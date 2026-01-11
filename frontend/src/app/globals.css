@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%; /* White */
+    --foreground: 0 0% 0%;   /* Black */
+    --primary: 24 95% 53%;   /* Orange */
+    --primary-foreground: 0 0% 100%; /* White */
+    --secondary: 0 0% 98%;   /* Off-white */
+    --secondary-foreground: 0 0% 0%; /* Black */
+    --accent: 0 0% 98%;      /* Off-white */
+    --accent-foreground: 0 0% 0%; /* Black */
+    --border: 0 0% 85%;      /* Light Gray */
+    --input: 0 0% 85%;       /* Light Gray */
+    --ring: 24 95% 53%;      /* Orange */
+    --radius: 0.5rem;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+  }
+
+  .dark {
+    --background: 0 0% 0%;   /* Black */
+    --foreground: 0 0% 100%; /* White */
+    --primary: 24 95% 53%;   /* Orange */
+    --primary-foreground: 0 0% 100%; /* White */
+    --secondary: 0 0% 10%;   /* Dark Gray */
+    --secondary-foreground: 0 0% 100%; /* White */
+    --accent: 0 0% 10%;      /* Dark Gray */
+    --accent-foreground: 0 0% 100%; /* White */
+    --border: 0 0% 20%;      /* Darker Gray */
+    --input: 0 0% 20%;       /* Darker Gray */
+    --ring: 24 95% 53%;      /* Orange */
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Animations personnalisées */
+@keyframes gradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient {
+  background-size: 200% auto;
+  animation: gradient 3s ease infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-in {
+  animation-fill-mode: both;
+}
+
+.fade-in {
+  animation-name: fadeIn;
+  animation-duration: 0.6s;
+}
+
+.slide-in-from-top-4 {
+  animation-name: slideInFromTop;
+  animation-duration: 0.6s;
+}
+
+.slide-in-from-left-4 {
+  animation-name: slideInFromLeft;
+  animation-duration: 0.6s;
+}
+
+.slide-in-from-bottom-4 {
+  animation-name: slideInFromBottom;
+  animation-duration: 0.6s;
+}
+
+.slide-in-from-top-2 {
+  animation-name: slideInFromTop2;
+  animation-duration: 0.3s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromTop2 {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.delay-200 {
+  animation-delay: 200ms;
+}
+
+.delay-1000 {
+  animation-delay: 1000ms;
+}
+
+
+
