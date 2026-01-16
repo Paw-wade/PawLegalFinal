@@ -111,11 +111,11 @@ export default function HomePage() {
   const heroBadge = useCmsText('home.hero.badge', 'Expertise juridique reconnue');
   const heroTitle = useCmsText(
     'home.hero.title',
-    'Votre partenaire juridique de confiance'
+    'Votre partenaire de confiance'
   );
   const heroTitleHighlight = useCmsText(
     'home.hero.title_highlight',
-    'juridique de confiance'
+    'de confiance'
   );
   const heroSubtitle = useCmsText(
     'home.hero.subtitle',
