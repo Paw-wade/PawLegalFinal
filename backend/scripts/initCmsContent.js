@@ -13,14 +13,14 @@ const cmsKeys = [
   },
   {
     key: 'home.hero.title',
-    value: 'Votre partenaire juridique de confiance',
+    value: 'Votre partenaire de confiance',
     page: 'home',
     section: 'hero',
     description: 'Titre principal de la section hero'
   },
   {
     key: 'home.hero.title_highlight',
-    value: 'juridique de confiance',
+    value: 'de confiance',
     page: 'home',
     section: 'hero',
     description: 'Partie du titre à mettre en évidence'
@@ -95,10 +95,40 @@ async function initCmsContent() {
       }).sort({ version: -1 });
 
       if (existing) {
-        // Si elle existe et est publiée, on la skip
-        if (existing.status === 'published') {
-          console.log(`⏭️  Clé "${cmsKey.key}" existe déjà et est publiée - ignorée`);
+        // Si elle existe et est publiée, on la met à jour si la valeur a changé
+        if (existing.status === 'published' && existing.value === cmsKey.value) {
+          console.log(`⏭️  Clé "${cmsKey.key}" existe déjà avec la même valeur - ignorée`);
           skippedCount++;
+          continue;
+        }
+        
+        // Si elle existe et est publiée mais la valeur a changé, on la met à jour
+        if (existing.status === 'published' && existing.value !== cmsKey.value) {
+          const newVersion = existing.version + 1;
+          existing.value = cmsKey.value;
+          existing.description = cmsKey.description;
+          existing.page = cmsKey.page;
+          existing.section = cmsKey.section;
+          existing.version = newVersion;
+          existing.status = 'published';
+          existing.isActive = true;
+          
+          // Ajouter à l'historique
+          if (!existing.changeHistory) {
+            existing.changeHistory = [];
+          }
+          existing.changeHistory.push({
+            version: newVersion,
+            value: cmsKey.value,
+            description: cmsKey.description,
+            status: 'published',
+            changeType: 'updated',
+            updatedAt: new Date()
+          });
+
+          await existing.save();
+          console.log(`✅ Clé "${cmsKey.key}" mise à jour et republiée (version ${newVersion})`);
+          updatedCount++;
           continue;
         }
         

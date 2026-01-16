@@ -18,6 +18,12 @@ export function useCmsText(key: string, fallback: string): string {
       try {
         const value = await cmsAPI.getText(key);
         if (isMounted && typeof value === 'string' && value.trim() !== '') {
+          // Si le texte du CMS contient "juridique" et que le fallback ne le contient pas,
+          // utiliser le fallback pour éviter le flash avec l'ancien texte
+          if (value.includes('juridique') && !fallback.includes('juridique')) {
+            // Ne pas mettre à jour avec l'ancien texte du CMS
+            return;
+          }
           setText(value);
         }
       } catch (error: any) {
