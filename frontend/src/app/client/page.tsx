@@ -504,6 +504,21 @@ function ClientDashboardContent() {
           // Trier par date (plus récents en premier) et prendre les 3 prochains
           const sortedAppointments = appointments
             .filter((apt: any) => apt.statut !== 'annule' && apt.statut !== 'annulé')
+            .map((apt: any) => {
+              // Calculer les alertes pour chaque rendez-vous
+              const aptDate = new Date(apt.date);
+              const aptTime = apt.heure ? apt.heure.split(':') : ['00', '00'];
+              aptDate.setHours(parseInt(aptTime[0]), parseInt(aptTime[1]), 0, 0);
+              const now = new Date();
+              const diffMs = aptDate.getTime() - now.getTime();
+              const diffHours = diffMs / (1000 * 60 * 60);
+              
+              return {
+                ...apt,
+                alertLevel: diffHours < 0 ? 'past' : diffHours <= 1 ? 'urgent' : diffHours <= 24 ? 'soon' : 'upcoming',
+                hoursUntil: diffHours
+              };
+            })
             .sort((a: any, b: any) => {
               const dateA = new Date(a.date).getTime();
               const dateB = new Date(b.date).getTime();
@@ -735,12 +750,21 @@ function ClientDashboardContent() {
                   <p className="text-sm text-muted-foreground">Gérez vos rendez-vous</p>
                 </div>
               </div>
-              {/* Rendez-vous récents */}
+              {/* Rendez-vous récents avec alertes */}
               {recentAppointments.length > 0 && (
                 <div className="mb-4 space-y-2 max-h-32 overflow-y-auto">
                   {recentAppointments.map((apt: any) => {
                     const aptDate = apt.date ? new Date(apt.date) : null;
                     const formattedDate = aptDate ? aptDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '';
+                    const alertClass = apt.alertLevel === 'urgent' ? 'border-red-300 bg-red-50' :
+                                      apt.alertLevel === 'soon' ? 'border-orange-300 bg-orange-50' :
+                                      apt.alertLevel === 'past' ? 'border-gray-300 bg-gray-50' :
+                                      'border-blue-200 bg-white';
+                    const alertText = apt.alertLevel === 'urgent' ? '⚠️ Dans moins d\'1h' :
+                                     apt.alertLevel === 'soon' ? '⏰ Dans moins de 24h' :
+                                     apt.alertLevel === 'past' ? '✅ Passé' :
+                                     '';
+                    
                     return (
                       <div
                         key={apt._id || apt.id}
@@ -748,11 +772,22 @@ function ClientDashboardContent() {
                           setSelectedAppointment(apt);
                           setShowAppointmentModal(true);
                         }}
-                        className="p-2 rounded-lg bg-white border border-blue-200 hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition-colors"
+                        className={`p-2 rounded-lg border ${alertClass} hover:shadow-md cursor-pointer transition-all`}
                       >
                         <div className="flex items-center justify-between">
-                          <div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
                             <p className="font-semibold text-xs text-foreground">{formattedDate}</p>
+                              {alertText && (
+                                <span className={`text-[10px] font-bold ${
+                                  apt.alertLevel === 'urgent' ? 'text-red-600' :
+                                  apt.alertLevel === 'soon' ? 'text-orange-600' :
+                                  'text-gray-600'
+                                }`}>
+                                  {alertText}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground">⏰ {apt.heure?.substring(0, 5) || '-'}</p>
                           </div>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${

@@ -422,14 +422,13 @@ export default function DossiersPage() {
                               N° {typeof dossier.numero === 'string' ? dossier.numero : dossier.numeroDossier}
                             </p>
                           )}
-                          {/* Indication de transmission */}
-                          {dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
+                          {/* Indication de transmission (visible quand plié) */}
+                          {!expandedDossiers.has(dossier._id || dossier.id) && dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
                             <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                               <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-800 border border-purple-300">
-                                📤 Dossier transmis
+                                📤 Transmis
                               </span>
                               {dossier.transmittedTo.map((trans: any, idx: number) => {
-                                const quality = typeof trans.quality === 'string' ? trans.quality : 'Professionnel';
                                 const partenaire = trans.partenaire;
                                 const partenaireName = partenaire 
                                   ? `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() || partenaire.email
@@ -437,10 +436,13 @@ export default function DossiersPage() {
                                     ? `${trans.user.firstName || ''} ${trans.user.lastName || ''}`.trim() || trans.user.email
                                     : 'Partenaire inconnu';
                                 const organismeName = partenaire?.partenaireInfo?.nomOrganisme || trans.user?.organisationName;
+                                const status = trans.status || 'pending';
+                                const statusLabel = status === 'accepted' ? 'Accepté' : status === 'refused' ? 'Refusé' : 'En attente';
                                 return (
                                   <span key={idx} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-300">
-                                    {quality}: {partenaireName}
+                                    {partenaireName}
                                     {organismeName && typeof organismeName === 'string' && ` (${organismeName})`}
+                                    <span className="ml-1 text-[9px]">• {statusLabel}</span>
                                   </span>
                                 );
                               })}
@@ -491,7 +493,7 @@ export default function DossiersPage() {
                                       )}
                                     </div>
                                     
-                                    {/* Ligne 2: Progression, Échéance, Activité */}
+                                    {/* Ligne 2: Progression, Échéance */}
                                     <div className="flex items-center gap-2.5 flex-wrap text-[10px] text-muted-foreground">
                                       <span className="flex items-center gap-0.5">
                                         <span className="text-xs">📊</span>
@@ -503,10 +505,20 @@ export default function DossiersPage() {
                                           <span className="font-semibold">{calculateDaysUntil(dossier.dateEcheance)}j</span>
                                         </span>
                                       )}
+                                    </div>
+                                    
+                                    {/* Ligne 3: Date (sur une ligne avec caractères plus grands) */}
+                                    <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                                      {dossier.createdAt && (
+                                        <span className="flex items-center gap-1">
+                                          <span>📅</span>
+                                          <span>Créé: {new Date(dossier.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                        </span>
+                                      )}
                                       {dossier.updatedAt && (
-                                        <span className="flex items-center gap-0.5">
-                                          <span className="text-xs">🔄</span>
-                                          <span>{formatRelativeTime(dossier.updatedAt)}</span>
+                                        <span className="flex items-center gap-1">
+                                          <span>🔄</span>
+                                          <span>Modifié: {new Date(dossier.updatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                                         </span>
                                       )}
                                     </div>

@@ -18,17 +18,17 @@ const messageInterneSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
-  // Type de message: 'user_to_admins' ou 'admin_to_user' ou 'admin_to_admin'
+  // Type de message: 'user_to_admins' ou 'admin_to_user' ou 'admin_to_admin' ou 'professional_to_admin'
   typeMessage: {
     type: String,
-    enum: ['user_to_admins', 'admin_to_user', 'admin_to_admin'],
+    enum: ['user_to_admins', 'admin_to_user', 'admin_to_admin', 'professional_to_admin'],
     default: 'user_to_admins'
   },
-  // Dossier auquel le message est lié (OBLIGATOIRE)
+  // Dossier auquel le message est lié (optionnel pour les réponses)
   dossierId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Dossier',
-    required: [true, 'Le message doit être lié à un dossier'],
+    required: false, // Rendre optionnel pour permettre les réponses sans dossier
     index: true
   },
   // Thread ID (identifiant unique du fil de discussion) - OBLIGATOIRE

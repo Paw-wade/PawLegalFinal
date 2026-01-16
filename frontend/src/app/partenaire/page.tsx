@@ -124,8 +124,24 @@ export default function PartenaireDashboard() {
     if (typeof value === 'string') return value;
     if (typeof value === 'number') return String(value);
     if (typeof value === 'boolean') return String(value);
-    // Si c'est un objet, ne pas le convertir, retourner une chaîne vide
+    // Si c'est un objet, essayer de le convertir en string (pour ObjectId MongoDB)
     if (typeof value === 'object') {
+      // Si l'objet a une méthode toString(), l'utiliser
+      if (typeof value.toString === 'function') {
+        try {
+          return value.toString();
+        } catch (e) {
+          console.warn('Erreur lors de la conversion toString:', value);
+          return '';
+        }
+      }
+      // Si l'objet a une propriété _id ou id, l'utiliser
+      if (value._id) {
+        return safeString(value._id);
+      }
+      if (value.id) {
+        return safeString(value.id);
+      }
       console.warn('Tentative de convertir un objet en string:', value);
       return '';
     }

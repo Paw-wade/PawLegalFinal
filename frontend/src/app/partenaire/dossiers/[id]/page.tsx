@@ -1,20 +1,48 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
-import { dossiersAPI, messagesAPI } from '@/lib/api';
-import { ArrowLeft, CheckCircle, XCircle, FileText, Calendar, MessageSquare, History, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { DossierDetailView } from '@/components/DossierDetailView';
+import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, tasksAPI } from '@/lib/api';
+import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
+import { DocumentPreview } from '@/components/DocumentPreview';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
+import { History, Clock, CheckCircle, XCircle } from 'lucide-react';
+
+function Button({ children, variant = 'default', className = '', ...props }: any) {
+  const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
+  const variantClasses = {
+    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
+    outline: 'border border-input bg-background hover:bg-accent',
+    ghost: 'hover:bg-accent',
+  };
+  return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} {...props}>{children}</button>;
+}
 
 export default function PartenaireDossierDetailPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
-  const dossierId = params.id as string;
+  const dossierId = params?.id as string;
   
   const [dossier, setDossier] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [documentRequests, setDocumentRequests] = useState<any[]>([]);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
+  const [selectedDocumentRequestNotification, setSelectedDocumentRequestNotification] = useState<any>(null);
+  const [showDocumentRequestModal, setShowDocumentRequestModal] = useState(false);
+  const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<any>(null);
+  const [showDocumentPreviewModal, setShowDocumentPreviewModal] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -22,137 +50,233 @@ export default function PartenaireDossierDetailPage() {
   const [showAcknowledgeModal, setShowAcknowledgeModal] = useState(false);
   const [acknowledgeAction, setAcknowledgeAction] = useState<'accept' | 'refuse' | null>(null);
   const [acknowledgeNotes, setAcknowledgeNotes] = useState('');
-  const [messages, setMessages] = useState<any[]>([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  
+  const [discharging, setDischarging] = useState(false);
+  const [showDischargeModal, setShowDischargeModal] = useState(false);
+  const [dischargeNotes, setDischargeNotes] = useState('');
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+
   useEffect(() => {
-    if (dossierId) {
-      loadDossier();
-      loadMessages();
+    const token = localStorage.getItem('token');
+    
+    if (status === 'loading') {
+      return;
     }
-  }, [dossierId]);
-  
-  const loadMessages = async () => {
-    try {
-      setLoadingMessages(true);
-      const response = await messagesAPI.getMessages({ 
-        type: 'all',
-        dossierId: dossierId 
-      });
-      if (response.data.success) {
-        const allMessages = response.data.messages || [];
-        const threads = response.data.threads || [];
-        
-        // Si on a des threads, extraire tous les messages
-        if (threads.length > 0) {
-          const messagesFromThreads: any[] = [];
-          threads.forEach((thread: any) => {
-            if (thread.messages && Array.isArray(thread.messages)) {
-              messagesFromThreads.push(...thread.messages);
-            } else if (thread.root) {
-              messagesFromThreads.push(thread.root);
-            }
-            if (thread.replies && Array.isArray(thread.replies)) {
-              messagesFromThreads.push(...thread.replies);
-            }
-          });
-          setMessages(messagesFromThreads.length > 0 ? messagesFromThreads.slice(0, 5) : allMessages.slice(0, 5));
-        } else {
-          setMessages(allMessages.slice(0, 5)); // Afficher les 5 derniers messages
+
+    if (status === 'unauthenticated' && !token) {
+      router.push('/auth/signin');
+      return;
+    }
+
+    if (status === 'authenticated' && session) {
+      if ((session.user as any)?.accessToken && typeof window !== 'undefined') {
+        const token = (session.user as any).accessToken;
+        if (!localStorage.getItem('token')) {
+          localStorage.setItem('token', token);
         }
       }
-    } catch (error) {
-      console.error('Erreur lors du chargement des messages:', error);
+      loadDossier();
+      loadNotifications();
+      loadMessagesForDossier();
+      loadDocumentRequests();
+      loadDocuments();
+      loadTasks();
+      if (showHistory) {
+        loadHistory();
+      }
+    } else if (token) {
+      loadDossier();
+      loadNotifications();
+      loadDocumentRequests();
+      loadDocuments();
+      loadTasks();
+      if (showHistory) {
+        loadHistory();
+      }
+    }
+  }, [session, status, router, dossierId]);
+
+  // Rafraîchissement automatique toutes les 30 secondes pour le suivi en temps réel
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (session || localStorage.getItem('token')) {
+        loadDossier();
+        loadNotifications();
+        loadMessagesForDossier();
+        loadTasks();
+        loadDocumentRequests();
+        loadDocuments();
+        if (showHistory) {
+          loadHistory();
+        }
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [session, dossierId]);
+
+  const loadDocuments = async () => {
+    if (!dossierId) return;
+    setIsLoadingDocuments(true);
+    try {
+      const response = await documentsAPI.getAllDocuments();
+      if (response.data.success) {
+        const allDocuments = response.data.documents || response.data.data || [];
+        const dossierDocuments = allDocuments.filter((doc: any) => 
+          doc.dossierId && (doc.dossierId._id || doc.dossierId).toString() === dossierId.toString()
+        );
+        setDocuments(dossierDocuments);
+      }
+    } catch (err: any) {
+      console.error('Erreur lors du chargement des documents:', err);
     } finally {
-      setLoadingMessages(false);
+      setIsLoadingDocuments(false);
     }
   };
-  
-  const loadDossier = async () => {
+
+  const loadDocumentRequests = async () => {
+    if (!dossierId) return;
+    setIsLoadingRequests(true);
     try {
-      setLoading(true);
+      const response = await documentRequestsAPI.getRequests({
+        dossierId: dossierId,
+        status: 'pending'
+      });
+      if (response.data.success) {
+        setDocumentRequests(response.data.documentRequests || []);
+      }
+    } catch (err: any) {
+      console.error('Erreur lors du chargement des demandes de documents:', err);
+    } finally {
+      setIsLoadingRequests(false);
+    }
+  };
+
+  const loadDossier = async () => {
+    if (!dossierId) return;
+    
+    setIsLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (!token && session && (session.user as any)?.accessToken) {
+        localStorage.setItem('token', (session.user as any).accessToken);
+      }
+      
       const response = await dossiersAPI.getDossierById(dossierId);
-      if (response.data.success && response.data.dossier && typeof response.data.dossier === 'object') {
+      
+      if (response.data.success) {
         setDossier(response.data.dossier);
       } else {
-        console.error('Dossier invalide reçu:', response.data);
+        setError('Erreur lors du chargement du dossier');
       }
-    } catch (error) {
-      console.error('Erreur lors du chargement du dossier:', error);
+    } catch (err: any) {
+      console.error('❌ Erreur lors du chargement du dossier:', err);
+      setError(err.response?.data?.message || 'Erreur lors du chargement du dossier');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
-  
-  const loadHistory = async () => {
+
+  const loadNotifications = async () => {
+    if (!dossierId) return;
+    
     try {
-      setLoadingHistory(true);
+      const response = await notificationsAPI.getNotifications({
+        limit: 50
+      });
+      
+      if (response.data.success) {
+        const dossierNotifications = (response.data.notifications || []).filter((notif: any) => 
+          notif.metadata?.dossierId === dossierId
+        );
+        setNotifications(dossierNotifications);
+      }
+    } catch (err: any) {
+      console.error('❌ Erreur lors du chargement des notifications:', err);
+    }
+  };
+
+  const loadMessagesForDossier = async () => {
+    if (!dossierId) return;
+
+    setIsLoadingMessages(true);
+    setMessagesError(null);
+    try {
+      const response = await messagesAPI.getMessages({ type: 'all', dossierId });
+      if (response.data.success) {
+        setMessages(response.data.messages || []);
+      }
+    } catch (err: any) {
+      console.error('❌ Erreur lors du chargement des messages du dossier:', err);
+      setMessagesError(err.response?.data?.message || 'Erreur lors du chargement des messages du dossier');
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  };
+
+  const loadHistory = async () => {
+    if (!dossierId) return;
+    
+    setLoadingHistory(true);
+    try {
       const response = await dossiersAPI.getDossierHistory(dossierId);
       if (response.data.success) {
         setHistory(response.data.history || []);
       }
-    } catch (error) {
-      console.error('Erreur lors du chargement de l\'historique:', error);
+    } catch (err: any) {
+      console.error('❌ Erreur lors du chargement de l\'historique:', err);
     } finally {
       setLoadingHistory(false);
     }
   };
-  
-  const getStatutLabel = (statut: string) => {
-    const labels: { [key: string]: string } = {
-      recu: 'Reçu',
-      accepte: 'Accepté',
-      refuse: 'Refusé',
-      annule: 'Annulé',
-      en_attente_onboarding: 'En attente d\'onboarding',
-      en_cours_instruction: 'En cours d\'instruction',
-      pieces_manquantes: 'Pièces manquantes',
-      dossier_complet: 'Dossier complet',
-      depose: 'Déposé',
-      reception_confirmee: 'Réception confirmée',
-      complement_demande: 'Complément demandé',
-      decision_defavorable: 'Décision défavorable',
-      communication_motifs: 'Communication des motifs',
-      recours_preparation: 'Recours en préparation',
-      refere_mesures_utiles: 'Référé mesures utiles',
-      refere_suspension_rep: 'Référé suspension REP',
-      gain_cause: 'Gain de cause',
-      rejet: 'Rejet',
-      decision_favorable: 'Décision favorable',
-      autre: 'Autre'
-    };
-    return labels[statut] || statut;
+
+  const loadTasks = async () => {
+    if (!dossierId) return;
+    
+    setIsLoadingTasks(true);
+    try {
+      const response = await tasksAPI.getDossierTasks(dossierId);
+      if (response.data.success) {
+        setTasks(response.data.tasks || []);
+      }
+    } catch (err: any) {
+      console.error('❌ Erreur lors du chargement des tâches:', err);
+      // Ne pas bloquer l'affichage si les tâches ne peuvent pas être chargées
+      setTasks([]);
+    } finally {
+      setIsLoadingTasks(false);
+    }
   };
-  
+
+  const getHistoryTypeIcon = (type: string) => {
+    const icons: Record<string, string> = {
+      creation: '📝',
+      status_change: '🔄',
+      document_added: '📄',
+      message_sent: '💬',
+      transmission: '📤',
+      acknowledgment: '✅',
+      update: '✏️',
+      cancellation: '❌'
+    };
+    return icons[type] || '📋';
+  };
+
   const getHistoryTypeLabel = (type: string) => {
-    const labels: { [key: string]: string } = {
-      creation: 'Création',
-      modification: 'Modification',
-      statut_change: 'Changement de statut',
+    const labels: Record<string, string> = {
+      creation: 'Création du dossier',
+      status_change: 'Changement de statut',
+      document_added: 'Document ajouté',
+      message_sent: 'Message envoyé',
       transmission: 'Transmission',
       acknowledgment: 'Accusé de réception',
-      suppression: 'Suppression'
+      update: 'Mise à jour',
+      cancellation: 'Annulation'
     };
     return labels[type] || type;
   };
-  
-  const getHistoryTypeIcon = (type: string) => {
-    switch (type) {
-      case 'creation':
-        return '✨';
-      case 'statut_change':
-        return '🔄';
-      case 'transmission':
-        return '📤';
-      case 'acknowledgment':
-        return '✅';
-      case 'modification':
-        return '✏️';
-      default:
-        return '📝';
-    }
-  };
-  
+
   const getTransmission = () => {
     if (!dossier || !dossier.transmittedTo) return null;
     const userId = (session?.user as any)?._id || (session?.user as any)?.id;
@@ -160,20 +284,7 @@ export default function PartenaireDossierDetailPage() {
       (t.partenaire?._id?.toString() || t.partenaire?.toString()) === userId
     );
   };
-  
-  const safeString = (value: any): string => {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number') return String(value);
-    if (typeof value === 'boolean') return String(value);
-    // Si c'est un objet, ne pas le convertir, retourner une chaîne vide
-    if (typeof value === 'object') {
-      console.warn('Tentative de convertir un objet en string:', value);
-      return '';
-    }
-    return '';
-  };
-  
+
   const handleAcknowledge = async () => {
     if (!acknowledgeAction) return;
     
@@ -183,7 +294,7 @@ export default function PartenaireDossierDetailPage() {
       setShowAcknowledgeModal(false);
       setAcknowledgeAction(null);
       setAcknowledgeNotes('');
-      loadDossier(); // Recharger le dossier
+      loadDossier();
     } catch (error: any) {
       console.error('Erreur lors de l\'accusé de réception:', error);
       alert(error.response?.data?.message || 'Erreur lors de l\'accusé de réception');
@@ -191,87 +302,209 @@ export default function PartenaireDossierDetailPage() {
       setAcknowledging(false);
     }
   };
-  
-  if (loading) {
+
+  const handleDischarge = async () => {
+    try {
+      setDischarging(true);
+      await dossiersAPI.dischargeDossier(dossierId, dischargeNotes);
+      setShowDischargeModal(false);
+      setDischargeNotes('');
+      alert('Vous vous êtes déchargé du dossier avec succès. Le dossier reste disponible pour les administrateurs.');
+      // Rediriger vers la liste des dossiers
+      router.push('/partenaire/dossiers');
+    } catch (error: any) {
+      console.error('Erreur lors de la décharge:', error);
+      alert(error.response?.data?.message || 'Erreur lors de la décharge du dossier');
+    } finally {
+      setDischarging(false);
+    }
+  };
+
+  if (status === 'loading') {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Chargement...</p>
+        </div>
       </div>
     );
   }
-  
-  if (!dossier || typeof dossier !== 'object') {
+
+  if (status === 'unauthenticated') return null;
+
+  if (isLoading) {
     return (
-      <div className="p-6">
-        <p className="text-red-500">Dossier non trouvé</p>
+      <div className="min-h-screen bg-background">
+        <main className="w-full px-4 py-16">
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Chargement du dossier...</p>
+          </div>
+        </main>
       </div>
     );
   }
-  
-  // S'assurer que dossier est un objet valide et non un tableau ou autre chose
-  if (Array.isArray(dossier)) {
+
+  if (error || !dossier) {
     return (
-      <div className="p-6">
-        <p className="text-red-500">Format de dossier invalide</p>
+      <div className="min-h-screen bg-background">
+        <main className="w-full px-4 py-16">
+          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+            <div className="text-6xl mb-4">❌</div>
+            <h2 className="text-2xl font-bold mb-4">Dossier non trouvé</h2>
+            <p className="text-muted-foreground mb-6">{error || 'Le dossier demandé n\'existe pas ou vous n\'avez pas l\'autorisation d\'y accéder.'}</p>
+            <Link href="/partenaire/dossiers">
+              <Button>Retour aux dossiers</Button>
+            </Link>
+          </div>
+        </main>
       </div>
     );
   }
-  
+
   const transmission = getTransmission();
-  const status = transmission?.status || 'pending';
-  const canAcknowledge = status === 'pending';
-  
+  const statusTransmission = transmission?.status || 'pending';
+  const canAcknowledge = statusTransmission === 'pending';
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
       <main className="w-full px-4 py-8 overflow-x-hidden">
         {/* En-tête amélioré */}
         <div className="mb-6">
-          <Link 
-            href="/partenaire/dossiers"
-            className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors"
-          >
-        <ArrowLeft className="w-4 h-4" />
-        Retour aux dossiers
-      </Link>
-      
+          <Link href="/partenaire/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Retour aux dossiers
+          </Link>
+          
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6 overflow-hidden">
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-3xl font-bold text-foreground">{safeString(dossier.titre) || safeString(dossier.numero) || 'Sans titre'}</h1>
-                  {safeString(dossier.numero) && (
+                <div className="flex items-center gap-3 mb-2 flex-wrap">
+                  <h1 className="text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
+                  {(dossier.numero || dossier.numeroDossier) && (
                     <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-semibold">
-                      N° {safeString(dossier.numero)}
+                      N° {dossier.numero || dossier.numeroDossier}
+                    </span>
+                  )}
+                  {transmission && (
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      statusTransmission === 'accepted' ? 'bg-green-100 text-green-800' :
+                      statusTransmission === 'refused' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {statusTransmission === 'accepted' ? 'Accepté' :
+                       statusTransmission === 'refused' ? 'Refusé' :
+                       'En attente'}
                     </span>
                   )}
                 </div>
-                {safeString(dossier.description) && (
-                  <p className="text-muted-foreground text-sm mb-3">{safeString(dossier.description)}</p>
+                {dossier.description && (
+                  <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
+                )}
+                
+                {/* Barre de progression */}
+                {(() => {
+                  const progress = getDossierProgress(dossier.statut);
+                  return (
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between text-sm mb-2">
+                        <span className="text-muted-foreground font-medium">Progression du dossier</span>
+                        <span className="font-bold text-foreground">{progress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                        <div 
+                          className={`h-3 rounded-full transition-all duration-500 ${
+                            progress >= 80 ? 'bg-green-500' : 
+                            progress >= 50 ? 'bg-blue-500' : 
+                            progress >= 25 ? 'bg-yellow-500' : 
+                            'bg-gray-400'
+                          }`}
+                          style={{width: `${Math.min(progress, 100)}%`, maxWidth: '100%'}}
+                        ></div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                
+                {/* Timeline */}
+                {(() => {
+                  const steps = getTimelineSteps(dossier.statut);
+                  return (
+                    <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
+                      <div className="flex items-center gap-2 min-w-max">
+                        {steps.map((step, index) => (
+                          <div key={step.key} className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                step.completed ? 'bg-green-500' : 'bg-gray-300'
+                              }`}></span>
+                              <span className={`text-[10px] font-medium whitespace-nowrap ${
+                                step.completed ? 'text-green-700' : 'text-gray-400'
+                              }`}>
+                                {step.label}
+                              </span>
+                            </div>
+                            {index < steps.length - 1 && (
+                              <div className={`h-0.5 w-6 flex-shrink-0 ${
+                                step.completed ? 'bg-green-500' : 'bg-gray-300'
+                              }`}></div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+                
+                {/* Statuts et informations rapides */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getStatutColor(dossier.statut)}`}>
+                    {getStatutLabel(dossier.statut)}
+                  </span>
+                  {dossier.priorite && (
+                    <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getPrioriteColor(dossier.priorite)}`}>
+                      {dossier.priorite}
+                    </span>
+                  )}
+                  {dossier.createdAt && (
+                    <span className="text-xs text-muted-foreground">
+                      ⏱️ Ouvert il y a {calculateDaysSince(dossier.createdAt)} jour{calculateDaysSince(dossier.createdAt) > 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {dossier.updatedAt && (
+                    <span className="text-xs text-muted-foreground">
+                      🔄 {formatRelativeTime(dossier.updatedAt)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex flex-col gap-2">
+                <Button variant="outline" onClick={() => {
+                  loadDossier();
+                  loadNotifications();
+                }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Actualiser
+                </Button>
+                {transmission && (
+                  <Button 
+                    variant="outline" 
+                    className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                    onClick={() => setShowDischargeModal(true)}
+                  >
+                    Se décharger du dossier
+                  </Button>
                 )}
               </div>
-              {transmission && (
-                <span className={`px-4 py-2 rounded-full text-sm font-medium ${
-                  status === 'accepted' ? 'bg-green-100 text-green-800' :
-                  status === 'refused' ? 'bg-red-100 text-red-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {status === 'accepted' ? 'Accepté' :
-                   status === 'refused' ? 'Refusé' :
-                   'En attente'}
-                </span>
-              )}
             </div>
             
-            {dossier.user && typeof dossier.user === 'object' && (
-              <div className="mb-4">
-                <h3 className="font-semibold mb-2 text-foreground">Client</h3>
-                <p className="text-muted-foreground">
-                  {safeString(dossier.user.firstName)} {safeString(dossier.user.lastName)}
-                  {safeString(dossier.user.email) && ` (${safeString(dossier.user.email)})`}
-                </p>
-              </div>
-            )}
-            
+            {/* Informations de transmission */}
             {transmission && (
               <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <h3 className="font-semibold mb-2 text-foreground">Informations de transmission</h3>
@@ -286,275 +519,523 @@ export default function PartenaireDossierDetailPage() {
                 </p>
                 {transmission.notes && (
                   <p className="text-sm text-foreground mt-2">
-                    <strong>Notes:</strong> {safeString(transmission.notes)}
+                    <strong>Notes:</strong> {transmission.notes}
                   </p>
                 )}
               </div>
             )}
-        
-        {canAcknowledge && (
-          <div className="flex gap-4 mt-6">
-            <button
-              onClick={() => {
-                setAcknowledgeAction('accept');
-                setShowAcknowledgeModal(true);
-              }}
-              className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <CheckCircle className="w-5 h-5" />
-              Accepter le dossier
-            </button>
-            <button
-              onClick={() => {
-                setAcknowledgeAction('refuse');
-                setShowAcknowledgeModal(true);
-              }}
-              className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              <XCircle className="w-5 h-5" />
-              Refuser le dossier
-            </button>
-          </div>
-        )}
-      </div>
-      
-        {/* Informations détaillées du dossier */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4 text-foreground">Informations du dossier</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Statut</p>
-              <p className="font-semibold text-foreground">{getStatutLabel(dossier.statut || 'recu')}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Catégorie</p>
-              <p className="font-semibold text-foreground">{safeString(dossier.categorie) || 'Non spécifiée'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Type</p>
-              <p className="font-semibold text-foreground">{safeString(dossier.type) || 'Non spécifié'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Priorité</p>
-              <p className="font-semibold capitalize text-foreground">{safeString(dossier.priorite) || 'Normale'}</p>
-            </div>
-            {dossier.dateEcheance && (
-              <div>
-                <p className="text-sm text-muted-foreground">Date d'échéance</p>
-                <p className="font-semibold text-foreground">
-                  {new Date(dossier.dateEcheance).toLocaleDateString('fr-FR', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric'
-                  })}
-                </p>
+            
+            {/* Boutons d'accusé de réception */}
+            {canAcknowledge && (
+              <div className="flex gap-4 mt-6">
+                <button
+                  onClick={() => {
+                    setAcknowledgeAction('accept');
+                    setShowAcknowledgeModal(true);
+                  }}
+                  className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                  Accepter le dossier
+                </button>
+                <button
+                  onClick={() => {
+                    setAcknowledgeAction('refuse');
+                    setShowAcknowledgeModal(true);
+                  }}
+                  className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <XCircle className="w-5 h-5" />
+                  Refuser le dossier
+                </button>
               </div>
             )}
-            <div>
-              <p className="text-sm text-muted-foreground">Date de création</p>
-              <p className="font-semibold text-foreground">
-                {new Date(dossier.createdAt).toLocaleDateString('fr-FR', {
-                  day: 'numeric',
-                  month: 'long',
+            
+            {/* Prochaine action */}
+            {(() => {
+              const nextAction = getNextAction(dossier.statut);
+              if (nextAction) {
+                return (
+                  <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg mt-4">
+                    <div className="flex items-start gap-3">
+                      <span className="text-blue-600 text-xl">📋</span>
+                      <div>
+                        <p className="text-sm font-semibold text-blue-900 mb-1">Prochaine action requise</p>
+                        <p className="text-sm text-blue-700">{nextAction}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        </div>
+
+        {/* Vue détaillée avec téléchargement et impression */}
+        <DossierDetailView dossier={dossier} variant="partenaire" />
+
+        <div className="grid md:grid-cols-3 gap-6 mt-8">
+          {/* Informations principales */}
+          <div className="md:col-span-2 space-y-6">
+            {/* Statut actuel */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-bold mb-4">Statut actuel</h2>
+              <div className="flex items-center gap-4">
+                <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatutColor(dossier.statut)}`}>
+                  {getStatutLabel(dossier.statut)}
+                </span>
+                {dossier.priorite && (
+                  <span className={`px-4 py-2 rounded-full text-sm font-medium ${getPrioriteColor(dossier.priorite)}`}>
+                    Priorité: {dossier.priorite}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground mt-4">
+                Dernière mise à jour : {new Date(dossier.updatedAt || dossier.createdAt).toLocaleDateString('fr-FR', {
                   year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
                   hour: '2-digit',
                   minute: '2-digit'
                 })}
               </p>
             </div>
-          </div>
-        </div>
-        
-        {/* Section Messages récents */}
-        {messages.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-foreground flex items-center">
-                <MessageSquare className="w-5 h-5 mr-2" />
-                Messages récents
-              </h2>
-              <Link
-                href={`/partenaire/dossiers/${dossierId}/messages`}
-                className="text-primary hover:text-primary/80 text-sm font-medium transition-colors"
-              >
-                Voir tous les messages →
-              </Link>
+
+            {/* Description */}
+            {dossier.description && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-xl font-bold mb-4">Description</h2>
+                <p className="text-muted-foreground whitespace-pre-wrap">{dossier.description}</p>
+              </div>
+            )}
+
+            {/* Informations complètes du dossier */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-bold mb-4">📋 Informations Complètes du Dossier</h2>
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                  <p className="text-sm text-muted-foreground font-semibold">Numéro de dossier</p>
+                  <p className="font-bold text-lg text-primary">{dossier.numero || dossier._id}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground font-semibold">Titre</p>
+                  <p className="font-medium">{dossier.titre || 'Sans titre'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground font-semibold">Catégorie</p>
+                  <p className="font-medium">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground font-semibold">Type de demande</p>
+                  <p className="font-medium">{dossier.type || 'Non spécifié'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground font-semibold">Date de création</p>
+                  <p className="font-medium">
+                    {new Date(dossier.createdAt).toLocaleDateString('fr-FR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground font-semibold">Dernière mise à jour</p>
+                  <p className="font-medium">
+                    {new Date(dossier.updatedAt || dossier.createdAt).toLocaleDateString('fr-FR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+                {dossier.dateEcheance && (
+                  <div>
+                    <p className="text-sm text-muted-foreground font-semibold">Date d'échéance</p>
+                    <p className="font-medium text-orange-600">
+                      {new Date(dossier.dateEcheance).toLocaleDateString('fr-FR', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
+                  </div>
+                )}
+                {dossier.createdBy && (
+                  <div>
+                    <p className="text-sm text-muted-foreground font-semibold">Créé par</p>
+                    <p className="font-medium">
+                      {dossier.createdBy.firstName} {dossier.createdBy.lastName}
+                      {dossier.createdBy.email && ` (${dossier.createdBy.email})`}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          
-            {loadingMessages ? (
-              <p className="text-sm text-muted-foreground">Chargement des messages...</p>
-            ) : (
-              <div className="space-y-3">
-                {messages.map((message: any) => {
-                  const isFromMe = message.expediteur?._id?.toString() === (session?.user as any)?._id || 
-                                  message.expediteur?.toString() === (session?.user as any)?._id;
-                  
-                  return (
+
+            {/* Coordonnées client */}
+            {dossier.user && typeof dossier.user === 'object' && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-xl font-bold mb-4">👤 Informations Client</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
+                    <p className="font-medium">{dossier.user.firstName || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground font-semibold">Nom</p>
+                    <p className="font-medium">{dossier.user.lastName || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground font-semibold">Email</p>
+                    <p className="font-medium">{dossier.user.email || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground font-semibold">Téléphone</p>
+                    <p className="font-medium">{dossier.user.phone || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Demandes de documents en attente */}
+            {documentRequests.length > 0 && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-xl font-bold mb-4">📄 Demandes de documents en attente</h2>
+                <div className="space-y-3">
+                  {documentRequests.map((request: any) => (
                     <div
-                      key={message._id || message.id}
-                      className={`border border-gray-200 rounded-lg p-4 ${isFromMe ? 'bg-blue-50' : 'bg-gray-50'}`}
+                      key={request._id || request.id}
+                      className={`border-l-4 rounded-lg p-4 ${
+                        request.isUrgent
+                          ? 'bg-red-50 border-red-500'
+                          : 'bg-blue-50 border-blue-500'
+                      }`}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-sm text-foreground">
-                            {message.sujet || 'Sans sujet'}
-                          </h3>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {isFromMe 
-                              ? 'Vous' 
-                              : `${message.expediteur?.firstName || ''} ${message.expediteur?.lastName || ''}`.trim() || message.expediteur?.email || 'Expéditeur'
-                            }
-                            {' • '}
-                            {new Date(message.createdAt || message.dateCreation || new Date()).toLocaleDateString('fr-FR', {
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">{request.isUrgent ? '🔴' : '📄'}</span>
+                            <h3 className="font-semibold text-base">
+                              {request.documentTypeLabel}
+                            </h3>
+                            {request.isUrgent && (
+                              <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs font-semibold">
+                                URGENT
+                              </span>
+                            )}
+                          </div>
+                          {request.message && (
+                            <p className="text-sm text-muted-foreground mt-1">{request.message}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Demandé le {new Date(request.createdAt).toLocaleDateString('fr-FR', {
                               day: 'numeric',
                               month: 'short',
+                              year: 'numeric',
                               hour: '2-digit',
                               minute: '2-digit'
                             })}
                           </p>
                         </div>
                       </div>
-                      <p className="text-sm text-foreground line-clamp-2">
-                        {message.contenu}
-                      </p>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Historique et Timeline du dossier */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <History className="w-6 h-6" />
+                  Historique et Timeline du dossier
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowHistory(!showHistory);
+                    if (!showHistory && history.length === 0) {
+                      loadHistory();
+                    }
+                  }}
+                  className="text-primary hover:text-primary/80 text-sm font-medium"
+                >
+                  {showHistory ? 'Masquer' : 'Afficher'}
+                </button>
+              </div>
+              
+              {showHistory && (
+                <>
+                  {loadingHistory ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    </div>
+                  ) : history.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8">Aucun historique disponible</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {history.map((item: any, index: number) => (
+                        <div key={index} className="border-l-4 border-primary pl-4 py-3 bg-gray-50/50 rounded-r-lg">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-2xl">{getHistoryTypeIcon(item.type)}</span>
+                                <span className="font-semibold text-foreground">{getHistoryTypeLabel(item.type)}</span>
+                              </div>
+                              <p className="text-gray-700 mb-2">{item.description}</p>
+                              {item.details && Object.keys(item.details).length > 0 && (
+                                <div className="mt-2 text-sm text-gray-600 space-y-1">
+                                  {item.details.newStatut && item.details.oldStatut && (
+                                    <p>
+                                      <span className="font-medium">Ancien statut:</span> {getStatutLabel(item.details.oldStatut)} → 
+                                      <span className="font-medium"> Nouveau statut:</span> {getStatutLabel(item.details.newStatut)}
+                                    </p>
+                                  )}
+                                  {item.details.partenaire && (
+                                    <p>
+                                      <span className="font-medium">Partenaire:</span> {
+                                        item.details.partenaire?.partenaireInfo?.nomOrganisme || 
+                                        item.details.partenaire?.email || 
+                                        'Partenaire'
+                                      }
+                                    </p>
+                                  )}
+                                  {item.details.status && (
+                                    <p>
+                                      <span className="font-medium">Statut:</span> {item.details.status}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right text-sm text-gray-500 ml-4">
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                {new Date(item.date).toLocaleDateString('fr-FR', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </div>
+                              {item.user && typeof item.user === 'object' && (
+                                <p className="text-xs mt-1">
+                                  {item.user.firstName} {item.user.lastName}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Historique des notifications */}
+            {notifications.length > 0 && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-xl font-bold mb-4">Notifications récentes</h2>
+                <div className="space-y-3">
+                  {notifications.slice(0, 5).map((notif) => (
+                    <div key={notif._id || notif.id} className="border-l-4 border-primary pl-4 py-2">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-semibold">{notif.titre}</h3>
+                          <p className="text-sm text-muted-foreground mt-1">{notif.message}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground ml-4">
+                          {new Date(notif.createdAt).toLocaleDateString('fr-FR', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
-        )}
-        
-        {/* Sections Documents, Messages, Rendez-vous, Historique */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Link
-            href={`/partenaire/dossiers/${dossierId}/documents`}
-            className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg hover:border-primary/30 transition-all duration-200"
-          >
-            <FileText className="w-8 h-8 text-primary mb-2" />
-            <h3 className="font-semibold text-foreground">Documents</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              {dossier.documents?.length || 0} document(s)
-            </p>
-          </Link>
-          
-          <Link
-            href={`/partenaire/dossiers/${dossierId}/messages`}
-            className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg hover:border-primary/30 transition-all duration-200"
-          >
-            <MessageSquare className="w-8 h-8 text-primary mb-2" />
-            <h3 className="font-semibold text-foreground">Messages</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              {messages.length} message(s) récent(s)
-            </p>
-          </Link>
-          
-          <Link
-            href={`/partenaire/dossiers/${dossierId}/rendez-vous`}
-            className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg hover:border-primary/30 transition-all duration-200"
-          >
-            <Calendar className="w-8 h-8 text-primary mb-2" />
-            <h3 className="font-semibold text-foreground">Rendez-vous</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              {dossier.rendezVous?.length || 0} rendez-vous
-            </p>
-          </Link>
-          
-          <button
-            onClick={() => {
-              setShowHistory(!showHistory);
-              if (!showHistory && history.length === 0) {
-                loadHistory();
-              }
-            }}
-            className="bg-white rounded-xl shadow-md border border-gray-200 p-6 hover:shadow-lg hover:border-primary/30 transition-all duration-200 text-left"
-          >
-            <History className="w-8 h-8 text-primary mb-2" />
-            <h3 className="font-semibold text-foreground">Historique</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Voir l'historique
-            </p>
-          </button>
-        </div>
-        
-        {/* Historique du dossier */}
-        {showHistory && (
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <History className="w-6 h-6" />
-              Historique du dossier
-            </h2>
-            <button
-              onClick={() => setShowHistory(false)}
-              className="text-gray-600 hover:text-gray-800"
-            >
-              Fermer
-            </button>
-          </div>
-          
-          {loadingHistory ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Actions rapides */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-bold mb-4">Actions</h2>
+              <div className="space-y-2">
+                <Link href={`/partenaire/dossiers/${dossierId}/documents`} className="block">
+                  <Button variant="outline" className="w-full">Voir les documents</Button>
+                </Link>
+                <Link href={`/partenaire/dossiers/${dossierId}/messages`} className="block">
+                  <Button variant="outline" className="w-full">Voir les messages</Button>
+                </Link>
+                <Link href="/partenaire/notifications" className="block">
+                  <Button variant="outline" className="w-full">Voir les notifications</Button>
+                </Link>
+              </div>
             </div>
-          ) : history.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">Aucun historique disponible</p>
-          ) : (
-            <div className="space-y-4">
-              {history.map((item: any, index: number) => (
-                <div key={index} className="border-l-4 border-primary pl-4 py-2">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-2xl">{getHistoryTypeIcon(item.type)}</span>
-                        <span className="font-semibold">{getHistoryTypeLabel(item.type)}</span>
-                      </div>
-                      <p className="text-gray-700">{item.description}</p>
-                      {item.details && Object.keys(item.details).length > 0 && (
-                        <div className="mt-2 text-sm text-gray-600">
-                          {item.details.newStatut && item.details.oldStatut && (
-                            <p>
-                              <span className="font-medium">Ancien statut:</span> {getStatutLabel(item.details.oldStatut)} → 
-                              <span className="font-medium"> Nouveau statut:</span> {getStatutLabel(item.details.newStatut)}
-                            </p>
-                          )}
-                          {item.details.partenaire && (
-                            <p>
-                              <span className="font-medium">Partenaire:</span> {
-                                item.details.partenaire?.partenaireInfo?.nomOrganisme || 
-                                item.details.partenaire?.email || 
-                                'Partenaire'
-                              }
-                            </p>
-                          )}
+
+            {/* Documents du dossier */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-bold mb-4">📁 Documents du dossier</h2>
+              {isLoadingDocuments ? (
+                <p className="text-sm text-muted-foreground">Chargement...</p>
+              ) : documents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucun document</p>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map((doc: any) => (
+                    <div
+                      key={doc._id || doc.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-lg">📄</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{doc.nom}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(doc.taille / 1024).toFixed(2)} KB
+                          </p>
                         </div>
-                      )}
-                    </div>
-                    <div className="text-right text-sm text-gray-500">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {new Date(item.date).toLocaleDateString('fr-FR', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
                       </div>
-                      {item.user && typeof item.user === 'object' && (
-                        <p className="text-xs mt-1">
-                          {safeString(item.user.firstName)} {safeString(item.user.lastName)}
-                        </p>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          className="text-xs h-8"
+                          onClick={() => {
+                            setSelectedDocumentForPreview(doc);
+                            setShowDocumentPreviewModal(true);
+                          }}
+                        >
+                          👁️ Voir
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="text-xs h-8"
+                          onClick={async () => {
+                            try {
+                              const response = await documentsAPI.downloadDocument(doc._id || doc.id);
+                              const blob = new Blob([response.data]);
+                              const url = window.URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.download = doc.nom;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              window.URL.revokeObjectURL(url);
+                            } catch (error) {
+                              console.error('Erreur lors du téléchargement:', error);
+                              alert('Erreur lors du téléchargement du document');
+                            }
+                          }}
+                        >
+                          ⬇️ Télécharger
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
+
+            {/* Tâches du dossier */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-bold mb-4">✅ Tâches du dossier</h2>
+              {isLoadingTasks ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                  <p className="text-sm text-muted-foreground">Chargement des tâches...</p>
+                </div>
+              ) : tasks.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Aucune tâche pour ce dossier</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {tasks.map((task: any) => (
+                    <div
+                      key={task._id || task.id}
+                      className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <h3 className="font-semibold text-foreground">{task.titre}</h3>
+                            <span className={`text-xs px-2 py-1 rounded ${getTaskStatutColor(task.statut)}`}>
+                              {getTaskStatutLabel(task.statut)}
+                            </span>
+                            {task.priorite && (
+                              <span className={`text-xs px-2 py-1 rounded ${getTaskPrioriteColor(task.priorite)}`}>
+                                {getTaskPrioriteLabel(task.priorite)}
+                              </span>
+                            )}
+                          </div>
+                          {task.description && (
+                            <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{task.description}</p>
+                          )}
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                            {task.createdBy && (
+                              <span>
+                                Créé par: {task.createdBy.firstName} {task.createdBy.lastName}
+                              </span>
+                            )}
+                            {task.dateEcheance && (
+                              <span>
+                                Échéance: {new Date(task.dateEcheance).toLocaleDateString('fr-FR')}
+                              </span>
+                            )}
+                            {task.dateDebut && (
+                              <span>
+                                Début: {new Date(task.dateDebut).toLocaleDateString('fr-FR')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Messages récents */}
+            {messages.length > 0 && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h2 className="text-xl font-bold mb-4">💬 Messages récents</h2>
+                <div className="space-y-2">
+                  {messages.slice(0, 3).map((message: any) => (
+                    <Link
+                      key={message._id || message.id}
+                      href={`/partenaire/dossiers/${dossierId}/messages`}
+                      className="block p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                    >
+                      <p className="font-semibold text-sm truncate">{message.sujet || 'Sans sujet'}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{message.contenu}</p>
+                    </Link>
+                  ))}
+                </div>
+                <Link href={`/partenaire/dossiers/${dossierId}/messages`} className="block mt-3">
+                  <Button variant="outline" className="w-full text-xs">Voir tous les messages</Button>
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
-      )}
-      
+      </main>
+
       {/* Modal d'accusé de réception */}
       {showAcknowledgeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -601,8 +1082,77 @@ export default function PartenaireDossierDetailPage() {
           </div>
         </div>
       )}
-      </main>
+
+      {/* Modal de décharge */}
+      {showDischargeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold mb-4">Se décharger du dossier</h2>
+            <p className="text-gray-600 mb-4">
+              Vous allez vous décharger de ce dossier. Le dossier ne sera <strong>pas supprimé</strong> et restera disponible pour les administrateurs. 
+              Vous ne pourrez plus y accéder depuis votre compte partenaire.
+            </p>
+            <p className="text-sm text-orange-600 mb-4 font-semibold">
+              ⚠️ Cette action est irréversible. Vous devrez attendre qu'un administrateur vous transmette à nouveau le dossier pour y accéder.
+            </p>
+            <textarea
+              value={dischargeNotes}
+              onChange={(e) => setDischargeNotes(e.target.value)}
+              placeholder="Raison de la décharge (optionnel)..."
+              className="w-full p-3 border border-gray-300 rounded-lg mb-4"
+              rows={4}
+            />
+            <div className="flex gap-4">
+              <button
+                onClick={() => {
+                  setShowDischargeModal(false);
+                  setDischargeNotes('');
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                disabled={discharging}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleDischarge}
+                className="flex-1 px-4 py-2 rounded-lg text-white bg-orange-600 hover:bg-orange-700"
+                disabled={discharging}
+              >
+                {discharging ? 'Traitement...' : 'Confirmer la décharge'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de prévisualisation de document */}
+      {showDocumentPreviewModal && selectedDocumentForPreview && (
+        <DocumentPreview
+          document={selectedDocumentForPreview}
+          isOpen={showDocumentPreviewModal}
+          onClose={() => {
+            setShowDocumentPreviewModal(false);
+            setSelectedDocumentForPreview(null);
+          }}
+        />
+      )}
+
+      {/* Modal de demande de document */}
+      <DocumentRequestNotificationModal
+        isOpen={showDocumentRequestModal}
+        onClose={() => {
+          setShowDocumentRequestModal(false);
+          setSelectedDocumentRequestNotification(null);
+          loadDocumentRequests();
+          loadNotifications();
+        }}
+        notification={selectedDocumentRequestNotification}
+        onDocumentSent={async () => {
+          await loadDocumentRequests();
+          await loadNotifications();
+          await loadDossier();
+        }}
+      />
     </div>
   );
 }
-

@@ -40,6 +40,15 @@ const upload = multer({
 // Middleware d'authentification pour toutes les routes
 router.use(protect);
 
+// Fonctions utilitaires pour obtenir l'utilisateur effectif
+const getEffectiveUser = (req) => {
+  return req.user || null;
+};
+
+const getEffectiveUserId = (req) => {
+  return req.user?.id || req.user?._id || null;
+};
+
 // IMPORTANT: Les routes spécifiques (comme /unread-count, /users) doivent être définies AVANT les routes paramétrées (/:id)
 // pour éviter que Express ne les intercepte avec le paramètre :id
 
@@ -250,7 +259,7 @@ router.get('/', async (req, res) => {
       }
     }
 
-    const messages = await MessageInterne.find(query)
+    let messages = await MessageInterne.find(query)
       .populate('expediteur', 'firstName lastName email role')
       .populate('destinataires', 'firstName lastName email role')
       .populate('copie', 'firstName lastName email role')
@@ -258,6 +267,23 @@ router.get('/', async (req, res) => {
       .populate('messageParent', 'sujet expediteur')
       .sort({ createdAt: -1 })
       .limit(1000); // Augmenter la limite pour avoir tous les messages des threads
+
+    // Peupler manuellement le champ lu.user car Mongoose a des difficultés avec les populates sur tableaux imbriqués
+    const User = require('../models/User');
+    for (const message of messages) {
+      if (message.lu && Array.isArray(message.lu) && message.lu.length > 0) {
+        for (const luEntry of message.lu) {
+          if (luEntry.user && !luEntry.user._id && typeof luEntry.user === 'object') {
+            // Si user est un ObjectId, le peupler
+            try {
+              luEntry.user = await User.findById(luEntry.user).select('_id email');
+            } catch (err) {
+              console.error('Erreur lors du populate de lu.user:', err);
+            }
+          }
+        }
+      }
+    }
 
     console.log('✅ Messages trouvés:', messages.length);
 
@@ -730,18 +756,59 @@ router.post(
       // Ajouter le message parent si c'est une réponse
       if (messageParent && mongoose.Types.ObjectId.isValid(messageParent)) {
         // Vérifier que le message parent existe
-        const parentMessage = await MessageInterne.findById(messageParent);
+        // Populate dossierId pour s'assurer qu'il est accessible
+        const parentMessage = await MessageInterne.findById(messageParent)
+          .populate('dossierId', '_id numero titre');
+        
         if (parentMessage) {
           messageData.messageParent = new mongoose.Types.ObjectId(messageParent);
           // Hériter du threadId du parent si disponible
           threadId = parentMessage.threadId || parentMessage._id.toString();
-          // Hériter du dossier si non fourni (pour compatibilité et éviter de bloquer l'envoi)
-          if (!messageData.dossierId && parentMessage.dossierId) {
-            messageData.dossierId = parentMessage.dossierId;
+          // Hériter du dossier si non fourni (priorité au parent pour les réponses)
+          // Pour les réponses, le dossierId doit toujours être hérité du parent
+          if (parentMessage.dossierId) {
+            // Gérer le cas où dossierId est un ObjectId ou un objet peuplé
+            let inheritedDossierId = null;
+            
+            // Si c'est un objet peuplé avec _id
+            if (parentMessage.dossierId._id) {
+              inheritedDossierId = parentMessage.dossierId._id;
+            } 
+            // Si c'est un ObjectId ou un objet avec toString
+            else if (typeof parentMessage.dossierId === 'object' && parentMessage.dossierId.toString) {
+              const dossierIdStr = parentMessage.dossierId.toString();
+              if (mongoose.Types.ObjectId.isValid(dossierIdStr)) {
+                inheritedDossierId = new mongoose.Types.ObjectId(dossierIdStr);
+              } else {
+                inheritedDossierId = parentMessage.dossierId;
+              }
+            } 
+            // Si c'est déjà un ObjectId ou une string
+            else {
+              if (typeof parentMessage.dossierId === 'string' && mongoose.Types.ObjectId.isValid(parentMessage.dossierId)) {
+                inheritedDossierId = new mongoose.Types.ObjectId(parentMessage.dossierId);
+              } else {
+                inheritedDossierId = parentMessage.dossierId;
+              }
+            }
+            
+            // Utiliser le dossierId hérité (priorité sur celui fourni dans le body pour les réponses)
+            if (inheritedDossierId) {
+              messageData.dossierId = inheritedDossierId;
+              console.log('📎 DossierId hérité du message parent:', inheritedDossierId.toString());
+            } else {
+              console.error('❌ Impossible d\'extraire le dossierId du message parent');
+            }
+          } else {
+            console.error('❌ Le message parent n\'a pas de dossierId');
           }
           console.log('📎 Message parent trouvé:', messageParent, 'threadId:', threadId, 'dossierId hérité:', messageData.dossierId?.toString());
         } else {
           console.warn('⚠️ Message parent non trouvé:', messageParent);
+          return res.status(404).json({
+            success: false,
+            message: 'Le message parent spécifié n\'existe pas'
+          });
         }
       }
 
@@ -750,10 +817,21 @@ router.post(
         messageData.dossierId = new mongoose.Types.ObjectId(dossierId);
       }
 
-      // En dernier recours, si aucun dossierId disponible, ne pas bloquer l'envoi
-      // (mais consigner un avertissement pour suivi)
-      if (!messageData.dossierId) {
-        console.warn('⚠️ Aucun dossierId fourni ou hérité pour ce message. Le message sera créé sans dossier lié.');
+      // Pour les réponses, le dossierId n'est pas obligatoire (il sera hérité du parent si disponible)
+      // Pour les nouveaux messages (non-réponses), le dossierId est requis
+      if (!messageData.dossierId && !messageParent) {
+        console.error('❌ Aucun dossierId fourni pour ce nouveau message. Le dossierId est requis pour les nouveaux messages.');
+        return res.status(400).json({
+          success: false,
+          message: 'Le message doit être lié à un dossier. Veuillez sélectionner un dossier.'
+        });
+      }
+      
+      // Si c'est une réponse mais qu'aucun dossierId n'a été hérité, permettre l'envoi sans dossier
+      if (!messageData.dossierId && messageParent) {
+        console.warn('⚠️ Réponse envoyée sans dossierId. Le message sera créé sans dossier lié.');
+        // Ne pas bloquer l'envoi, mais définir dossierId à null explicitement
+        messageData.dossierId = null;
       }
 
       // Générer un threadId si nécessaire (nouveau fil)
@@ -1123,7 +1201,33 @@ router.post('/batch/delete', async (req, res) => {
       };
     }
 
-    const messages = await MessageInterne.find(query);
+    const messages = await MessageInterne.find(query)
+      .populate('expediteur', 'firstName lastName email')
+      .populate('dossierId', 'titre numero');
+
+    // Ajouter les messages à la corbeille avant suppression
+    try {
+      const Trash = require('../models/Trash');
+      for (const message of messages) {
+        const messageData = message.toObject();
+        await Trash.create({
+          itemType: 'message',
+          originalId: message._id,
+          itemData: messageData,
+          deletedBy: userIdObj,
+          originalOwner: message.expediteur?._id || message.expediteur,
+          origin: req.headers.referer || 'unknown',
+          metadata: {
+            sujet: message.sujet,
+            dossierId: message.dossierId?._id || message.dossierId
+          }
+        });
+      }
+      console.log(`✅ ${messages.length} message(s) ajouté(s) à la corbeille`);
+    } catch (trashError) {
+      console.error('⚠️ Erreur lors de l\'ajout à la corbeille (continuation de la suppression):', trashError);
+      // Continuer la suppression même si l'ajout à la corbeille échoue
+    }
 
     // Supprimer les fichiers associés
     for (const message of messages) {
@@ -1249,7 +1353,8 @@ router.get('/:id', async (req, res) => {
       .populate('expediteur', 'firstName lastName email role')
       .populate('destinataires', 'firstName lastName email role')
       .populate('copie', 'firstName lastName email role')
-      .populate('dossierId', 'titre numero statut');
+      .populate('dossierId', 'titre numero statut')
+      .populate('lu.user', '_id email'); // Peupler le champ user dans lu
 
     if (!message) {
       return res.status(404).json({
@@ -1553,8 +1658,17 @@ router.put('/:id/archive', async (req, res) => {
 // @access  Private
 router.delete('/:id', async (req, res) => {
   try {
+    const mongoose = require('mongoose');
     const userId = req.user.id;
     const messageId = req.params.id;
+
+    // Valider que messageId est un ObjectId valide
+    if (!mongoose.Types.ObjectId.isValid(messageId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de message invalide'
+      });
+    }
 
     const effectiveUser = getEffectiveUser(req);
     const userRole = effectiveUser?.role || req.user.role;
@@ -1567,13 +1681,44 @@ router.delete('/:id', async (req, res) => {
       query = { _id: messageId, expediteur: userId };
     }
 
-    const message = await MessageInterne.findOne(query);
+    const message = await MessageInterne.findOne(query)
+      .populate('expediteur', '_id')
+      .populate('dossierId', '_id');
 
     if (!message) {
       return res.status(404).json({
         success: false,
         message: 'Message non trouvé ou vous n\'avez pas l\'autorisation de le supprimer'
       });
+    }
+
+    // Ajouter le message à la corbeille avant suppression
+    try {
+      const Trash = require('../models/Trash');
+      const messageData = message.toObject();
+      
+      // Extraire l'ID de l'expéditeur (peut être un ObjectId ou un objet peuplé)
+      const expediteurId = message.expediteur?._id || message.expediteur || null;
+      
+      // Extraire l'ID du dossier (peut être un ObjectId ou un objet peuplé)
+      const dossierIdValue = message.dossierId?._id || message.dossierId || null;
+      
+      await Trash.create({
+        itemType: 'message',
+        originalId: message._id,
+        itemData: messageData,
+        deletedBy: userId,
+        originalOwner: expediteurId,
+        origin: req.headers.referer || 'unknown',
+        metadata: {
+          sujet: message.sujet || 'Sans sujet',
+          dossierId: dossierIdValue
+        }
+      });
+      console.log('✅ Message ajouté à la corbeille:', message._id);
+    } catch (trashError) {
+      console.error('⚠️ Erreur lors de l\'ajout à la corbeille (continuation de la suppression):', trashError);
+      // Continuer la suppression même si l'ajout à la corbeille échoue
     }
 
     // Supprimer les fichiers associés

@@ -280,6 +280,22 @@ export default function AdminMessageDetailPage() {
         formDataToSend.append('copie', cc);
       });
 
+      // Le message parent est le message auquel on répond
+      const messageParentId = message._id || message.id;
+      if (messageParentId) {
+        formDataToSend.append('messageParent', messageParentId);
+      }
+      
+      // Le dossierId sera hérité automatiquement du message parent par le backend si disponible
+      // Mais on peut l'envoyer aussi si disponible pour plus de sécurité
+      const dossierId = message.dossierId?._id?.toString() || 
+                       message.dossierId?.toString() || 
+                       message.dossier?._id?.toString() || 
+                       message.dossier?.toString();
+      if (dossierId) {
+        formDataToSend.append('dossierId', dossierId);
+      }
+
       attachments.forEach((file) => {
         formDataToSend.append('piecesJointes', file);
       });
@@ -326,7 +342,8 @@ export default function AdminMessageDetailPage() {
       month: 'long',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      second: '2-digit'
     });
   };
 
@@ -394,43 +411,189 @@ export default function AdminMessageDetailPage() {
           <Link href="/admin/messages">
             <Button variant="outline" size="sm">← Retour aux messages</Button>
           </Link>
-          {isReceived && (
-            <Button onClick={() => setShowReplyModal(true)}>
-              Répondre
+          <div className="flex gap-2">
+            {isReceived && (
+              <Button onClick={() => setShowReplyModal(true)}>
+                Répondre
+              </Button>
+            )}
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={async () => {
+                if (!confirm('Êtes-vous sûr de vouloir supprimer ce message ?')) return;
+                try {
+                  await messagesAPI.deleteMessage(messageId);
+                  router.push('/admin/messages');
+                } catch (err: any) {
+                  console.error('Erreur lors de la suppression:', err);
+                  alert('Erreur lors de la suppression du message');
+                }
+              }}
+              className="text-red-600 border-red-300 hover:bg-red-50"
+            >
+              🗑️ Supprimer
             </Button>
-          )}
+          </div>
         </div>
 
-        {/* Message principal */}
-        <div className="bg-white rounded-xl shadow-lg border-l-4 border-primary p-6 mb-6">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold mb-2">{isContactMessage ? message.subject : message.sujet}</h1>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span>
-                  {isReceived ? 'De' : 'À'}: {isReceived 
-                    ? isContactMessage
-                      ? `${message.name || ''} (${message.email || ''})`
-                      : `${expediteur?.firstName || ''} ${expediteur?.lastName || ''}`.trim() || expediteur?.email
-                    : message.typeMessage === 'user_to_admins'
-                    ? 'Tous les administrateurs'
-                    : message.destinataires?.map((d: any) => 
-                        `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.email
-                      ).join(', ')
-                  }
-                </span>
-                <span>•</span>
-                <span>{formatDate(message.createdAt)}</span>
-                {isReceived && !isMessageRead(message) && (
-                  <>
-                    <span>•</span>
-                    <span className="px-2 py-1 rounded-full bg-primary text-white text-xs font-semibold">
-                      Nouveau
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
+        {/* Fil de discussion complet */}
+        <div className="mb-6">
+          <h2 className="text-xl font-bold mb-4">Fil de discussion</h2>
+          <div className="space-y-4">
+            {threadMessages.length > 0 ? (
+              threadMessages.map((msg: any, index: number) => {
+                const msgExpediteur = msg.expediteur;
+                const msgExpediteurName = msgExpediteur?.firstName && msgExpediteur?.lastName
+                  ? `${msgExpediteur.firstName} ${msgExpediteur.lastName}`
+                  : msgExpediteur?.email || 'Expéditeur inconnu';
+                const msgIsReceived = msg.destinataires?.some((d: any) => 
+                  d._id?.toString() === (session?.user as any)?.id?.toString() || 
+                  d.toString() === (session?.user as any)?.id?.toString()
+                ) || msg.copie?.some((c: any) => 
+                  c._id?.toString() === (session?.user as any)?.id?.toString() || 
+                  c.toString() === (session?.user as any)?.id?.toString()
+                );
+                const msgIsRead = isMessageRead(msg);
+                const isRootMessage = !msg.messageParent;
+                
+                return (
+                  <div
+                    key={msg._id || msg.id || index}
+                    className={`bg-white rounded-xl shadow-md border-l-4 p-6 ${
+                      msgIsReceived && !msgIsRead
+                        ? 'border-primary bg-gradient-to-r from-primary/5 via-primary/2 to-white'
+                        : 'border-gray-300'
+                    } ${isRootMessage ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          {isRootMessage && (
+                            <span className="px-2 py-1 rounded-full bg-primary text-white text-xs font-semibold">
+                              Message initial
+                            </span>
+                          )}
+                          <h3 className="text-lg font-bold">{msg.sujet || msg.subject}</h3>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                          <span>
+                            <span className="font-semibold">{msgIsReceived ? 'De' : 'À'}:</span>{' '}
+                            {msgIsReceived 
+                              ? msgExpediteurName
+                              : msg.typeMessage === 'user_to_admins'
+                              ? 'Tous les administrateurs'
+                              : msg.destinataires?.map((d: any) => 
+                                  `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.email
+                                ).join(', ') || 'Aucun destinataire'
+                            }
+                          </span>
+                          <span>•</span>
+                          <span className="font-semibold">
+                            📅 {formatDate(msg.createdAt)}
+                          </span>
+                          {msg.updatedAt && msg.updatedAt !== msg.createdAt && (
+                            <>
+                              <span>•</span>
+                              <span className="text-xs">
+                                Modifié: {formatDate(msg.updatedAt)}
+                              </span>
+                            </>
+                          )}
+                          {msgIsReceived && !msgIsRead && (
+                            <>
+                              <span>•</span>
+                              <span className="px-2 py-1 rounded-full bg-primary text-white text-xs font-semibold">
+                                ✉️ Nouveau
+                              </span>
+                            </>
+                          )}
+                          {msgIsRead && (
+                            <>
+                              <span>•</span>
+                              <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">
+                                ✓ Lu
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        {msg.copie && msg.copie.length > 0 && (
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            <span className="font-semibold">Copie (CC):</span>{' '}
+                            {msg.copie.map((c: any) => 
+                              `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email
+                            ).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="mb-4">
+                      <div className="prose max-w-none p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="whitespace-pre-wrap text-foreground leading-relaxed">
+                          {msg.contenu || msg.message}
+                        </p>
+                      </div>
+                    </div>
+
+                    {msg.piecesJointes && msg.piecesJointes.length > 0 && (
+                      <div className="pt-4 border-t">
+                        <p className="text-sm font-semibold mb-2">Pièces jointes ({msg.piecesJointes.length})</p>
+                        <div className="space-y-2">
+                          {msg.piecesJointes.map((pj: any, pjIndex: number) => (
+                            <div key={pjIndex} className="flex items-center justify-between p-2 bg-gray-50 rounded-md text-sm">
+                              <div className="flex items-center gap-2">
+                                <span>📎</span>
+                                <span>{pj.originalName}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  ({(pj.size / 1024 / 1024).toFixed(2)} MB)
+                                </span>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownloadAttachment(msg._id || msg.id, pjIndex, pj.originalName)}
+                              >
+                                Télécharger
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="bg-white rounded-xl shadow-md border-l-4 border-primary p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h1 className="text-2xl font-bold mb-2">{isContactMessage ? message.subject : message.sujet}</h1>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>
+                        {isReceived ? 'De' : 'À'}: {isReceived 
+                          ? isContactMessage
+                            ? `${message.name || ''} (${message.email || ''})`
+                            : `${expediteur?.firstName || ''} ${expediteur?.lastName || ''}`.trim() || expediteur?.email
+                          : message.typeMessage === 'user_to_admins'
+                          ? 'Tous les administrateurs'
+                          : message.destinataires?.map((d: any) => 
+                              `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.email
+                            ).join(', ')
+                        }
+                      </span>
+                      <span>•</span>
+                      <span>📅 {formatDate(message.createdAt)}</span>
+                      {isReceived && !isMessageRead(message) && (
+                        <>
+                          <span>•</span>
+                          <span className="px-2 py-1 rounded-full bg-primary text-white text-xs font-semibold">
+                            Nouveau
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
             {isReceived && (
               <div className="flex gap-2">
                 <Button
@@ -471,142 +634,145 @@ export default function AdminMessageDetailPage() {
                 )}
               </div>
             )}
-          </div>
+                </div>
 
-          {message.copie && message.copie.length > 0 && (
-            <div className="mb-4 p-3 bg-gray-50 rounded-md">
-              <p className="text-xs text-muted-foreground mb-1">Copie (CC)</p>
-              <p className="text-sm font-semibold">
-                {message.copie.map((c: any) => 
-                  `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email
-                ).join(', ')}
-              </p>
-            </div>
-          )}
-
-          <div className="mb-6">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-              Contenu du message
-            </h3>
-            <div className="prose max-w-none p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="whitespace-pre-wrap text-foreground leading-relaxed">
-                {isContactMessage ? message.message : message.contenu}
-              </p>
-            </div>
-          </div>
-
-          {/* Informations complètes pour les messages de contact */}
-          {isContactMessage && (
-            <div className="mb-6 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-lg">📋</span>
-                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
-                  Informations de l'expéditeur
-                </h3>
-                <span className="ml-auto px-2 py-0.5 rounded-full bg-blue-500 text-white text-xs font-semibold">
-                  Envoyé depuis le formulaire de contact
-                </span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Nom complet</p>
-                    <p className="text-sm font-semibold text-foreground">{message.name || 'Non renseigné'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Prénom</p>
-                    <p className="text-sm font-semibold text-foreground">
-                      {message.name?.split(' ')[0] || 'Non renseigné'}
+                {message.copie && message.copie.length > 0 && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded-md">
+                    <p className="text-xs text-muted-foreground mb-1">Copie (CC)</p>
+                    <p className="text-sm font-semibold">
+                      {message.copie.map((c: any) => 
+                        `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email
+                      ).join(', ')}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Nom de famille</p>
-                    <p className="text-sm font-semibold text-foreground">
-                      {message.name?.split(' ').slice(1).join(' ') || 'Non renseigné'}
+                )}
+
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Contenu du message
+                  </h3>
+                  <div className="prose max-w-none p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <p className="whitespace-pre-wrap text-foreground leading-relaxed">
+                      {isContactMessage ? message.message : message.contenu}
                     </p>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Adresse e-mail</p>
-                    <a 
-                      href={`mailto:${message.email}`}
-                      className="text-sm font-semibold text-primary hover:underline flex items-center gap-1"
-                    >
-                      {message.email || 'Non renseigné'}
-                      <span className="text-xs">✉️</span>
-                    </a>
-                  </div>
-                  {message.phone && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Numéro de téléphone</p>
-                      <a 
-                        href={`tel:${message.phone}`}
-                        className="text-sm font-semibold text-primary hover:underline flex items-center gap-1"
-                      >
-                        {message.phone}
-                        <span className="text-xs">📞</span>
-                      </a>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Date d'envoi</p>
-                    <p className="text-sm font-semibold text-foreground">
-                      {formatDate(message.createdAt)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {(isContactMessage ? message.documents : message.piecesJointes) && 
-           (isContactMessage ? message.documents : message.piecesJointes).length > 0 && (
-            <div className="pt-4 border-t">
-              <p className="text-sm font-semibold mb-3">Pièces jointes</p>
-              <div className="space-y-2">
-                {(isContactMessage ? message.documents : message.piecesJointes).map((pj: any, index: number) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                    <div className="flex items-center gap-2">
-                      <span>📎</span>
-                      <span className="text-sm">{pj.originalName}</span>
-                      <span className="text-xs text-muted-foreground">
-                        ({(pj.size / 1024 / 1024).toFixed(2)} MB)
+                {/* Informations complètes pour les messages de contact */}
+                {isContactMessage && (
+                  <div className="mb-6 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-lg">📋</span>
+                      <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+                        Informations de l'expéditeur
+                      </h3>
+                      <span className="ml-auto px-2 py-0.5 rounded-full bg-blue-500 text-white text-xs font-semibold">
+                        Envoyé depuis le formulaire de contact
                       </span>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          if (isContactMessage) {
-                            const { contactAPI } = await import('@/lib/api');
-                            const response = await contactAPI.downloadDocument(message._id || message.id, pj._id || index.toString());
-                            const blob = new Blob([response.data], { type: response.headers['content-type'] });
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = pj.originalName;
-                            document.body.appendChild(a);
-                            a.click();
-                            window.URL.revokeObjectURL(url);
-                            document.body.removeChild(a);
-                          } else {
-                            handleDownloadAttachment(message._id || message.id, index, pj.originalName);
-                          }
-                        } catch (err) {
-                          console.error('Erreur lors du téléchargement:', err);
-                          alert('Erreur lors du téléchargement du fichier');
-                        }
-                      }}
-                    >
-                      Télécharger
-                    </Button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Nom complet</p>
+                          <p className="text-sm font-semibold text-foreground">{message.name || 'Non renseigné'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Prénom</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {message.name?.split(' ')[0] || 'Non renseigné'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Nom de famille</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {message.name?.split(' ').slice(1).join(' ') || 'Non renseigné'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Adresse e-mail</p>
+                          <a 
+                            href={`mailto:${message.email}`}
+                            className="text-sm font-semibold text-primary hover:underline flex items-center gap-1"
+                          >
+                            {message.email || 'Non renseigné'}
+                            <span className="text-xs">✉️</span>
+                          </a>
+                        </div>
+                        {message.phone && (
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Numéro de téléphone</p>
+                            <a 
+                              href={`tel:${message.phone}`}
+                              className="text-sm font-semibold text-primary hover:underline flex items-center gap-1"
+                            >
+                              {message.phone}
+                              <span className="text-xs">📞</span>
+                            </a>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Date d'envoi</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {formatDate(message.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                ))}
+                )}
+
+                {(isContactMessage ? message.documents : message.piecesJointes) && 
+                 (isContactMessage ? message.documents : message.piecesJointes).length > 0 && (
+                  <div className="pt-4 border-t">
+                    <p className="text-sm font-semibold mb-3">Pièces jointes</p>
+                    <div className="space-y-2">
+                      {(isContactMessage ? message.documents : message.piecesJointes).map((pj: any, index: number) => (
+                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                          <div className="flex items-center gap-2">
+                            <span>📎</span>
+                            <span className="text-sm">{pj.originalName}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({(pj.size / 1024 / 1024).toFixed(2)} MB)
+                            </span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                if (isContactMessage) {
+                                  const { contactAPI } = await import('@/lib/api');
+                                  const response = await contactAPI.downloadDocument(message._id || message.id, pj._id || index.toString());
+                                  const blob = new Blob([response.data], { type: response.headers['content-type'] });
+                                  const url = window.URL.createObjectURL(blob);
+                                  const a = document.createElement('a');
+                                  a.href = url;
+                                  a.download = pj.originalName;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  window.URL.revokeObjectURL(url);
+                                  document.body.removeChild(a);
+                                } else {
+                                  handleDownloadAttachment(message._id || message.id, index, pj.originalName);
+                                }
+                              } catch (err) {
+                                console.error('Erreur lors du téléchargement:', err);
+                                alert('Erreur lors du téléchargement du fichier');
+                              }
+                            }}
+                          >
+                            Télécharger
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Notifications liées - Toujours affichée */}

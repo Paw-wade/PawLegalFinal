@@ -231,19 +231,31 @@ export default function MessagesPage() {
         return;
       }
 
-      const dossierId = selectedMessage.dossierId || selectedDossierId;
-      if (!dossierId) {
-        setError('Ce message n\'est rattaché à aucun dossier. La réponse ne peut pas être envoyée.');
-        setIsReplying(false);
-        return;
-      }
-
+      // Pour une réponse, utiliser le message sélectionné comme parent
+      // Le dossierId sera automatiquement hérité du message parent par le backend
       const formDataToSend = new FormData();
       formDataToSend.append('sujet', replyData.sujet);
       formDataToSend.append('contenu', replyData.contenu);
-      const messageParentId = selectedMessage.messageParent?._id || selectedMessage.messageParent || selectedMessage._id || selectedMessage.id;
+      
+      // Le message parent est le message auquel on répond (selectedMessage)
+      const messageParentId = selectedMessage._id || selectedMessage.id;
+      if (!messageParentId) {
+        setError('Impossible d\'identifier le message parent.');
+        setIsReplying(false);
+        return;
+      }
       formDataToSend.append('messageParent', messageParentId);
-      formDataToSend.append('dossierId', dossierId);
+      
+      // Le dossierId sera hérité automatiquement du message parent par le backend
+      // Mais on peut l'envoyer aussi si disponible pour plus de sécurité
+      const dossierId = selectedMessage.dossierId?._id?.toString() || 
+                       selectedMessage.dossierId?.toString() || 
+                       selectedMessage.dossier?._id?.toString() || 
+                       selectedMessage.dossier?.toString() || 
+                       selectedDossierId;
+      if (dossierId) {
+        formDataToSend.append('dossierId', dossierId);
+      }
 
       replyAttachments.forEach((file) => {
         formDataToSend.append('piecesJointes', file);
@@ -400,6 +412,39 @@ export default function MessagesPage() {
     }
   };
 
+  const handleBatchDelete = async () => {
+    if (selectedMessages.size === 0) return;
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer ${selectedMessages.size} message(s) ?`)) return;
+    try {
+      await messagesAPI.deleteBatch(Array.from(selectedMessages));
+      await loadMessages();
+      setSelectedMessages(new Set());
+      setError(null);
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression batch:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression des messages';
+      setError(errorMessage);
+      alert(`Erreur: ${errorMessage}`);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce message ?')) return;
+    try {
+      await messagesAPI.deleteMessage(messageId);
+      await loadMessages();
+      if (selectedMessage && (selectedMessage._id || selectedMessage.id) === messageId) {
+        setSelectedMessage(null);
+      }
+      setError(null);
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression du message';
+      setError(errorMessage);
+      alert(`Erreur: ${errorMessage}`);
+    }
+  };
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -415,6 +460,24 @@ export default function MessagesPage() {
 
   // IMPORTANT: "Non lus" = non lus PAR MOI (uniquement si je suis destinataire ou en copie)
   const unreadCount = messages.filter(m => canCurrentUserMarkAsRead(m) && !isMessageRead(m)).length;
+
+  // Grouper les messages par dossier
+  const messagesByDossier = messages.reduce((acc: any, message: any) => {
+    const dossierId = message.dossierId?._id?.toString() || message.dossierId?.toString() || message.dossier?._id?.toString() || message.dossier?.toString() || 'sans-dossier';
+    const dossierTitre = message.dossierId?.titre || message.dossier?.titre || message.dossierId?.numero || message.dossier?.numero || null;
+    
+    if (!acc[dossierId]) {
+      acc[dossierId] = {
+        dossierId,
+        dossierTitre,
+        messages: []
+      };
+    }
+    acc[dossierId].messages.push(message);
+    return acc;
+  }, {});
+
+  const dossiersList = Object.values(messagesByDossier) as any[];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
@@ -580,6 +643,9 @@ export default function MessagesPage() {
               <Button variant="outline" size="sm" onClick={handleBatchUnread}>
                 Marquer comme non lu
               </Button>
+              <Button variant="destructive" size="sm" onClick={handleBatchDelete}>
+                🗑️ Supprimer
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => setSelectedMessages(new Set())}>
                 Annuler
               </Button>
@@ -602,21 +668,75 @@ export default function MessagesPage() {
             <Button onClick={() => setShowComposeModal(true)}>Envoyer un message</Button>
           </div>
         ) : (
-          <div className="space-y-3">
-            {/* Checkbox pour sélectionner tous */}
-            <div className="flex items-center gap-3 px-4 py-2 bg-white/50 rounded-lg border border-border">
-              <input
-                type="checkbox"
-                checked={selectedMessages.size === messages.length && messages.length > 0}
-                onChange={toggleSelectAll}
-                className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-              />
-              <span className="text-sm font-medium text-muted-foreground">
-                Sélectionner tout
-              </span>
-            </div>
+          <div className="space-y-6">
+            {dossiersList.map((dossierGroup: any) => (
+              <div key={dossierGroup.dossierId} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                {/* En-tête du dossier */}
+                <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-4 border-b border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
+                        <span className="text-primary text-xl">📁</span>
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold text-foreground">
+                          {dossierGroup.dossierTitre || 'Sans dossier'}
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                          {dossierGroup.messages.length} message{dossierGroup.messages.length > 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    {dossierGroup.dossierId !== 'sans-dossier' && (
+                      <Link href={`/client/dossiers/${dossierGroup.dossierId}`}>
+                        <Button variant="outline" size="sm">
+                          Voir le dossier →
+                        </Button>
+                      </Link>
+                    )}
+                    {dossierGroup.dossierId === 'sans-dossier' && (
+                      <div className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold">
+                        ⚠️ Ce message n'est pas lié à un dossier
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Messages du dossier */}
+                <div className="divide-y divide-gray-100">
+                  {/* Checkbox pour sélectionner tous les messages de ce dossier */}
+                  <div className="flex items-center gap-3 px-6 py-3 bg-gray-50 border-b border-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={dossierGroup.messages.every((m: any) => selectedMessages.has(m._id || m.id)) && dossierGroup.messages.length > 0}
+                      onChange={() => {
+                        const allSelected = dossierGroup.messages.every((m: any) => selectedMessages.has(m._id || m.id));
+                        if (allSelected) {
+                          dossierGroup.messages.forEach((m: any) => {
+                            setSelectedMessages(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(m._id || m.id);
+                              return newSet;
+                            });
+                          });
+                        } else {
+                          dossierGroup.messages.forEach((m: any) => {
+                            setSelectedMessages(prev => {
+                              const newSet = new Set(prev);
+                              newSet.add(m._id || m.id);
+                              return newSet;
+                            });
+                          });
+                        }
+                      }}
+                      className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
+                    />
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Sélectionner tous les messages de ce dossier
+                    </span>
+                  </div>
 
-            {messages.map((message) => {
+                  {dossierGroup.messages.map((message: any) => {
               const expediteur = message.expediteur;
               const userId = (session?.user as any)?.id;
               const isReceived = message.destinataires?.some((d: any) => 
@@ -771,17 +891,6 @@ export default function MessagesPage() {
                                   </div>
                                 )}
                                 
-                                {/* Dossier lié */}
-                                {message.dossier && message.dossier.titre && (
-                                  <div className="flex items-center gap-1.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                                    </svg>
-                                    <span className="text-muted-foreground font-medium">
-                                      Dossier: {message.dossier.titre}
-                                    </span>
-                                  </div>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -829,6 +938,16 @@ export default function MessagesPage() {
                         >
                           {isRead ? 'Non lu' : 'Marquer lu'}
                         </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteMessage(messageId);
+                          }}
+                        >
+                          🗑️ Supprimer
+                        </Button>
                         <Link href={`/client/messages/${messageId}`}>
                           <Button variant="outline" size="sm" className="w-full">
                             Détails
@@ -838,8 +957,11 @@ export default function MessagesPage() {
                     </div>
                   </div>
                 </div>
-              );
-            })}
+                  );
+                })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

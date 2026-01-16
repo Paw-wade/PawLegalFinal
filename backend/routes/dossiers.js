@@ -144,7 +144,7 @@ router.post(
   [
     body('titre').optional().trim(),
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']),
-    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable']),
+    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente'])
   ],
   // Middleware d'authentification optionnel
@@ -476,9 +476,21 @@ router.get('/', async (req, res) => {
     
     if (userRole === 'partenaire') {
       // Les partenaires voient uniquement les dossiers qui leur sont transmis
+      // Utiliser $elemMatch pour une recherche plus précise dans le tableau
+      const mongoose = require('mongoose');
+      const targetUserIdObj = mongoose.Types.ObjectId.isValid(targetUserId) 
+        ? new mongoose.Types.ObjectId(targetUserId) 
+        : targetUserId;
+      
+      console.log('🔍 Partenaire - targetUserId:', targetUserId, 'Type:', typeof targetUserId);
       filter = {
-        'transmittedTo.partenaire': targetUserId
+        'transmittedTo': {
+          $elemMatch: {
+            'partenaire': targetUserIdObj
+          }
+        }
       };
+      console.log('🔍 Partenaire - Filtre avec $elemMatch:', JSON.stringify(filter));
     } else if (userRole === 'client') {
       // Clients voient leurs propres dossiers
       filter = {
@@ -513,6 +525,18 @@ router.get('/', async (req, res) => {
       .sort({ createdAt: -1 });
     
     console.log('✅ Dossiers trouvés:', dossiers.length, 'pour l\'utilisateur:', targetUserEmail);
+    if (userRole === 'partenaire') {
+      console.log('📋 Détails des dossiers trouvés pour le partenaire:');
+      dossiers.forEach((d, idx) => {
+        console.log(`  ${idx + 1}. Dossier ID: ${d._id}, Titre: ${d.titre || d.numero || 'Sans titre'}`);
+        if (d.transmittedTo && d.transmittedTo.length > 0) {
+          d.transmittedTo.forEach((trans, tIdx) => {
+            const partenaireId = trans.partenaire?._id?.toString() || trans.partenaire?.toString() || trans.partenaire;
+            console.log(`     Transmission ${tIdx + 1}: partenaire=${partenaireId}, status=${trans.status}, targetUserId=${targetUserId}`);
+          });
+        }
+      });
+    }
     
     res.json({
       success: true,
@@ -593,7 +617,7 @@ router.post(
   [
     body('titre').optional().trim(),
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']),
-    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable']),
+    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente'])
   ],
   async (req, res) => {
@@ -790,6 +814,776 @@ router.post(
   }
 );
 
+// @route   GET /api/user/dossiers/:id/recap
+// @desc    Récupérer le récit récapitulatif complet d'un dossier
+// @access  Private (Admin, Superadmin, Partenaire avec accès au dossier, Propriétaire du dossier)
+router.get('/:id/recap', protect, async (req, res) => {
+  try {
+    const dossierId = req.params.id;
+    
+    // Récupérer le dossier avec toutes les relations
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName email phone createdAt')
+      .populate('createdBy', 'firstName lastName email role')
+      .populate('assignedTo', 'firstName lastName email role')
+      .populate('teamMembers', 'firstName lastName email role')
+      .populate('teamLeader', 'firstName lastName email role')
+      .populate('transmittedTo.partenaire', 'firstName lastName email partenaireInfo')
+      .populate('transmittedTo.transmittedBy', 'firstName lastName email role')
+      .populate('documents')
+      .populate('messages')
+      .populate('rendezVous');
+    
+    if (!dossier) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dossier non trouvé'
+      });
+    }
+    
+    // Vérifier l'accès
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
+    const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(
+      m => m._id.toString() === req.user.id.toString()
+    );
+    const isPartenaire = req.user.role === 'partenaire';
+    const isTransmittedToPartenaire = isPartenaire && dossier.transmittedTo && dossier.transmittedTo.some(
+      t => {
+        if (!t.partenaire) return false;
+        const partenaireId = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
+        return partenaireId === req.user.id.toString() && t.status !== 'refused';
+      }
+    );
+    
+    if (!isAdmin && !isOwner && !isAssigned && !isTeamMember && !isTransmittedToPartenaire) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès non autorisé à ce dossier'
+      });
+    }
+    
+    // Récupérer les données complémentaires
+    const Document = require('../models/Document');
+    const Task = require('../models/Task');
+    const MessageInterne = require('../models/MessageInterne');
+    const RendezVous = require('../models/RendezVous');
+    const DocumentRequest = require('../models/DocumentRequest');
+    const Log = require('../models/Log');
+    
+    // Documents
+    const documents = await Document.find({ dossierId: dossierId })
+      .populate('user', 'firstName lastName email')
+      .sort({ createdAt: -1 });
+    
+    // Tâches
+    const tasks = await Task.find({ dossier: dossierId })
+      .populate('createdBy', 'firstName lastName email role')
+      .populate('assignedTo', 'firstName lastName email role')
+      .populate('completedBy', 'firstName lastName email role')
+      .sort({ createdAt: -1 });
+    
+    // Messages
+    const messages = await MessageInterne.find({ dossierId: dossierId })
+      .populate('expediteur', 'firstName lastName email role')
+      .populate('destinataires', 'firstName lastName email role')
+      .sort({ createdAt: -1 });
+    
+    // Rendez-vous
+    const rendezVous = await RendezVous.find({ dossierId: dossierId })
+      .populate('client', 'firstName lastName email')
+      .populate('createdBy', 'firstName lastName email role')
+      .sort({ date: -1 });
+    
+    // Demandes de documents
+    const documentRequests = await DocumentRequest.find({ dossier: dossierId })
+      .populate('requestedBy', 'firstName lastName email role')
+      .populate('requestedFrom', 'firstName lastName email role')
+      .populate('document')
+      .sort({ createdAt: -1 });
+    
+    // Historique (logs)
+    const logs = await Log.find({
+      $or: [
+        { 'metadata.dossierId': dossierId },
+        { description: { $regex: dossierId, $options: 'i' } }
+      ]
+    })
+      .populate('user', 'firstName lastName email role')
+      .sort({ createdAt: -1 });
+    
+    // Calculer les statistiques
+    const now = new Date();
+    const createdAt = new Date(dossier.createdAt);
+    const dureeTraitement = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Construire le récit récapitulatif
+    const recap = {
+      dossier: {
+        numero: dossier.numero,
+        titre: dossier.titre,
+        description: dossier.description,
+        categorie: dossier.categorie,
+        type: dossier.type,
+        statut: dossier.statut,
+        priorite: dossier.priorite,
+        dateEcheance: dossier.dateEcheance,
+        motifRefus: dossier.motifRefus,
+        notes: dossier.notes,
+        createdAt: dossier.createdAt,
+        updatedAt: dossier.updatedAt
+      },
+      client: dossier.user ? {
+        nom: `${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim(),
+        email: dossier.user.email,
+        telephone: dossier.user.phone,
+        inscritDepuis: dossier.user.createdAt
+      } : {
+        nom: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim(),
+        email: dossier.clientEmail,
+        telephone: dossier.clientTelephone,
+        inscritDepuis: null
+      },
+      equipe: {
+        createur: dossier.createdBy ? {
+          nom: `${dossier.createdBy.firstName || ''} ${dossier.createdBy.lastName || ''}`.trim(),
+          email: dossier.createdBy.email,
+          role: dossier.createdBy.role
+        } : null,
+        chefEquipe: dossier.teamLeader ? {
+          nom: `${dossier.teamLeader.firstName || ''} ${dossier.teamLeader.lastName || ''}`.trim(),
+          email: dossier.teamLeader.email,
+          role: dossier.teamLeader.role
+        } : null,
+        membres: dossier.teamMembers ? dossier.teamMembers.map(m => ({
+          nom: `${m.firstName || ''} ${m.lastName || ''}`.trim(),
+          email: m.email,
+          role: m.role
+        })) : [],
+        assigneA: dossier.assignedTo ? {
+          nom: `${dossier.assignedTo.firstName || ''} ${dossier.assignedTo.lastName || ''}`.trim(),
+          email: dossier.assignedTo.email,
+          role: dossier.assignedTo.role
+        } : null
+      },
+      documents: {
+        total: documents.length,
+        liste: documents.map(doc => ({
+          nom: doc.nom,
+          type: doc.typeMime || doc.categorie,
+          taille: doc.taille,
+          description: doc.description,
+          uploadPar: doc.user ? `${doc.user.firstName || ''} ${doc.user.lastName || ''}`.trim() : 'Inconnu',
+          dateUpload: doc.createdAt
+        }))
+      },
+      documentRequests: {
+        total: documentRequests.length,
+        enAttente: documentRequests.filter(r => r.status === 'pending').length,
+        recus: documentRequests.filter(r => r.status === 'received').length,
+        liste: documentRequests.map(req => ({
+          type: req.documentTypeLabel,
+          demandePar: req.requestedBy ? `${req.requestedBy.firstName || ''} ${req.requestedBy.lastName || ''}`.trim() : 'Inconnu',
+          demandeA: req.requestedFrom ? `${req.requestedFrom.firstName || ''} ${req.requestedFrom.lastName || ''}`.trim() : 'Inconnu',
+          statut: req.status,
+          message: req.message,
+          dateDemande: req.createdAt,
+          dateReception: req.receivedAt
+        }))
+      },
+      taches: {
+        total: tasks.length,
+        enCours: tasks.filter(t => t.statut !== 'termine' && t.statut !== 'annule' && !t.effectue).length,
+        terminees: tasks.filter(t => t.statut === 'termine' || t.effectue).length,
+        liste: tasks.map(task => ({
+          titre: task.titre,
+          description: task.description,
+          statut: task.statut,
+          priorite: task.priorite,
+          creePar: task.createdBy ? `${task.createdBy.firstName || ''} ${task.createdBy.lastName || ''}`.trim() : 'Inconnu',
+          assigneA: task.assignedTo ? task.assignedTo.map(u => `${u.firstName || ''} ${u.lastName || ''}`.trim()).join(', ') : 'Non assigné',
+          dateEcheance: task.dateEcheance,
+          dateCreation: task.dateDebut || task.createdAt,
+          dateCompletion: task.dateEffectue || task.dateFin,
+          completePar: task.completedBy ? `${task.completedBy.firstName || ''} ${task.completedBy.lastName || ''}`.trim() : null
+        }))
+      },
+      messages: {
+        total: messages.length,
+        liste: messages.slice(0, 10).map(msg => ({
+          sujet: msg.sujet,
+          expediteur: msg.expediteur ? `${msg.expediteur.firstName || ''} ${msg.expediteur.lastName || ''}`.trim() : 'Inconnu',
+          destinataires: msg.destinataires ? msg.destinataires.map(d => `${d.firstName || ''} ${d.lastName || ''}`.trim()).join(', ') : 'Non spécifié',
+          date: msg.createdAt
+        }))
+      },
+      rendezVous: {
+        total: rendezVous.length,
+        passes: rendezVous.filter(r => new Date(r.date) < now).length,
+        aVenir: rendezVous.filter(r => new Date(r.date) >= now).length,
+        liste: rendezVous.map(rv => ({
+          date: rv.date,
+          heure: rv.heure,
+          statut: rv.statut,
+          type: rv.type,
+          notes: rv.notes
+        }))
+      },
+      transmissions: dossier.transmittedTo ? dossier.transmittedTo.map(trans => ({
+        partenaire: trans.partenaire ? {
+          nom: trans.partenaire.partenaireInfo?.nomOrganisme || `${trans.partenaire.firstName || ''} ${trans.partenaire.lastName || ''}`.trim(),
+          email: trans.partenaire.email
+        } : null,
+        transmisPar: trans.transmittedBy ? `${trans.transmittedBy.firstName || ''} ${trans.transmittedBy.lastName || ''}`.trim() : 'Inconnu',
+        dateTransmission: trans.transmittedAt,
+        statut: trans.status,
+        accepte: trans.acknowledged,
+        dateAcceptation: trans.acknowledgedAt,
+        notes: trans.notes
+      })) : [],
+      historique: logs.slice(0, 20).map(log => ({
+        action: log.action,
+        description: log.description,
+        utilisateur: log.user ? `${log.user.firstName || ''} ${log.user.lastName || ''}`.trim() : 'Inconnu',
+        date: log.createdAt,
+        details: log.metadata
+      })),
+      statistiques: {
+        dureeTraitement: dureeTraitement,
+        joursDepuisCreation: dureeTraitement,
+        joursDepuisDerniereMAJ: dossier.updatedAt ? Math.floor((now.getTime() - new Date(dossier.updatedAt).getTime()) / (1000 * 60 * 60 * 24)) : 0,
+        nombreModifications: logs.filter(l => l.action === 'dossier_updated').length,
+        nombreChangementsStatut: logs.filter(l => l.metadata?.newStatut).length
+      }
+    };
+    
+    res.json({
+      success: true,
+      recap
+    });
+  } catch (error) {
+    console.error('Erreur lors de la génération du récit récapitulatif:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: error.message
+    });
+  }
+});
+
+// @route   GET /api/user/dossiers/:id/recap/pdf
+// @desc    Générer et télécharger le récit récapitulatif en PDF
+// @access  Private (Admin, Superadmin, Partenaire avec accès au dossier, Propriétaire du dossier)
+router.get('/:id/recap/pdf', protect, async (req, res) => {
+  try {
+    const dossierId = req.params.id;
+    
+    // Récupérer le dossier avec toutes les relations (même logique que /recap)
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName email phone createdAt')
+      .populate('createdBy', 'firstName lastName email role')
+      .populate('assignedTo', 'firstName lastName email role')
+      .populate('teamMembers', 'firstName lastName email role')
+      .populate('teamLeader', 'firstName lastName email role')
+      .populate('transmittedTo.partenaire', 'firstName lastName email partenaireInfo')
+      .populate('transmittedTo.transmittedBy', 'firstName lastName email role')
+      .populate('documents')
+      .populate('messages')
+      .populate('rendezVous');
+    
+    if (!dossier) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dossier non trouvé'
+      });
+    }
+    
+    // Vérifier l'accès (même logique que /recap)
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
+    const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(
+      m => m._id.toString() === req.user.id.toString()
+    );
+    const isPartenaire = req.user.role === 'partenaire';
+    const isTransmittedToPartenaire = isPartenaire && dossier.transmittedTo && dossier.transmittedTo.some(
+      t => {
+        if (!t.partenaire) return false;
+        const partenaireId = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
+        return partenaireId === req.user.id.toString() && t.status !== 'refused';
+      }
+    );
+    
+    if (!isAdmin && !isOwner && !isAssigned && !isTeamMember && !isTransmittedToPartenaire) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès non autorisé à ce dossier'
+      });
+    }
+    
+    // Récupérer les données complémentaires
+    const Document = require('../models/Document');
+    const Task = require('../models/Task');
+    const MessageInterne = require('../models/MessageInterne');
+    const RendezVous = require('../models/RendezVous');
+    const DocumentRequest = require('../models/DocumentRequest');
+    const Log = require('../models/Log');
+    
+    const [documents, tasks, messages, rendezVous, documentRequests, logs] = await Promise.all([
+      Document.find({ dossierId: dossierId }).populate('user', 'firstName lastName email').sort({ createdAt: -1 }),
+      Task.find({ dossier: dossierId }).populate('createdBy', 'firstName lastName email role').populate('assignedTo', 'firstName lastName email role').populate('completedBy', 'firstName lastName email role').sort({ createdAt: -1 }),
+      MessageInterne.find({ dossierId: dossierId }).populate('expediteur', 'firstName lastName email role').populate('destinataires', 'firstName lastName email role').sort({ createdAt: -1 }),
+      RendezVous.find({ dossierId: dossierId }).populate('client', 'firstName lastName email').populate('createdBy', 'firstName lastName email role').sort({ date: -1 }),
+      DocumentRequest.find({ dossier: dossierId }).populate('requestedBy', 'firstName lastName email role').populate('requestedFrom', 'firstName lastName email role').populate('document').sort({ createdAt: -1 }),
+      Log.find({
+        $or: [
+          { 'metadata.dossierId': dossierId },
+          { description: { $regex: dossierId, $options: 'i' } }
+        ]
+      }).populate('user', 'firstName lastName email role').sort({ createdAt: -1 })
+    ]);
+    
+    // Construire le récit récapitulatif (même structure que /recap)
+    const now = new Date();
+    const createdAt = new Date(dossier.createdAt);
+    const dureeTraitement = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+    
+    const recap = {
+      dossier: {
+        numero: dossier.numero,
+        titre: dossier.titre,
+        description: dossier.description,
+        categorie: dossier.categorie,
+        type: dossier.type,
+        statut: dossier.statut,
+        priorite: dossier.priorite,
+        dateEcheance: dossier.dateEcheance,
+        motifRefus: dossier.motifRefus,
+        notes: dossier.notes,
+        createdAt: dossier.createdAt,
+        updatedAt: dossier.updatedAt
+      },
+      client: dossier.user ? {
+        nom: `${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim(),
+        email: dossier.user.email,
+        telephone: dossier.user.phone,
+        inscritDepuis: dossier.user.createdAt
+      } : {
+        nom: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim(),
+        email: dossier.clientEmail,
+        telephone: dossier.clientTelephone,
+        inscritDepuis: null
+      },
+      equipe: {
+        createur: dossier.createdBy ? {
+          nom: `${dossier.createdBy.firstName || ''} ${dossier.createdBy.lastName || ''}`.trim(),
+          email: dossier.createdBy.email,
+          role: dossier.createdBy.role
+        } : null,
+        chefEquipe: dossier.teamLeader ? {
+          nom: `${dossier.teamLeader.firstName || ''} ${dossier.teamLeader.lastName || ''}`.trim(),
+          email: dossier.teamLeader.email,
+          role: dossier.teamLeader.role
+        } : null,
+        membres: dossier.teamMembers ? dossier.teamMembers.map(m => ({
+          nom: `${m.firstName || ''} ${m.lastName || ''}`.trim(),
+          email: m.email,
+          role: m.role
+        })) : [],
+        assigneA: dossier.assignedTo ? {
+          nom: `${dossier.assignedTo.firstName || ''} ${dossier.assignedTo.lastName || ''}`.trim(),
+          email: dossier.assignedTo.email,
+          role: dossier.assignedTo.role
+        } : null
+      },
+      documents: {
+        total: documents.length,
+        liste: documents.map(doc => ({
+          nom: doc.nom,
+          type: doc.typeMime || doc.categorie,
+          taille: doc.taille,
+          description: doc.description,
+          uploadPar: doc.user ? `${doc.user.firstName || ''} ${doc.user.lastName || ''}`.trim() : 'Inconnu',
+          dateUpload: doc.createdAt
+        }))
+      },
+      documentRequests: {
+        total: documentRequests.length,
+        enAttente: documentRequests.filter(r => r.status === 'pending').length,
+        recus: documentRequests.filter(r => r.status === 'received').length,
+        liste: documentRequests.map(req => ({
+          type: req.documentTypeLabel,
+          demandePar: req.requestedBy ? `${req.requestedBy.firstName || ''} ${req.requestedBy.lastName || ''}`.trim() : 'Inconnu',
+          demandeA: req.requestedFrom ? `${req.requestedFrom.firstName || ''} ${req.requestedFrom.lastName || ''}`.trim() : 'Inconnu',
+          statut: req.status,
+          message: req.message,
+          dateDemande: req.createdAt,
+          dateReception: req.receivedAt
+        }))
+      },
+      taches: {
+        total: tasks.length,
+        enCours: tasks.filter(t => t.statut !== 'termine' && t.statut !== 'annule' && !t.effectue).length,
+        terminees: tasks.filter(t => t.statut === 'termine' || t.effectue).length,
+        liste: tasks.map(task => ({
+          titre: task.titre,
+          description: task.description,
+          statut: task.statut,
+          priorite: task.priorite,
+          creePar: task.createdBy ? `${task.createdBy.firstName || ''} ${task.createdBy.lastName || ''}`.trim() : 'Inconnu',
+          assigneA: task.assignedTo ? task.assignedTo.map(u => `${u.firstName || ''} ${u.lastName || ''}`.trim()).join(', ') : 'Non assigné',
+          dateEcheance: task.dateEcheance,
+          dateCreation: task.dateDebut || task.createdAt,
+          dateCompletion: task.dateEffectue || task.dateFin,
+          completePar: task.completedBy ? `${task.completedBy.firstName || ''} ${task.completedBy.lastName || ''}`.trim() : null
+        }))
+      },
+      messages: {
+        total: messages.length,
+        liste: messages.slice(0, 10).map(msg => ({
+          sujet: msg.sujet,
+          expediteur: msg.expediteur ? `${msg.expediteur.firstName || ''} ${msg.expediteur.lastName || ''}`.trim() : 'Inconnu',
+          destinataires: msg.destinataires ? msg.destinataires.map(d => `${d.firstName || ''} ${d.lastName || ''}`.trim()).join(', ') : 'Non spécifié',
+          date: msg.createdAt
+        }))
+      },
+      rendezVous: {
+        total: rendezVous.length,
+        passes: rendezVous.filter(r => new Date(r.date) < now).length,
+        aVenir: rendezVous.filter(r => new Date(r.date) >= now).length,
+        liste: rendezVous.map(rv => ({
+          date: rv.date,
+          heure: rv.heure,
+          statut: rv.statut,
+          type: rv.type,
+          notes: rv.notes
+        }))
+      },
+      transmissions: dossier.transmittedTo ? dossier.transmittedTo.map(trans => ({
+        partenaire: trans.partenaire ? {
+          nom: trans.partenaire.partenaireInfo?.nomOrganisme || `${trans.partenaire.firstName || ''} ${trans.partenaire.lastName || ''}`.trim(),
+          email: trans.partenaire.email
+        } : null,
+        transmisPar: trans.transmittedBy ? `${trans.transmittedBy.firstName || ''} ${trans.transmittedBy.lastName || ''}`.trim() : 'Inconnu',
+        dateTransmission: trans.transmittedAt,
+        statut: trans.status,
+        accepte: trans.acknowledged,
+        dateAcceptation: trans.acknowledgedAt,
+        notes: trans.notes
+      })) : [],
+      historique: logs.slice(0, 20).map(log => ({
+        action: log.action,
+        description: log.description,
+        utilisateur: log.user ? `${log.user.firstName || ''} ${log.user.lastName || ''}`.trim() : 'Inconnu',
+        date: log.createdAt,
+        details: log.metadata
+      })),
+      statistiques: {
+        dureeTraitement: dureeTraitement,
+        joursDepuisCreation: dureeTraitement,
+        joursDepuisDerniereMAJ: dossier.updatedAt ? Math.floor((now.getTime() - new Date(dossier.updatedAt).getTime()) / (1000 * 60 * 60 * 24)) : 0,
+        nombreModifications: logs.filter(l => l.action === 'dossier_updated').length,
+        nombreChangementsStatut: logs.filter(l => l.metadata?.newStatut).length
+      }
+    };
+    
+    // Générer le PDF
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+    
+    // Headers pour le téléchargement
+    const filename = `Recit_Dossier_${recap.dossier.numero || dossierId}_${new Date().toISOString().split('T')[0]}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    
+    // Pipe le PDF vers la réponse
+    doc.pipe(res);
+    
+    // Fonction helper pour ajouter du texte avec gestion de la pagination
+    let yPosition = 50;
+    const pageHeight = doc.page.height;
+    const margin = 50;
+    const lineHeight = 15;
+    const sectionSpacing = 20;
+    let pageCount = 1;
+    
+    // Suivre les pages pour le footer
+    doc.on('pageAdded', () => {
+      pageCount++;
+    });
+    
+    const addText = (text, x, y, options = {}) => {
+      let currentY = y;
+      if (currentY > pageHeight - 80) {
+        doc.addPage();
+        currentY = margin;
+      }
+      doc.text(text, x, currentY, options);
+      // Retourner la nouvelle position Y après l'ajout du texte
+      return doc.y || (currentY + lineHeight);
+    };
+    
+    const addMultilineText = (text, x, y, options = {}) => {
+      let currentY = y;
+      if (currentY > pageHeight - 100) {
+        doc.addPage();
+        currentY = margin;
+      }
+      
+      // Calculer approximativement le nombre de lignes nécessaires
+      const textWidth = options.width || (doc.page.width - 2 * margin);
+      const fontSize = doc._fontSize || 10;
+      const charsPerLine = Math.floor(textWidth / (fontSize * 0.6)); // Approximation
+      const lines = Math.ceil(text.length / charsPerLine) || 1;
+      
+      doc.text(text, x, currentY, options);
+      return currentY + (lines * lineHeight);
+    };
+    
+    const addSection = (title, y) => {
+      let currentY = y;
+      if (currentY > pageHeight - 100) {
+        doc.addPage();
+        currentY = margin;
+      }
+      doc.fontSize(14).font('Helvetica-Bold').fillColor('#FF6600');
+      currentY = addText(title, margin, currentY);
+      doc.fontSize(10).font('Helvetica').fillColor('#000000');
+      currentY += lineHeight;
+      return currentY;
+    };
+    
+    // En-tête
+    doc.fontSize(18).font('Helvetica-Bold').fillColor('#FF6600');
+    yPosition = addText('PAW LEGAL', margin, yPosition);
+    doc.fontSize(16).fillColor('#000000');
+    yPosition += lineHeight;
+    yPosition = addText('RÉCIT RÉCAPITULATIF DU DOSSIER', margin, yPosition);
+    yPosition += sectionSpacing;
+    
+    // Informations du dossier
+    yPosition = addSection('INFORMATIONS DU DOSSIER', yPosition);
+    yPosition = addText(`Numéro : ${recap.dossier.numero || 'N/A'}`, margin, yPosition);
+    yPosition += lineHeight;
+    yPosition = addText(`Titre : ${recap.dossier.titre || 'Sans titre'}`, margin, yPosition);
+    yPosition += lineHeight;
+    yPosition = addText(`Catégorie : ${recap.dossier.categorie || 'N/A'}`, margin, yPosition);
+    yPosition += lineHeight;
+    yPosition = addText(`Type : ${recap.dossier.type || 'N/A'}`, margin, yPosition);
+    yPosition += lineHeight;
+    yPosition = addText(`Statut : ${recap.dossier.statut || 'N/A'}`, margin, yPosition);
+    yPosition += lineHeight;
+    yPosition = addText(`Priorité : ${recap.dossier.priorite || 'N/A'}`, margin, yPosition);
+    yPosition += lineHeight;
+    yPosition = addText(`Créé le : ${new Date(recap.dossier.createdAt).toLocaleDateString('fr-FR')}`, margin, yPosition);
+    yPosition += lineHeight;
+    yPosition = addText(`Dernière mise à jour : ${new Date(recap.dossier.updatedAt).toLocaleDateString('fr-FR')}`, margin, yPosition);
+    if (recap.dossier.dateEcheance) {
+      yPosition += lineHeight;
+      yPosition = addText(`Échéance : ${new Date(recap.dossier.dateEcheance).toLocaleDateString('fr-FR')}`, margin, yPosition);
+    }
+    yPosition += sectionSpacing;
+    
+    // Informations client
+    yPosition = addSection('INFORMATIONS CLIENT', yPosition);
+    yPosition = addText(`Nom : ${recap.client.nom || 'N/A'}`, margin, yPosition);
+    yPosition += lineHeight;
+    yPosition = addText(`Email : ${recap.client.email || 'N/A'}`, margin, yPosition);
+    yPosition += lineHeight;
+    if (recap.client.telephone) {
+      yPosition = addText(`Téléphone : ${recap.client.telephone}`, margin, yPosition);
+      yPosition += lineHeight;
+    }
+    if (recap.client.inscritDepuis) {
+      yPosition = addText(`Inscrit depuis : ${new Date(recap.client.inscritDepuis).toLocaleDateString('fr-FR')}`, margin, yPosition);
+      yPosition += lineHeight;
+    }
+    yPosition += sectionSpacing;
+    
+    // Équipe
+    yPosition = addSection('ÉQUIPE DE TRAITEMENT', yPosition);
+    if (recap.equipe.createur) {
+      yPosition = addText(`Créateur : ${recap.equipe.createur.nom} (${recap.equipe.createur.email})`, margin, yPosition);
+      yPosition += lineHeight;
+    }
+    if (recap.equipe.chefEquipe) {
+      yPosition = addText(`Chef d'équipe : ${recap.equipe.chefEquipe.nom} (${recap.equipe.chefEquipe.email})`, margin, yPosition);
+      yPosition += lineHeight;
+    }
+    if (recap.equipe.membres && recap.equipe.membres.length > 0) {
+      yPosition = addText(`Membres de l'équipe : ${recap.equipe.membres.map(m => m.nom).join(', ')}`, margin, yPosition);
+      yPosition += lineHeight;
+    }
+    yPosition += sectionSpacing;
+    
+    // Documents
+    yPosition = addSection('DOCUMENTS', yPosition);
+    yPosition = addText(`Total : ${recap.documents.total} document(s)`, margin, yPosition);
+    yPosition += lineHeight;
+    if (recap.documents.liste && recap.documents.liste.length > 0) {
+      recap.documents.liste.forEach((doc, index) => {
+        yPosition = addText(`${index + 1}. ${doc.nom}`, margin + 20, yPosition);
+        yPosition += lineHeight * 0.7;
+        yPosition = addText(`   Type: ${doc.type} | Taille: ${doc.taille ? (doc.taille / 1024).toFixed(2) + ' KB' : 'N/A'} | Ajouté par: ${doc.uploadPar} | Date: ${new Date(doc.dateUpload).toLocaleDateString('fr-FR')}`, margin + 20, yPosition);
+        yPosition += lineHeight;
+      });
+    }
+    yPosition += sectionSpacing;
+    
+    // Demandes de documents
+    if (recap.documentRequests.total > 0) {
+      yPosition = addSection('DEMANDES DE DOCUMENTS', yPosition);
+      yPosition = addText(`Total : ${recap.documentRequests.total} demande(s)`, margin, yPosition);
+      yPosition += lineHeight;
+      yPosition = addText(`En attente : ${recap.documentRequests.enAttente} | Reçus : ${recap.documentRequests.recus}`, margin, yPosition);
+      yPosition += sectionSpacing;
+    }
+    
+    // Tâches
+    if (recap.taches.total > 0) {
+      yPosition = addSection('TÂCHES', yPosition);
+      yPosition = addText(`Total : ${recap.taches.total} tâche(s)`, margin, yPosition);
+      yPosition += lineHeight;
+      yPosition = addText(`En cours : ${recap.taches.enCours} | Terminées : ${recap.taches.terminees}`, margin, yPosition);
+      yPosition += lineHeight;
+      if (recap.taches.liste && recap.taches.liste.length > 0) {
+        recap.taches.liste.slice(0, 10).forEach((task, index) => {
+          yPosition = addText(`${index + 1}. ${task.titre}`, margin + 20, yPosition);
+          yPosition += lineHeight * 0.7;
+          yPosition = addText(`   Statut: ${task.statut} | Priorité: ${task.priorite} | Assigné à: ${task.assigneA}`, margin + 20, yPosition);
+          yPosition += lineHeight;
+        });
+      }
+      yPosition += sectionSpacing;
+    }
+    
+    // Messages
+    if (recap.messages.total > 0) {
+      yPosition = addSection('COMMUNICATION', yPosition);
+      yPosition = addText(`Total : ${recap.messages.total} message(s) échangé(s)`, margin, yPosition);
+      yPosition += sectionSpacing;
+    }
+    
+    // Rendez-vous
+    if (recap.rendezVous.total > 0) {
+      yPosition = addSection('RENDEZ-VOUS', yPosition);
+      yPosition = addText(`Total : ${recap.rendezVous.total} rendez-vous`, margin, yPosition);
+      yPosition += lineHeight;
+      yPosition = addText(`Passés : ${recap.rendezVous.passes} | À venir : ${recap.rendezVous.aVenir}`, margin, yPosition);
+      yPosition += sectionSpacing;
+    }
+    
+    // Transmissions
+    if (recap.transmissions && recap.transmissions.length > 0) {
+      yPosition = addSection('TRANSMISSIONS AUX PARTENAIRES', yPosition);
+      recap.transmissions.forEach((trans, index) => {
+        if (trans.partenaire) {
+          yPosition = addText(`${index + 1}. ${trans.partenaire.nom}`, margin + 20, yPosition);
+          yPosition += lineHeight * 0.7;
+          yPosition = addText(`   Transmis le: ${new Date(trans.dateTransmission).toLocaleDateString('fr-FR')} | Statut: ${trans.statut}`, margin + 20, yPosition);
+          if (trans.accepte && trans.dateAcceptation) {
+            yPosition += lineHeight * 0.7;
+            yPosition = addText(`   Accepté le: ${new Date(trans.dateAcceptation).toLocaleDateString('fr-FR')}`, margin + 20, yPosition);
+          }
+          yPosition += lineHeight;
+        }
+      });
+      yPosition += sectionSpacing;
+    }
+    
+    // Historique récent
+    if (recap.historique && recap.historique.length > 0) {
+      yPosition = addSection('HISTORIQUE RÉCENT', yPosition);
+      recap.historique.slice(0, 10).forEach((log, index) => {
+        yPosition = addText(`${new Date(log.date).toLocaleDateString('fr-FR')} - ${log.description}`, margin + 20, yPosition);
+        yPosition += lineHeight * 0.7;
+        yPosition = addText(`   Par: ${log.utilisateur}`, margin + 20, yPosition);
+        yPosition += lineHeight;
+      });
+      yPosition += sectionSpacing;
+    }
+    
+    // Statistiques
+    yPosition = addSection('STATISTIQUES', yPosition);
+    yPosition = addText(`Durée de traitement : ${recap.statistiques.dureeTraitement} jour(s)`, margin, yPosition);
+    yPosition += lineHeight;
+    yPosition = addText(`Nombre de modifications : ${recap.statistiques.nombreModifications}`, margin, yPosition);
+    yPosition += lineHeight;
+    yPosition = addText(`Changements de statut : ${recap.statistiques.nombreChangementsStatut}`, margin, yPosition);
+    yPosition += sectionSpacing;
+    
+    // Description
+    if (recap.dossier.description) {
+      yPosition = addSection('DESCRIPTION', yPosition);
+      doc.fontSize(10);
+      yPosition = addMultilineText(recap.dossier.description, margin, yPosition, {
+        width: doc.page.width - 2 * margin,
+        align: 'left'
+      });
+      yPosition += sectionSpacing;
+    }
+    
+    // Notes
+    if (recap.dossier.notes) {
+      yPosition = addSection('NOTES INTERNES', yPosition);
+      doc.fontSize(10);
+      yPosition = addMultilineText(recap.dossier.notes, margin, yPosition, {
+        width: doc.page.width - 2 * margin,
+        align: 'left'
+      });
+    }
+    
+    // Gérer les erreurs du stream PDF
+    doc.on('error', (err) => {
+      console.error('Erreur dans le stream PDF:', err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Erreur lors de la génération du PDF',
+          error: err.message
+        });
+      }
+    });
+    
+    // Ajouter le footer sur toutes les pages AVANT de finaliser
+    try {
+      const bufferedPages = doc.bufferedPageRange();
+      if (bufferedPages && bufferedPages.count > 0) {
+        const totalPages = bufferedPages.count;
+        const startPage = bufferedPages.start;
+        
+        for (let i = startPage; i < startPage + totalPages; i++) {
+          doc.switchToPage(i);
+          doc.fontSize(8).fillColor('#666666');
+          doc.text(
+            `Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')} - Page ${i - startPage + 1}/${totalPages}`,
+            margin,
+            doc.page.height - 30,
+            { align: 'center', width: doc.page.width - 2 * margin }
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Erreur lors de l\'ajout du footer:', err.message);
+      // Continuer même si l'ajout du footer échoue
+    }
+    
+    // Finaliser le PDF
+    doc.end();
+    
+  } catch (error) {
+    console.error('Erreur lors de la génération du PDF:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la génération du PDF',
+        error: error.message
+      });
+    }
+  }
+});
+
 // @route   GET /api/user/dossiers/:id
 // @desc    Récupérer un dossier par ID
 // @access  Private
@@ -908,7 +1702,7 @@ router.put(
     // Validation simplifiée : tous les champs sont optionnels
     // Si un champ est fourni, il sera validé, sinon ignoré
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']).withMessage('Catégorie invalide'),
-    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable']).withMessage('Statut invalide'),
+    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']).withMessage('Statut invalide'),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente']).withMessage('Priorité invalide')
     // Pas de validation pour les autres champs optionnels
   ],
@@ -1282,13 +2076,40 @@ router.patch('/:id/cancel', protect, async (req, res) => {
 // @access  Private/Admin
 router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id);
+    const dossier = await Dossier.findById(req.params.id)
+      .populate('user', 'firstName lastName email')
+      .populate('createdBy', 'firstName lastName email');
 
     if (!dossier) {
       return res.status(404).json({
         success: false,
         message: 'Dossier non trouvé'
       });
+    }
+
+    // Ajouter le dossier à la corbeille avant suppression
+    try {
+      const Trash = require('../models/Trash');
+      const dossierData = dossier.toObject();
+      
+      await Trash.create({
+        itemType: 'dossier',
+        originalId: dossier._id,
+        itemData: dossierData,
+        deletedBy: req.user.id,
+        originalOwner: dossier.user?._id || dossier.user,
+        origin: req.headers.referer || 'unknown',
+        metadata: {
+          titre: dossier.titre,
+          numero: dossier.numero,
+          categorie: dossier.categorie,
+          statut: dossier.statut
+        }
+      });
+      console.log('✅ Dossier ajouté à la corbeille:', dossier._id);
+    } catch (trashError) {
+      console.error('⚠️ Erreur lors de l\'ajout à la corbeille (continuation de la suppression):', trashError);
+      // Continuer la suppression même si l'ajout à la corbeille échoue
     }
 
     // Logger l'action
@@ -1881,6 +2702,111 @@ router.post('/:id/acknowledge', authorize('partenaire'), async (req, res) => {
   }
 });
 
+// @route   POST /api/user/dossiers/:id/discharge
+// @desc    Se décharger d'un dossier transmis (Partenaire seulement - annule la transmission sans supprimer le dossier)
+// @access  Private (Partenaire)
+router.post('/:id/discharge', protect, authorize('partenaire'), async (req, res) => {
+  try {
+    const { notes } = req.body;
+    const dossier = await Dossier.findById(req.params.id);
+    
+    if (!dossier) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Dossier non trouvé' 
+      });
+    }
+    
+    if (!dossier.transmittedTo || dossier.transmittedTo.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Ce dossier n\'a pas été transmis' 
+      });
+    }
+    
+    // Trouver la transmission pour ce partenaire
+    const transmissionIndex = dossier.transmittedTo.findIndex(
+      t => t.partenaire && t.partenaire.toString() === req.user.id.toString()
+    );
+    
+    if (transmissionIndex === -1) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Ce dossier ne vous a pas été transmis' 
+      });
+    }
+    
+    const transmission = dossier.transmittedTo[transmissionIndex];
+    
+    // Retirer la transmission du tableau
+    dossier.transmittedTo.splice(transmissionIndex, 1);
+    await dossier.save();
+    
+    // Populate pour la réponse
+    await dossier.populate('transmittedTo.partenaire', 'firstName lastName email partenaireInfo');
+    await dossier.populate('transmittedTo.transmittedBy', 'firstName lastName email');
+    
+    // Notifier les administrateurs
+    const User = require('../models/User');
+    const Notification = require('../models/Notification');
+    const admins = await User.find({ 
+      role: { $in: ['admin', 'superadmin'] },
+      isActive: { $ne: false }
+    });
+    
+    const partenaireName = req.user.partenaireInfo?.nomOrganisme || req.user.email || 'Partenaire';
+    
+    for (const admin of admins) {
+      await Notification.create({
+        user: admin._id,
+        type: 'dossier_updated',
+        titre: 'Partenaire s\'est déchargé du dossier',
+        message: `Le partenaire ${partenaireName} s'est déchargé du dossier ${dossier.numero || dossier._id}${notes ? `. Raison: ${notes}` : ''}`,
+        lien: `/admin/dossiers/${dossier._id}`,
+        metadata: {
+          dossierId: dossier._id.toString(),
+          partenaireId: req.user.id.toString(),
+          action: 'discharge',
+          notes: notes || ''
+        }
+      });
+    }
+    
+    // Logger l'action
+    try {
+      const Log = require('../models/Log');
+      await Log.create({
+        action: 'dossier_discharged',
+        user: req.user.id,
+        userEmail: req.user.email,
+        description: `Partenaire ${req.user.email} s'est déchargé du dossier "${dossier.titre || dossier.numero}"${notes ? `. Raison: ${notes}` : ''}`,
+        ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
+        userAgent: req.get('user-agent'),
+        metadata: {
+          dossierId: dossier._id.toString(),
+          action: 'discharge',
+          notes: notes || ''
+        }
+      });
+    } catch (logError) {
+      console.error('Erreur lors de l\'enregistrement du log:', logError);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Vous vous êtes déchargé du dossier avec succès. Le dossier reste disponible pour les administrateurs.', 
+      dossier 
+    });
+  } catch (error) {
+    console.error('Erreur lors de la décharge du dossier:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Erreur serveur',
+      error: error.message 
+    });
+  }
+});
+
 // @route   GET /api/user/dossiers/:id/history
 // @desc    Récupérer l'historique complet d'un dossier (changements de statut, modifications, etc.)
 // @access  Private (Admin, Superadmin, Partenaire avec accès au dossier)
@@ -2021,10 +2947,10 @@ router.get('/:id/history', async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur lors de la récupération de l\'historique:', error);
-    res.status(500).json({
-      success: false,
+    res.status(500).json({ 
+      success: false, 
       message: 'Erreur serveur',
-      error: error.message
+      error: error.message 
     });
   }
 });

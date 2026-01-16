@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef } from 'react';
+import Link from 'next/link';
 import { getStatutLabel, getStatutColor, getPrioriteColor, getPrioriteLabel } from '@/lib/dossierUtils';
 
 // Mapping des catégories pour l'affichage
@@ -34,7 +35,7 @@ const getCategorieLabel = (categorie: string) => {
 
 interface DossierDetailViewProps {
   dossier: any;
-  variant?: 'client' | 'admin';
+  variant?: 'client' | 'admin' | 'partenaire';
   onDownloadPDF?: () => void;
   onPrint?: () => void;
 }
@@ -128,6 +129,20 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
             </div>
           </div>
           <div className="flex gap-3">
+            {(() => {
+              const dossierId = dossier._id || dossier.id;
+              const basePath = variant === 'admin' ? '/admin' : variant === 'partenaire' ? '/partenaire' : '/client';
+              return (
+                <Link
+                  href={`${basePath}/dossiers/${dossierId}/recap`}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm"
+                  title="Voir le récit récapitulatif complet"
+                >
+                  <span>📋</span>
+                  Récit récapitulatif
+                </Link>
+              );
+            })()}
             <button
               onClick={handlePrint}
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors shadow-sm"

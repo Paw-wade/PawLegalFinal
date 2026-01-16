@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MessageNotificationModal } from '@/components/MessageNotificationModal';
 import { AppointmentBadgeModal } from '@/components/AppointmentBadgeModal';
-import { userAPI, appointmentsAPI, documentsAPI, tasksAPI, messagesAPI, dossiersAPI, documentRequestsAPI } from '@/lib/api';
+import { userAPI, appointmentsAPI, documentsAPI, tasksAPI, messagesAPI, dossiersAPI } from '@/lib/api';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
 
@@ -62,7 +62,10 @@ export default function AdminDashboardPage() {
     revenus: 0,
     tasks: 0,
     tasksEnCours: 0,
+    dossiersTransmis: 0,
+    tauxTransmission: 0,
   });
+  const [statsPeriod, setStatsPeriod] = useState<'week' | 'month'>('month');
   const [tasks, setTasks] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -108,11 +111,7 @@ export default function AdminDashboardPage() {
   const [taskNotesError, setTaskNotesError] = useState<string | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
-  const [documentRequests, setDocumentRequests] = useState<any[]>([]);
-  const [isLoadingDocumentRequests, setIsLoadingDocumentRequests] = useState(false);
   const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(new Set());
-  const [expandedDocumentSections, setExpandedDocumentSections] = useState<Set<string>>(new Set());
-  const [documentRequestFilter, setDocumentRequestFilter] = useState<'all' | 'pending' | 'received'>('all');
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   const [isMessagesExpanded, setIsMessagesExpanded] = useState(false);
@@ -165,7 +164,6 @@ export default function AdminDashboardPage() {
     }
     checkUnreadMessages();
     loadNotifications();
-    loadDocumentRequests();
   }, [session, status]);
 
   // Vérifier les messages non lus à la connexion (internes + contact)
@@ -220,84 +218,6 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const loadDocumentRequests = async () => {
-    setIsLoadingDocumentRequests(true);
-    try {
-      const response = await documentRequestsAPI.getRequests({});
-      if (response.data.success) {
-        // Populate les dossiers et clients pour chaque demande
-        const requests = await Promise.all(
-          (response.data.documentRequests || []).map(async (req: any) => {
-            try {
-              // Charger le dossier
-              let dossier = null;
-              if (req.dossier) {
-                try {
-                  // Extraire l'ID du dossier de manière sécurisée
-                  const dossierId = req.dossier?._id || req.dossier?.id || (typeof req.dossier === 'string' ? req.dossier : null);
-                  if (!dossierId) {
-                    console.error('❌ Impossible de récupérer l\'ID du dossier:', req.dossier);
-                    // Continuer sans dossier si l'ID est invalide
-                  } else {
-                    const dossierResponse = await dossiersAPI.getDossierById(dossierId);
-                    dossier = dossierResponse.data.success ? dossierResponse.data.dossier : null;
-                  }
-                } catch (e) {
-                  console.error('Erreur lors du chargement du dossier:', e);
-                }
-              }
-              
-              // Charger le client (requestedFrom)
-              let client = null;
-              if (req.requestedFrom) {
-                try {
-                  const clientResponse = await userAPI.getUserById(req.requestedFrom._id || req.requestedFrom);
-                  if (clientResponse.data.success) {
-                    client = clientResponse.data.user;
-                  }
-                } catch (e) {
-                  // Client peut ne pas exister si c'est un dossier sans utilisateur connecté
-                }
-              }
-              
-              // Charger le document si disponible
-              let document = null;
-              if (req.document) {
-                try {
-                  // Utiliser getAllDocuments et filtrer par ID
-                  const allDocsResponse = await documentsAPI.getAllDocuments();
-                  if (allDocsResponse.data.success) {
-                    const allDocs = allDocsResponse.data.documents || allDocsResponse.data.data || [];
-                    document = allDocs.find((d: any) => 
-                      (d._id || d.id).toString() === (req.document._id || req.document).toString()
-                    );
-                  }
-                } catch (e) {
-                  console.error('Erreur lors du chargement du document:', e);
-                }
-              }
-              
-              return {
-                ...req,
-                dossier: dossier,
-                client: client,
-                document: document
-              };
-            } catch (error) {
-              console.error('Erreur lors du chargement des détails de la demande:', error);
-              return req;
-            }
-          })
-        );
-        
-        setDocumentRequests(requests);
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement des demandes de documents:', error);
-    } finally {
-      setIsLoadingDocumentRequests(false);
-    }
-  };
 
   const loadStats = async () => {
     try {
@@ -388,6 +308,51 @@ export default function AdminDashboardPage() {
           ...prev,
           documents: 0,
         }));
+      }
+
+      // Charger les dossiers pour calculer les statistiques de transmission
+      try {
+        const dossiersResponse = await dossiersAPI.getMyDossiers();
+        if (dossiersResponse.data.success) {
+          const allDossiers = dossiersResponse.data.dossiers || [];
+          const now = new Date();
+          
+          // Calculer les dates pour la période sélectionnée
+          const periodStart = statsPeriod === 'week' 
+            ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+            : new Date(now.getFullYear(), now.getMonth(), 1);
+          
+          // Filtrer les dossiers de la période
+          const periodDossiers = allDossiers.filter((d: any) => {
+            const dossierDate = new Date(d.createdAt || d.updatedAt);
+            return dossierDate >= periodStart;
+          });
+          
+          // Calculer les dossiers transmis
+          const dossiersTransmis = periodDossiers.filter((d: any) => 
+            d.transmittedTo && d.transmittedTo.length > 0
+          ).length;
+          
+          // Calculer le taux de transmission
+          const tauxTransmission = periodDossiers.length > 0 
+            ? Math.round((dossiersTransmis / periodDossiers.length) * 100) 
+            : 0;
+          
+          // Calculer les dossiers en cours
+          const dossiersEnCours = periodDossiers.filter((d: any) => 
+            d.statut && !['termine', 'cloture', 'annule', 'refuse'].includes(d.statut)
+          ).length;
+          
+          setStats(prev => ({
+            ...prev,
+            dossiers: allDossiers.length,
+            dossiersEnCours: dossiersEnCours,
+            dossiersTransmis: dossiersTransmis,
+            tauxTransmission: tauxTransmission,
+          }));
+        }
+      } catch (dossiersError) {
+        console.error('Erreur lors du chargement des dossiers:', dossiersError);
       }
     } catch (error) {
       console.error('Erreur lors du chargement des statistiques:', error);
@@ -801,12 +766,12 @@ export default function AdminDashboardPage() {
         </div>
 
 
-        {/* Statistiques principales - Design professionnel et chaleureux avec accès direct */}
-        <div id="utilisateurs-section" className={`grid ${isAdmin ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'} gap-6 mb-8 scroll-mt-20`}>
-          {/* Badge Utilisateurs avec lien direct - Seulement pour les admins */}
+        {/* Statistiques principales - Disposition optimisée */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+          {/* Badge Utilisateurs - Seulement pour les admins */}
           {isAdmin && (
-            <Link href="/admin/utilisateurs" className="group">
-              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-primary hover:shadow-lg hover:border-primary/80 transition-all duration-200 hover:-translate-y-1 cursor-pointer">
+            <Link href="/admin/utilisateurs" className="group" id="utilisateurs-section">
+              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-primary hover:shadow-lg hover:border-primary/80 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
                 <div className="flex items-center justify-between mb-3">
                   <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                     <span className="text-2xl">👥</span>
@@ -827,10 +792,29 @@ export default function AdminDashboardPage() {
             </Link>
           )}
 
-          {/* Badge Documents avec lien direct */}
-          <div id="documents-section" className="scroll-mt-20">
-          <Link href="/admin/documents" className="group">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 hover:shadow-lg hover:border-purple-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer">
+          {/* Badge Dossiers */}
+          <Link href="/admin/dossiers" className="group" id="dossiers-section">
+            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 hover:shadow-lg hover:border-blue-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                  <span className="text-2xl">📁</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-blue-600 transition-colors">{stats.dossiers}</p>
+                </div>
+              </div>
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Dossiers</h3>
+              <p className="text-xs text-muted-foreground mb-3">Tous les dossiers</p>
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <span className="text-xs text-muted-foreground">Gestion complète</span>
+                <span className="text-blue-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
+              </div>
+            </div>
+          </Link>
+
+          {/* Badge Documents */}
+          <Link href="/admin/documents" className="group" id="documents-section">
+            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 hover:shadow-lg hover:border-purple-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
                   <span className="text-2xl">📄</span>
@@ -847,11 +831,10 @@ export default function AdminDashboardPage() {
               </div>
             </div>
           </Link>
-          </div>
 
-          {/* Badge Tâches - lien vers la page dédiée */}
+          {/* Badge Tâches */}
           <Link href="/admin/taches" className="group">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-500 hover:shadow-lg hover:border-orange-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer">
+            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-500 hover:shadow-lg hover:border-orange-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-orange-500/10 rounded-lg flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
                   <span className="text-2xl">✅</span>
@@ -870,424 +853,50 @@ export default function AdminDashboardPage() {
               </div>
             </div>
           </Link>
-        </div>
 
-        {/* Actions rapides - Seulement les sections sans doublons */}
-        <div id="dossiers-section" className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 scroll-mt-20">
-          <Link href="/admin/dossiers" className="group">
-            <div className="bg-gradient-to-br from-white to-blue-50 rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 border border-blue-200 hover:border-blue-400 hover:scale-105">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                  <span className="text-3xl">📁</span>
+          {/* Badge Rendez-vous */}
+          <Link href="/admin/rendez-vous" className="group" id="rendez-vous-section">
+            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 hover:shadow-lg hover:border-green-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
+                  <span className="text-2xl">📅</span>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground group-hover:text-blue-600 transition-colors mb-1">Dossiers</h3>
-                  <p className="text-sm text-muted-foreground">Suivez tous les dossiers</p>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.rendezVous}</p>
                 </div>
               </div>
-              <div className="flex items-center justify-between pt-4 border-t border-blue-200">
-                <span className="text-xs font-medium text-blue-600">Accéder →</span>
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                  <span className="text-blue-600 text-sm">→</span>
-                </div>
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Rendez-vous</h3>
+              <p className="text-xs text-muted-foreground mb-3">Gérez le calendrier</p>
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <span className="text-xs text-muted-foreground">Planification</span>
+                <span className="text-green-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
           </Link>
 
-          <div id="rendez-vous-section" className="scroll-mt-20">
-          <Link href="/admin/rendez-vous" className="group">
-            <div className="bg-gradient-to-br from-white to-green-50 rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 border border-green-200 hover:border-green-400 hover:scale-105">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                  <span className="text-3xl">📅</span>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground group-hover:text-green-600 transition-colors mb-1">Rendez-vous</h3>
-                  <p className="text-sm text-muted-foreground">Gérez le calendrier</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between pt-4 border-t border-green-200">
-                <span className="text-xs font-medium text-green-600">Accéder →</span>
-                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center group-hover:bg-green-200 transition-colors">
-                  <span className="text-green-600 text-sm">→</span>
-                </div>
-              </div>
-            </div>
-          </Link>
-          </div>
-
-          {/* Section Témoignages - Seulement pour les admins */}
+          {/* Badge Témoignages - Seulement pour les admins */}
           {isAdmin && (
-            <div id="temoignages-section" className="scroll-mt-20">
-              <Link href="/admin/temoignages" className="group">
-                <div className="bg-gradient-to-br from-white to-purple-50 rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 border border-purple-200 hover:border-purple-400 hover:scale-105">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                      <span className="text-3xl">⭐</span>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold text-foreground group-hover:text-purple-600 transition-colors mb-1">Témoignages</h3>
-                      <p className="text-sm text-muted-foreground">Validez les avis</p>
-                    </div>
+            <Link href="/admin/temoignages" className="group" id="temoignages-section">
+              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500 hover:shadow-lg hover:border-yellow-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-12 h-12 bg-yellow-500/10 rounded-lg flex items-center justify-center group-hover:bg-yellow-500/20 transition-colors">
+                    <span className="text-2xl">⭐</span>
                   </div>
-                  <div className="flex items-center justify-between pt-4 border-t border-purple-200">
-                    <span className="text-xs font-medium text-purple-600">Accéder →</span>
-                    <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-                      <span className="text-purple-600 text-sm">→</span>
-                    </div>
+                  <div className="text-right">
+                    <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-yellow-600 transition-colors">-</p>
                   </div>
                 </div>
-              </Link>
-            </div>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Témoignages</h3>
+                <p className="text-xs text-muted-foreground mb-3">Validez les avis</p>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <span className="text-xs text-muted-foreground">Avis clients</span>
+                  <span className="text-yellow-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
+                </div>
+              </div>
+            </Link>
           )}
-
         </div>
 
-        {/* Section Documents demandés */}
-        <div className="mb-8">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                  <span className="text-2xl">📂</span>
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-foreground">Documents demandés</h2>
-                  <p className="text-sm text-muted-foreground">Suivi des documents demandés aux clients</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={documentRequestFilter}
-                  onChange={(e) => setDocumentRequestFilter(e.target.value as 'all' | 'pending' | 'received')}
-                  className="px-3 py-2 border border-input rounded-md text-sm bg-background"
-                >
-                  <option value="all">Tous les statuts</option>
-                  <option value="pending">En attente</option>
-                  <option value="received">Reçus</option>
-                </select>
-                <Button
-                  variant="outline"
-                  onClick={loadDocumentRequests}
-                  disabled={isLoadingDocumentRequests}
-                  className="text-xs"
-                >
-                  {isLoadingDocumentRequests ? 'Chargement...' : 'Actualiser'}
-                </Button>
-              </div>
-            </div>
-
-            {isLoadingDocumentRequests ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Chargement des demandes...</p>
-              </div>
-            ) : documentRequests.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-4xl">📄</span>
-                </div>
-                <p className="text-muted-foreground font-medium">Aucune demande de document</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {(() => {
-                  // Filtrer les demandes selon le filtre sélectionné
-                  let filteredRequests = documentRequests;
-                  if (documentRequestFilter === 'pending') {
-                    filteredRequests = documentRequests.filter((r: any) => r.status === 'pending');
-                  } else if (documentRequestFilter === 'received') {
-                    filteredRequests = documentRequests.filter((r: any) => r.status === 'received' || r.status === 'sent');
-                  }
-
-                  // Grouper par dossier
-                  const requestsByDossier = filteredRequests.reduce((acc: Record<string, any[]>, req: any) => {
-                    const dossierId = req.dossier?._id || req.dossier || 'unknown';
-                    if (!acc[dossierId]) {
-                      acc[dossierId] = [];
-                    }
-                    acc[dossierId].push(req);
-                    return acc;
-                  }, {});
-
-                  return Object.entries(requestsByDossier).map(([dossierId, requests]: [string, any[]]) => {
-                    const dossier = requests[0]?.dossier;
-                    const client = requests[0]?.client;
-                    const pendingRequests = requests.filter((r: any) => r.status === 'pending');
-                    const receivedRequests = requests.filter((r: any) => r.status === 'received' || r.status === 'sent');
-                    const isExpanded = expandedDocumentSections.has(dossierId);
-
-                    // Déterminer la couleur de la bordure gauche selon le statut du dossier
-                    const getDossierBorderColor = () => {
-                      if (!dossier?.statut) return 'border-l-blue-500';
-                      if (dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding') {
-                        return 'border-l-yellow-500';
-                      } else if (dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause') {
-                        return 'border-l-green-500';
-                      } else if (dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet') {
-                        return 'border-l-red-500';
-                      }
-                      return 'border-l-blue-500';
-                    };
-
-                    return (
-                      <div
-                        key={dossierId}
-                        className={`border rounded-xl p-5 hover:shadow-xl transition-all duration-200 bg-white w-full ${getDossierBorderColor()} border-t border-r border-b border-gray-200`}
-                      >
-                        {/* En-tête de la carte */}
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1 min-w-0 pr-2">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-bold text-base text-foreground line-clamp-2 leading-tight">
-                                {dossier?.titre || `Dossier ${dossierId.slice(-6)}`}
-                              </h3>
-                            </div>
-                            {dossier?.description && (
-                              <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                                {dossier.description}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                            {dossier?.statut && (
-                              <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(dossier.statut)}`}>
-                                {getStatutLabel(dossier.statut)}
-                              </span>
-                            )}
-                            {dossier?.priorite && (
-                              <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getPrioriteColor(dossier.priorite)}`}>
-                                {dossier.priorite}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Informations du dossier */}
-                        <div className="space-y-2 mb-3">
-                          {(dossier?.numero || dossier?.numeroDossier) && (
-                            <div className="flex items-center gap-2 text-xs">
-                              <span className="text-primary font-semibold">🔢</span>
-                              <span className="text-primary font-semibold">
-                                N° {dossier.numero || dossier.numeroDossier}
-                              </span>
-                            </div>
-                          )}
-                          {client ? (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>👤</span>
-                              <span>{client.firstName} {client.lastName}</span>
-                            </div>
-                          ) : dossier?.clientEmail && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>👤</span>
-                              <span>{dossier.clientEmail}</span>
-                            </div>
-                          )}
-                          {dossier?.createdAt && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>📅</span>
-                              <span>
-                                {new Date(dossier.createdAt).toLocaleDateString('fr-FR', {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  year: 'numeric'
-                                })}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Section Documents demandés */}
-                        {(() => {
-                          if (requests.length === 0) {
-                            return null;
-                          }
-                          
-                          return (
-                            <div className="pt-3 border-t border-gray-200 mb-3">
-                              <div 
-                                className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-md p-2 -m-2 transition-colors"
-                                onClick={() => {
-                                  const newExpanded = new Set(expandedDocumentSections);
-                                  if (isExpanded) {
-                                    newExpanded.delete(dossierId);
-                                  } else {
-                                    newExpanded.add(dossierId);
-                                  }
-                                  setExpandedDocumentSections(newExpanded);
-                                }}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg">📄</span>
-                                  <div>
-                                    <h4 className="text-sm font-semibold text-foreground">Documents demandés</h4>
-                                    <p className="text-xs text-muted-foreground">
-                                      {pendingRequests.length > 0 && (
-                                        <span className="text-orange-600 font-medium">
-                                          {pendingRequests.length} en attente
-                                        </span>
-                                      )}
-                                      {pendingRequests.length > 0 && receivedRequests.length > 0 && ' • '}
-                                      {receivedRequests.length > 0 && (
-                                        <span className="text-green-600 font-medium">
-                                          {receivedRequests.length} reçu{receivedRequests.length > 1 ? 's' : ''}
-                                        </span>
-                                      )}
-                                    </p>
-                                  </div>
-                                </div>
-                                <span className="text-muted-foreground text-sm">{isExpanded ? '▲' : '▼'}</span>
-                              </div>
-                              
-                              {isExpanded && (
-                                <div className="mt-3 space-y-3">
-                                  {requests.map((request: any) => {
-                                    const isPending = request.status === 'pending';
-                                    const isUrgent = request.isUrgent;
-                                    
-                                    return (
-                                      <div
-                                        key={request._id || request.id}
-                                        className={`border rounded-lg p-3 ${
-                                          isPending
-                                            ? isUrgent
-                                              ? 'bg-red-50/50 border-red-200'
-                                              : 'bg-orange-50/50 border-orange-200'
-                                            : 'bg-green-50/50 border-green-200'
-                                        }`}
-                                      >
-                                        <div className="flex items-start justify-between gap-3">
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-2">
-                                              <span className="text-lg">
-                                                {isPending ? (isUrgent ? '🔴' : '📄') : '✅'}
-                                              </span>
-                                              <h5 className="font-semibold text-sm text-foreground">
-                                                {request.documentTypeLabel || request.documentType || 'Document'}
-                                              </h5>
-                                              {isUrgent && (
-                                                <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded text-xs font-bold">
-                                                  URGENT
-                                                </span>
-                                              )}
-                                              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                                isPending
-                                                  ? 'bg-yellow-100 text-yellow-800'
-                                                  : 'bg-green-100 text-green-800'
-                                              }`}>
-                                                {isPending ? 'En attente' : 'Reçu'}
-                                              </span>
-                                            </div>
-                                            
-                                            {request.message && (
-                                              <p className="text-xs text-muted-foreground mb-2 ml-7">
-                                                {request.message}
-                                              </p>
-                                            )}
-                                            
-                                            <div className="flex items-center gap-3 text-xs text-muted-foreground ml-7">
-                                              <span>
-                                                📅 Demandé le {new Date(request.createdAt).toLocaleDateString('fr-FR')}
-                                              </span>
-                                              {request.receivedAt && (
-                                                <span>
-                                                  ✅ Reçu le {new Date(request.receivedAt).toLocaleDateString('fr-FR')}
-                                                </span>
-                                              )}
-                                            </div>
-
-                                            {request.document && (
-                                              <div className="mt-2 ml-7 p-2 bg-blue-50 rounded border border-blue-200">
-                                                <div className="flex items-center gap-2">
-                                                  <span className="text-sm">📄</span>
-                                                  <span className="text-xs font-medium text-blue-900">
-                                                    {request.document.nom}
-                                                  </span>
-                                                  <span className="text-xs text-blue-700">
-                                                    ({(request.document.taille / 1024).toFixed(2)} KB)
-                                                  </span>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
-                                          
-                                          {/* Actions */}
-                                          {request.document && (
-                                            <div className="flex items-center gap-2 flex-shrink-0">
-                                              <Button
-                                                variant="outline"
-                                                className="text-xs h-8"
-                                                onClick={() => {
-                                                  const documentUrl = `/api/user/documents/${request.document._id || request.document.id}/preview`;
-                                                  window.open(documentUrl, '_blank');
-                                                }}
-                                              >
-                                                👁️ Voir
-                                              </Button>
-                                              <Button
-                                                variant="outline"
-                                                className="text-xs h-8"
-                                                onClick={async () => {
-                                                  try {
-                                                    const response = await documentsAPI.downloadDocument(request.document._id || request.document.id);
-                                                    const blob = new Blob([response.data]);
-                                                    const url = window.URL.createObjectURL(blob);
-                                                    const link = document.createElement('a');
-                                                    link.href = url;
-                                                    link.download = request.document.nom;
-                                                    document.body.appendChild(link);
-                                                    link.click();
-                                                    document.body.removeChild(link);
-                                                    window.URL.revokeObjectURL(url);
-                                                  } catch (error) {
-                                                    console.error('Erreur lors du téléchargement:', error);
-                                                    alert('Erreur lors du téléchargement du document');
-                                                  }
-                                                }}
-                                              >
-                                                ⬇️ Télécharger
-                                              </Button>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Actions */}
-                        <div className="pt-3 border-t border-gray-200">
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <Link 
-                                href={`/admin/messages?dossierId=${dossierId}&action=view`}
-                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                              >
-                                💬 Voir les messages
-                              </Link>
-                            </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              <Link href={`/admin/dossiers/${dossierId}`}>
-                                <Button variant="outline" size="sm" className="text-xs h-8">
-                                  Détails
-                                </Button>
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            )}
-          </div>
-        </div>
 
         {/* Messagerie - Pleine largeur et dépliable */}
         <div className="mb-8">
@@ -1390,87 +999,124 @@ export default function AdminDashboardPage() {
         </div>
 
 
-        {/* Activités récentes et graphiques - Seulement pour les admins */}
+        {/* Statistiques professionnelles - Seulement pour les admins */}
         {isAdmin && (
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-gradient-to-br from-white to-primary/5 rounded-2xl shadow-lg p-8 border border-primary/20">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/70 rounded-lg flex items-center justify-center">
-                    <span className="text-xl">📊</span>
+          <div className="mb-8">
+            <div className="bg-gradient-to-br from-white via-blue-50/20 to-white rounded-2xl shadow-xl p-8 border border-blue-200/50 backdrop-blur-sm">
+              {/* En-tête avec toggle période */}
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <span className="text-2xl">📈</span>
                   </div>
-                  <h2 className="text-xl font-bold text-foreground">Activités récentes</h2>
+                  <div>
+                    <h2 className="text-2xl font-bold text-foreground">Statistiques {statsPeriod === 'week' ? 'hebdomadaires' : 'mensuelles'}</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {statsPeriod === 'week' 
+                        ? '7 derniers jours' 
+                        : `Mois de ${new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}`}
+                    </p>
+                  </div>
                 </div>
-                <Link href="/admin/utilisateurs" className="text-sm text-primary hover:underline font-semibold">
-                  Voir tout →
-                </Link>
+                <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setStatsPeriod('week')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      statsPeriod === 'week'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Hebdomadaire
+                  </button>
+                  <button
+                    onClick={() => setStatsPeriod('month')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      statsPeriod === 'month'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Mensuel
+                  </button>
+                </div>
               </div>
-              <div className="space-y-3">
-                {stats.utilisateurs === 0 ? (
-                  <div className="text-center py-8">
-                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
-                      <span className="text-3xl">📊</span>
+
+              {/* Grille de statistiques avec diagrammes */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Nouveaux clients */}
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-6 border border-orange-200/50 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm">
+                        <span className="text-white text-lg">👥</span>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700">Nouveaux clients</span>
                     </div>
-                    <p className="text-muted-foreground text-sm">Aucune activité récente</p>
+                    <span className="text-2xl font-bold text-orange-600">{stats.nouveauxClients}</span>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-4 p-4 rounded-xl bg-green-50/50 border border-green-200 hover:bg-green-50 transition-colors">
-                      <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-sm">
-                        <span className="text-white text-lg">✓</span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-foreground">Nouveau client inscrit</p>
-                        <p className="text-xs text-muted-foreground mt-1">Il y a 1 heure</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 p-4 rounded-xl bg-blue-50/50 border border-blue-200 hover:bg-blue-50 transition-colors">
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+                  <div className="w-full bg-orange-200/50 rounded-full h-4 overflow-hidden shadow-inner">
+                    <div 
+                      className="bg-gradient-to-r from-orange-500 to-orange-600 h-4 rounded-full transition-all duration-700 shadow-sm" 
+                      style={{ width: `${Math.min((stats.nouveauxClients / Math.max(stats.nouveauxClients, 1)) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Dossiers traités */}
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-6 border border-blue-200/50 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
                         <span className="text-white text-lg">📁</span>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-foreground">Nouveau dossier créé</p>
-                        <p className="text-xs text-muted-foreground mt-1">Il y a 3 heures</p>
-                      </div>
+                      <span className="text-sm font-semibold text-gray-700">Dossiers traités</span>
                     </div>
-                  </>
-                )}
-              </div>
-            </div>
+                    <span className="text-2xl font-bold text-blue-600">{stats.dossiersEnCours}</span>
+                  </div>
+                  <div className="w-full bg-blue-200/50 rounded-full h-4 overflow-hidden shadow-inner">
+                    <div 
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 h-4 rounded-full transition-all duration-700 shadow-sm" 
+                      style={{ width: `${Math.min((stats.dossiersEnCours / Math.max(stats.dossiersEnCours, 1)) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
 
-            <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl shadow-lg p-8 border border-blue-200">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                  <span className="text-xl">📈</span>
-                </div>
-                <h2 className="text-xl font-bold text-foreground">Statistiques du mois</h2>
-              </div>
-              <div className="space-y-5">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-semibold text-foreground">Nouveaux clients</span>
-                    <span className="text-lg font-bold text-primary">{stats.nouveauxClients}</span>
+                {/* Dossiers transmis */}
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl p-6 border border-purple-200/50 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center shadow-sm">
+                        <span className="text-white text-lg">📤</span>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700">Dossiers transmis</span>
+                    </div>
+                    <span className="text-2xl font-bold text-purple-600">{stats.dossiersTransmis}</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                    <div className="bg-gradient-to-r from-primary to-primary/70 h-3 rounded-full transition-all duration-500" style={{ width: `${Math.min((stats.nouveauxClients / 50) * 100, 100)}%` }}></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-semibold text-foreground">Dossiers traités</span>
-                    <span className="text-lg font-bold text-blue-600">{stats.dossiersEnCours}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                    <div className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500" style={{ width: `${Math.min((stats.dossiersEnCours / 100) * 100, 100)}%` }}></div>
+                  <div className="w-full bg-purple-200/50 rounded-full h-4 overflow-hidden shadow-inner">
+                    <div 
+                      className="bg-gradient-to-r from-purple-500 to-purple-600 h-4 rounded-full transition-all duration-700 shadow-sm" 
+                      style={{ width: `${Math.min((stats.dossiersTransmis / Math.max(stats.dossiersEnCours, 1)) * 100, 100)}%` }}
+                    ></div>
                   </div>
                 </div>
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-semibold text-foreground">Taux de complétion</span>
-                    <span className="text-lg font-bold text-green-600">85%</span>
+
+                {/* Taux de transmission */}
+                <div className="bg-gradient-to-br from-green-50 to-green-100/50 rounded-xl p-6 border border-green-200/50 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
+                        <span className="text-white text-lg">📊</span>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700">Taux de transmission</span>
+                    </div>
+                    <span className="text-2xl font-bold text-green-600">{stats.tauxTransmission}%</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                    <div className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500" style={{ width: '85%' }}></div>
+                  <div className="w-full bg-green-200/50 rounded-full h-4 overflow-hidden shadow-inner">
+                    <div 
+                      className="bg-gradient-to-r from-green-500 to-green-600 h-4 rounded-full transition-all duration-700 shadow-sm" 
+                      style={{ width: `${stats.tauxTransmission}%` }}
+                    ></div>
                   </div>
                 </div>
               </div>

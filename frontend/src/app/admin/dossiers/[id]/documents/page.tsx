@@ -7,9 +7,8 @@ import { ArrowLeft, FileText, Download, Eye, Calendar, User } from 'lucide-react
 import Link from 'next/link';
 import { DocumentPreview } from '@/components/DocumentPreview';
 
-export default function PartenaireDossierDocumentsPage() {
+export default function AdminDossierDocumentsPage() {
   const params = useParams();
-  const router = useRouter();
   const dossierId = params.id as string;
   
   const [dossier, setDossier] = useState<any>(null);
@@ -39,7 +38,6 @@ export default function PartenaireDossierDocumentsPage() {
   const loadDocuments = async () => {
     try {
       setLoading(true);
-      // Utiliser la route spécifique pour récupérer les documents du dossier
       const response = await documentsAPI.getDossierDocuments(dossierId);
       if (response.data.success) {
         setDocuments(response.data.documents || []);
@@ -57,10 +55,6 @@ export default function PartenaireDossierDocumentsPage() {
       }
     } catch (error: any) {
       console.error('Erreur lors du chargement des documents:', error);
-      // Si l'erreur est 403, c'est que le partenaire n'a pas accès
-      if (error.response?.status === 403) {
-        console.error('Accès refusé aux documents du dossier');
-      }
     } finally {
       setLoading(false);
     }
@@ -140,7 +134,7 @@ export default function PartenaireDossierDocumentsPage() {
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Link 
-          href={`/partenaire/dossiers/${dossierId}`}
+          href={`/admin/dossiers/${dossierId}`}
           className="inline-flex items-center gap-2 text-gray-600 hover:text-primary mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />

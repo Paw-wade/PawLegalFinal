@@ -47,7 +47,7 @@ function Textarea({ className = '', ...props }: any) {
   );
 }
 
-export default function ClientMessageDetailPage() {
+export default function PartenaireMessageDetailPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
@@ -70,6 +70,11 @@ export default function ClientMessageDetailPage() {
     if (status === 'unauthenticated') {
       router.push('/auth/signin');
     } else if (status === 'authenticated') {
+      const userRole = (session?.user as any)?.role;
+      if (userRole !== 'partenaire') {
+        router.push('/client');
+        return;
+      }
       if (messageId) {
         loadMessage();
       }
@@ -80,12 +85,10 @@ export default function ClientMessageDetailPage() {
     if (message) {
       loadMessageNotifications(message._id || message.id);
       // Pré-remplir le formulaire de réponse
-      if (message.expediteur) {
-        setReplyData({
-          sujet: `Re: ${message.sujet}`,
-          contenu: '',
-        });
-      }
+      setReplyData({
+        sujet: `Re: ${message.sujet}`,
+        contenu: '',
+      });
     }
   }, [message]);
 
@@ -169,12 +172,13 @@ export default function ClientMessageDetailPage() {
     setError(null);
 
     try {
-      // Pour les clients, le message va automatiquement à tous les admins
-      // Le dossierId n'est pas obligatoire pour les réponses
+      // Pour une réponse, utiliser le message sélectionné comme parent
+      // Le dossierId sera automatiquement hérité du message parent par le backend
       const formDataToSend = new FormData();
       formDataToSend.append('sujet', replyData.sujet);
       formDataToSend.append('contenu', replyData.contenu);
-      // Lier au message parent / fil existant
+      
+      // Le message parent est le message auquel on répond (selectedMessage)
       const messageParentId = message._id || message.id;
       if (!messageParentId) {
         setError('Impossible d\'identifier le message parent.');
@@ -183,7 +187,7 @@ export default function ClientMessageDetailPage() {
       }
       formDataToSend.append('messageParent', messageParentId);
       
-      // Le dossierId sera hérité automatiquement du message parent par le backend si disponible
+      // Le dossierId sera hérité automatiquement du message parent par le backend
       // Mais on peut l'envoyer aussi si disponible pour plus de sécurité
       const dossierId = message.dossierId?._id?.toString() || 
                        message.dossierId?.toString() || 
@@ -266,7 +270,7 @@ export default function ClientMessageDetailPage() {
     );
   }
 
-  if (!session) {
+  if (!session || (session.user as any)?.role !== 'partenaire') {
     return null;
   }
 
@@ -276,7 +280,7 @@ export default function ClientMessageDetailPage() {
         <main className="w-full px-4 py-8">
           <div className="bg-red-50 border border-red-200 rounded-md p-4">
             <p className="text-red-600">{error}</p>
-            <Link href="/client/messages">
+            <Link href="/partenaire/messages">
               <Button variant="outline" className="mt-4">Retour aux messages</Button>
             </Link>
           </div>
@@ -293,6 +297,9 @@ export default function ClientMessageDetailPage() {
   const isReceived = message.destinataires?.some((d: any) => 
     d._id?.toString() === (session?.user as any)?.id?.toString() || 
     d.toString() === (session?.user as any)?.id?.toString()
+  ) || message.copie?.some((c: any) => 
+    c._id?.toString() === (session?.user as any)?.id?.toString() || 
+    c.toString() === (session?.user as any)?.id?.toString()
   );
 
   return (
@@ -300,7 +307,7 @@ export default function ClientMessageDetailPage() {
       <main className="w-full px-4 py-8">
         {/* En-tête avec bouton retour */}
         <div className="mb-6 flex items-center justify-between">
-          <Link href="/client/messages">
+          <Link href="/partenaire/messages">
             <Button variant="outline" size="sm">← Retour aux messages</Button>
           </Link>
           <div className="flex gap-2">
@@ -316,7 +323,7 @@ export default function ClientMessageDetailPage() {
                 if (!confirm('Êtes-vous sûr de vouloir supprimer ce message ?')) return;
                 try {
                   await messagesAPI.deleteMessage(messageId);
-                  router.push('/client/messages');
+                  router.push('/partenaire/messages');
                 } catch (err: any) {
                   console.error('Erreur lors de la suppression:', err);
                   alert('Erreur lors de la suppression du message');
@@ -373,7 +380,7 @@ export default function ClientMessageDetailPage() {
                             <span className="font-semibold">{msgIsReceived ? 'De' : 'À'}:</span>{' '}
                             {msgIsReceived 
                               ? msgExpediteurName
-                              : msg.typeMessage === 'user_to_admins'
+                              : msg.typeMessage === 'user_to_admins' || msg.typeMessage === 'professional_to_admin'
                               ? 'Tous les administrateurs'
                               : msg.destinataires?.map((d: any) => 
                                   `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.email
@@ -465,7 +472,7 @@ export default function ClientMessageDetailPage() {
                       <span>
                         {isReceived ? 'De' : 'À'}: {isReceived 
                           ? `${expediteur?.firstName || ''} ${expediteur?.lastName || ''}`.trim() || expediteur?.email
-                          : message.typeMessage === 'user_to_admins'
+                          : message.typeMessage === 'user_to_admins' || message.typeMessage === 'professional_to_admin'
                           ? 'Tous les administrateurs'
                           : message.destinataires?.map((d: any) => 
                               `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.email
@@ -484,70 +491,73 @@ export default function ClientMessageDetailPage() {
                       )}
                     </div>
                   </div>
-            {isReceived && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  try {
-                    const isRead = isMessageRead(message);
-                    if (isRead) {
-                      await messagesAPI.markAsUnread(message._id || message.id);
-                    } else {
-                      await messagesAPI.markAsRead(message._id || message.id);
-                    }
-                    await loadMessage();
-                    await loadMessageNotifications(message._id || message.id);
-                  } catch (err) {
-                    console.error('Erreur lors du changement de statut:', err);
-                  }
-                }}
-              >
-                {isMessageRead(message) ? 'Marquer comme non lu' : 'Marquer comme lu'}
-              </Button>
-            )}
-          </div>
-
-          {message.copie && message.copie.length > 0 && (
-            <div className="mb-4 p-3 bg-gray-50 rounded-md">
-              <p className="text-xs text-muted-foreground mb-1">Copie (CC)</p>
-              <p className="text-sm font-semibold">
-                {message.copie.map((c: any) => 
-                  `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email
-                ).join(', ')}
-              </p>
-            </div>
-          )}
-
-          <div className="prose max-w-none mb-6">
-            <p className="whitespace-pre-wrap text-foreground">{message.contenu}</p>
-          </div>
-
-          {message.piecesJointes && message.piecesJointes.length > 0 && (
-            <div className="pt-4 border-t">
-              <p className="text-sm font-semibold mb-3">Pièces jointes</p>
-              <div className="space-y-2">
-                {message.piecesJointes.map((pj: any, index: number) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                    <div className="flex items-center gap-2">
-                      <span>📎</span>
-                      <span className="text-sm">{pj.originalName}</span>
-                      <span className="text-xs text-muted-foreground">
-                        ({(pj.size / 1024 / 1024).toFixed(2)} MB)
-                      </span>
-                    </div>
+                  {isReceived && (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleDownloadAttachment(message._id || message.id, index, pj.originalName)}
+                      onClick={async () => {
+                        try {
+                          const isRead = isMessageRead(message);
+                          if (isRead) {
+                            await messagesAPI.markAsUnread(message._id || message.id);
+                          } else {
+                            await messagesAPI.markAsRead(message._id || message.id);
+                          }
+                          await loadMessage();
+                          await loadMessageNotifications(message._id || message.id);
+                        } catch (err) {
+                          console.error('Erreur lors du changement de statut:', err);
+                        }
+                      }}
                     >
-                      Télécharger
+                      {isMessageRead(message) ? 'Marquer comme non lu' : 'Marquer comme lu'}
                     </Button>
+                  )}
+                </div>
+
+                {message.copie && message.copie.length > 0 && (
+                  <div className="mb-4 p-3 bg-gray-50 rounded-md">
+                    <p className="text-xs text-muted-foreground mb-1">Copie (CC)</p>
+                    <p className="text-sm font-semibold">
+                      {message.copie.map((c: any) => 
+                        `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email
+                      ).join(', ')}
+                    </p>
                   </div>
-                ))}
+                )}
+
+                <div className="prose max-w-none mb-6">
+                  <p className="whitespace-pre-wrap text-foreground">{message.contenu}</p>
+                </div>
+
+                {message.piecesJointes && message.piecesJointes.length > 0 && (
+                  <div className="pt-4 border-t">
+                    <p className="text-sm font-semibold mb-3">Pièces jointes</p>
+                    <div className="space-y-2">
+                      {message.piecesJointes.map((pj: any, index: number) => (
+                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                          <div className="flex items-center gap-2">
+                            <span>📎</span>
+                            <span className="text-sm">{pj.originalName}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({(pj.size / 1024 / 1024).toFixed(2)} MB)
+                            </span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDownloadAttachment(message._id || message.id, index, pj.originalName)}
+                          >
+                            Télécharger
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Notifications liées - Toujours affichée */}
@@ -681,6 +691,3 @@ export default function ClientMessageDetailPage() {
     </div>
   );
 }
-
-
-

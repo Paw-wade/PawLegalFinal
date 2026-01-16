@@ -199,7 +199,7 @@ router.get('/admin', protect, async (req, res) => {
     const { statut, date, userId, includeArchived } = req.query;
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
     let query = {};
-    
+
     // Si l'utilisateur n'est pas admin, il ne peut récupérer que ses propres rendez-vous
     if (!isAdmin) {
       if (userId && userId !== req.user.id.toString()) {
@@ -212,8 +212,8 @@ router.get('/admin', protect, async (req, res) => {
       query.user = req.user.id;
     } else {
       // Admin peut voir tous les rendez-vous ou filtrer par userId
-      if (userId) {
-        query.user = userId;
+    if (userId) {
+      query.user = userId;
       }
     }
 

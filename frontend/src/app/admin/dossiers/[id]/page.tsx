@@ -1300,4 +1300,3 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
     </div>
   );
 }
-

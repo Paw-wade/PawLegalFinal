@@ -578,6 +578,11 @@ export const tasksAPI = {
     return api.get('/tasks/my', { params });
   },
   
+  // Récupérer les tâches d'un dossier spécifique
+  getDossierTasks: (dossierId: string, params?: { statut?: string; priorite?: string }) => {
+    return api.get(`/tasks/dossier/${dossierId}`, { params });
+  },
+  
   // Récupérer une tâche par ID
   getTaskById: (id: string) => {
     return api.get(`/tasks/${id}`);
@@ -685,6 +690,18 @@ export const dossiersAPI = {
     return api.get(`/user/documents/dossier/${dossierId}`);
   },
   
+  // Récupérer le récit récapitulatif d'un dossier
+  getDossierRecap: (dossierId: string) => {
+    return api.get(`/user/dossiers/${dossierId}/recap`);
+  },
+  
+  // Télécharger le récit récapitulatif en PDF
+  downloadDossierRecapPDF: (dossierId: string) => {
+    return api.get(`/user/dossiers/${dossierId}/recap/pdf`, {
+      responseType: 'blob'
+    });
+  },
+  
   // Client - Annuler un dossier
   cancelDossier: (id: string) =>
     api.patch(`/user/dossiers/${id}/cancel`),
@@ -708,6 +725,10 @@ export const dossiersAPI = {
   // Accuser réception d'un dossier transmis avec acceptation/refus (Consulat/Avocat/Association)
   acknowledgeDossier: (id: string, action: 'accept' | 'refuse', notes?: string) =>
     api.post(`/user/dossiers/${id}/acknowledge`, { action, notes }),
+  
+  // Partenaire - Se décharger d'un dossier transmis
+  dischargeDossier: (id: string, notes?: string) =>
+    api.post(`/user/dossiers/${id}/discharge`, { notes }),
 };
 
 export const notificationsAPI = {

@@ -714,7 +714,9 @@ router.get('/:id/download', async (req, res) => {
 // @access  Private
 router.delete('/:id', async (req, res) => {
   try {
-    const document = await Document.findById(req.params.id);
+    const document = await Document.findById(req.params.id)
+      .populate('user', 'firstName lastName email')
+      .populate('dossierId', 'titre numero');
 
     if (!document) {
       return res.status(404).json({
@@ -732,6 +734,30 @@ router.delete('/:id', async (req, res) => {
         success: false,
         message: 'Accès non autorisé à ce document'
       });
+    }
+
+    // Ajouter le document à la corbeille avant suppression
+    try {
+      const Trash = require('../models/Trash');
+      const documentData = document.toObject();
+      
+      await Trash.create({
+        itemType: 'document',
+        originalId: document._id,
+        itemData: documentData,
+        deletedBy: effectiveUserId,
+        originalOwner: document.user._id || document.user,
+        origin: req.headers.referer || 'unknown',
+        metadata: {
+          nom: document.nom,
+          dossierId: document.dossierId?._id || document.dossierId,
+          dossierTitre: document.dossierId?.titre || document.dossierId?.numero
+        }
+      });
+      console.log('✅ Document ajouté à la corbeille:', document._id);
+    } catch (trashError) {
+      console.error('⚠️ Erreur lors de l\'ajout à la corbeille (continuation de la suppression):', trashError);
+      // Continuer la suppression même si l'ajout à la corbeille échoue
     }
 
     // Supprimer le fichier du système de fichiers

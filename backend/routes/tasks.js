@@ -89,6 +89,79 @@ router.get('/my', protect, async (req, res) => {
   }
 });
 
+// @route   GET /api/tasks/dossier/:dossierId
+// @desc    Récupérer les tâches d'un dossier (pour partenaires et admins)
+// @access  Private
+router.get('/dossier/:dossierId', protect, async (req, res) => {
+  try {
+    const { dossierId } = req.params;
+    const { statut, priorite, includeArchived } = req.query;
+    
+    // Vérifier que le dossier existe
+    const dossier = await Dossier.findById(dossierId);
+    if (!dossier) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dossier non trouvé'
+      });
+    }
+
+    // Vérifier les permissions
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const isOwner = dossier.user && dossier.user.toString() === req.user.id;
+    const isPartenaire = req.user.role === 'partenaire';
+    
+    // Pour les partenaires, vérifier que le dossier leur est transmis
+    let hasAccess = false;
+    if (isAdmin || isOwner) {
+      hasAccess = true;
+    } else if (isPartenaire) {
+      const transmission = dossier.transmittedTo?.find((t) => {
+        const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
+        return partenaireId === req.user.id;
+      });
+      hasAccess = !!transmission && (transmission.statut === 'pending' || transmission.statut === 'accepted');
+    }
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Vous n\'avez pas accès à ce dossier'
+      });
+    }
+
+    // Construire le filtre
+    const filter = { dossier: dossierId };
+    if (statut) filter.statut = statut;
+    if (priorite) filter.priorite = priorite;
+    
+    // Par défaut, exclure les tâches archivées sauf si includeArchived=true
+    if (includeArchived !== 'true') {
+      filter.archived = { $ne: true };
+    }
+
+    const tasks = await Task.find(filter)
+      .populate('assignedTo', 'firstName lastName email role')
+      .populate('createdBy', 'firstName lastName email role')
+      .populate('completedBy', 'firstName lastName email role')
+      .populate('dossier', 'titre numero statut')
+      .sort({ priorite: -1, dateEcheance: 1, createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: tasks.length,
+      tasks
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des tâches du dossier:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: error.message
+    });
+  }
+});
+
 // @route   GET /api/tasks/:id
 // @desc    Récupérer une tâche par ID
 // @access  Private
@@ -351,6 +424,39 @@ router.post(
         }
       }
 
+      // Si un partenaire crée une tâche sur un dossier transmis, notifier tous les admins
+      if (req.user.role === 'partenaire' && dossierExists) {
+        try {
+          const allAdmins = await User.find({ 
+            role: { $in: ['admin', 'superadmin'] }
+          });
+
+          const creatorName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email;
+
+          for (const admin of allAdmins) {
+            try {
+              await Notification.create({
+                user: admin._id,
+                type: 'other',
+                titre: 'Nouvelle tâche créée par un partenaire',
+                message: `${creatorName} (partenaire) a créé une nouvelle tâche "${task.titre}" sur le dossier "${dossierExists.titre || dossierExists.numero}".`,
+                lien: `/admin/dossiers/${dossierExists._id}`,
+                metadata: {
+                  taskId: task._id.toString(),
+                  dossierId: dossierExists._id.toString(),
+                  type: 'task_created_by_partenaire',
+                  createdBy: req.user.id.toString()
+                }
+              });
+            } catch (adminNotifError) {
+              console.error('Erreur lors de la notification d\'un admin pour la tâche créée par un partenaire:', adminNotifError);
+            }
+          }
+        } catch (partenaireNotifError) {
+          console.error('Erreur lors de la notification des admins pour la tâche créée par un partenaire:', partenaireNotifError);
+        }
+      }
+
       res.status(201).json({
         success: true,
         message: 'Tâche créée avec succès',
@@ -422,8 +528,22 @@ router.put(
       const currentAssignedToArray = Array.isArray(task.assignedTo) ? task.assignedTo : [task.assignedTo].filter(Boolean);
       const isAssigned = currentAssignedToArray.some(id => id.toString() === req.user.id);
       const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+      const isPartenaire = req.user.role === 'partenaire';
+      
+      // Pour les partenaires, vérifier qu'ils ont accès au dossier de la tâche
+      let hasDossierAccess = false;
+      if (isPartenaire && task.dossier) {
+        const dossier = await Dossier.findById(task.dossier);
+        if (dossier) {
+          const transmission = dossier.transmittedTo?.find((t) => {
+            const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
+            return partenaireId === req.user.id;
+          });
+          hasDossierAccess = !!transmission && (transmission.statut === 'pending' || transmission.statut === 'accepted');
+        }
+      }
 
-      if (!isCreator && !isAssigned && !isAdmin) {
+      if (!isCreator && !isAssigned && !isAdmin && !hasDossierAccess) {
         return res.status(403).json({
           success: false,
           message: 'Vous n\'avez pas la permission de modifier cette tâche'

@@ -572,6 +572,34 @@ router.delete('/:id', authorize('admin', 'superadmin'), async (req, res) => {
       });
     }
 
+    // Ajouter l'utilisateur à la corbeille avant suppression
+    try {
+      const Trash = require('../models/Trash');
+      // Convertir l'utilisateur en objet et exclure le mot de passe
+      const userData = user.toObject();
+      delete userData.password; // Ne pas sauvegarder le mot de passe dans la corbeille
+      
+      await Trash.create({
+        itemType: 'user',
+        originalId: user._id,
+        itemData: userData,
+        deletedBy: req.user.id,
+        originalOwner: user._id, // L'utilisateur est son propre propriétaire
+        origin: req.headers.referer || 'unknown',
+        metadata: {
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          isActive: user.isActive
+        }
+      });
+      console.log('✅ Utilisateur ajouté à la corbeille:', user._id);
+    } catch (trashError) {
+      console.error('⚠️ Erreur lors de l\'ajout à la corbeille (continuation de la suppression):', trashError);
+      // Continuer la suppression même si l'ajout à la corbeille échoue
+    }
+
     // Logger l'action avant suppression
     try {
       const Log = require('../models/Log');

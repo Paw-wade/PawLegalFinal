@@ -5,13 +5,15 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { documentsAPI, dossiersAPI } from '@/lib/api';
 import { DocumentPreview } from '@/components/DocumentPreview';
+import { FileText, Download, Folder, Calendar, Upload, Search, Filter } from 'lucide-react';
+import Link from 'next/link';
 
 function Button({ children, variant = 'default', className = '', disabled, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
   const variantClasses = {
     default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
-    outline: 'border border-input bg-background hover:bg-accent',
-    ghost: 'hover:bg-accent',
+    outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+    ghost: 'hover:bg-accent hover:text-accent-foreground',
     destructive: 'bg-red-500 text-white hover:bg-red-600',
   };
   return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} disabled={disabled} {...props}>{children}</button>;
@@ -57,7 +59,7 @@ export default function DocumentsPage() {
   const [previewDocument, setPreviewDocument] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
-  const [dossierFilter, setDossierFilter] = useState<string>('');
+  const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -73,6 +75,14 @@ export default function DocumentsPage() {
       loadDossiers();
     }
   }, [session, status, router]);
+
+  // Déplier tous les dossiers par défaut
+  useEffect(() => {
+    if (dossiers.length > 0 && expandedDossiers.size === 0) {
+      const dossierIds = dossiers.map((d: any) => (d._id || d.id)?.toString()).filter(Boolean);
+      setExpandedDossiers(new Set(dossierIds));
+    }
+  }, [dossiers]);
 
   const loadDossiers = async () => {
     setIsLoadingDossiers(true);
@@ -150,7 +160,6 @@ export default function DocumentsPage() {
           fileInputRef.current.value = '';
         }
         setShowUploadForm(false);
-        // Attendre un peu avant de recharger pour s'assurer que le document est bien enregistré
         setTimeout(() => {
           loadDocuments();
         }, 500);
@@ -160,11 +169,6 @@ export default function DocumentsPage() {
       }
     } catch (err: any) {
       console.error('❌ Erreur lors du téléversement:', err);
-      console.error('❌ Détails de l\'erreur:', {
-        status: err.response?.status,
-        message: err.response?.data?.message,
-        data: err.response?.data
-      });
       setError(err.response?.data?.message || 'Erreur lors du téléversement du document');
     } finally {
       setUploading(false);
@@ -207,11 +211,24 @@ export default function DocumentsPage() {
   };
 
   const formatFileSize = (bytes: number) => {
+    if (!bytes) return '';
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const formatDate = (date: string | Date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    return d.toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const getFileIcon = (typeMime: string) => {
@@ -233,6 +250,54 @@ export default function DocumentsPage() {
     return labels[categorie] || categorie;
   };
 
+  // Grouper les documents par dossier
+  const groupedDocuments = documents.reduce((acc: any, doc: any) => {
+    const dossierId = doc.dossierId?._id?.toString() || doc.dossierId?.toString() || doc.dossierId || 'sans-dossier';
+    const dossier = dossiers.find((d: any) => (d._id || d.id)?.toString() === dossierId) || doc.dossierId;
+    
+    const dossierNumero = dossier?.numero || dossier?.numeroDossier || 'Sans numéro';
+    const dossierTitre = dossier?.titre || 'Sans titre';
+    
+    const key = dossierId;
+    
+    if (!acc[key]) {
+      acc[key] = {
+        dossierId,
+        dossierNumero,
+        dossierTitre,
+        documents: []
+      };
+    }
+    
+    acc[key].documents.push(doc);
+    return acc;
+  }, {});
+
+  // Trier les groupes par numéro de dossier
+  const sortedGroups = Object.values(groupedDocuments).sort((a: any, b: any) => {
+    const numA = a.dossierNumero || '';
+    const numB = b.dossierNumero || '';
+    return numA.localeCompare(numB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+
+  // Filtrer les documents
+  const filteredGroups = sortedGroups.filter((group: any) => {
+    const filteredDocs = group.documents.filter((doc: any) => {
+      const matchesSearch = !searchTerm || 
+        doc.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = !categoryFilter || doc.categorie === categoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+    
+    // Retourner le groupe seulement s'il a des documents après filtrage
+    if (filteredDocs.length > 0) {
+      group.documents = filteredDocs;
+      return true;
+    }
+    return false;
+  });
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -248,45 +313,37 @@ export default function DocumentsPage() {
     return null;
   }
 
-  const filteredDocuments = documents.filter((doc) => {
-    const matchesSearch = !searchTerm || 
-      doc.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = !categoryFilter || doc.categorie === categoryFilter;
-    const matchesDossier = !dossierFilter || 
-      (doc.dossierId && (
-        (typeof doc.dossierId === 'object' && doc.dossierId._id?.toString() === dossierFilter) ||
-        doc.dossierId.toString() === dossierFilter
-      ));
-    return matchesSearch && matchesCategory && matchesDossier;
-  });
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
       <main className="w-full px-4 py-8">
-        <div className="mb-8 flex items-center justify-between">
+        {/* Header */}
+        <div className="mb-8 flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-4xl font-bold mb-2">Mes Documents</h1>
+            <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">
+              Mes Documents
+            </h1>
             <p className="text-muted-foreground">Gérez et consultez tous vos documents</p>
           </div>
-          <Button onClick={() => setShowUploadForm(!showUploadForm)}>
-            {showUploadForm ? 'Annuler' : '📤 Téléverser un document'}
+          <Button onClick={() => setShowUploadForm(!showUploadForm)} className="flex items-center gap-2">
+            <Upload className="w-4 h-4" />
+            {showUploadForm ? 'Annuler' : 'Téléverser un document'}
           </Button>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg shadow-sm">
             <p className="text-sm text-red-600">{error}</p>
           </div>
         )}
         {success && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg shadow-sm">
             <p className="text-sm text-green-600">{success}</p>
           </div>
         )}
 
+        {/* Formulaire de téléversement */}
         {showUploadForm && (
-          <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 mb-8">
             <h2 className="text-2xl font-bold mb-6">Téléverser un document</h2>
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
@@ -322,37 +379,39 @@ export default function DocumentsPage() {
                   placeholder="Description du document..."
                 />
               </div>
-              <div>
-                <Label htmlFor="categorie">Catégorie</Label>
-                <select
-                  id="categorie"
-                  value={uploadData.categorie}
-                  onChange={(e) => setUploadData({ ...uploadData, categorie: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                >
-                  <option value="identite">Identité</option>
-                  <option value="titre_sejour">Titre de séjour</option>
-                  <option value="contrat">Contrat</option>
-                  <option value="facture">Facture</option>
-                  <option value="autre">Autre</option>
-                </select>
-              </div>
-              <div>
-                <Label htmlFor="dossierId">Dossier associé (optionnel)</Label>
-                <select
-                  id="dossierId"
-                  value={uploadData.dossierId}
-                  onChange={(e) => setUploadData({ ...uploadData, dossierId: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                  disabled={isLoadingDossiers}
-                >
-                  <option value="">Aucun dossier</option>
-                  {dossiers.map((dossier) => (
-                    <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
-                      {dossier.titre || 'Dossier sans titre'} {dossier.numero ? `(${dossier.numero})` : ''}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="categorie">Catégorie</Label>
+                  <select
+                    id="categorie"
+                    value={uploadData.categorie}
+                    onChange={(e) => setUploadData({ ...uploadData, categorie: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                  >
+                    <option value="identite">Identité</option>
+                    <option value="titre_sejour">Titre de séjour</option>
+                    <option value="contrat">Contrat</option>
+                    <option value="facture">Facture</option>
+                    <option value="autre">Autre</option>
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="dossierId">Dossier associé (optionnel)</Label>
+                  <select
+                    id="dossierId"
+                    value={uploadData.dossierId}
+                    onChange={(e) => setUploadData({ ...uploadData, dossierId: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                    disabled={isLoadingDossiers}
+                  >
+                    <option value="">Aucun dossier</option>
+                    {dossiers.map((dossier) => (
+                      <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
+                        {dossier.titre || 'Dossier sans titre'} {dossier.numero ? `(${dossier.numero})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => {
@@ -372,25 +431,31 @@ export default function DocumentsPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Filtres */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="search">Rechercher</Label>
+              <Label htmlFor="search" className="flex items-center gap-2 mb-2">
+                <Search className="w-4 h-4" />
+                Rechercher
+              </Label>
               <Input
                 id="search"
                 placeholder="Nom, description..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="mt-1"
               />
             </div>
             <div>
-              <Label htmlFor="category-filter">Catégorie</Label>
+              <Label htmlFor="category-filter" className="flex items-center gap-2 mb-2">
+                <Filter className="w-4 h-4" />
+                Catégorie
+              </Label>
               <select
                 id="category-filter"
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="">Toutes les catégories</option>
                 <option value="identite">Identité</option>
@@ -400,130 +465,219 @@ export default function DocumentsPage() {
                 <option value="autre">Autre</option>
               </select>
             </div>
-            <div>
-              <Label htmlFor="dossier-filter">Dossier</Label>
-              <select
-                id="dossier-filter"
-                value={dossierFilter}
-                onChange={(e) => setDossierFilter(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                disabled={isLoadingDossiers}
-              >
-                <option value="">Tous les dossiers</option>
-                {dossiers.map((dossier) => (
-                  <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
-                    {dossier.titre || 'Dossier sans titre'} {dossier.numero ? `(${dossier.numero})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
+        </div>
 
-          {isLoading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-muted-foreground">Chargement des documents...</p>
-            </div>
-          ) : filteredDocuments.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              {searchTerm || categoryFilter || dossierFilter 
+        {/* Liste des documents groupés par dossier */}
+        {isLoading ? (
+          <div className="text-center py-16">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Chargement des documents...</p>
+          </div>
+        ) : filteredGroups.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-lg p-16 text-center border border-gray-200">
+            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <p className="text-muted-foreground text-lg mb-2">
+              {searchTerm || categoryFilter 
                 ? 'Aucun document ne correspond aux filtres sélectionnés' 
                 : 'Aucun document trouvé'}
             </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b bg-muted/30">
-                    <th className="text-left p-4 font-semibold text-sm">Document</th>
-                    <th className="text-left p-4 font-semibold text-sm">Catégorie</th>
-                    <th className="text-left p-4 font-semibold text-sm">Dossier</th>
-                    <th className="text-left p-4 font-semibold text-sm">Taille</th>
-                    <th className="text-left p-4 font-semibold text-sm">Date</th>
-                    <th className="text-left p-4 font-semibold text-sm">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredDocuments.map((doc: any) => (
-                    <tr key={doc._id || doc.id} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{getFileIcon(doc.typeMime)}</span>
-                          <div>
-                            <p className="font-medium text-sm">{doc.nom}</p>
-                            {doc.description && (
-                              <p className="text-xs text-muted-foreground line-clamp-1">{doc.description}</p>
+            {!searchTerm && !categoryFilter && (
+              <Button onClick={() => setShowUploadForm(true)} className="mt-4">
+                Téléverser votre premier document
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {filteredGroups.map((group: any) => {
+              const isExpanded = expandedDossiers.has(group.dossierId);
+              const dossierId = group.dossierId;
+              
+              return (
+                <div
+                  key={group.dossierId}
+                  className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden"
+                >
+                  {/* En-tête du groupe (Dossier) */}
+                  <div className="bg-gradient-to-r from-orange-50 to-orange-100 px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => {
+                          const newExpanded = new Set(expandedDossiers);
+                          if (newExpanded.has(dossierId)) {
+                            newExpanded.delete(dossierId);
+                          } else {
+                            newExpanded.add(dossierId);
+                          }
+                          setExpandedDossiers(newExpanded);
+                        }}
+                        className="flex items-center gap-3 hover:opacity-80 transition-opacity flex-1 text-left"
+                      >
+                        <div className="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                          <Folder className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h2 className="text-lg font-bold text-foreground">
+                              {group.dossierTitre}
+                            </h2>
+                            {group.dossierNumero && group.dossierNumero !== 'Sans numéro' && (
+                              <span className="px-2 py-0.5 bg-orange-500/20 text-orange-700 rounded text-xs font-semibold">
+                                N° {group.dossierNumero}
+                              </span>
                             )}
                           </div>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1.5">
+                              <FileText className="w-4 h-4" />
+                              <span>{group.documents.length} document{group.documents.length > 1 ? 's' : ''}</span>
+                            </div>
+                          </div>
                         </div>
-                      </td>
-                      <td className="p-4">
-                        <span className="px-2 py-1 bg-primary/10 text-primary rounded-md text-xs font-medium">
-                          {getCategoryLabel(doc.categorie || 'autre')}
-                        </span>
-                      </td>
-                      <td className="p-4 text-sm text-muted-foreground">
-                        {doc.dossierId ? (
-                          typeof doc.dossierId === 'object' 
-                            ? (doc.dossierId.titre || 'Dossier') + (doc.dossierId.numero ? ` (${doc.dossierId.numero})` : '')
-                            : 'Dossier'
-                        ) : '—'}
-                      </td>
-                      <td className="p-4 text-sm text-muted-foreground">{formatFileSize(doc.taille)}</td>
-                      <td className="p-4 text-sm text-muted-foreground">
-                        {new Date(doc.createdAt).toLocaleDateString('fr-FR')}
-                      </td>
-                      <td className="p-4">
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPreviewDocument(doc)}
-                            className="text-xs"
-                            title="Prévisualiser"
+                        <div className="ml-auto">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className={`h-5 w-5 text-gray-500 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
                           >
-                            👁️
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDownload(doc._id || doc.id, doc.nom)}
-                            className="text-xs"
-                            title="Télécharger"
-                          >
-                            📥
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDelete(doc._id || doc.id)}
-                            className="text-xs"
-                            title="Supprimer"
-                          >
-                            🗑️
-                          </Button>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                      </button>
+                      {group.dossierId !== 'sans-dossier' && (
+                        <div className="ml-4">
+                          <Link href={`/client/dossiers/${group.dossierId}`}>
+                            <Button variant="outline" size="sm">
+                              Voir le dossier →
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-          {!isLoading && filteredDocuments.length > 0 && (
-            <div className="mt-4 text-sm text-muted-foreground">
-              <p>
-                {filteredDocuments.length} document{filteredDocuments.length > 1 ? 's' : ''} trouvé{filteredDocuments.length > 1 ? 's' : ''}
-                {(searchTerm || categoryFilter || dossierFilter) && filteredDocuments.length !== documents.length && (
-                  <span> (sur {documents.length} au total)</span>
-                )}
-              </p>
-            </div>
-          )}
-        </div>
+                  {/* Liste des documents (affichée si déplié) */}
+                  {isExpanded && (
+                    <div className="divide-y divide-gray-100">
+                      {group.documents.map((doc: any) => {
+                        const docId = (doc._id || doc.id)?.toString();
+                        const docNom = doc.nom || doc.filename || 'Document';
+                        const docType = doc.type || doc.categorie || 'Type inconnu';
+                        const docTaille = doc.taille ? formatFileSize(doc.taille) : '';
+                        const docDate = doc.createdAt ? formatDate(doc.createdAt) : '';
+                        const originalName = doc.originalName || doc.nom || doc.filename || 'document';
+
+                        return (
+                          <div
+                            key={docId}
+                            className="p-6 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-4 flex-1 min-w-0">
+                                <div className="flex-shrink-0 w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                                  <span className="text-2xl">{getFileIcon(doc.typeMime)}</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-foreground mb-1 truncate">
+                                    {docNom}
+                                  </h3>
+                                  <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                                    <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-md text-xs font-medium">
+                                      {getCategoryLabel(doc.categorie || 'autre')}
+                                    </span>
+                                    {docTaille && (
+                                      <span className="flex items-center gap-1">
+                                        <span>💾</span>
+                                        <span>{docTaille}</span>
+                                      </span>
+                                    )}
+                                    {docDate && (
+                                      <span className="flex items-center gap-1 font-medium text-foreground">
+                                        <Calendar className="w-4 h-4" />
+                                        <span>Téléversé le {docDate}</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  {doc.description && (
+                                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                                      {doc.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setPreviewDocument(doc)}
+                                  title="Prévisualiser"
+                                >
+                                  👁️ Prévisualiser
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleDownload(docId, originalName)}
+                                  className="flex items-center gap-2"
+                                  title="Télécharger"
+                                >
+                                  <Download className="w-4 h-4" />
+                                  Télécharger
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDelete(docId)}
+                                  title="Supprimer"
+                                >
+                                  🗑️
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Compteur de documents */}
+        {!isLoading && filteredGroups.length > 0 && (
+          <div className="mt-6 text-sm text-muted-foreground text-center">
+            <p>
+              {documents.filter((doc: any) => {
+                const matchesSearch = !searchTerm || 
+                  doc.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  doc.description?.toLowerCase().includes(searchTerm.toLowerCase());
+                const matchesCategory = !categoryFilter || doc.categorie === categoryFilter;
+                return matchesSearch && matchesCategory;
+              }).length} document{(documents.filter((doc: any) => {
+                const matchesSearch = !searchTerm || 
+                  doc.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  doc.description?.toLowerCase().includes(searchTerm.toLowerCase());
+                const matchesCategory = !categoryFilter || doc.categorie === categoryFilter;
+                return matchesSearch && matchesCategory;
+              }).length) > 1 ? 's' : ''} trouvé{(documents.filter((doc: any) => {
+                const matchesSearch = !searchTerm || 
+                  doc.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  doc.description?.toLowerCase().includes(searchTerm.toLowerCase());
+                const matchesCategory = !categoryFilter || doc.categorie === categoryFilter;
+                return matchesSearch && matchesCategory;
+              }).length) > 1 ? 's' : ''}
+            </p>
+          </div>
+        )}
       </main>
 
+      {/* Modal de prévisualisation */}
       {previewDocument && (
         <DocumentPreview
           document={previewDocument}
@@ -534,4 +688,3 @@ export default function DocumentsPage() {
     </div>
   );
 }
-

@@ -553,6 +553,43 @@ export default function AdminDossiersPage() {
     }
   };
 
+  const handleMarkTaskAsDone = async (taskId: string, dossierId: string) => {
+    try {
+      const response = await tasksAPI.updateTask(taskId, {
+        effectue: true,
+        statut: 'termine'
+      });
+      
+      if (response.data.success) {
+        // Recharger les tâches
+        await loadDossierTasks();
+      } else {
+        setError(response.data.message || 'Erreur lors de la mise à jour de la tâche');
+      }
+    } catch (err: any) {
+      console.error('❌ Erreur lors de la mise à jour de la tâche:', err);
+      setError(err.response?.data?.message || 'Erreur lors de la mise à jour de la tâche');
+    }
+  };
+
+  const handleCancelTask = async (taskId: string, dossierId: string) => {
+    try {
+      const response = await tasksAPI.updateTask(taskId, {
+        statut: 'annule'
+      });
+      
+      if (response.data.success) {
+        // Recharger les tâches
+        await loadDossierTasks();
+      } else {
+        setError(response.data.message || 'Erreur lors de l\'annulation de la tâche');
+      }
+    } catch (err: any) {
+      console.error('❌ Erreur lors de l\'annulation de la tâche:', err);
+      setError(err.response?.data?.message || 'Erreur lors de l\'annulation de la tâche');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -1512,6 +1549,30 @@ export default function AdminDossiersPage() {
                                 N° {dossier.numero || dossier.numeroDossier}
                               </p>
                             )}
+                            {/* Indication de transmission (visible quand plié) */}
+                            {!expandedDossiers.has(dossier._id || dossier.id) && dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
+                              <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-800 border border-purple-300">
+                                  📤 Transmis
+                                </span>
+                                {dossier.transmittedTo.map((trans: any, idx: number) => {
+                                  const partenaire = trans.partenaire;
+                                  const partenaireName = partenaire 
+                                    ? `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() || partenaire.email
+                                    : 'Partenaire inconnu';
+                                  const organismeName = partenaire?.partenaireInfo?.nomOrganisme;
+                                  const status = trans.status || 'pending';
+                                  const statusLabel = status === 'accepted' ? 'Accepté' : status === 'refused' ? 'Refusé' : 'En attente';
+                                  return (
+                                    <span key={idx} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-300">
+                                      {partenaireName}
+                                      {organismeName && typeof organismeName === 'string' && ` (${organismeName})`}
+                                      <span className="ml-1 text-[9px]">• {statusLabel}</span>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
                             {/* Compteurs et informations sur dossier plié */}
                             {!expandedDossiers.has(dossier._id || dossier.id) && (
                               <div className="mt-1.5 space-y-1">
@@ -1522,6 +1583,16 @@ export default function AdminDossiersPage() {
                                   const totalDocuments = dossierDocuments[dossier._id || dossier.id]?.length || dossier.documents?.length || 0;
                                   const progress = getDossierProgress(dossier.statut);
                                   const unreadCount = getUnreadNotificationsCountForDossier(dossier._id || dossier.id);
+                                  
+                                  // Calculer les tâches
+                                  const dossierId = dossier._id || dossier.id;
+                                  const tasks = dossierTasks[dossierId] || [];
+                                  const pendingTasks = tasks.filter((task: any) => {
+                                    return task.statut !== 'termine' && task.statut !== 'annule' && !task.effectue;
+                                  });
+                                  const completedTasks = tasks.filter((task: any) => {
+                                    return task.statut === 'termine' || task.effectue === true;
+                                  });
                                   
                                   return (
                                     <>
@@ -1543,6 +1614,20 @@ export default function AdminDossiersPage() {
                                             </span>
                                           </>
                                         )}
+                                        {tasks.length > 0 && (
+                                          <>
+                                            <span className="flex items-center gap-0.5">
+                                              <span className="text-xs">⏳</span>
+                                              <span className="font-semibold text-orange-600">{pendingTasks.length}</span>
+                                            </span>
+                                            {completedTasks.length > 0 && (
+                                              <span className="flex items-center gap-0.5">
+                                                <span className="text-xs">✅</span>
+                                                <span className="font-semibold text-green-600">{completedTasks.length}</span>
+                                              </span>
+                                            )}
+                                          </>
+                                        )}
                                         {dossier.messages?.length > 0 && (
                                           <span className="flex items-center gap-0.5">
                                             <span className="text-xs">💬</span>
@@ -1557,7 +1642,7 @@ export default function AdminDossiersPage() {
                                         )}
                                       </div>
                                       
-                                      {/* Ligne 2: Progression, Échéance, Activité, Assigné */}
+                                      {/* Ligne 2: Progression, Échéance, Assigné */}
                                       <div className="flex items-center gap-2.5 flex-wrap text-[10px] text-muted-foreground">
                                         <span className="flex items-center gap-0.5">
                                           <span className="text-xs">📊</span>
@@ -1569,16 +1654,26 @@ export default function AdminDossiersPage() {
                                             <span className="font-semibold">{calculateDaysUntil(dossier.dateEcheance)}j</span>
                                           </span>
                                         )}
-                                        {dossier.updatedAt && (
-                                          <span className="flex items-center gap-0.5">
-                                            <span className="text-xs">🔄</span>
-                                            <span>{formatRelativeTime(dossier.updatedAt)}</span>
-                                          </span>
-                                        )}
                                         {dossier.assignedTo && typeof dossier.assignedTo === 'object' && dossier.assignedTo.firstName && (
                                           <span className="flex items-center gap-0.5">
                                             <span className="text-xs">👤</span>
                                             <span className="truncate max-w-[80px]">{dossier.assignedTo.firstName}</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                      
+                                      {/* Ligne 3: Date (sur une ligne avec caractères plus grands) */}
+                                      <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                                        {dossier.createdAt && (
+                                          <span className="flex items-center gap-1">
+                                            <span>📅</span>
+                                            <span>Créé: {new Date(dossier.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                          </span>
+                                        )}
+                                        {dossier.updatedAt && (
+                                          <span className="flex items-center gap-1">
+                                            <span>🔄</span>
+                                            <span>Modifié: {new Date(dossier.updatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                                           </span>
                                         )}
                                       </div>
@@ -1837,9 +1932,33 @@ export default function AdminDossiersPage() {
                       </div>
                       <div className="bg-gray-50 p-2 rounded text-center">
                         <p className="text-xs text-muted-foreground">Tâches</p>
-                        <p className="text-sm font-semibold text-foreground">
-                          {dossierTasks[dossier._id || dossier.id]?.length || 0}
-                        </p>
+                        {(() => {
+                          const dossierId = dossier._id || dossier.id;
+                          const tasks = dossierTasks[dossierId] || [];
+                          const pendingTasks = tasks.filter((task: any) => {
+                            return task.statut !== 'termine' && task.statut !== 'annule' && !task.effectue;
+                          });
+                          const completedTasks = tasks.filter((task: any) => {
+                            return task.statut === 'termine' || task.effectue === true;
+                          });
+                          return (
+                            <div className="flex items-center justify-center gap-1.5">
+                              {pendingTasks.length > 0 && (
+                                <span className="text-sm font-semibold text-orange-600">
+                                  ⏳ {pendingTasks.length}
+                                </span>
+                              )}
+                              {completedTasks.length > 0 && (
+                                <span className="text-sm font-semibold text-green-600">
+                                  ✅ {completedTasks.length}
+                                </span>
+                              )}
+                              {tasks.length === 0 && (
+                                <span className="text-sm font-semibold text-foreground">0</span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -1883,31 +2002,56 @@ export default function AdminDossiersPage() {
                               {/* Liste des tâches */}
                               {tasks.length > 0 ? (
                                 <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                                  {tasks.map((task: any) => (
-                                    <div key={task._id || task.id} className="bg-gray-50 rounded-md p-2 border border-gray-200">
-                                      <div className="flex items-start justify-between gap-2">
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-xs font-semibold text-foreground truncate">{task.titre}</p>
-                                          {task.description && (
-                                            <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{task.description}</p>
-                                          )}
-                                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${getTaskStatutColor(task.statut)}`}>
-                                              {getTaskStatutLabel(task.statut)}
-                                            </span>
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${getTaskPrioriteColor(task.priorite)}`}>
-                                              {getTaskPrioriteLabel(task.priorite)}
-                                            </span>
-                                            {task.assignedTo && Array.isArray(task.assignedTo) && task.assignedTo.length > 0 && (
-                                              <span className="text-[10px] text-muted-foreground">
-                                                👤 {task.assignedTo.length} assigné{task.assignedTo.length > 1 ? 's' : ''}
-                                              </span>
+                                  {tasks.map((task: any) => {
+                                    const taskId = task._id || task.id;
+                                    const dossierId = task.dossier?._id || task.dossier || task.dossierId?._id || task.dossierId;
+                                    const isDone = task.statut === 'termine' || task.effectue;
+                                    const isCancelled = task.statut === 'annule';
+                                    
+                                    return (
+                                      <div key={taskId} className="bg-gray-50 rounded-md p-2 border border-gray-200">
+                                        <div className="flex items-start justify-between gap-2">
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-semibold text-foreground truncate">{task.titre || 'Sans titre'}</p>
+                                            {task.description && (
+                                              <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{task.description}</p>
                                             )}
+                                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${getTaskStatutColor(task.statut)}`}>
+                                                {getTaskStatutLabel(task.statut)}
+                                              </span>
+                                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${getTaskPrioriteColor(task.priorite)}`}>
+                                                {getTaskPrioriteLabel(task.priorite)}
+                                              </span>
+                                              {task.assignedTo && Array.isArray(task.assignedTo) && task.assignedTo.length > 0 && (
+                                                <span className="text-[10px] text-muted-foreground">
+                                                  👤 {task.assignedTo.length} assigné{task.assignedTo.length > 1 ? 's' : ''}
+                                                </span>
+                                              )}
+                                            </div>
                                           </div>
+                                          {!isDone && !isCancelled && dossierId && (
+                                            <div className="flex gap-1">
+                                              <button
+                                                onClick={() => handleMarkTaskAsDone(taskId, dossierId.toString())}
+                                                className="text-[10px] px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded transition-colors"
+                                                title="Marquer comme effectuée"
+                                              >
+                                                ✓
+                                              </button>
+                                              <button
+                                                onClick={() => handleCancelTask(taskId, dossierId.toString())}
+                                                className="text-[10px] px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                                                title="Annuler"
+                                              >
+                                                ✕
+                                              </button>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
-                                    </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               ) : (
                                 <p className="text-xs text-muted-foreground text-center py-2">Aucune tâche</p>

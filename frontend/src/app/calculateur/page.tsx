@@ -481,6 +481,7 @@ export default function CalculateurPage() {
     situation: 'demande', // 'demande', 'contentieux_visa', 'contentieux_titre' - Par défaut, afficher le formulaire de dépôt
     dateAttributionTitre: '', // Date d'attribution du titre ou du visa
     dateExpirationTitre: '', // Date d'expiration du titre ou du visa
+    dateFinValiditeTitreActuel: '', // Date de fin de validité du titre actuel ou du visa
     // Champs pour recours visa
     natureVisa: '', // Nature du visa
     consulatDepot: '', // Consulat du dépôt
@@ -1765,6 +1766,28 @@ export default function CalculateurPage() {
                         </>
                       )}
                     </div>
+
+                    {/* Champ conditionnel : Date de fin de validité du titre actuel ou du visa */}
+                    {formData.typePrecisTitreSejour && (
+                      <div className="space-y-2">
+                        <Label htmlFor="dateFinValiditeTitreActuel">
+                          {formData.typeDemande === 'premiere' 
+                            ? 'Date de fin de validité du visa *' 
+                            : 'Date de fin de validité du titre actuel *'}
+                        </Label>
+                        <Input
+                          id="dateFinValiditeTitreActuel"
+                          type="date"
+                          value={formData.dateFinValiditeTitreActuel}
+                          onChange={(e) => setFormData({ ...formData, dateFinValiditeTitreActuel: e.target.value })}
+                          required
+                          className={dateErrors.dateFinValiditeTitreActuel ? 'border-red-500' : ''}
+                        />
+                        {dateErrors.dateFinValiditeTitreActuel && (
+                          <p className="text-xs text-red-600 mt-1">{dateErrors.dateFinValiditeTitreActuel}</p>
+                        )}
+                      </div>
+                    )}
 
                     {formData.typeDemande === 'renouvellement' && (
                       <>

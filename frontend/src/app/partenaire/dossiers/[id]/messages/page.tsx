@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { messagesAPI, dossiersAPI, userAPI } from '@/lib/api';
 import { ArrowLeft, Send, Paperclip, MessageSquare, FileText, X } from 'lucide-react';
 import Link from 'next/link';
@@ -167,6 +168,20 @@ export default function PartenaireDossierMessagesPage() {
       setError(error.response?.data?.message || 'Erreur lors de l\'envoi du message');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce message ?')) return;
+    try {
+      await messagesAPI.deleteMessage(messageId);
+      await loadMessages();
+      setError(null);
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression du message';
+      setError(errorMessage);
+      alert(`Erreur: ${errorMessage}`);
     }
   };
   
@@ -413,6 +428,20 @@ export default function PartenaireDossierMessagesPage() {
                           </a>
                         ))}
                       </div>
+                    </div>
+                  )}
+                  
+                  {/* Bouton de suppression pour les messages envoyés par le partenaire */}
+                  {isFromMe && (
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        variant="outline"
+                        onClick={() => handleDeleteMessage(message._id || message.id)}
+                        className="text-red-600 border-red-300 hover:bg-red-50"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Supprimer
+                      </Button>
                     </div>
                   )}
                 </div>

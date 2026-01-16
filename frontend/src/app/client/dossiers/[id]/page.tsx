@@ -9,6 +9,7 @@ import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, docume
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { History, Clock } from 'lucide-react';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -42,6 +43,9 @@ export default function DossierDetailPage() {
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<any>(null);
   const [showDocumentPreviewModal, setShowDocumentPreviewModal] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -67,11 +71,21 @@ export default function DossierDetailPage() {
       loadMessagesForDossier();
       loadDocumentRequests();
       loadDocuments();
+      // Charger l'historique si déjà ouvert
+      if (showHistory) {
+        loadHistory();
+      }
+      if (showHistory) {
+        loadHistory();
+      }
     } else if (token) {
       loadDossier();
       loadNotifications();
       loadDocumentRequests();
       loadDocuments();
+      if (showHistory) {
+        loadHistory();
+      }
     }
   }, [session, status, router, dossierId]);
 
@@ -192,6 +206,50 @@ export default function DossierDetailPage() {
     }
   };
 
+  const loadHistory = async () => {
+    if (!dossierId) return;
+    
+    setLoadingHistory(true);
+    try {
+      const response = await dossiersAPI.getDossierHistory(dossierId);
+      if (response.data.success) {
+        setHistory(response.data.history || []);
+      }
+    } catch (err: any) {
+      console.error('❌ Erreur lors du chargement de l\'historique:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const getHistoryTypeIcon = (type: string) => {
+    const icons: Record<string, string> = {
+      creation: '📝',
+      status_change: '🔄',
+      document_added: '📄',
+      message_sent: '💬',
+      transmission: '📤',
+      acknowledgment: '✅',
+      update: '✏️',
+      cancellation: '❌'
+    };
+    return icons[type] || '📋';
+  };
+
+  const getHistoryTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      creation: 'Création du dossier',
+      status_change: 'Changement de statut',
+      document_added: 'Document ajouté',
+      message_sent: 'Message envoyé',
+      transmission: 'Transmission',
+      acknowledgment: 'Accusé de réception',
+      update: 'Mise à jour',
+      cancellation: 'Annulation'
+    };
+    return labels[type] || type;
+  };
+
   const handleCancelDossier = async () => {
     if (!dossier) return;
     
@@ -208,6 +266,10 @@ export default function DossierDetailPage() {
         alert('Dossier annulé avec succès. Les administrateurs ont été notifiés.');
         // Recharger le dossier pour afficher le nouveau statut
         await loadDossier();
+        // Recharger l'historique si ouvert
+        if (showHistory) {
+          await loadHistory();
+        }
         // Rediriger vers la liste des dossiers après 2 secondes
         setTimeout(() => {
           router.push('/client/dossiers');
@@ -756,10 +818,100 @@ export default function DossierDetailPage() {
               </div>
             )}
 
+            {/* Historique et Timeline du dossier */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <History className="w-6 h-6" />
+                  Historique et Timeline du dossier
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowHistory(!showHistory);
+                    if (!showHistory && history.length === 0) {
+                      loadHistory();
+                    }
+                  }}
+                  className="text-primary hover:text-primary/80 text-sm font-medium"
+                >
+                  {showHistory ? 'Masquer' : 'Afficher'}
+                </button>
+              </div>
+              
+              {showHistory && (
+                <>
+                  {loadingHistory ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    </div>
+                  ) : history.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8">Aucun historique disponible</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {history.map((item: any, index: number) => (
+                        <div key={index} className="border-l-4 border-primary pl-4 py-3 bg-gray-50/50 rounded-r-lg">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-2xl">{getHistoryTypeIcon(item.type)}</span>
+                                <span className="font-semibold text-foreground">{getHistoryTypeLabel(item.type)}</span>
+                              </div>
+                              <p className="text-gray-700 mb-2">{item.description}</p>
+                              {item.details && Object.keys(item.details).length > 0 && (
+                                <div className="mt-2 text-sm text-gray-600 space-y-1">
+                                  {item.details.newStatut && item.details.oldStatut && (
+                                    <p>
+                                      <span className="font-medium">Ancien statut:</span> {getStatutLabel(item.details.oldStatut)} → 
+                                      <span className="font-medium"> Nouveau statut:</span> {getStatutLabel(item.details.newStatut)}
+                                    </p>
+                                  )}
+                                  {item.details.partenaire && (
+                                    <p>
+                                      <span className="font-medium">Partenaire:</span> {
+                                        item.details.partenaire?.partenaireInfo?.nomOrganisme || 
+                                        item.details.partenaire?.email || 
+                                        'Partenaire'
+                                      }
+                                    </p>
+                                  )}
+                                  {item.details.status && (
+                                    <p>
+                                      <span className="font-medium">Statut:</span> {item.details.status}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right text-sm text-gray-500 ml-4">
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                {new Date(item.date).toLocaleDateString('fr-FR', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </div>
+                              {item.user && typeof item.user === 'object' && (
+                                <p className="text-xs mt-1">
+                                  {item.user.firstName} {item.user.lastName}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
             {/* Historique des notifications */}
             {notifications.length > 0 && (
               <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Historique des mises à jour</h2>
+                <h2 className="text-xl font-bold mb-4">Notifications récentes</h2>
                 <div className="space-y-3">
                   {notifications.map((notif) => (
                     <div key={notif._id || notif.id} className="border-l-4 border-primary pl-4 py-2">
@@ -797,6 +949,66 @@ export default function DossierDetailPage() {
                 <Link href="/client/notifications" className="block">
                   <Button variant="outline" className="w-full">Voir les notifications</Button>
                 </Link>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={async () => {
+                    try {
+                      // Export PDF du dossier
+                      const pdfUrl = `/dossiers/${dossierId}/pdf`;
+                      window.open(pdfUrl, '_blank');
+                    } catch (error) {
+                      console.error('Erreur lors de l\'export PDF:', error);
+                      alert('Erreur lors de l\'export PDF');
+                    }
+                  }}
+                >
+                  📄 Exporter en PDF
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={async () => {
+                    try {
+                      // Export ZIP de tous les documents
+                      if (documents.length === 0) {
+                        alert('Aucun document à exporter');
+                        return;
+                      }
+                      
+                      // Créer un ZIP avec JSZip côté client
+                      const JSZip = (await import('jszip')).default;
+                      const zip = new JSZip();
+                      
+                      // Télécharger chaque document et l'ajouter au ZIP
+                      for (const doc of documents) {
+                        try {
+                          const response = await documentsAPI.downloadDocument(doc._id || doc.id);
+                          const blob = await response.data;
+                          zip.file(doc.nom, blob);
+                        } catch (err) {
+                          console.error(`Erreur lors du téléchargement de ${doc.nom}:`, err);
+                        }
+                      }
+                      
+                      // Générer le ZIP et le télécharger
+                      const zipBlob = await zip.generateAsync({ type: 'blob' });
+                      const url = window.URL.createObjectURL(zipBlob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = `dossier-${dossier?.numero || dossierId}-documents.zip`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      window.URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error('Erreur lors de l\'export ZIP:', error);
+                      alert('Erreur lors de l\'export ZIP. Assurez-vous que tous les documents sont accessibles.');
+                    }
+                  }}
+                >
+                  📦 Exporter documents (ZIP)
+                </Button>
               </div>
             </div>
 
