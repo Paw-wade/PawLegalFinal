@@ -254,7 +254,7 @@ export default function MessagesPage() {
                        selectedMessage.dossier?.toString() || 
                        selectedDossierId;
       if (dossierId) {
-        formDataToSend.append('dossierId', dossierId);
+      formDataToSend.append('dossierId', dossierId);
       }
 
       replyAttachments.forEach((file) => {
@@ -706,8 +706,8 @@ export default function MessagesPage() {
                 <div className="divide-y divide-gray-100">
                   {/* Checkbox pour sélectionner tous les messages de ce dossier */}
                   <div className="flex items-center gap-3 px-6 py-3 bg-gray-50 border-b border-gray-200">
-                    <input
-                      type="checkbox"
+              <input
+                type="checkbox"
                       checked={dossierGroup.messages.every((m: any) => selectedMessages.has(m._id || m.id)) && dossierGroup.messages.length > 0}
                       onChange={() => {
                         const allSelected = dossierGroup.messages.every((m: any) => selectedMessages.has(m._id || m.id));
@@ -730,11 +730,11 @@ export default function MessagesPage() {
                         }
                       }}
                       className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
-                    />
-                    <span className="text-sm font-medium text-muted-foreground">
+              />
+              <span className="text-sm font-medium text-muted-foreground">
                       Sélectionner tous les messages de ce dossier
-                    </span>
-                  </div>
+              </span>
+            </div>
 
                   {dossierGroup.messages.map((message: any) => {
               const expediteur = message.expediteur;
@@ -957,8 +957,8 @@ export default function MessagesPage() {
                     </div>
                   </div>
                 </div>
-                  );
-                })}
+              );
+            })}
                 </div>
               </div>
             ))}

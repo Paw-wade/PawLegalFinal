@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { Footer } from '@/components/layout/Footer';
 import { userAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import jsPDF from 'jspdf';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -436,8 +437,11 @@ export default function CalculateurPage() {
   const [isPersonalInfoOpen, setIsPersonalInfoOpen] = useState<boolean>(true);
   const [isAdminInfoOpen, setIsAdminInfoOpen] = useState<boolean>(true);
   
-  // Vérifier si l'utilisateur est un administrateur
-  const isAdmin = (session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin' || userProfile?.role === 'admin' || userProfile?.role === 'superadmin';
+  // Vérifier le rôle de l'utilisateur
+  const userRole = (session?.user as any)?.role || userProfile?.role || 'client';
+  const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+  const isPartenaire = userRole === 'partenaire';
+  const isClient = userRole === 'client';
   
   // Fonction de déconnexion
   const handleSignOut = async () => {
@@ -482,6 +486,10 @@ export default function CalculateurPage() {
     dateAttributionTitre: '', // Date d'attribution du titre ou du visa
     dateExpirationTitre: '', // Date d'expiration du titre ou du visa
     dateFinValiditeTitreActuel: '', // Date de fin de validité du titre actuel ou du visa
+    // Champs pour renouvellement détaillé
+    renouvellementDepose: null as boolean | null, // null = pas encore demandé, true = oui, false = non
+    confirmationDepotRenouvellement: null as boolean | null, // null = pas encore demandé, true = oui, false = non
+    dateConfirmationDepotRenouvellement: '', // Date de confirmation du dépôt de renouvellement
     // Champs pour recours visa
     natureVisa: '', // Nature du visa
     consulatDepot: '', // Consulat du dépôt
@@ -501,11 +509,27 @@ export default function CalculateurPage() {
   const [dateErrors, setDateErrors] = useState<{ [key: string]: string }>({});
 
   const [calculs, setCalculs] = useState<any>(null);
+  
+  // Référence pour suivre la valeur précédente de dateFinValiditeTitreActuel
+  const prevDateFinValiditeRef = useRef<string>('');
 
   useEffect(() => {
     calculerDelais();
     validateDates();
   }, [formData]);
+
+  // Réinitialiser les champs de renouvellement quand la date de fin de validité change
+  useEffect(() => {
+    if (formData.dateFinValiditeTitreActuel && formData.dateFinValiditeTitreActuel !== prevDateFinValiditeRef.current) {
+      prevDateFinValiditeRef.current = formData.dateFinValiditeTitreActuel;
+      setFormData(prev => ({
+        ...prev,
+        renouvellementDepose: null,
+        confirmationDepotRenouvellement: null,
+        dateConfirmationDepotRenouvellement: ''
+      }));
+    }
+  }, [formData.dateFinValiditeTitreActuel]);
 
   const validateDates = () => {
     const errors: { [key: string]: string } = {};
@@ -679,6 +703,9 @@ export default function CalculateurPage() {
           const dateDelivranceFormatted = formatDate(user.dateDelivrance);
           const dateExpirationFormatted = formatDate(user.dateExpiration);
 
+          // Pour les clients uniquement, préremplir automatiquement avec leurs informations de titre de séjour
+          const isClientUser = (user.role === 'client' || !user.role);
+
           setFormData(prev => ({
             ...prev,
             // Informations générales (préremplir seulement si vide)
@@ -692,6 +719,10 @@ export default function CalculateurPage() {
             // Dates d'attribution et d'expiration du titre (utilisées dans tous les formulaires)
             dateAttributionTitre: prev.dateAttributionTitre || dateDelivranceFormatted || prev.dateAttributionTitre,
             dateExpirationTitre: prev.dateExpirationTitre || dateExpirationFormatted || prev.dateExpirationTitre,
+            // Pour les clients uniquement, préremplir dateFinValiditeTitreActuel depuis leur profil
+            dateFinValiditeTitreActuel: isClientUser && !prev.dateFinValiditeTitreActuel 
+              ? (dateExpirationFormatted || prev.dateFinValiditeTitreActuel)
+              : prev.dateFinValiditeTitreActuel,
           }));
         }
       }
@@ -995,70 +1026,82 @@ export default function CalculateurPage() {
             : `⚠️ Le délai de recours est dépassé de ${Math.abs(joursRestants)} jour(s). Consultez un avocat rapidement.`
         });
       }
-    } else if (formData.situation === 'demande' && formData.typeTitre) {
-      const infoTitre = infosTitres[formData.typeTitre];
-      if (infoTitre) {
-        let calculsResult: any = {
-          type: 'demande',
-          infoTitre: infoTitre
-        };
-
-        if (formData.typeDemande === 'premiere') {
-          // Pour une première demande, on indique qu'elle peut être déposée dès maintenant
-          calculsResult.premiereDemande = {
-            peutDeposer: true,
-            message: 'Vous pouvez déposer votre première demande dès maintenant.',
-            delaiRecommandé: infoTitre.delaiPremiereDemande
-          };
-        } else if (formData.typeDemande === 'renouvellement') {
-          // Utiliser dateExpirationTitre si disponible, sinon dateExpiration
-          const dateExpiration = formData.dateExpirationTitre 
-            ? new Date(formData.dateExpirationTitre) 
-            : formData.dateExpiration 
-            ? new Date(formData.dateExpiration) 
-            : null;
-          
-          if (dateExpiration) {
-          const aujourdhui = new Date();
-          
-          // Date recommandée pour déposer (2 à 4 mois avant expiration)
-          const dateRecommandeeMin = new Date(dateExpiration);
-          dateRecommandeeMin.setMonth(dateRecommandeeMin.getMonth() - infoTitre.delaiRenouvellement.max);
-          
-          const dateRecommandeeMax = new Date(dateExpiration);
-          dateRecommandeeMax.setMonth(dateRecommandeeMax.getMonth() - infoTitre.delaiRenouvellement.min);
-          
-          // Date limite (jour d'expiration)
-          const dateLimite = new Date(dateExpiration);
-          
-          const joursAvantExpiration = Math.ceil((dateExpiration.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24));
-          
-            // Déterminer l'urgence selon le type de document
-            const isUrgent = joursAvantExpiration < 60;
-            const isTardif = joursAvantExpiration < 0;
-            const isRecoursTardif = formData.dateAttributionTitre && formData.dateExpirationTitre 
-              ? new Date(formData.dateExpirationTitre) < aujourdhui 
-              : false;
-          
-          calculsResult.renouvellement = {
-            dateExpiration: dateExpiration,
-            dateRecommandeeMin: dateRecommandeeMin,
-            dateRecommandeeMax: dateRecommandeeMax,
-            dateLimite: dateLimite,
-            joursAvantExpiration: joursAvantExpiration,
-            periodeRecommandee: `${infoTitre.delaiRenouvellement.min} à ${infoTitre.delaiRenouvellement.max} mois avant expiration`,
-              risqueRupture: isUrgent,
-              enRetard: isTardif,
-              messagePersonnalise: isTardif 
-                ? `⚠️ Votre titre a expiré il y a ${Math.abs(joursAvantExpiration)} jour(s). Déposez immédiatement votre demande de renouvellement.`
-                : isUrgent
-                ? `⚠️ Votre titre expire dans ${joursAvantExpiration} jour(s). Déposez votre demande de renouvellement dès maintenant.`
-                : `✅ Votre titre expire dans ${joursAvantExpiration} jour(s). Période recommandée pour déposer : ${formatDateCourte(dateRecommandeeMin)} au ${formatDateCourte(dateRecommandeeMax)}.`
-            };
-          }
+    } else if (formData.situation === 'demande') {
+      // Calcul détaillé pour renouvellement avec dateFinValiditeTitreActuel
+      if (formData.typeDemande === 'renouvellement' && formData.dateFinValiditeTitreActuel && formData.typePrecisTitreSejour) {
+        const resultatRenouvellement = calculerDelaisRenouvellement();
+        if (resultatRenouvellement) {
+          setCalculs({
+            type: 'renouvellement_detaille',
+            ...resultatRenouvellement
+          });
+          return;
         }
+      }
+      
+      // Calcul classique pour première demande ou renouvellement sans dateFinValiditeTitreActuel
+      if (formData.typeTitre) {
+        const infoTitre = infosTitres[formData.typeTitre];
+        if (infoTitre) {
+          let calculsResult: any = {
+            type: 'demande',
+            infoTitre: infoTitre
+          };
 
-        setCalculs(calculsResult);
+          if (formData.typeDemande === 'premiere') {
+            // Pour une première demande, on indique qu'elle peut être déposée dès maintenant
+            calculsResult.premiereDemande = {
+              peutDeposer: true,
+              message: 'Vous pouvez déposer votre première demande dès maintenant.',
+              delaiRecommandé: infoTitre.delaiPremiereDemande
+            };
+          } else if (formData.typeDemande === 'renouvellement' && !formData.dateFinValiditeTitreActuel) {
+            // Utiliser dateExpirationTitre si disponible, sinon dateExpiration
+            const dateExpiration = formData.dateExpirationTitre 
+              ? new Date(formData.dateExpirationTitre) 
+              : formData.dateExpiration 
+              ? new Date(formData.dateExpiration) 
+              : null;
+            
+            if (dateExpiration) {
+              const aujourdhui = new Date();
+              
+              // Date recommandée pour déposer (2 à 4 mois avant expiration)
+              const dateRecommandeeMin = new Date(dateExpiration);
+              dateRecommandeeMin.setMonth(dateRecommandeeMin.getMonth() - infoTitre.delaiRenouvellement.max);
+              
+              const dateRecommandeeMax = new Date(dateExpiration);
+              dateRecommandeeMax.setMonth(dateRecommandeeMax.getMonth() - infoTitre.delaiRenouvellement.min);
+              
+              // Date limite (jour d'expiration)
+              const dateLimite = new Date(dateExpiration);
+              
+              const joursAvantExpiration = Math.ceil((dateExpiration.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24));
+              
+              // Déterminer l'urgence selon le type de document
+              const isUrgent = joursAvantExpiration < 60;
+              const isTardif = joursAvantExpiration < 0;
+              
+              calculsResult.renouvellement = {
+                dateExpiration: dateExpiration,
+                dateRecommandeeMin: dateRecommandeeMin,
+                dateRecommandeeMax: dateRecommandeeMax,
+                dateLimite: dateLimite,
+                joursAvantExpiration: joursAvantExpiration,
+                periodeRecommandee: `${infoTitre.delaiRenouvellement.min} à ${infoTitre.delaiRenouvellement.max} mois avant expiration`,
+                risqueRupture: isUrgent,
+                enRetard: isTardif,
+                messagePersonnalise: isTardif 
+                  ? `⚠️ Votre titre a expiré il y a ${Math.abs(joursAvantExpiration)} jour(s). Déposez immédiatement votre demande de renouvellement.`
+                  : isUrgent
+                  ? `⚠️ Votre titre expire dans ${joursAvantExpiration} jour(s). Déposez votre demande de renouvellement dès maintenant.`
+                  : `✅ Votre titre expire dans ${joursAvantExpiration} jour(s). Période recommandée pour déposer : ${formatDateCourte(dateRecommandeeMin)} au ${formatDateCourte(dateRecommandeeMax)}.`
+              };
+            }
+          }
+
+          setCalculs(calculsResult);
+        }
       }
     } else {
       setCalculs(null);
@@ -1095,6 +1138,287 @@ export default function CalculateurPage() {
       month: '2-digit',
       year: 'numeric'
     });
+  };
+
+  // Fonction de calcul détaillé des délais de renouvellement selon article R.431-5 du CESEDA
+  const calculerDelaisRenouvellement = () => {
+    if (!formData.dateFinValiditeTitreActuel || !formData.typePrecisTitreSejour) {
+      return null;
+    }
+
+    const aujourdhui = new Date();
+    aujourdhui.setHours(0, 0, 0, 0);
+    
+    const dateFinValidite = new Date(formData.dateFinValiditeTitreActuel);
+    dateFinValidite.setHours(0, 0, 0, 0);
+    
+    // Calculer les dates limites (1 mois = 30 jours)
+    // Date de début de période : 120 jours avant la date de fin de validité
+    const dateDebutPeriode = new Date(dateFinValidite);
+    dateDebutPeriode.setDate(dateDebutPeriode.getDate() - 120); // 4 mois = 120 jours
+    
+    // Date de fin de période : 60 jours avant la date de fin de validité
+    const dateFinPeriode = new Date(dateFinValidite);
+    dateFinPeriode.setDate(dateFinPeriode.getDate() - 60); // 2 mois = 60 jours
+    
+    // Calculer les jours avant expiration (en partant d'aujourd'hui)
+    const joursAvantExpiration = Math.ceil((dateFinValidite.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24));
+    const joursAvantDebutPeriode = Math.ceil((dateDebutPeriode.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24));
+    const joursAvantFinPeriode = Math.ceil((dateFinPeriode.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24));
+    const joursDepuisFinPeriode = joursAvantExpiration < 60 ? Math.abs(joursAvantExpiration - 60) : 0;
+    
+    // Cas 1 : Avant la période (plus de 120 jours avant expiration)
+    if (joursAvantExpiration > 120) {
+      return {
+        cas: 'avant_periode',
+        couleur: 'green',
+        dateDebutPeriode,
+        dateFinPeriode,
+        dateFinValidite,
+        joursAvantExpiration,
+        joursAvantDebutPeriode,
+        message: {
+          titre: 'Renouvellement pas encore ouvert',
+          corps: `La date du jour n'est pas comprise dans la période des quatre mois avant la date d'expiration du titre de séjour.`,
+          details: `Le renouvellement ${formData.typeDemande === 'premiere' ? 'ou la demande' : ''} du titre de séjour n'est pas encore ouvert.`,
+          periode: `Le renouvellement pourra être effectué entre quatre mois et deux mois avant la date de fin de validité, soit du ${formatDateCourte(dateDebutPeriode)} au ${formatDateCourte(dateFinPeriode)}.`,
+          dateOuverture: `Le renouvellement sera possible à partir du ${formatDateCourte(dateDebutPeriode)}.`,
+          avertissement: 'Le renouvellement d\'un titre de séjour demandé après l\'expiration du délai requis pour le dépôt de la demande donne lieu, sauf cas de force majeure ou présentation d\'un visa en cours de validité, à l\'acquittement d\'un droit de visa de régularisation de 180 euros.'
+        }
+      };
+    }
+    
+    // Cas 2a : Dans la période légale (entre 120 et 60 jours avant expiration)
+    if (joursAvantExpiration >= 60 && joursAvantExpiration <= 120) {
+      return {
+        cas: 'dans_periode',
+        couleur: 'blue',
+        dateDebutPeriode,
+        dateFinPeriode,
+        dateFinValidite,
+        joursAvantExpiration,
+        joursAvantFinPeriode,
+        message: {
+          titre: 'Renouvellement ouvert',
+          corps: `Le renouvellement du titre de séjour est ouvert.`,
+          details: `Le titre de séjour est renouvelable entre quatre mois et deux mois avant la date de fin de validité. Cette période correspond au cadre légal prévu par l'article R.431-5 du CESEDA.`,
+          periode: `Le renouvellement peut être effectué entre quatre mois et deux mois avant la date de fin de validité, soit du ${formatDateCourte(dateDebutPeriode)} au ${formatDateCourte(dateFinPeriode)}.`,
+          delaiRestant: `Il vous reste ${joursAvantFinPeriode} jour(s) avant d'entrer dans le délai de 2 mois avant la fin de validité qui conduit à l'acquittement d'un droit de visa de régularisation de 180 euros.`,
+          avertissement: 'Le renouvellement d\'un titre de séjour demandé après l\'expiration du délai requis pour le dépôt de la demande donne lieu, sauf cas de force majeure ou présentation d\'un visa en cours de validité, à l\'acquittement d\'un droit de visa de régularisation de 180 euros.'
+        }
+      };
+    }
+    
+    // Cas 2b : Après la période légale (moins de 60 jours avant expiration)
+    return {
+      cas: 'apres_periode',
+      couleur: 'red',
+      dateDebutPeriode,
+      dateFinPeriode,
+      dateFinValidite,
+      joursAvantExpiration,
+      joursDepuisFinPeriode,
+      message: {
+        titre: 'Délai légal dépassé',
+        corps: `Le délai légal de renouvellement est dépassé. Le renouvellement peut toujours être effectué mais risque d'entraîner le paiement d'un droit de visa de régularisation de 180 euros.`,
+        details: `Le renouvellement du titre de séjour doit être effectué immédiatement pour éviter des lenteurs dans la gestion du dossier. Les recours éventuels sont voués à l'échec quand les délais légaux de renouvellement sont dépassés.`,
+        periodeLegale: `Le renouvellement ${formData.typeDemande === 'premiere' ? 'ou la demande' : ''} aurait dû être introduit entre quatre mois et deux mois avant la date de fin de validité, soit du ${formatDateCourte(dateDebutPeriode)} au ${formatDateCourte(dateFinPeriode)}.`,
+        delaiRestant: joursAvantExpiration > 0 
+          ? `Il vous reste ${joursAvantExpiration} jour(s) avant l'expiration du titre.`
+          : `Votre titre a expiré il y a ${Math.abs(joursAvantExpiration)} jour(s).`,
+        avertissement: 'Le renouvellement d\'un titre de séjour demandé après l\'expiration du délai requis pour le dépôt de la demande donne lieu, sauf cas de force majeure ou présentation d\'un visa en cours de validité, à l\'acquittement d\'un droit de visa de régularisation de 180 euros.'
+      }
+    };
+  };
+
+  // Fonction de génération PDF pour le rapport de renouvellement
+  const genererPDFRenouvellement = () => {
+    if (!calculs || calculs.type !== 'renouvellement_detaille') {
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const margin = 20;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yPosition = margin;
+
+    // En-tête
+    doc.setFontSize(20);
+    doc.setTextColor(249, 115, 22); // Orange
+    doc.setFont('helvetica', 'bold');
+    doc.text('PAW LEGAL', margin, yPosition);
+    
+    yPosition += 8;
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Rapport de calcul des délais de renouvellement', margin, yPosition);
+    
+    yPosition += 10;
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.5);
+    doc.line(margin, yPosition, pageWidth - margin, yPosition);
+    yPosition += 10;
+
+    // Informations générales
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Informations générales', margin, yPosition);
+    yPosition += 8;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const infos = [
+      `Type de demande : ${formData.typeDemande === 'premiere' ? 'Première demande' : 'Renouvellement'}`,
+      `Date de fin de validité : ${formatDateCourte(calculs.dateFinValidite)}`,
+      `Date de calcul : ${formatDateCourte(new Date())}`,
+    ];
+    infos.forEach(info => {
+      doc.text(info, margin, yPosition);
+      yPosition += 6;
+    });
+
+    yPosition += 5;
+
+    // Résultat du calcul
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Résultat du calcul', margin, yPosition);
+    yPosition += 8;
+
+    // Couleur selon le cas
+    const couleur = calculs.couleur === 'green' ? [34, 197, 94] : calculs.couleur === 'red' ? [239, 68, 68] : [59, 130, 246];
+    doc.setFillColor(couleur[0], couleur[1], couleur[2]);
+    doc.roundedRect(margin, yPosition - 5, pageWidth - 2 * margin, 15, 3, 3, 'F');
+    
+    doc.setFontSize(12);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.text(calculs.message.titre, margin + 5, yPosition + 3);
+    yPosition += 10;
+
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    
+    const messages = [
+      calculs.message.corps,
+      calculs.message.details,
+      calculs.message.periode,
+      calculs.message.periodeLegale,
+      calculs.message.dateOuverture,
+      calculs.message.delaiRestant
+    ].filter(Boolean);
+
+    messages.forEach(msg => {
+      const lines = doc.splitTextToSize(msg, pageWidth - 2 * margin - 10);
+      lines.forEach((line: string) => {
+        if (yPosition > pageHeight - 30) {
+          doc.addPage();
+          yPosition = margin;
+        }
+        doc.text(line, margin + 5, yPosition);
+        yPosition += 5;
+      });
+      yPosition += 2;
+    });
+
+    yPosition += 5;
+
+    // Avertissement
+    doc.setFillColor(255, 243, 205);
+    doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 12, 3, 3, 'F');
+    doc.setFontSize(9);
+    doc.setTextColor(120, 53, 15);
+    doc.setFont('helvetica', 'bold');
+    doc.text('⚠️ Avertissement important', margin + 5, yPosition + 5);
+    yPosition += 6;
+    doc.setFont('helvetica', 'normal');
+    const avertissementLines = doc.splitTextToSize(calculs.message.avertissement, pageWidth - 2 * margin - 10);
+    avertissementLines.forEach((line: string) => {
+      if (yPosition > pageHeight - 20) {
+        doc.addPage();
+        yPosition = margin;
+      }
+      doc.text(line, margin + 5, yPosition);
+      yPosition += 4;
+    });
+
+    yPosition += 10;
+
+    // Période légale
+    if (calculs.dateDebutPeriode && calculs.dateFinPeriode) {
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Période légale de renouvellement', margin, yPosition);
+      yPosition += 7;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Début : ${formatDateCourte(calculs.dateDebutPeriode)}`, margin, yPosition);
+      yPosition += 6;
+      doc.text(`Fin : ${formatDateCourte(calculs.dateFinPeriode)}`, margin, yPosition);
+      yPosition += 6;
+      doc.text(`Date d'expiration : ${formatDateCourte(calculs.dateFinValidite)}`, margin, yPosition);
+      yPosition += 10;
+    }
+
+    // Recommandations
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Recommandations', margin, yPosition);
+    yPosition += 7;
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    const recommandations = [
+      '• Déposez votre demande dans les délais légaux pour éviter toute pénalité',
+      '• Conservez tous les justificatifs de votre demande',
+      '• En cas de retard, contactez immédiatement un avocat spécialisé',
+      '• Suivez l\'évolution de votre dossier sur la plateforme',
+      '• En fonction de la réponse de la préfecture, vous pouvez introduire des recours'
+    ];
+
+    recommandations.forEach(rec => {
+      if (yPosition > pageHeight - 20) {
+        doc.addPage();
+        yPosition = margin;
+      }
+      const lines = doc.splitTextToSize(rec, pageWidth - 2 * margin - 10);
+      lines.forEach((line: string) => {
+        doc.text(line, margin, yPosition);
+        yPosition += 4;
+      });
+      yPosition += 2;
+    });
+
+    // Pied de page
+    const totalPages = doc.internal.pages.length - 1;
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.setFont('helvetica', 'normal');
+      doc.text(
+        `Page ${i} / ${totalPages} - Généré le ${formatDateCourte(new Date())}`,
+        pageWidth / 2,
+        pageHeight - 10,
+        { align: 'center' }
+      );
+    }
+
+    // Télécharger le PDF
+    const fileName = `Rapport_Renouvellement_${formatDateCourte(new Date()).replace(/\//g, '_')}.pdf`;
+    doc.save(fileName);
   };
 
   const getAlertColor = (jours: number): string => {
@@ -1614,6 +1938,54 @@ export default function CalculateurPage() {
                 {/* Champs pour Dépôt de titre de séjour */}
                 {formData.situation === 'demande' && (
                   <div className="space-y-3 pt-3 border-t">
+                    {/* Bouton de réinitialisation pour admins et partenaires */}
+                    {(isAdmin || isPartenaire) && (
+                      <div className="flex justify-end mb-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setFormData({
+                              typeTitre: '',
+                              typeTitreAutre: '',
+                              motifTitreSejour: '',
+                              sousCategorieTitreSejour: '',
+                              typePrecisTitreSejour: '',
+                              typeDemande: 'premiere',
+                              prefecture: '',
+                              dateDelivrance: getTodayDate(),
+                              dateExpiration: getTodayDate(),
+                              dateDecision: getTodayDate(),
+                              natureDecision: '',
+                              dureeTitre: '',
+                              situation: 'demande',
+                              dateAttributionTitre: '',
+                              dateExpirationTitre: '',
+                              dateFinValiditeTitreActuel: '',
+                              renouvellementDepose: null,
+                              confirmationDepotRenouvellement: null,
+                              dateConfirmationDepotRenouvellement: '',
+                              natureVisa: '',
+                              consulatDepot: '',
+                              dateConfirmationDepot: '',
+                              typeRefusVisa: '',
+                              dateNotificationRefus: '',
+                              dateDepotRapo: '',
+                              reponseRapoRecue: false,
+                              dateReponseRapo: '',
+                              demandeCommunicationMotifs: false,
+                              dateDemandeMotifs: '',
+                              dateReceptionMotifs: '',
+                              actionApresRapo: '',
+                              rapoDepose: null
+                            });
+                            setCalculs(null);
+                          }}
+                          className="text-xs"
+                        >
+                          🔄 Réinitialiser le formulaire
+                        </Button>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label htmlFor="typeDemande">Type de demande *</Label>
                       <Select
@@ -1787,25 +2159,6 @@ export default function CalculateurPage() {
                           <p className="text-xs text-red-600 mt-1">{dateErrors.dateFinValiditeTitreActuel}</p>
                         )}
                       </div>
-                    )}
-
-                    {formData.typeDemande === 'renouvellement' && (
-                      <>
-                        <div className="space-y-2">
-                          <Label htmlFor="dateExpiration">Date d'expiration du titre actuel *</Label>
-                          <Input
-                            id="dateExpiration"
-                            type="date"
-                            value={formData.dateExpiration}
-                            onChange={(e) => setFormData({ ...formData, dateExpiration: e.target.value })}
-                            required
-                            className={dateErrors.dateExpiration ? 'border-red-500' : ''}
-                          />
-                          {dateErrors.dateExpiration && (
-                            <p className="text-xs text-red-600 mt-1">{dateErrors.dateExpiration}</p>
-                          )}
-                        </div>
-                      </>
                     )}
                   </div>
                 )}
@@ -2433,6 +2786,265 @@ export default function CalculateurPage() {
                             Délai recommandé : {calculs.premiereDemande.delaiRecommandé} mois avant le début
                           </p>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Affichage du calcul détaillé de renouvellement */}
+                  {calculs.type === 'renouvellement_detaille' && (
+                    <div className={`rounded-lg p-6 border-2 ${
+                      calculs.couleur === 'green' 
+                        ? 'bg-green-50 border-green-300' 
+                        : calculs.couleur === 'red'
+                        ? 'bg-red-50 border-red-300'
+                        : 'bg-blue-50 border-blue-300'
+                    }`}>
+                      <div className="flex items-start gap-3 mb-4">
+                        <span className="text-3xl">
+                          {calculs.couleur === 'green' ? '✅' : calculs.couleur === 'red' ? '⚠️' : 'ℹ️'}
+                        </span>
+                        <div className="flex-1">
+                          <h3 className={`font-bold text-xl mb-2 ${
+                            calculs.couleur === 'green' 
+                              ? 'text-green-800' 
+                              : calculs.couleur === 'red'
+                              ? 'text-red-800'
+                              : 'text-blue-800'
+                          }`}>
+                            {calculs.message.titre}
+                          </h3>
+                          <p className={`text-sm mb-3 ${
+                            calculs.couleur === 'green' 
+                              ? 'text-green-700' 
+                              : calculs.couleur === 'red'
+                              ? 'text-red-700'
+                              : 'text-blue-700'
+                          }`}>
+                            {calculs.message.corps}
+                          </p>
+                          {calculs.message.details && (
+                            <p className={`text-sm mb-3 ${
+                              calculs.couleur === 'green' 
+                                ? 'text-green-700' 
+                                : calculs.couleur === 'red'
+                                ? 'text-red-700'
+                                : 'text-blue-700'
+                            }`}>
+                              {calculs.message.details}
+                            </p>
+                          )}
+                          {calculs.message.periode && (
+                            <p className={`text-sm mb-2 ${
+                              calculs.couleur === 'green' 
+                                ? 'text-green-700' 
+                                : calculs.couleur === 'red'
+                                ? 'text-red-700'
+                                : 'text-blue-700'
+                            }`}>
+                              {calculs.message.periode}
+                            </p>
+                          )}
+                          {calculs.message.periodeLegale && (
+                            <p className={`text-sm mb-2 font-semibold ${
+                              calculs.couleur === 'red' ? 'text-red-800' : 'text-gray-700'
+                            }`}>
+                              {calculs.message.periodeLegale}
+                            </p>
+                          )}
+                          {calculs.message.dateOuverture && (
+                            <p className={`text-sm mb-2 font-semibold text-green-700`}>
+                              {calculs.message.dateOuverture}
+                            </p>
+                          )}
+                          {calculs.message.delaiRestant && (
+                            <p className={`text-sm mb-2 font-semibold ${
+                              calculs.couleur === 'red' ? 'text-red-800' : 'text-blue-800'
+                            }`}>
+                              {calculs.message.delaiRestant}
+                            </p>
+                          )}
+                          <div className={`mt-4 p-3 rounded-lg border ${
+                            calculs.couleur === 'green' 
+                              ? 'bg-green-100 border-green-300' 
+                              : calculs.couleur === 'red'
+                              ? 'bg-red-100 border-red-300'
+                              : 'bg-yellow-100 border-yellow-300'
+                          }`}>
+                            <p className={`text-xs font-semibold ${
+                              calculs.couleur === 'green' 
+                                ? 'text-green-800' 
+                                : calculs.couleur === 'red'
+                                ? 'text-red-800'
+                                : 'text-yellow-800'
+                            }`}>
+                              ⚠️ Avertissement important :
+                            </p>
+                            <p className={`text-xs mt-1 ${
+                              calculs.couleur === 'green' 
+                                ? 'text-green-700' 
+                                : calculs.couleur === 'red'
+                                ? 'text-red-700'
+                                : 'text-yellow-700'
+                            }`}>
+                              {calculs.message.avertissement}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Questions conditionnelles */}
+                      <div className="mt-6 space-y-4 border-t pt-4">
+                        <div className="space-y-2">
+                          <Label className="font-semibold">Avez-vous déposé le renouvellement de votre titre de séjour ? *</Label>
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="renouvellementDepose"
+                                value="oui"
+                                checked={formData.renouvellementDepose === true}
+                                onChange={() => setFormData({ ...formData, renouvellementDepose: true })}
+                                className="w-4 h-4 text-primary"
+                              />
+                              <span className="text-sm">Oui</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="renouvellementDepose"
+                                value="non"
+                                checked={formData.renouvellementDepose === false}
+                                onChange={() => setFormData({ 
+                                  ...formData, 
+                                  renouvellementDepose: false,
+                                  confirmationDepotRenouvellement: null,
+                                  dateConfirmationDepotRenouvellement: ''
+                                })}
+                                className="w-4 h-4 text-primary"
+                              />
+                              <span className="text-sm">Non</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Si Non : Message d'invitation */}
+                        {formData.renouvellementDepose === false && (
+                          <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                            <p className="text-sm text-orange-800 font-semibold mb-2">📋 Action requise</p>
+                            <p className="text-sm text-orange-700 mb-2">
+                              Nous vous invitons à déposer immédiatement votre demande de renouvellement. 
+                              Notre plateforme peut vous accompagner dans cette démarche.
+                            </p>
+                            <p className="text-sm text-orange-700 mb-3">
+                              N'hésitez pas à nous contacter pour obtenir de l'aide dans le dépôt de votre demande.
+                            </p>
+                            <div className="flex gap-2">
+                              <Link href="/contact">
+                                <Button variant="default" size="sm" className="text-xs">
+                                  Nous contacter
+                                </Button>
+                              </Link>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Si Oui : Question sur la confirmation */}
+                        {formData.renouvellementDepose === true && (
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label className="font-semibold">Avez-vous obtenu la confirmation de dépôt de la demande ? *</Label>
+                              <div className="flex gap-4">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name="confirmationDepotRenouvellement"
+                                    value="oui"
+                                    checked={formData.confirmationDepotRenouvellement === true}
+                                    onChange={() => setFormData({ ...formData, confirmationDepotRenouvellement: true })}
+                                    className="w-4 h-4 text-primary"
+                                  />
+                                  <span className="text-sm">Oui</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name="confirmationDepotRenouvellement"
+                                    value="non"
+                                    checked={formData.confirmationDepotRenouvellement === false}
+                                    onChange={() => setFormData({ 
+                                      ...formData, 
+                                      confirmationDepotRenouvellement: false,
+                                      dateConfirmationDepotRenouvellement: ''
+                                    })}
+                                    className="w-4 h-4 text-primary"
+                                  />
+                                  <span className="text-sm">Non</span>
+                                </label>
+                              </div>
+                            </div>
+
+                            {/* Si Oui : Champ date de confirmation */}
+                            {formData.confirmationDepotRenouvellement === true && (
+                              <div className="space-y-2">
+                                <Label htmlFor="dateConfirmationDepotRenouvellement">Date de confirmation du dépôt de la demande de titre de séjour *</Label>
+                                <Input
+                                  id="dateConfirmationDepotRenouvellement"
+                                  type="date"
+                                  value={formData.dateConfirmationDepotRenouvellement}
+                                  onChange={(e) => setFormData({ ...formData, dateConfirmationDepotRenouvellement: e.target.value })}
+                                  required
+                                />
+                                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-2">
+                                  <p className="text-xs text-blue-800 mb-2">
+                                    💡 En fonction de la réponse de la préfecture ou de l'absence de réponse, vous avez la possibilité d'introduire des recours en fonction de la situation.
+                                  </p>
+                                  <p className="text-xs text-blue-800 mb-2">
+                                    Consultez la page qui permet le calcul des délais de recours pour plus d'informations.
+                                  </p>
+                                  <Link href="/calculateur">
+                                    <Button variant="outline" size="sm" className="text-xs mt-2">
+                                      Calculer les délais de recours
+                                    </Button>
+                                  </Link>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Si Non : Message d'alerte */}
+                            {formData.confirmationDepotRenouvellement === false && (
+                              <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                                <p className="text-sm text-yellow-800 font-semibold mb-2">⚠️ Alerte</p>
+                                <p className="text-sm text-yellow-700 mb-2">
+                                  Veuillez renseigner la date de confirmation de la demande dès que vous l'obtiendrez.
+                                </p>
+                                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-2">
+                                  <p className="text-xs text-blue-800 mb-2">
+                                    💡 En fonction de la réponse de la préfecture ou de l'absence de réponse, vous avez la possibilité d'introduire des recours en fonction de la situation.
+                                  </p>
+                                  <p className="text-xs text-blue-800 mb-2">
+                                    Consultez la page qui permet le calcul des délais de recours pour plus d'informations.
+                                  </p>
+                                  <Link href="/calculateur">
+                                    <Button variant="outline" size="sm" className="text-xs mt-2">
+                                      Calculer les délais de recours
+                                    </Button>
+                                  </Link>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bouton de téléchargement PDF */}
+                      <div className="mt-6 flex justify-center">
+                        <Button
+                          variant="default"
+                          onClick={genererPDFRenouvellement}
+                          className="bg-orange-500 hover:bg-orange-600 text-white"
+                        >
+                          📄 Télécharger le rapport PDF
+                        </Button>
                       </div>
                     </div>
                   )}

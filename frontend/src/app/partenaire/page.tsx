@@ -170,7 +170,7 @@ export default function PartenaireDashboard() {
             </div>
           </div>
         </div>
-
+        
         {/* Statistiques principales - Design professionnel avec accès direct */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 scroll-mt-20">
           {/* Badge Dossiers transmis */}
@@ -201,8 +201,8 @@ export default function PartenaireDashboard() {
               </div>
               <div className="text-right">
                 <p className="text-3xl font-bold text-foreground mb-0">{stats.dossiersEnAttente}</p>
-              </div>
-            </div>
+          </div>
+        </div>
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">En attente</h3>
             <p className="text-xs text-muted-foreground mb-3">Dossiers en attente de traitement</p>
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
@@ -220,8 +220,8 @@ export default function PartenaireDashboard() {
               </div>
               <div className="text-right">
                 <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.dossiersAcceptes}</p>
-              </div>
-            </div>
+          </div>
+        </div>
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Acceptés</h3>
             <p className="text-xs text-muted-foreground mb-3">Dossiers acceptés</p>
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
@@ -239,8 +239,8 @@ export default function PartenaireDashboard() {
               </div>
               <div className="text-right">
                 <p className="text-3xl font-bold text-foreground mb-0">{stats.dossiersRefuses}</p>
-              </div>
-            </div>
+          </div>
+        </div>
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Refusés</h3>
             <p className="text-xs text-muted-foreground mb-3">Dossiers refusés</p>
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
@@ -290,7 +290,7 @@ export default function PartenaireDashboard() {
             </div>
           </Link>
         </div>
-
+        
         {/* Actions rapides */}
         <div className="grid md:grid-cols-2 lg:grid-cols-2 gap-4 mb-8 scroll-mt-20">
           <Link href="/partenaire/dossiers" className="group">
@@ -328,84 +328,84 @@ export default function PartenaireDashboard() {
                 <span className="text-xs font-medium text-green-600">Accéder →</span>
                 <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center group-hover:bg-green-200 transition-colors">
                   <span className="text-green-600 text-sm">→</span>
-                </div>
-              </div>
+          </div>
+        </div>
             </div>
           </Link>
-        </div>
+      </div>
       
-        {/* Dossiers récents */}
+      {/* Dossiers récents */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-foreground">Dossiers récents</h2>
-              <Link 
-                href="/partenaire/dossiers"
+            <Link 
+              href="/partenaire/dossiers"
                 className="text-primary hover:text-primary/80 text-sm font-medium transition-colors"
-              >
+            >
                 Voir tout →
-              </Link>
-            </div>
+            </Link>
           </div>
-          
-          <div className="p-6">
-            {dossiersRecents.length === 0 ? (
+        </div>
+        
+        <div className="p-6">
+          {dossiersRecents.length === 0 ? (
               <div className="text-center py-12">
                 <FolderOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg">Aucun dossier transmis pour le moment</p>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {dossiersRecents.map((dossier: any) => {
-                  const status = getDossierStatus(dossier);
-                  const dossierId = safeString(dossier._id) || safeString(dossier.id) || '';
-                  const dossierHref = dossierId ? `/partenaire/dossiers/${dossierId}` : '#';
-                  
-                  return (
-                    <Link
-                      key={dossierId || `dossier-${Math.random()}`}
-                      href={dossierHref}
+          ) : (
+            <div className="space-y-4">
+              {dossiersRecents.map((dossier: any) => {
+                const status = getDossierStatus(dossier);
+                const dossierId = safeString(dossier._id) || safeString(dossier.id) || '';
+                const dossierHref = dossierId ? `/partenaire/dossiers/${dossierId}` : '#';
+                
+                return (
+                  <Link
+                    key={dossierId || `dossier-${Math.random()}`}
+                    href={dossierHref}
                       className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-primary/30 transition-all duration-200"
-                    >
-                      <div className="flex items-center justify-between">
+                  >
+                    <div className="flex items-center justify-between">
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold text-lg text-foreground mb-1 truncate">
-                            {safeString(dossier.titre) || safeString(dossier.numero) || 'Sans titre'}
-                          </h3>
+                          {safeString(dossier.titre) || safeString(dossier.numero) || 'Sans titre'}
+                        </h3>
                           <p className="text-sm text-muted-foreground line-clamp-2">
-                            {(() => {
-                              const numStr = safeString(dossier.numero);
-                              const descStr = safeString(dossier.description);
-                              const parts: string[] = [];
-                              if (numStr) parts.push(`N° ${numStr}`);
-                              if (numStr && descStr) parts.push(' • ');
-                              if (descStr) {
-                                const truncated = descStr.substring(0, 100);
-                                parts.push(truncated);
-                                if (descStr.length > 100) parts.push('...');
-                              }
-                              return parts.join('');
-                            })()}
-                          </p>
-                          {dossier.user && typeof dossier.user === 'object' && (
+                          {(() => {
+                            const numStr = safeString(dossier.numero);
+                            const descStr = safeString(dossier.description);
+                            const parts: string[] = [];
+                            if (numStr) parts.push(`N° ${numStr}`);
+                            if (numStr && descStr) parts.push(' • ');
+                            if (descStr) {
+                              const truncated = descStr.substring(0, 100);
+                              parts.push(truncated);
+                              if (descStr.length > 100) parts.push('...');
+                            }
+                            return parts.join('');
+                          })()}
+                        </p>
+                        {dossier.user && typeof dossier.user === 'object' && (
                             <p className="text-xs text-muted-foreground mt-2">
-                              Client: {safeString(dossier.user.firstName)} {safeString(dossier.user.lastName)}
-                            </p>
-                          )}
-                        </div>
-                        <div className="ml-4 flex-shrink-0">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
-                            {getStatusLabel(status)}
-                          </span>
-                        </div>
+                            Client: {safeString(dossier.user.firstName)} {safeString(dossier.user.lastName)}
+                          </p>
+                        )}
                       </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                        <div className="ml-4 flex-shrink-0">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
+                          {getStatusLabel(status)}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
+      </div>
       </main>
     </div>
   );

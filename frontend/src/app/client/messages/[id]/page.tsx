@@ -304,11 +304,11 @@ export default function ClientMessageDetailPage() {
             <Button variant="outline" size="sm">← Retour aux messages</Button>
           </Link>
           <div className="flex gap-2">
-            {isReceived && (
-              <Button onClick={() => setShowReplyModal(true)}>
-                Répondre
-              </Button>
-            )}
+          {isReceived && (
+            <Button onClick={() => setShowReplyModal(true)}>
+              Répondre
+            </Button>
+          )}
             <Button 
               variant="outline" 
               size="sm"
@@ -458,32 +458,32 @@ export default function ClientMessageDetailPage() {
               })
             ) : (
               <div className="bg-white rounded-xl shadow-md border-l-4 border-primary p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h1 className="text-2xl font-bold mb-2">{message.sujet}</h1>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>
-                        {isReceived ? 'De' : 'À'}: {isReceived 
-                          ? `${expediteur?.firstName || ''} ${expediteur?.lastName || ''}`.trim() || expediteur?.email
-                          : message.typeMessage === 'user_to_admins'
-                          ? 'Tous les administrateurs'
-                          : message.destinataires?.map((d: any) => 
-                              `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.email
-                            ).join(', ')
-                        }
-                      </span>
-                      <span>•</span>
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold mb-2">{message.sujet}</h1>
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <span>
+                  {isReceived ? 'De' : 'À'}: {isReceived 
+                    ? `${expediteur?.firstName || ''} ${expediteur?.lastName || ''}`.trim() || expediteur?.email
+                    : message.typeMessage === 'user_to_admins'
+                    ? 'Tous les administrateurs'
+                    : message.destinataires?.map((d: any) => 
+                        `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.email
+                      ).join(', ')
+                  }
+                </span>
+                <span>•</span>
                       <span>📅 {formatDate(message.createdAt)}</span>
-                      {isReceived && !isMessageRead(message) && (
-                        <>
-                          <span>•</span>
-                          <span className="px-2 py-1 rounded-full bg-primary text-white text-xs font-semibold">
-                            Nouveau
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                {isReceived && !isMessageRead(message) && (
+                  <>
+                    <span>•</span>
+                    <span className="px-2 py-1 rounded-full bg-primary text-white text-xs font-semibold">
+                      Nouveau
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
             {isReceived && (
               <Button
                 variant="outline"

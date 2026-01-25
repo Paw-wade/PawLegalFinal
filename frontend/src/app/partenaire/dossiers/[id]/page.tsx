@@ -55,7 +55,7 @@ export default function PartenaireDossierDetailPage() {
   const [dischargeNotes, setDischargeNotes] = useState('');
   const [tasks, setTasks] = useState<any[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
-
+  
   useEffect(() => {
     const token = localStorage.getItem('token');
     
@@ -151,7 +151,7 @@ export default function PartenaireDossierDetailPage() {
       setIsLoadingRequests(false);
     }
   };
-
+  
   const loadDossier = async () => {
     if (!dossierId) return;
     
@@ -276,7 +276,7 @@ export default function PartenaireDossierDetailPage() {
     };
     return labels[type] || type;
   };
-
+  
   const getTransmission = () => {
     if (!dossier || !dossier.transmittedTo) return null;
     const userId = (session?.user as any)?._id || (session?.user as any)?.id;
@@ -284,7 +284,7 @@ export default function PartenaireDossierDetailPage() {
       (t.partenaire?._id?.toString() || t.partenaire?.toString()) === userId
     );
   };
-
+  
   const handleAcknowledge = async () => {
     if (!acknowledgeAction) return;
     
@@ -302,7 +302,7 @@ export default function PartenaireDossierDetailPage() {
       setAcknowledging(false);
     }
   };
-
+  
   const handleDischarge = async () => {
     try {
       setDischarging(true);
@@ -330,7 +330,7 @@ export default function PartenaireDossierDetailPage() {
       </div>
     );
   }
-
+  
   if (status === 'unauthenticated') return null;
 
   if (isLoading) {
@@ -345,7 +345,7 @@ export default function PartenaireDossierDetailPage() {
       </div>
     );
   }
-
+  
   if (error || !dossier) {
     return (
       <div className="min-h-screen bg-background">
@@ -362,11 +362,11 @@ export default function PartenaireDossierDetailPage() {
       </div>
     );
   }
-
+  
   const transmission = getTransmission();
   const statusTransmission = transmission?.status || 'pending';
   const canAcknowledge = statusTransmission === 'pending';
-
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
       <main className="w-full px-4 py-8 overflow-x-hidden">
@@ -376,11 +376,11 @@ export default function PartenaireDossierDetailPage() {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Retour aux dossiers
-          </Link>
-          
+        Retour aux dossiers
+      </Link>
+      
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6 overflow-hidden">
-            <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start justify-between mb-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-2 flex-wrap">
                   <h1 className="text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
@@ -388,28 +388,28 @@ export default function PartenaireDossierDetailPage() {
                     <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-semibold">
                       N° {dossier.numero || dossier.numeroDossier}
                     </span>
-                  )}
-                  {transmission && (
+            )}
+          {transmission && (
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                       statusTransmission === 'accepted' ? 'bg-green-100 text-green-800' :
                       statusTransmission === 'refused' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
+              'bg-yellow-100 text-yellow-800'
+            }`}>
                       {statusTransmission === 'accepted' ? 'Accepté' :
                        statusTransmission === 'refused' ? 'Refusé' :
-                       'En attente'}
-                    </span>
-                  )}
-                </div>
+               'En attente'}
+            </span>
+          )}
+        </div>
                 {dossier.description && (
                   <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
                 )}
-                
+        
                 {/* Barre de progression */}
                 {(() => {
                   const progress = getDossierProgress(dossier.statut);
                   return (
-                    <div className="mb-4">
+          <div className="mb-4">
                       <div className="flex items-center justify-between text-sm mb-2">
                         <span className="text-muted-foreground font-medium">Progression du dossier</span>
                         <span className="font-bold text-foreground">{progress}%</span>
@@ -446,7 +446,7 @@ export default function PartenaireDossierDetailPage() {
                               }`}>
                                 {step.label}
                               </span>
-                            </div>
+          </div>
                             {index < steps.length - 1 && (
                               <div className={`h-0.5 w-6 flex-shrink-0 ${
                                 step.completed ? 'bg-green-500' : 'bg-gray-300'
@@ -480,7 +480,7 @@ export default function PartenaireDossierDetailPage() {
                     </span>
                   )}
                 </div>
-              </div>
+          </div>
               
               <div className="flex flex-col gap-2">
                 <Button variant="outline" onClick={() => {
@@ -505,51 +505,51 @@ export default function PartenaireDossierDetailPage() {
             </div>
             
             {/* Informations de transmission */}
-            {transmission && (
+        {transmission && (
               <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <h3 className="font-semibold mb-2 text-foreground">Informations de transmission</h3>
                 <p className="text-sm text-muted-foreground">
-                  Transmis le {new Date(transmission.transmittedAt).toLocaleDateString('fr-FR', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </p>
-                {transmission.notes && (
+              Transmis le {new Date(transmission.transmittedAt).toLocaleDateString('fr-FR', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </p>
+            {transmission.notes && (
                   <p className="text-sm text-foreground mt-2">
                     <strong>Notes:</strong> {transmission.notes}
-                  </p>
-                )}
-              </div>
+              </p>
             )}
-            
+          </div>
+        )}
+        
             {/* Boutons d'accusé de réception */}
-            {canAcknowledge && (
-              <div className="flex gap-4 mt-6">
-                <button
-                  onClick={() => {
-                    setAcknowledgeAction('accept');
-                    setShowAcknowledgeModal(true);
-                  }}
-                  className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <CheckCircle className="w-5 h-5" />
-                  Accepter le dossier
-                </button>
-                <button
-                  onClick={() => {
-                    setAcknowledgeAction('refuse');
-                    setShowAcknowledgeModal(true);
-                  }}
-                  className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  <XCircle className="w-5 h-5" />
-                  Refuser le dossier
-                </button>
-              </div>
-            )}
+        {canAcknowledge && (
+          <div className="flex gap-4 mt-6">
+            <button
+              onClick={() => {
+                setAcknowledgeAction('accept');
+                setShowAcknowledgeModal(true);
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <CheckCircle className="w-5 h-5" />
+              Accepter le dossier
+            </button>
+            <button
+              onClick={() => {
+                setAcknowledgeAction('refuse');
+                setShowAcknowledgeModal(true);
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <XCircle className="w-5 h-5" />
+              Refuser le dossier
+            </button>
+          </div>
+        )}
             
             {/* Prochaine action */}
             {(() => {
@@ -676,8 +676,8 @@ export default function PartenaireDossierDetailPage() {
                   </div>
                 )}
               </div>
-            </div>
-
+      </div>
+      
             {/* Coordonnées client */}
             {dossier.user && typeof dossier.user === 'object' && (
               <div className="bg-white rounded-lg shadow-lg p-6">
@@ -883,7 +883,7 @@ export default function PartenaireDossierDetailPage() {
                 </Link>
                 <Link href="/partenaire/notifications" className="block">
                   <Button variant="outline" className="w-full">Voir les notifications</Button>
-                </Link>
+        </Link>
               </div>
             </div>
 
@@ -969,7 +969,7 @@ export default function PartenaireDossierDetailPage() {
                     <div
                       key={task._id || task.id}
                       className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow"
-                    >
+        >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -1017,7 +1017,7 @@ export default function PartenaireDossierDetailPage() {
                 <h2 className="text-xl font-bold mb-4">💬 Messages récents</h2>
                 <div className="space-y-2">
                   {messages.slice(0, 3).map((message: any) => (
-                    <Link
+        <Link
                       key={message._id || message.id}
                       href={`/partenaire/dossiers/${dossierId}/messages`}
                       className="block p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
@@ -1029,13 +1029,13 @@ export default function PartenaireDossierDetailPage() {
                 </div>
                 <Link href={`/partenaire/dossiers/${dossierId}/messages`} className="block mt-3">
                   <Button variant="outline" className="w-full text-xs">Voir tous les messages</Button>
-                </Link>
-              </div>
+        </Link>
+      </div>
             )}
           </div>
         </div>
       </main>
-
+      
       {/* Modal d'accusé de réception */}
       {showAcknowledgeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
