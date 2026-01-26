@@ -1039,6 +1039,18 @@ export default function CalculateurPage() {
         }
       }
       
+      // Calcul détaillé pour première demande avec dateFinValiditeTitreActuel
+      if (formData.typeDemande === 'premiere' && formData.dateFinValiditeTitreActuel && formData.typePrecisTitreSejour) {
+        const resultatPremiereDemande = calculerDelaisPremiereDemande();
+        if (resultatPremiereDemande) {
+          setCalculs({
+            type: 'premiere_demande_detaille',
+            ...resultatPremiereDemande
+          });
+          return;
+        }
+      }
+      
       // Calcul classique pour première demande ou renouvellement sans dateFinValiditeTitreActuel
       if (formData.typeTitre) {
         const infoTitre = infosTitres[formData.typeTitre];
@@ -1231,6 +1243,116 @@ export default function CalculateurPage() {
     };
   };
 
+  // Fonction de calcul détaillé des délais de première demande selon article R.431-5 du CESEDA
+  const calculerDelaisPremiereDemande = () => {
+    if (!formData.dateFinValiditeTitreActuel || !formData.typePrecisTitreSejour) {
+      return null;
+    }
+
+    const aujourdhui = new Date();
+    aujourdhui.setHours(0, 0, 0, 0);
+    
+    const dateFinValidite = new Date(formData.dateFinValiditeTitreActuel);
+    dateFinValidite.setHours(0, 0, 0, 0);
+    
+    // Calculer les dates limites (1 mois = 30 jours)
+    // Date de début de période : 120 jours avant la date de fin de validité
+    const dateDebutPeriode = new Date(dateFinValidite);
+    dateDebutPeriode.setDate(dateDebutPeriode.getDate() - 120); // 4 mois = 120 jours
+    
+    // Date de fin de période : 60 jours avant la date de fin de validité
+    const dateFinPeriode = new Date(dateFinValidite);
+    dateFinPeriode.setDate(dateFinPeriode.getDate() - 60); // 2 mois = 60 jours
+    
+    // Calculer les jours avant expiration (en partant d'aujourd'hui)
+    const joursAvantExpiration = Math.ceil((dateFinValidite.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24));
+    const joursAvantDebutPeriode = Math.ceil((dateDebutPeriode.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24));
+    const joursAvantFinPeriode = Math.ceil((dateFinPeriode.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24));
+    const joursDepuisFinPeriode = joursAvantExpiration < 60 ? Math.abs(joursAvantExpiration - 60) : 0;
+    const joursDepuisExpiration = joursAvantExpiration < 0 ? Math.abs(joursAvantExpiration) : 0;
+    
+    // Cas 1 : Avant la période (plus de 120 jours avant expiration)
+    if (joursAvantExpiration > 120) {
+      return {
+        cas: 'avant_periode',
+        couleur: 'green',
+        dateDebutPeriode,
+        dateFinPeriode,
+        dateFinValidite,
+        joursAvantExpiration,
+        joursAvantDebutPeriode,
+        message: {
+          titre: 'Première demande pas encore ouverte',
+          corps: `La date du jour n'est pas comprise dans la période des quatre mois avant la date d'expiration du visa.`,
+          details: `La première demande du titre de séjour n'est pas encore ouverte.`,
+          periode: `La première demande pourra être effectuée entre quatre mois et deux mois avant la date de fin de validité, soit du ${formatDateCourte(dateDebutPeriode)} au ${formatDateCourte(dateFinPeriode)}.`,
+          dateOuverture: `La première demande sera possible à partir du ${formatDateCourte(dateDebutPeriode)}.`,
+          avertissement: 'La première demande d\'un titre de séjour demandée après l\'expiration totale du délai (après la date de fin de validité du visa) donne lieu, sauf cas de force majeure ou présentation d\'un visa en cours de validité, à l\'acquittement d\'un droit de visa de régularisation de 180 euros.'
+        }
+      };
+    }
+    
+    // Cas 2a : Dans la période légale (entre 120 et 60 jours avant expiration)
+    if (joursAvantExpiration >= 60 && joursAvantExpiration <= 120) {
+      return {
+        cas: 'dans_periode',
+        couleur: 'blue',
+        dateDebutPeriode,
+        dateFinPeriode,
+        dateFinValidite,
+        joursAvantExpiration,
+        joursAvantFinPeriode,
+        message: {
+          titre: 'Première demande ouverte',
+          corps: `La première demande du titre de séjour est ouverte.`,
+          details: `Le titre de séjour est demandable entre quatre mois et deux mois avant la date de fin de validité. Cette période correspond au cadre légal prévu par l'article R.431-5 du CESEDA.`,
+          periode: `La première demande peut être effectuée entre quatre mois et deux mois avant la date de fin de validité, soit du ${formatDateCourte(dateDebutPeriode)} au ${formatDateCourte(dateFinPeriode)}.`,
+          delaiRestant: `Il vous reste ${joursAvantFinPeriode} jour(s) avant d'entrer dans le délai de 2 mois avant la fin de validité.`,
+          avertissement: 'La première demande d\'un titre de séjour demandée après l\'expiration totale du délai (après la date de fin de validité du visa) donne lieu, sauf cas de force majeure ou présentation d\'un visa en cours de validité, à l\'acquittement d\'un droit de visa de régularisation de 180 euros.'
+        }
+      };
+    }
+    
+    // Cas 2b : Après la période légale mais avant expiration (moins de 60 jours avant expiration, mais pas encore expiré)
+    if (joursAvantExpiration > 0 && joursAvantExpiration < 60) {
+      return {
+        cas: 'apres_periode_avant_expiration',
+        couleur: 'orange',
+        dateDebutPeriode,
+        dateFinPeriode,
+        dateFinValidite,
+        joursAvantExpiration,
+        joursDepuisFinPeriode,
+        message: {
+          titre: 'Délai légal dépassé - Action urgente requise',
+          corps: `Le délai légal de première demande est dépassé, mais votre visa n'a pas encore expiré. La première demande peut toujours être effectuée sans pénalité avant l'expiration du visa.`,
+          details: `La première demande du titre de séjour doit être effectuée immédiatement pour éviter des lenteurs dans la gestion du dossier et éviter la pénalité de 180 euros qui sera due après l'expiration du visa.`,
+          periodeLegale: `La première demande aurait dû être introduite entre quatre mois et deux mois avant la date de fin de validité, soit du ${formatDateCourte(dateDebutPeriode)} au ${formatDateCourte(dateFinPeriode)}.`,
+          delaiRestant: `Il vous reste ${joursAvantExpiration} jour(s) avant l'expiration du visa. Agissez rapidement pour éviter la pénalité.`,
+          avertissement: '⚠️ ATTENTION : La première demande d\'un titre de séjour demandée après l\'expiration totale du délai (après la date de fin de validité du visa) donne lieu, sauf cas de force majeure ou présentation d\'un visa en cours de validité, à l\'acquittement d\'un droit de visa de régularisation de 180 euros.'
+        }
+      };
+    }
+    
+    // Cas 2c : Après expiration complète du visa
+    return {
+      cas: 'apres_expiration',
+      couleur: 'red',
+      dateDebutPeriode,
+      dateFinPeriode,
+      dateFinValidite,
+      joursDepuisExpiration,
+      message: {
+        titre: 'Délai légal dépassé - Pénalité due',
+        corps: `Le délai légal de première demande est dépassé et votre visa a expiré. La première demande peut toujours être effectuée mais entraîne le paiement d'un droit de visa de régularisation de 180 euros.`,
+        details: `La première demande du titre de séjour doit être effectuée immédiatement. Les recours éventuels sont voués à l'échec quand les délais légaux sont dépassés.`,
+        periodeLegale: `La première demande aurait dû être introduite entre quatre mois et deux mois avant la date de fin de validité, soit du ${formatDateCourte(dateDebutPeriode)} au ${formatDateCourte(dateFinPeriode)}.`,
+        delaiRestant: `Votre visa a expiré il y a ${joursDepuisExpiration} jour(s). La pénalité de 180 euros est maintenant due.`,
+        avertissement: '⚠️ PÉNALITÉ DUE : La première demande d\'un titre de séjour demandée après l\'expiration totale du délai (après la date de fin de validité du visa) donne lieu, sauf cas de force majeure ou présentation d\'un visa en cours de validité, à l\'acquittement d\'un droit de visa de régularisation de 180 euros.'
+      }
+    };
+  };
+
   // Fonction de génération PDF pour le rapport de renouvellement
   const genererPDFRenouvellement = () => {
     if (!calculs || calculs.type !== 'renouvellement_detaille') {
@@ -1418,6 +1540,197 @@ export default function CalculateurPage() {
 
     // Télécharger le PDF
     const fileName = `Rapport_Renouvellement_${formatDateCourte(new Date()).replace(/\//g, '_')}.pdf`;
+    doc.save(fileName);
+  };
+
+  // Fonction de génération PDF pour le rapport de première demande
+  const genererPDFPremiereDemande = () => {
+    if (!calculs || calculs.type !== 'premiere_demande_detaille') {
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const margin = 20;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yPosition = margin;
+
+    // En-tête
+    doc.setFontSize(20);
+    doc.setTextColor(249, 115, 22); // Orange
+    doc.setFont('helvetica', 'bold');
+    doc.text('PAW LEGAL', margin, yPosition);
+    
+    yPosition += 8;
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Rapport de calcul des délais de première demande', margin, yPosition);
+    
+    yPosition += 10;
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.5);
+    doc.line(margin, yPosition, pageWidth - margin, yPosition);
+    yPosition += 10;
+
+    // Informations générales
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Informations générales', margin, yPosition);
+    yPosition += 8;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const infos = [
+      `Type de demande : Première demande`,
+      `Date de fin de validité du visa : ${formatDateCourte(calculs.dateFinValidite)}`,
+      `Date de calcul : ${formatDateCourte(new Date())}`,
+    ];
+    infos.forEach(info => {
+      doc.text(info, margin, yPosition);
+      yPosition += 6;
+    });
+
+    yPosition += 5;
+
+    // Résultat du calcul
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Résultat du calcul', margin, yPosition);
+    yPosition += 8;
+
+    // Couleur selon le cas
+    const couleur = calculs.couleur === 'green' ? [34, 197, 94] : calculs.couleur === 'red' ? [239, 68, 68] : calculs.couleur === 'orange' ? [249, 115, 22] : [59, 130, 246];
+    doc.setFillColor(couleur[0], couleur[1], couleur[2]);
+    doc.roundedRect(margin, yPosition - 5, pageWidth - 2 * margin, 15, 3, 3, 'F');
+    
+    doc.setFontSize(12);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.text(calculs.message.titre, margin + 5, yPosition + 3);
+    yPosition += 10;
+
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    
+    const messages = [
+      calculs.message.corps,
+      calculs.message.details,
+      calculs.message.periode,
+      calculs.message.periodeLegale,
+      calculs.message.dateOuverture,
+      calculs.message.delaiRestant
+    ].filter(Boolean);
+
+    messages.forEach(msg => {
+      const lines = doc.splitTextToSize(msg, pageWidth - 2 * margin - 10);
+      lines.forEach((line: string) => {
+        if (yPosition > pageHeight - 30) {
+          doc.addPage();
+          yPosition = margin;
+        }
+        doc.text(line, margin + 5, yPosition);
+        yPosition += 5;
+      });
+      yPosition += 2;
+    });
+
+    yPosition += 5;
+
+    // Avertissement
+    doc.setFillColor(255, 243, 205);
+    doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 12, 3, 3, 'F');
+    doc.setFontSize(9);
+    doc.setTextColor(120, 53, 15);
+    doc.setFont('helvetica', 'bold');
+    doc.text('⚠️ Avertissement important', margin + 5, yPosition + 5);
+    yPosition += 6;
+    doc.setFont('helvetica', 'normal');
+    const avertissementLines = doc.splitTextToSize(calculs.message.avertissement, pageWidth - 2 * margin - 10);
+    avertissementLines.forEach((line: string) => {
+      if (yPosition > pageHeight - 20) {
+        doc.addPage();
+        yPosition = margin;
+      }
+      doc.text(line, margin + 5, yPosition);
+      yPosition += 4;
+    });
+
+    yPosition += 10;
+
+    // Période légale
+    if (calculs.dateDebutPeriode && calculs.dateFinPeriode) {
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Période légale de première demande', margin, yPosition);
+      yPosition += 7;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Début : ${formatDateCourte(calculs.dateDebutPeriode)}`, margin, yPosition);
+      yPosition += 6;
+      doc.text(`Fin : ${formatDateCourte(calculs.dateFinPeriode)}`, margin, yPosition);
+      yPosition += 6;
+      doc.text(`Date d'expiration du visa : ${formatDateCourte(calculs.dateFinValidite)}`, margin, yPosition);
+      yPosition += 10;
+    }
+
+    // Recommandations
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Recommandations', margin, yPosition);
+    yPosition += 7;
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    const recommandations = [
+      '• Déposez votre demande dans les délais légaux pour éviter toute pénalité',
+      '• La pénalité de 180 euros n\'est due qu\'après l\'expiration complète du visa',
+      '• Conservez tous les justificatifs de votre demande',
+      '• En cas de retard, contactez immédiatement un avocat spécialisé',
+      '• Suivez l\'évolution de votre dossier sur la plateforme',
+      '• En fonction de la réponse de la préfecture, vous pouvez introduire des recours'
+    ];
+
+    recommandations.forEach(rec => {
+      if (yPosition > pageHeight - 20) {
+        doc.addPage();
+        yPosition = margin;
+      }
+      const lines = doc.splitTextToSize(rec, pageWidth - 2 * margin - 10);
+      lines.forEach((line: string) => {
+        doc.text(line, margin, yPosition);
+        yPosition += 4;
+      });
+      yPosition += 2;
+    });
+
+    // Pied de page
+    const totalPages = doc.internal.pages.length - 1;
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.setFont('helvetica', 'normal');
+      doc.text(
+        `Page ${i} / ${totalPages} - Généré le ${formatDateCourte(new Date())}`,
+        pageWidth / 2,
+        pageHeight - 10,
+        { align: 'center' }
+      );
+    }
+
+    // Télécharger le PDF
+    const fileName = `Rapport_Premiere_Demande_${formatDateCourte(new Date()).replace(/\//g, '_')}.pdf`;
     doc.save(fileName);
   };
 
@@ -3041,6 +3354,281 @@ export default function CalculateurPage() {
                         <Button
                           variant="default"
                           onClick={genererPDFRenouvellement}
+                          className="bg-orange-500 hover:bg-orange-600 text-white"
+                        >
+                          📄 Télécharger le rapport PDF
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Affichage du calcul détaillé de première demande */}
+                  {calculs.type === 'premiere_demande_detaille' && (
+                    <div className={`rounded-lg p-6 border-2 ${
+                      calculs.couleur === 'green' 
+                        ? 'bg-green-50 border-green-300' 
+                        : calculs.couleur === 'red'
+                        ? 'bg-red-50 border-red-300'
+                        : calculs.couleur === 'orange'
+                        ? 'bg-orange-50 border-orange-300'
+                        : 'bg-blue-50 border-blue-300'
+                    }`}>
+                      <div className="flex items-start gap-3 mb-4">
+                        <span className="text-3xl">
+                          {calculs.couleur === 'green' ? '✅' : calculs.couleur === 'red' ? '⚠️' : calculs.couleur === 'orange' ? '🔴' : 'ℹ️'}
+                        </span>
+                        <div className="flex-1">
+                          <h3 className={`font-bold text-xl mb-2 ${
+                            calculs.couleur === 'green' 
+                              ? 'text-green-800' 
+                              : calculs.couleur === 'red'
+                              ? 'text-red-800'
+                              : calculs.couleur === 'orange'
+                              ? 'text-orange-800'
+                              : 'text-blue-800'
+                          }`}>
+                            {calculs.message.titre}
+                          </h3>
+                          <p className={`text-sm mb-3 ${
+                            calculs.couleur === 'green' 
+                              ? 'text-green-700' 
+                              : calculs.couleur === 'red'
+                              ? 'text-red-700'
+                              : calculs.couleur === 'orange'
+                              ? 'text-orange-700'
+                              : 'text-blue-700'
+                          }`}>
+                            {calculs.message.corps}
+                          </p>
+                          {calculs.message.details && (
+                            <p className={`text-sm mb-3 ${
+                              calculs.couleur === 'green' 
+                                ? 'text-green-700' 
+                                : calculs.couleur === 'red'
+                                ? 'text-red-700'
+                                : calculs.couleur === 'orange'
+                                ? 'text-orange-700'
+                                : 'text-blue-700'
+                            }`}>
+                              {calculs.message.details}
+                            </p>
+                          )}
+                          {calculs.message.periode && (
+                            <p className={`text-sm mb-2 ${
+                              calculs.couleur === 'green' 
+                                ? 'text-green-700' 
+                                : calculs.couleur === 'red'
+                                ? 'text-red-700'
+                                : calculs.couleur === 'orange'
+                                ? 'text-orange-700'
+                                : 'text-blue-700'
+                            }`}>
+                              {calculs.message.periode}
+                            </p>
+                          )}
+                          {calculs.message.periodeLegale && (
+                            <p className={`text-sm mb-2 font-semibold ${
+                              calculs.couleur === 'red' || calculs.couleur === 'orange' ? 'text-red-800' : 'text-gray-700'
+                            }`}>
+                              {calculs.message.periodeLegale}
+                            </p>
+                          )}
+                          {calculs.message.dateOuverture && (
+                            <p className={`text-sm mb-2 font-semibold text-green-700`}>
+                              {calculs.message.dateOuverture}
+                            </p>
+                          )}
+                          {calculs.message.delaiRestant && (
+                            <p className={`text-sm mb-2 font-semibold ${
+                              calculs.couleur === 'red' ? 'text-red-800' : calculs.couleur === 'orange' ? 'text-orange-800' : 'text-blue-800'
+                            }`}>
+                              {calculs.message.delaiRestant}
+                            </p>
+                          )}
+                          <div className={`mt-4 p-3 rounded-lg border ${
+                            calculs.couleur === 'green' 
+                              ? 'bg-green-100 border-green-300' 
+                              : calculs.couleur === 'red'
+                              ? 'bg-red-100 border-red-300'
+                              : calculs.couleur === 'orange'
+                              ? 'bg-orange-100 border-orange-300'
+                              : 'bg-yellow-100 border-yellow-300'
+                          }`}>
+                            <p className={`text-xs font-semibold ${
+                              calculs.couleur === 'green' 
+                                ? 'text-green-800' 
+                                : calculs.couleur === 'red'
+                                ? 'text-red-800'
+                                : calculs.couleur === 'orange'
+                                ? 'text-orange-800'
+                                : 'text-yellow-800'
+                            }`}>
+                              ⚠️ Avertissement important :
+                            </p>
+                            <p className={`text-xs mt-1 ${
+                              calculs.couleur === 'green' 
+                                ? 'text-green-700' 
+                                : calculs.couleur === 'red'
+                                ? 'text-red-700'
+                                : calculs.couleur === 'orange'
+                                ? 'text-orange-700'
+                                : 'text-yellow-700'
+                            }`}>
+                              {calculs.message.avertissement}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Questions conditionnelles */}
+                      <div className="mt-6 space-y-4 border-t pt-4">
+                        <div className="space-y-2">
+                          <Label className="font-semibold">Avez-vous déposé la première demande de votre titre de séjour ? *</Label>
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="renouvellementDepose"
+                                value="oui"
+                                checked={formData.renouvellementDepose === true}
+                                onChange={() => setFormData({ ...formData, renouvellementDepose: true })}
+                                className="w-4 h-4 text-primary"
+                              />
+                              <span className="text-sm">Oui</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="renouvellementDepose"
+                                value="non"
+                                checked={formData.renouvellementDepose === false}
+                                onChange={() => setFormData({ 
+                                  ...formData, 
+                                  renouvellementDepose: false,
+                                  confirmationDepotRenouvellement: null,
+                                  dateConfirmationDepotRenouvellement: ''
+                                })}
+                                className="w-4 h-4 text-primary"
+                              />
+                              <span className="text-sm">Non</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Si Non : Message d'invitation */}
+                        {formData.renouvellementDepose === false && (
+                          <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                            <p className="text-sm text-orange-800 font-semibold mb-2">📋 Action requise</p>
+                            <p className="text-sm text-orange-700 mb-2">
+                              Nous vous invitons à déposer immédiatement votre première demande de titre de séjour. 
+                              Notre plateforme peut vous accompagner dans cette démarche.
+                            </p>
+                            <p className="text-sm text-orange-700 mb-3">
+                              N'hésitez pas à nous contacter pour obtenir de l'aide dans le dépôt de votre demande.
+                            </p>
+                            <div className="flex gap-2">
+                              <Link href="/contact">
+                                <Button variant="default" size="sm" className="text-xs">
+                                  Nous contacter
+                                </Button>
+                              </Link>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Si Oui : Question sur la confirmation */}
+                        {formData.renouvellementDepose === true && (
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label className="font-semibold">Avez-vous obtenu la confirmation de dépôt de la demande ? *</Label>
+                              <div className="flex gap-4">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name="confirmationDepotRenouvellement"
+                                    value="oui"
+                                    checked={formData.confirmationDepotRenouvellement === true}
+                                    onChange={() => setFormData({ ...formData, confirmationDepotRenouvellement: true })}
+                                    className="w-4 h-4 text-primary"
+                                  />
+                                  <span className="text-sm">Oui</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name="confirmationDepotRenouvellement"
+                                    value="non"
+                                    checked={formData.confirmationDepotRenouvellement === false}
+                                    onChange={() => setFormData({ 
+                                      ...formData, 
+                                      confirmationDepotRenouvellement: false,
+                                      dateConfirmationDepotRenouvellement: ''
+                                    })}
+                                    className="w-4 h-4 text-primary"
+                                  />
+                                  <span className="text-sm">Non</span>
+                                </label>
+                              </div>
+                            </div>
+
+                            {/* Si Oui : Champ date de confirmation */}
+                            {formData.confirmationDepotRenouvellement === true && (
+                              <div className="space-y-2">
+                                <Label htmlFor="dateConfirmationDepotRenouvellement">Date de confirmation du dépôt de la demande de titre de séjour *</Label>
+                                <Input
+                                  id="dateConfirmationDepotRenouvellement"
+                                  type="date"
+                                  value={formData.dateConfirmationDepotRenouvellement}
+                                  onChange={(e) => setFormData({ ...formData, dateConfirmationDepotRenouvellement: e.target.value })}
+                                  required
+                                />
+                                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-2">
+                                  <p className="text-xs text-blue-800 mb-2">
+                                    💡 En fonction de la réponse de la préfecture ou de l'absence de réponse, vous avez la possibilité d'introduire des recours en fonction de la situation.
+                                  </p>
+                                  <p className="text-xs text-blue-800 mb-2">
+                                    Consultez la page qui permet le calcul des délais de recours pour plus d'informations.
+                                  </p>
+                                  <Link href="/calculateur">
+                                    <Button variant="outline" size="sm" className="text-xs mt-2">
+                                      Calculer les délais de recours
+                                    </Button>
+                                  </Link>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Si Non : Message d'alerte */}
+                            {formData.confirmationDepotRenouvellement === false && (
+                              <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                                <p className="text-sm text-yellow-800 font-semibold mb-2">⚠️ Alerte</p>
+                                <p className="text-sm text-yellow-700 mb-2">
+                                  Veuillez renseigner la date de confirmation de la demande dès que vous l'obtiendrez.
+                                </p>
+                                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mt-2">
+                                  <p className="text-xs text-blue-800 mb-2">
+                                    💡 En fonction de la réponse de la préfecture ou de l'absence de réponse, vous avez la possibilité d'introduire des recours en fonction de la situation.
+                                  </p>
+                                  <p className="text-xs text-blue-800 mb-2">
+                                    Consultez la page qui permet le calcul des délais de recours pour plus d'informations.
+                                  </p>
+                                  <Link href="/calculateur">
+                                    <Button variant="outline" size="sm" className="text-xs mt-2">
+                                      Calculer les délais de recours
+                                    </Button>
+                                  </Link>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bouton de téléchargement PDF */}
+                      <div className="mt-6 flex justify-center">
+                        <Button
+                          variant="default"
+                          onClick={genererPDFPremiereDemande}
                           className="bg-orange-500 hover:bg-orange-600 text-white"
                         >
                           📄 Télécharger le rapport PDF

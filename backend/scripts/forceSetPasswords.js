@@ -16,14 +16,8 @@ const connectDB = async () => {
   }
 };
 
-const generatePassword = (length = 12) => {
-  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
-  let password = '';
-  for (let i = 0; i < length; i++) {
-    password += charset.charAt(Math.floor(Math.random() * charset.length));
-  }
-  return password;
-};
+// Mot de passe par défaut pour tous les utilisateurs
+const DEFAULT_PASSWORD = 'Pawlegal25+';
 
 const forceSetPasswords = async () => {
   try {
@@ -42,8 +36,8 @@ const forceSetPasswords = async () => {
     console.log(`📋 Traitement de ${allUsers.length} compte(s)...\n`);
 
     for (const user of allUsers) {
-      // Générer un mot de passe pour chaque utilisateur
-      const plainPassword = generatePassword(12);
+      // Utiliser le mot de passe par défaut pour tous les utilisateurs
+      const plainPassword = DEFAULT_PASSWORD;
       
       // Hasher le mot de passe
       const salt = await bcrypt.genSalt(10);
