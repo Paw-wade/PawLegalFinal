@@ -332,9 +332,8 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
     <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-50 shadow-sm">
       <div className="container mx-auto px-4 py-2.5">
         <div className="flex items-center justify-between">
-          {/* Logo et bouton menu (pour dashboard) */}
+          {/* Bouton menu (logo supprimé du header ; présent dans les sidebars) */}
           <div className="flex items-center gap-3">
-            {/* Bouton hamburger pour mobile/tablette sur dashboard - uniquement pour les clients */}
             {!showNav && onMenuClick && variant === 'client' && (
               <button
                 onClick={onMenuClick}
@@ -346,23 +345,6 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 </svg>
               </button>
             )}
-            {/* Logo toujours visible et renvoyant à la page d'accueil */}
-            <>
-              <Link
-                href="/"
-                className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-xl"
-              >
-                ADA Pappers
-              </Link>
-              <div className="h-4 w-px bg-gray-300"></div>
-              <p className="text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
-                {variant === 'admin'
-                  ? subtitleAdmin
-                  : variant === 'client'
-                  ? subtitleClient
-                  : subtitleHome}
-              </p>
-            </>
           </div>
 
           {/* Navigation - Liens permanents (Domaines, Services, FAQ, Forum, Contact, Calculateur, Dashboard) */}

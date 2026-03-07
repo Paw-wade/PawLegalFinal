@@ -1811,7 +1811,13 @@ export default function AdminDossiersPage() {
                             <p className="text-xs font-semibold text-muted-foreground">Étapes du dossier :</p>
                             <button
                               type="button"
-                              onClick={() => { setAddEtapeDossier(dossier); setNewEtapeLabel(''); setNewEtapeDate(''); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAddEtapeDossier(dossier);
+                                setNewEtapeLabel('');
+                                setNewEtapeDate('');
+                                setError(null);
+                              }}
                               className="text-[10px] text-primary hover:underline font-medium"
                             >
                               + Ajouter une étape
@@ -3017,8 +3023,11 @@ export default function AdminDossiersPage() {
 
       {/* Modal Ajouter une étape du dossier */}
       {addEtapeDossier && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => { setAddEtapeDossier(null); setNewEtapeLabel(''); setNewEtapeDate(''); setError(null); }}
+        >
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-2">Ajouter une étape (non prévue)</h3>
             <p className="text-sm text-muted-foreground mb-4">
               Dossier : <strong>{addEtapeDossier.titre || addEtapeDossier.numero || addEtapeDossier._id}</strong>
@@ -3028,14 +3037,19 @@ export default function AdminDossiersPage() {
                 e.preventDefault();
                 const label = newEtapeLabel.trim();
                 if (!label) return;
+                const dossierId = addEtapeDossier._id || addEtapeDossier.id;
+                if (!dossierId) {
+                  setError('Identifiant du dossier manquant');
+                  return;
+                }
                 setIsAddingEtape(true);
                 setError(null);
                 try {
                   const current = addEtapeDossier.etapesSupplementaires || [];
                   const next = [...current, { label, date: newEtapeDate || undefined, ordre: current.length }];
-                  const response = await dossiersAPI.updateDossier(addEtapeDossier._id, { etapesSupplementaires: next });
+                  const response = await dossiersAPI.updateDossier(dossierId, { etapesSupplementaires: next });
                   if (response.data.success) {
-                    setDossiers(prev => prev.map(d => d._id === addEtapeDossier._id ? { ...d, etapesSupplementaires: next } : d));
+                    setDossiers(prev => prev.map(d => (d._id || d.id) === dossierId ? { ...d, etapesSupplementaires: next } : d));
                     setAddEtapeDossier(null);
                     setNewEtapeLabel('');
                     setNewEtapeDate('');
