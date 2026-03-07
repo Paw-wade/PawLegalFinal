@@ -27,7 +27,7 @@ const cmsKeys = [
   },
   {
     key: 'home.hero.subtitle',
-    value: 'Spécialisés en droit des étrangers et droit du travail, nous vous accompagnons dans toutes vos démarches administratives avec expertise et professionnalisme.',
+    value: "Nous vous accompagnons dans toutes vos démarches administratives liées au séjour en France : première demande et renouvellement de titre de séjour, regroupement familial et demande de visa. Bénéficiez d’un accompagnement personnalisé pour constituer un dossier complet, conforme et sécurisé. Suivez l'évolution de votre dossier en temps réel sur la plateforme.",
     page: 'home',
     section: 'hero',
     description: 'Sous-titre de la section hero'

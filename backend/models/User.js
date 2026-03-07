@@ -143,6 +143,15 @@ const userSchema = new mongoose.Schema({
       otp: { type: Boolean, default: true } // OTP toujours activé pour sécurité
     }
   },
+  // Réinitialisation de mot de passe (token temporaire)
+  resetPasswordToken: {
+    type: String,
+    select: false
+  },
+  resetPasswordExpires: {
+    type: Date,
+    select: false
+  },
   createdAt: {
     type: Date,
     default: Date.now

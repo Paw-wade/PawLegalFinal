@@ -144,13 +144,41 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
               let link = '/client/notifications';
               let icon = '🔔';
 
-              if (notif.type?.includes('document')) {
+              const notifType = notif.type || '';
+              const data = notif.data || notif.metadata || {};
+
+              if (notifType === 'document_request') {
+                // Cas spécifique: demande de document pour le client
+                const dossierId = safeString(data.dossierId);
+                const dossierNumero = safeString(data.dossierNumero);
+                const label =
+                  safeString(data.documentTypeLabel) ||
+                  safeString(data.documentType) ||
+                  'document';
+                const isUrgent = !!data.isUrgent;
+
+                message = `${isUrgent ? '[URGENT] ' : ''}Un document "${label}" est demandé pour votre dossier ${dossierNumero || ''}`.trim();
+                icon = '📄';
+                link = dossierId ? `/client/dossiers/${dossierId}` : '/client/documents';
+
+                items.push({
+                  id: `notification-${safeString(notif._id) || safeString(notif.id) || Math.random()}`,
+                  type: 'dossier',
+                  message,
+                  link,
+                  icon,
+                  priority: isUrgent ? 'high' : 'normal'
+                });
+                return;
+              }
+
+              if (notifType.includes('document')) {
                 icon = '📄';
                 const dossierId = safeString(notif.dossierId) || safeString(notif.metadata?.dossierId);
                 if (dossierId) {
                   link = `/client/dossiers/${dossierId}`;
                 }
-              } else if (notif.type?.includes('echeance')) {
+              } else if (notifType.includes('echeance')) {
                 icon = '⏰';
                 const dossierId = safeString(notif.dossierId) || safeString(notif.metadata?.dossierId);
                 if (dossierId) {
@@ -164,7 +192,7 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
                 message,
                 link,
                 icon,
-                priority: notif.type?.includes('urgent') ? 'high' : 'normal'
+                priority: notifType.includes('urgent') ? 'high' : 'normal'
               });
             });
           }

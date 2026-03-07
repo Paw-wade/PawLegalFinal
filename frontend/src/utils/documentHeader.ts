@@ -9,9 +9,9 @@ import { jsPDF } from 'jspdf';
  * Configuration de la plateforme (coordonnées)
  */
 export const PLATFORM_CONFIG = {
-  name: 'Paw Legal',
-  legalName: 'Paw Legal',
-  subtitle: 'Service d\'accompagnement juridique',
+  name: 'ADA Pappers',
+  legalName: 'ADA Pappers',
+  subtitle: 'Service d\'Accompagnement aux démarches administratives',
   address: {
     street: '', // À compléter avec l'adresse réelle
     city: '',

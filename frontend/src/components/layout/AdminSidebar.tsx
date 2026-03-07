@@ -33,6 +33,7 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/cms', label: 'CMS', icon: '✏️' },
   { href: '/admin/logs', label: 'Logs', icon: '📋', roles: ['superadmin'] },
   { href: '/admin/corbeille', label: 'Corbeille', icon: '🗑️' },
+  { href: '/forum', label: 'Forum', icon: '🗣️' },
   { href: '/admin/compte', label: 'Mon Compte', icon: '👤' },
 ];
 
@@ -81,15 +82,15 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
         {/* Header de la sidebar */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-white">
           {!isCollapsed && (
-            <Link href="/admin" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-md">
-                <span className="text-white font-bold text-sm">PL</span>
+                <span className="text-white font-bold text-sm">AP</span>
               </div>
-              <span className="text-lg font-bold text-primary">Paw Legal</span>
+              <span className="text-lg font-bold text-primary">ADA Pappers</span>
             </Link>
           )}
           {isCollapsed && (
-            <Link href="/admin" className="flex items-center justify-center w-full">
+            <Link href="/" className="flex items-center justify-center w-full">
               <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-md">
                 <span className="text-white font-bold text-sm">PL</span>
               </div>

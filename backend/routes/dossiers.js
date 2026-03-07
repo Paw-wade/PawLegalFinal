@@ -853,7 +853,9 @@ router.get('/:id/recap', protect, async (req, res) => {
       t => {
         if (!t.partenaire) return false;
         const partenaireId = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
-        return partenaireId === req.user.id.toString() && t.status !== 'refused';
+        // Le partenaire a accès au dossier tant qu'il lui a été transmis,
+        // même si la transmission a été précédemment refusée
+        return partenaireId === req.user.id.toString();
       }
     );
     
@@ -1111,7 +1113,9 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       t => {
         if (!t.partenaire) return false;
         const partenaireId = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
-        return partenaireId === req.user.id.toString() && t.status !== 'refused';
+        // Le partenaire a accès aux données détaillées du dossier
+        // tant que le dossier lui a été transmis, quel que soit le statut
+        return partenaireId === req.user.id.toString();
       }
     );
     
@@ -1736,21 +1740,49 @@ router.put(
       // Vérifier les permissions
       const dossierUserId = dossier.user ? (dossier.user._id ? dossier.user._id.toString() : dossier.user.toString()) : null;
       let hasModifyPermission = false;
-      
+      const isPartenaire = req.user.role === 'partenaire';
+      const isTransmittedToPartenaire = isPartenaire && dossier.transmittedTo && dossier.transmittedTo.some(
+        t => {
+          if (!t.partenaire) return false;
+          const pid = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
+          return pid === req.user.id.toString();
+        }
+      );
+
       // L'utilisateur peut modifier si :
       // 1. Il est le propriétaire du dossier
       // 2. Il est admin/superadmin
+      // 3. Il est partenaire et le dossier lui a été transmis et accepté
       if (dossierUserId && dossierUserId === req.user.id.toString()) {
         hasModifyPermission = true;
       } else if (req.user.role === 'admin' || req.user.role === 'superadmin') {
         hasModifyPermission = true;
+      } else if (isTransmittedToPartenaire) {
+        hasModifyPermission = true;
       }
-      
+
       if (!hasModifyPermission) {
         return res.status(403).json({
           success: false,
           message: 'Accès non autorisé à ce dossier'
         });
+      }
+
+      // Partenaire : ne peut mettre à jour que les étapes supplémentaires
+      if (isPartenaire && hasModifyPermission) {
+        const etapesSupplementaires = req.body.etapesSupplementaires;
+        if (Array.isArray(etapesSupplementaires)) {
+          dossier.etapesSupplementaires = etapesSupplementaires.map((e, idx) => ({
+            label: e.label || '',
+            date: e.date ? new Date(e.date) : undefined,
+            ordre: typeof e.ordre === 'number' ? e.ordre : idx,
+            addedAt: e.addedAt ? new Date(e.addedAt) : new Date(),
+            addedBy: req.user.id
+          }));
+        }
+        await dossier.save();
+        const updated = await Dossier.findById(dossier._id).populate('user', 'firstName lastName email phone');
+        return res.status(200).json({ success: true, message: 'Dossier mis à jour', dossier: updated });
       }
 
       const {
@@ -1764,7 +1796,8 @@ router.put(
         notes,
         assignedTo,
         motifRefus,
-        notificationMessage
+        notificationMessage,
+        etapesSupplementaires: bodyEtapesSupplementaires
       } = req.body;
 
       const oldStatut = dossier.statut;
@@ -1780,7 +1813,18 @@ router.put(
       if (dateEcheance) dossier.dateEcheance = dateEcheance;
       if (notes !== undefined) dossier.notes = notes;
       if (motifRefus !== undefined) dossier.motifRefus = motifRefus;
-      
+
+      // Étapes supplémentaires (admin/superadmin uniquement, partenaire géré au-dessus)
+      if (Array.isArray(bodyEtapesSupplementaires)) {
+        dossier.etapesSupplementaires = bodyEtapesSupplementaires.map((e, idx) => ({
+          label: e.label || '',
+          date: e.date ? new Date(e.date) : undefined,
+          ordre: typeof e.ordre === 'number' ? e.ordre : idx,
+          addedAt: e.addedAt ? new Date(e.addedAt) : new Date(),
+          addedBy: e.addedBy || req.user.id
+        }));
+      }
+
       // Gérer l'assignation
       if (assignedTo !== undefined) {
         if (assignedTo === '' || assignedTo === null) {
@@ -1885,29 +1929,8 @@ router.put(
             console.log('✅ Notification créée avec succès');
           }
           
-          // Notification si le dossier a été assigné
-          if (assignedTo !== undefined && assignedTo !== oldAssignedTo) {
-            if (assignedTo && assignedTo !== oldAssignedTo) {
-              const assignedUser = await User.findById(assignedTo);
-              await createNotification(
-                userId,
-                'dossier_assigned',
-                'Dossier assigné',
-                `Votre dossier "${dossierForNotification.titre}" a été assigné à ${assignedUser.firstName} ${assignedUser.lastName}.`,
-                `/client/dossiers`,
-                { dossierId: dossierForNotification._id.toString(), assignedTo: assignedTo }
-              );
-            } else if (!assignedTo && oldAssignedTo) {
-              await createNotification(
-                userId,
-                'dossier_updated',
-                'Dossier modifié',
-                `L'assignation de votre dossier "${dossierForNotification.titre}" a été retirée.`,
-                `/client/dossiers`,
-                { dossierId: dossierForNotification._id.toString() }
-              );
-            }
-          }
+          // ⚠️ Ne plus notifier le client sur les changements d'assignation de dossier
+          // (ni assignation ni retrait d'assignation)
           
           // Notification générale si d'autres modifications
           if (!statut || statut === oldStatut) {

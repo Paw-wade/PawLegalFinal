@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { dossiersAPI, notificationsAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -649,9 +649,9 @@ export default function DossiersPage() {
                     return null;
                   })()}
 
-                  {/* Timeline complète avec toutes les étapes */}
+                  {/* Timeline complète avec toutes les étapes + étapes supplémentaires */}
                   {(() => {
-                    const steps = getTimelineSteps(dossier.statut);
+                    const steps = getTimelineStepsWithCustom(dossier.statut, dossier.etapesSupplementaires);
                     return (
                       <div className="mb-3 pb-2 border-b border-gray-100">
                         <p className="text-xs font-semibold text-muted-foreground mb-2">Étapes du dossier :</p>
@@ -659,18 +659,21 @@ export default function DossiersPage() {
                           {steps.map((step) => (
                             <div key={step.key} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded ${
                               step.isCurrent ? 'bg-blue-50 border border-blue-200' : ''
-                            }`}>
+                            } ${(step as any).isCustom ? 'bg-amber-50 border border-amber-200' : ''}`}>
                               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                step.completed && !step.isCurrent ? 'bg-green-500' : 
-                                step.isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' : 
+                                (step as any).isCustom ? 'bg-amber-500' :
+                                step.completed && !step.isCurrent ? 'bg-green-500' :
+                                step.isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' :
                                 'bg-gray-300'
                               }`}></span>
                               <span className={`text-[10px] leading-tight ${
-                                step.completed && !step.isCurrent ? 'text-green-700 font-medium' : 
-                                step.isCurrent ? 'text-blue-700 font-bold' : 
+                                (step as any).isCustom ? 'text-amber-800 font-medium' :
+                                step.completed && !step.isCurrent ? 'text-green-700 font-medium' :
+                                step.isCurrent ? 'text-blue-700 font-bold' :
                                 'text-gray-400'
                               }`}>
                                 {step.label}
+                                {(step as any).isCustom && (step as any).date ? ` (${(step as any).date})` : ''}
                               </span>
                             </div>
                           ))}
@@ -949,30 +952,10 @@ export default function DossiersPage() {
                             return (
                               <div className="relative">
                                 <div className="flex gap-3 text-xs text-muted-foreground">
-                                  {hasDocuments && (
+                                  {hasDocuments && isDocDropdownExpanded && (
                                     <div className="relative">
-                                      <button
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          const newExpanded = new Set(expandedDocumentDropdowns);
-                                          if (isDocDropdownExpanded) {
-                                            newExpanded.delete(dossier._id || dossier.id);
-                                          } else {
-                                            newExpanded.add(dossier._id || dossier.id);
-                                          }
-                                          setExpandedDocumentDropdowns(newExpanded);
-                                        }}
-                                        className="flex items-center gap-1 hover:text-foreground transition-colors"
-                                        title="Voir les documents"
-                                      >
-                                        <span>📄 {dossierDocs.length}</span>
-                                        <span className="text-[10px]">{isDocDropdownExpanded ? '▲' : '▼'}</span>
-                                      </button>
-                                      
-                                      {/* Dropdown des documents */}
-                                      {isDocDropdownExpanded && (
-                                        <div 
+                                      {/* Dropdown des documents sans bouton redondant */}
+                                      <div 
                                           className="absolute left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
                                           onClick={(e) => e.stopPropagation()}
                                         >

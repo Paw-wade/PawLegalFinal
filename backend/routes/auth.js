@@ -1,5 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
@@ -221,10 +223,84 @@ router.post(
       const user = await User.findOne({ email });
       
       if (!user) {
+        // Toujours répondre succès pour ne pas révéler l'existence des comptes
         return res.json({
           success: true,
           message: 'Si cet email existe, un lien de réinitialisation a été envoyé'
         });
+      }
+
+      // Générer un token de réinitialisation
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenHashed = crypto
+        .createHash('sha256')
+        .update(resetToken)
+        .digest('hex');
+
+      // Stocker le token hashé et la date d'expiration (1h)
+      user.resetPasswordToken = resetTokenHashed;
+      user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
+      await user.save();
+
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3004';
+      const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
+
+      // Préparer le contenu de l'email
+      const subject = 'Réinitialisation de votre mot de passe';
+      const text = `Bonjour ${user.firstName || ''},
+
+Vous avez demandé à réinitialiser votre mot de passe sur la plateforme.
+
+Cliquez sur le lien suivant (ou copiez-le dans votre navigateur) pour définir un nouveau mot de passe. Ce lien est valable 1 heure :
+
+${resetUrl}
+
+Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet email.
+
+ADA Pappers`;
+
+      const html = `
+        <p>Bonjour ${user.firstName || ''},</p>
+        <p>Vous avez demandé à réinitialiser votre mot de passe sur la plateforme.</p>
+        <p>Cliquez sur le lien suivant pour définir un nouveau mot de passe (valable 1 heure) :</p>
+        <p><a href="${resetUrl}" target="_blank" rel="noopener noreferrer">${resetUrl}</a></p>
+        <p>Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet email.</p>
+        <p>ADA Pappers</p>
+      `;
+
+      // Essayer d'envoyer l'email si la configuration SMTP est présente
+      let emailSent = false;
+      try {
+        const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM } = process.env;
+        if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS && EMAIL_FROM) {
+          const transporter = nodemailer.createTransport({
+            host: SMTP_HOST,
+            port: Number(SMTP_PORT),
+            secure: Number(SMTP_PORT) === 465,
+            auth: {
+              user: SMTP_USER,
+              pass: SMTP_PASS,
+            },
+          });
+
+          await transporter.sendMail({
+            from: EMAIL_FROM,
+            to: user.email,
+            subject,
+            text,
+            html,
+          });
+          emailSent = true;
+        } else {
+          console.warn('⚠️ SMTP non configuré, impossible d\'envoyer l\'email de réinitialisation. Lien:', resetUrl);
+        }
+      } catch (emailError) {
+        console.error('❌ Erreur lors de l\'envoi de l\'email de réinitialisation:', emailError);
+      }
+
+      if (!emailSent) {
+        // Toujours logguer le lien en développement pour pouvoir le tester
+        console.log('🔗 Lien de réinitialisation de mot de passe:', resetUrl);
       }
 
       res.json({
@@ -336,6 +412,67 @@ router.post(
         success: false,
         message: 'Erreur serveur',
         error: error.message
+      });
+    }
+  }
+);
+
+// @route   POST /api/auth/reset-password
+// @desc    Réinitialiser le mot de passe avec un token
+// @access  Public
+router.post(
+  '/reset-password',
+  [
+    body('token').notEmpty().withMessage('Token de réinitialisation manquant'),
+    body('password').isLength({ min: 8 }).withMessage('Le mot de passe doit contenir au moins 8 caractères'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Erreurs de validation',
+          errors: errors.array()
+        });
+      }
+
+      const { token, password } = req.body;
+
+      const tokenHashed = crypto
+        .createHash('sha256')
+        .update(token)
+        .digest('hex');
+
+      const user = await User.findOne({
+        resetPasswordToken: tokenHashed,
+        resetPasswordExpires: { $gt: Date.now() },
+      }).select('+password');
+
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: 'Lien de réinitialisation invalide ou expiré',
+        });
+      }
+
+      user.password = password;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      user.needsPasswordSetup = false;
+
+      await user.save();
+
+      return res.json({
+        success: true,
+        message: 'Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter.',
+      });
+    } catch (error) {
+      console.error('Erreur lors de la réinitialisation du mot de passe:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur serveur lors de la réinitialisation du mot de passe',
+        error: error.message,
       });
     }
   }

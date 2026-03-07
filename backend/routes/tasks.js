@@ -120,7 +120,7 @@ router.get('/dossier/:dossierId', protect, async (req, res) => {
         const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
         return partenaireId === req.user.id;
       });
-      hasAccess = !!transmission && (transmission.statut === 'pending' || transmission.statut === 'accepted');
+      hasAccess = !!transmission && (transmission.status === 'pending' || transmission.status === 'accepted');
     }
 
     if (!hasAccess) {
@@ -539,7 +539,7 @@ router.put(
             const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
             return partenaireId === req.user.id;
           });
-          hasDossierAccess = !!transmission && (transmission.statut === 'pending' || transmission.statut === 'accepted');
+          hasDossierAccess = !!transmission && (transmission.status === 'pending' || transmission.status === 'accepted');
         }
       }
 

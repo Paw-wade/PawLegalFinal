@@ -235,6 +235,9 @@ export const authAPI = {
   forgotPassword: (data: { email: string }) =>
     api.post('/auth/forgot-password', data),
   
+  resetPassword: (data: { token: string; password: string }) =>
+    api.post('/auth/reset-password', data),
+  
   getMe: () =>
     api.get('/auth/me'),
 };
@@ -302,7 +305,7 @@ export const userAPI = {
     email: string;
     password: string;
     phone?: string;
-    role?: 'client' | 'admin' | 'superadmin' | 'avocat' | 'consulat' | 'collaborateur' | 'assistant' | 'comptable' | 'secretaire' | 'juriste' | 'stagiaire' | 'visiteur';
+    role?: 'client' | 'admin' | 'superadmin' | 'partenaire' | 'avocat' | 'consulat' | 'collaborateur' | 'assistant' | 'comptable' | 'secretaire' | 'juriste' | 'stagiaire' | 'visiteur';
     professionnelType?: 'consulat' | 'cabinet_avocat';
     organisationName?: string;
   }) => api.post('/user/create', data),
@@ -877,6 +880,33 @@ export const documentsAPI = {
   // Supprimer un document
   deleteDocument: (id: string) =>
     api.delete(`/user/documents/${id}`),
+};
+
+// Forum - discussions et réponses
+export const forumAPI = {
+  // Lister les discussions (connecté uniquement)
+  listThreads: (params?: { page?: number; limit?: number }) =>
+    api.get('/forum/threads', { params }),
+
+  // Récupérer une discussion et ses réponses
+  getThread: (id: string) =>
+    api.get(`/forum/threads/${id}`),
+
+  // Créer une nouvelle discussion
+  createThread: (data: { title: string; body: string; tags?: string[] }) =>
+    api.post('/forum/threads', data),
+
+  // Répondre à une discussion
+  replyToThread: (id: string, data: { body: string }) =>
+    api.post(`/forum/threads/${id}/posts`, data),
+
+  // Admin - mettre à jour une discussion (statut / épinglage)
+  updateThreadAsAdmin: (id: string, data: { status?: 'open' | 'closed' | 'archived'; isPinned?: boolean }) =>
+    api.patch(`/forum/threads/${id}`, data),
+
+  // Admin - supprimer une réponse
+  deletePostAsAdmin: (postId: string) =>
+    api.delete(`/forum/posts/${postId}`),
 };
 
 export const creneauxAPI = {

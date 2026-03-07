@@ -8,9 +8,9 @@ export function Footer() {
       <div className="container mx-auto px-4">
         <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <span className="text-xl font-bold text-orange-500">Paw Legal</span>
+            <span className="text-xl font-bold text-orange-500">ADA Pappers</span>
             <span className="text-gray-400">|</span>
-            <span className="text-gray-400">Service d'accompagnement juridique</span>
+            <span className="text-gray-400">Service d'Accompagnement aux démarches administratives</span>
           </div>
           
           <div className="flex items-center gap-4 flex-wrap">
@@ -28,7 +28,7 @@ export function Footer() {
           </div>
 
           <div className="text-gray-400">
-            &copy; {new Date().getFullYear()} Paw Legal. Tous droits réservés.
+            &copy; {new Date().getFullYear()} ADA Pappers. Tous droits réservés.
           </div>
         </div>
       </div>

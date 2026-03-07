@@ -385,7 +385,11 @@ router.put(
     body('lastName').optional().trim().notEmpty().withMessage('Le nom ne peut pas être vide'),
     body('email').optional().isEmail().normalizeEmail().withMessage('Email invalide'),
     body('phone').optional().trim(),
-    body('role').optional().isIn(['client', 'admin', 'superadmin']).withMessage('Rôle invalide')
+    body('role').optional().isIn(['client', 'admin', 'superadmin', 'partenaire']).withMessage('Rôle invalide'),
+    body('partenaireInfo.typeOrganisme')
+      .optional()
+      .isIn(['consulat', 'association', 'avocat'])
+      .withMessage('Type d\'organisme partenaire invalide')
   ],
   async (req, res) => {
     try {
@@ -428,7 +432,8 @@ router.put(
         codePostal,
         pays,
         profilComplete,
-        isActive
+        isActive,
+        partenaireInfo
       } = req.body;
 
       // Vérifier si l'email est déjà utilisé par un autre utilisateur
@@ -462,6 +467,16 @@ router.put(
       if (pays !== undefined) user.pays = pays;
       if (profilComplete !== undefined) user.profilComplete = profilComplete;
       if (isActive !== undefined) user.isActive = isActive;
+
+      // Mettre à jour les informations partenaire si fournies
+      if (partenaireInfo) {
+        user.partenaireInfo = {
+          typeOrganisme: partenaireInfo.typeOrganisme,
+          nomOrganisme: partenaireInfo.nomOrganisme || '',
+          adresseOrganisme: partenaireInfo.adresseOrganisme || '',
+          contactPrincipal: partenaireInfo.contactPrincipal || ''
+        };
+      }
 
       await user.save();
 

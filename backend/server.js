@@ -238,6 +238,16 @@ try {
   console.error(error.stack);
 }
 
+// Route forum
+try {
+  const forumRouter = require('./routes/forum');
+  app.use('/api/forum', forumRouter);
+  console.log('✅ Route /api/forum enregistrée');
+} catch (error) {
+  console.error('❌ Erreur lors du chargement de la route forum:', error.message);
+  console.error(error.stack);
+}
+
 try {
   if (require.resolve('./routes/calculators')) {
     app.use('/api', require('./routes/calculators'));

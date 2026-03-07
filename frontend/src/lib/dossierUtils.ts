@@ -267,7 +267,38 @@ export const getTimelineSteps = (statut: string) => {
     label: step.label,
     completed: step.order <= currentOrder,
     order: step.order,
-    isCurrent: step.order === currentOrder
+    isCurrent: step.order === currentOrder,
+    isCustom: false
   }));
+};
+
+export interface EtapeSupplementaire {
+  label: string;
+  date?: string | Date;
+  ordre?: number;
+  addedAt?: string | Date;
+  _id?: string;
+}
+
+/** Étapes de la timeline incluant les étapes standard + étapes supplémentaires ajoutées manuellement */
+export const getTimelineStepsWithCustom = (
+  statut: string,
+  etapesSupplementaires?: EtapeSupplementaire[] | null
+): Array<{ key: string; label: string; completed: boolean; order: number; isCurrent: boolean; isCustom: boolean; date?: string }> => {
+  const standardSteps = getTimelineSteps(statut);
+  const custom = Array.isArray(etapesSupplementaires) ? etapesSupplementaires : [];
+  const maxOrder = standardSteps.length > 0 ? Math.max(...standardSteps.map(s => s.order)) : 0;
+  const customSteps = custom
+    .sort((a, b) => (a.ordre ?? 0) - (b.ordre ?? 0))
+    .map((e, idx) => ({
+      key: `custom-${(e as any)._id ?? idx}`,
+      label: e.label,
+      completed: true,
+      order: maxOrder + 1 + idx,
+      isCurrent: false,
+      isCustom: true,
+      date: e.date ? (typeof e.date === 'string' ? e.date : new Date(e.date).toLocaleDateString('fr-FR')) : undefined
+    }));
+  return [...standardSteps, ...customSteps];
 };
 

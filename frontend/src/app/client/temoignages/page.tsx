@@ -146,7 +146,7 @@ export default function TemoignagesPage() {
             Publier un témoignage
           </h1>
           <p className="text-muted-foreground text-lg">
-            Partagez votre expérience avec Paw Legal. Votre témoignage sera publié après validation par un administrateur.
+            Partagez votre expérience avec ADA Pappers. Votre témoignage sera publié après validation par un administrateur.
           </p>
         </div>
 
@@ -202,7 +202,7 @@ export default function TemoignagesPage() {
                 id="texte"
                 value={texte}
                 onChange={(e) => setTexte(e.target.value)}
-                placeholder="Partagez votre expérience avec Paw Legal (10-500 caractères)"
+                placeholder="Partagez votre expérience avec ADA Pappers (10-500 caractères)"
                 required
                 rows={6}
                 maxLength={500}

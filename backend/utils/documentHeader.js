@@ -9,9 +9,9 @@ const PDFDocument = require('pdfkit');
  * Configuration de la plateforme (coordonnées)
  */
 const PLATFORM_CONFIG = {
-  name: 'Paw Legal',
-  legalName: 'Paw Legal',
-  subtitle: 'Service d\'accompagnement juridique',
+  name: 'ADA Pappers',
+  legalName: 'ADA Pappers',
+  subtitle: 'Service d\'Accompagnement aux démarches administratives',
   address: {
     street: '', // À compléter avec l'adresse réelle
     city: '',

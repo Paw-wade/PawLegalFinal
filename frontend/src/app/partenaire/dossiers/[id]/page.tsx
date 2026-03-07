@@ -365,7 +365,9 @@ export default function PartenaireDossierDetailPage() {
   
   const transmission = getTransmission();
   const statusTransmission = transmission?.status || 'pending';
-  const canAcknowledge = statusTransmission === 'pending';
+  // Le partenaire peut accuser réception lorsqu'un dossier est en attente,
+  // mais aussi lorsqu'il l'a précédemment refusé (pour pouvoir l'accepter à nouveau)
+  const canAcknowledge = statusTransmission === 'pending' || statusTransmission === 'refused';
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">

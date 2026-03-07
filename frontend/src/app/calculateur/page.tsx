@@ -292,16 +292,28 @@ const titresSejourHierarchiques: MotifTitre[] = [
   }
 ];
 
-// Types de décisions défavorables
+// Types de décisions défavorables (hors visa)
 const typesDecisions = [
-  { value: 'refus_titre', label: 'Refus de titre de séjour', delai: 30 },
-  { value: 'oqtf', label: 'OQTF (Obligation de quitter le territoire)', delai: 30 },
-  { value: 'irt', label: 'IRT (Interdiction de retour)', delai: 30 },
-  { value: 'refus_visa', label: 'Refus de visa', delai: 2 },
-  { value: 'refus_cnda', label: 'Rejet CNDA (Asile)', delai: 1 },
-  { value: 'retrait_titre', label: 'Retrait de titre', delai: 30 },
-  { value: 'refus_renouvellement', label: 'Refus de renouvellement', delai: 30 },
-  { value: 'refus_enregistrement', label: 'Refus d\'enregistrement de demande', delai: 15 },
+  {
+    value: 'absence_reponse',
+    label: 'Je n’ai pas reçu de réponse à ma demande',
+    delai: 0, // Cas particulier : pas de délai simple à calculer, géré séparément dans la logique
+  },
+  {
+    value: 'refus_titre',
+    label: 'J’ai reçu un refus de titre de séjour',
+    delai: 30,
+  },
+  {
+    value: 'refus_enregistrement',
+    label: 'J’ai un refus d’enregistrement de ma demande',
+    delai: 15,
+  },
+  {
+    value: 'oqtf',
+    label: 'J’ai reçu une OQTF (Obligation de quitter le territoire)',
+    delai: 30,
+  },
 ];
 
 // Types de visas
@@ -999,32 +1011,58 @@ export default function CalculateurPage() {
     }
     
     // Calcul pour recours concernant le titre de séjour
-    if (formData.situation === 'contentieux_titre' && formData.dateDecision && formData.natureDecision) {
-      const decision = typesDecisions.find(d => d.value === formData.natureDecision);
-      if (decision) {
-        const dateDecision = new Date(formData.dateDecision);
-        const dateLimite = new Date(dateDecision);
-        dateLimite.setDate(dateLimite.getDate() + decision.delai);
-        
-        const aujourdhui = new Date();
-        const joursRestants = Math.ceil((dateLimite.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24));
-        
-        // Vérifier si le recours est introduit dans les délais
-        const recoursDansDelais = joursRestants > 0;
-        
+    if (formData.situation === 'contentieux_titre' && formData.natureDecision) {
+      // Cas particulier : absence de réponse à la demande
+      if (formData.natureDecision === 'absence_reponse') {
         setCalculs({
           type: 'contentieux',
-          delai: decision.delai,
-          dateDecision: dateDecision,
-          dateLimite: dateLimite,
-          joursRestants: joursRestants,
+          delai: null,
+          dateDecision: null,
+          dateLimite: null,
+          joursRestants: null,
           typeRecours: getTypeRecours(formData.natureDecision),
-          urgence: joursRestants <= 7,
-          recoursDansDelais: recoursDansDelais,
-          messagePersonnalise: recoursDansDelais 
-            ? `✅ Vous avez encore ${joursRestants} jour(s) pour introduire votre recours.`
-            : `⚠️ Le délai de recours est dépassé de ${Math.abs(joursRestants)} jour(s). Consultez un avocat rapidement.`
+          urgence: false,
+          recoursDansDelais: null,
+          messagePersonnalise:
+            'Vous indiquez ne pas avoir reçu de réponse à votre demande de titre de séjour. ' +
+            'Les délais de recours et les actions possibles dépendent de la nature exacte de votre demande et de sa date de dépôt. ' +
+            'Nous vous recommandons de prendre contact avec un professionnel ou avec la plateforme pour une analyse personnalisée.',
         });
+        return;
+      }
+
+      // Cas général : décision formelle avec date et délai légal chiffré
+      if (formData.dateDecision) {
+        const decision = typesDecisions.find((d) => d.value === formData.natureDecision);
+        if (decision) {
+          const dateDecision = new Date(formData.dateDecision);
+          const dateLimite = new Date(dateDecision);
+          dateLimite.setDate(dateLimite.getDate() + decision.delai);
+
+          const aujourdhui = new Date();
+          const joursRestants = Math.ceil(
+            (dateLimite.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24)
+          );
+
+          // Vérifier si le recours est introduit dans les délais
+          const recoursDansDelais = joursRestants > 0;
+
+          setCalculs({
+            type: 'contentieux',
+            delai: decision.delai,
+            dateDecision: dateDecision,
+            dateLimite: dateLimite,
+            joursRestants: joursRestants,
+            typeRecours: getTypeRecours(formData.natureDecision),
+            urgence: joursRestants <= 7,
+            recoursDansDelais: recoursDansDelais,
+            messagePersonnalise: recoursDansDelais
+              ? `✅ Vous avez encore ${joursRestants} jour(s) pour introduire votre recours.`
+              : `⚠️ Le délai de recours est dépassé de ${Math.abs(
+                  joursRestants
+                )} jour(s). Consultez un avocat rapidement.`,
+          });
+        }
       }
     } else if (formData.situation === 'demande') {
       // Calcul détaillé pour renouvellement avec dateFinValiditeTitreActuel
@@ -1122,14 +1160,12 @@ export default function CalculateurPage() {
 
   const getTypeRecours = (natureDecision: string): string => {
     const recoursMap: Record<string, string> = {
-      'refus_titre': 'Recours contentieux devant le tribunal administratif',
-      'oqtf': 'Recours contentieux devant le tribunal administratif + Référé suspension si urgence',
-      'irt': 'Recours contentieux devant le tribunal administratif',
-      'refus_visa': 'Recours gracieux ou hiérarchique auprès du consulat',
-      'refus_cnda': 'Recours en cassation devant le Conseil d\'État',
-      'retrait_titre': 'Recours contentieux devant le tribunal administratif',
-      'refus_renouvellement': 'Recours contentieux devant le tribunal administratif',
-      'refus_enregistrement': 'Recours contentieux devant le tribunal administratif'
+      absence_reponse:
+        'Analyse personnalisée à envisager en l’absence de réponse : contactez un avocat ou la plateforme pour déterminer la stratégie (mise en demeure, recours, etc.).',
+      refus_titre: 'Recours contentieux devant le tribunal administratif',
+      refus_enregistrement: 'Recours contentieux devant le tribunal administratif',
+      oqtf:
+        'Recours contentieux devant le tribunal administratif, avec la possibilité d’un référé suspension en cas d’urgence.',
     };
     return recoursMap[natureDecision] || 'Recours contentieux devant le tribunal administratif';
   };
@@ -1143,12 +1179,17 @@ export default function CalculateurPage() {
     });
   };
 
-  const formatDateCourte = (date: Date): string => {
+  const formatDateCourte = (date?: Date | null): string => {
+    // Sécuriser : si la date est nulle ou invalide, on renvoie une chaîne vide
+    if (!date || isNaN(date.getTime())) {
+      return '';
+    }
+
     // Format jour/mois/année (ex: 15/03/2024)
     return date.toLocaleDateString('fr-FR', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric'
+      year: 'numeric',
     });
   };
 
@@ -1747,7 +1788,7 @@ export default function CalculateurPage() {
       <header className="border-b bg-white/95 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <Link href="/" className="text-2xl font-bold text-primary">Paw Legal</Link>
+            <Link href="/" className="text-2xl font-bold text-primary">ADA Pappers</Link>
             <nav className="hidden md:flex items-center gap-6">
               <Link href="/" className="hover:text-primary transition-colors">Accueil</Link>
               <Link href="/domaines" className="hover:text-primary transition-colors">Domaines</Link>

@@ -9,7 +9,6 @@ import { DocumentPreview } from '@/components/DocumentPreview';
 
 export default function PartenaireDossierDocumentsPage() {
   const params = useParams();
-  const router = useRouter();
   const dossierId = params.id as string;
   
   const [dossier, setDossier] = useState<any>(null);

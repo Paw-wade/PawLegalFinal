@@ -9,7 +9,8 @@ import {
   FileText, 
   Bell, 
   Calculator,
-  Calendar
+  Calendar,
+  User
 } from 'lucide-react';
 
 const menuItems = [
@@ -20,6 +21,8 @@ const menuItems = [
   { href: '/partenaire/notifications', label: 'Notifications', icon: Bell },
   { href: '/partenaire/calculateur', label: 'Calculateur', icon: Calculator },
   { href: '/partenaire/rendez-vous', label: 'Rendez-vous', icon: Calendar },
+  { href: '/forum', label: 'Forum', icon: MessageSquare },
+  { href: '/partenaire/compte', label: 'Mon compte', icon: User },
 ];
 
 export function PartenaireSidebar() {

@@ -1,4 +1,4 @@
-http://localhost:3004/admin'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import { appointmentsAPI } from '@/lib/api';

@@ -157,6 +157,14 @@ const dossierSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  // Étapes supplémentaires ajoutées manuellement par l'admin ou le partenaire (non prévues dans le flux standard)
+  etapesSupplementaires: [{
+    label: { type: String, required: true, trim: true },
+    date: { type: Date },
+    ordre: { type: Number, default: 0 },
+    addedAt: { type: Date, default: Date.now },
+    addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  }],
   transmittedTo: [{
     partenaire: {
       type: mongoose.Schema.Types.ObjectId,

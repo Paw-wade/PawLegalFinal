@@ -24,6 +24,7 @@ const clientMenuItems: MenuItem[] = [
   { href: '/client/rendez-vous', label: 'Mes Rendez-vous', icon: '📅' },
   { href: '/client/messages', label: 'Messagerie', icon: '💬' },
   { href: '/client/notifications', label: 'Notifications', icon: '🔔' },
+  { href: '/forum', label: 'Forum', icon: '🗣️' },
   { href: '/calculateur', label: 'Calculateur', icon: '🧮' },
   { href: '/client/compte', label: 'Mon Compte', icon: '👤' },
 ];
@@ -39,6 +40,7 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/notifications', label: 'Notifications', icon: '🔔' },
   { href: '/admin/temoignages', label: 'Témoignages', icon: '⭐' },
   { href: '/admin/logs', label: 'Logs', icon: '📋' },
+  { href: '/forum', label: 'Forum', icon: '🗣️' },
   { href: '/admin/compte', label: 'Mon Compte', icon: '👤' },
 ];
 
@@ -88,7 +90,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Header de la sidebar */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-primary">Paw Legal</span>
+            <span className="text-2xl font-bold text-primary">ADA Pappers</span>
           </Link>
           <button
             onClick={onClose}

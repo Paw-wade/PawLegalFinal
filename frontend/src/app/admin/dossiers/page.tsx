@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, userAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI } from '@/lib/api';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -311,6 +311,10 @@ export default function AdminDossiersPage() {
   });
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [taskSuccessMessage, setTaskSuccessMessage] = useState<string | null>(null);
+  const [addEtapeDossier, setAddEtapeDossier] = useState<any>(null);
+  const [newEtapeLabel, setNewEtapeLabel] = useState('');
+  const [newEtapeDate, setNewEtapeDate] = useState('');
+  const [isAddingEtape, setIsAddingEtape] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -1798,28 +1802,40 @@ export default function AdminDossiersPage() {
                       return null;
                     })()}
 
-                    {/* Timeline complète avec toutes les étapes */}
+                    {/* Timeline complète avec toutes les étapes + étapes supplémentaires */}
                     {(() => {
-                      const steps = getTimelineSteps(dossier.statut);
+                      const steps = getTimelineStepsWithCustom(dossier.statut, dossier.etapesSupplementaires);
                       return (
                         <div className="mb-3 pb-2 border-b border-gray-100">
-                          <p className="text-xs font-semibold text-muted-foreground mb-2">Étapes du dossier :</p>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-semibold text-muted-foreground">Étapes du dossier :</p>
+                            <button
+                              type="button"
+                              onClick={() => { setAddEtapeDossier(dossier); setNewEtapeLabel(''); setNewEtapeDate(''); }}
+                              className="text-[10px] text-primary hover:underline font-medium"
+                            >
+                              + Ajouter une étape
+                            </button>
+                          </div>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {steps.map((step) => (
                               <div key={step.key} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded ${
                                 step.isCurrent ? 'bg-blue-50 border border-blue-200' : ''
-                              }`}>
+                              } ${(step as any).isCustom ? 'bg-amber-50 border border-amber-200' : ''}`}>
                                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                  step.completed && !step.isCurrent ? 'bg-green-500' : 
-                                  step.isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' : 
+                                  (step as any).isCustom ? 'bg-amber-500' :
+                                  step.completed && !step.isCurrent ? 'bg-green-500' :
+                                  step.isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' :
                                   'bg-gray-300'
                                 }`}></span>
                                 <span className={`text-[10px] leading-tight ${
-                                  step.completed && !step.isCurrent ? 'text-green-700 font-medium' : 
-                                  step.isCurrent ? 'text-blue-700 font-bold' : 
+                                  (step as any).isCustom ? 'text-amber-800 font-medium' :
+                                  step.completed && !step.isCurrent ? 'text-green-700 font-medium' :
+                                  step.isCurrent ? 'text-blue-700 font-bold' :
                                   'text-gray-400'
                                 }`}>
                                   {step.label}
+                                  {(step as any).isCustom && (step as any).date ? ` (${(step as any).date})` : ''}
                                 </span>
                               </div>
                             ))}
@@ -2416,30 +2432,10 @@ export default function AdminDossiersPage() {
                             return (
                               <div className="relative">
                                 <div className="flex gap-3 text-xs text-muted-foreground">
-                                  {hasDocuments && (
+                                  {hasDocuments && isDocDropdownExpanded && (
                                     <div className="relative">
-                                      <button
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          const newExpanded = new Set(expandedDossierDocumentDropdowns);
-                                          if (isDocDropdownExpanded) {
-                                            newExpanded.delete(dossier._id || dossier.id);
-                                          } else {
-                                            newExpanded.add(dossier._id || dossier.id);
-                                          }
-                                          setExpandedDossierDocumentDropdowns(newExpanded);
-                                        }}
-                                        className="flex items-center gap-1 hover:text-foreground transition-colors"
-                                        title="Voir les documents"
-                                      >
-                                        <span>📄 {dossierDocs.length}</span>
-                                        <span className="text-[10px]">{isDocDropdownExpanded ? '▲' : '▼'}</span>
-                                      </button>
-                                      
-                                      {/* Dropdown des documents */}
-                                      {isDocDropdownExpanded && (
-                                        <div 
+                                      {/* Dropdown des documents (affiché sans bouton redondant) */}
+                                      <div 
                                           className="absolute left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
                                           onClick={(e) => e.stopPropagation()}
                                         >
@@ -3013,6 +3009,79 @@ export default function AdminDossiersPage() {
                     {isLoading ? 'Envoi...' : 'Envoyer la demande'}
                   </Button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Ajouter une étape du dossier */}
+      {addEtapeDossier && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2">Ajouter une étape (non prévue)</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Dossier : <strong>{addEtapeDossier.titre || addEtapeDossier.numero || addEtapeDossier._id}</strong>
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const label = newEtapeLabel.trim();
+                if (!label) return;
+                setIsAddingEtape(true);
+                setError(null);
+                try {
+                  const current = addEtapeDossier.etapesSupplementaires || [];
+                  const next = [...current, { label, date: newEtapeDate || undefined, ordre: current.length }];
+                  const response = await dossiersAPI.updateDossier(addEtapeDossier._id, { etapesSupplementaires: next });
+                  if (response.data.success) {
+                    setDossiers(prev => prev.map(d => d._id === addEtapeDossier._id ? { ...d, etapesSupplementaires: next } : d));
+                    setAddEtapeDossier(null);
+                    setNewEtapeLabel('');
+                    setNewEtapeDate('');
+                  } else {
+                    setError(response.data.message || 'Erreur lors de l\'ajout');
+                  }
+                } catch (err: any) {
+                  setError(err.response?.data?.message || 'Erreur lors de l\'ajout de l\'étape');
+                } finally {
+                  setIsAddingEtape(false);
+                }
+              }}
+            >
+              <div className="space-y-3 mb-4">
+                <div>
+                  <Label htmlFor="newEtapeLabel">Libellé de l&apos;étape *</Label>
+                  <Input
+                    id="newEtapeLabel"
+                    value={newEtapeLabel}
+                    onChange={(e) => setNewEtapeLabel(e.target.value)}
+                    placeholder="Ex: Convocation préfecture reçue"
+                    required
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="newEtapeDate">Date (optionnel)</Label>
+                  <Input
+                    id="newEtapeDate"
+                    type="date"
+                    value={newEtapeDate}
+                    onChange={(e) => setNewEtapeDate(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              {error && (
+                <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{error}</div>
+              )}
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => { setAddEtapeDossier(null); setNewEtapeLabel(''); setNewEtapeDate(''); setError(null); }} disabled={isAddingEtape}>
+                  Annuler
+                </Button>
+                <Button type="submit" disabled={isAddingEtape || !newEtapeLabel.trim()}>
+                  {isAddingEtape ? 'Ajout...' : 'Ajouter l\'étape'}
+                </Button>
               </div>
             </form>
           </div>
