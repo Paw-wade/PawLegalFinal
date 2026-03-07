@@ -25,6 +25,11 @@ const forumThreadSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  theme: {
+    type: String,
+    enum: ['titre-sejour-etudiant', 'titre-sejour-salarie', 'regroupement-familial', 'demande-visa', 'autres'],
+    default: 'autres',
+  },
   tags: [{
     type: String,
     trim: true,

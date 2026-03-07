@@ -16,20 +16,46 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-// GET /api/forum/threads - Liste des discussions (publique)
+// Thèmes autorisés pour le filtre
+const THEMES = ['titre-sejour-etudiant', 'titre-sejour-salarie', 'regroupement-familial', 'demande-visa', 'autres'];
+
+// Filtres statut autorisés
+const STATUS_FILTERS = ['pinned', 'resolved', 'archived'];
+
+// GET /api/forum/threads - Liste des discussions (publique), optionnel ?theme=xxx & ?statusFilter=pinned|resolved|archived
 router.get('/threads', async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
     const skip = (page - 1) * limit;
+    const themeParam = typeof req.query.theme === 'string' ? req.query.theme.trim() : null;
+    const theme = themeParam && THEMES.includes(themeParam) ? themeParam : null;
+    const statusParam = typeof req.query.statusFilter === 'string' ? req.query.statusFilter.trim() : null;
+    const statusFilter = statusParam && STATUS_FILTERS.includes(statusParam) ? statusParam : null;
+
+    // Filtre thème : "autres" inclut aussi les documents sans thème (anciennes discussions)
+    let filter = theme === null
+      ? {}
+      : theme === 'autres'
+        ? { $or: [ { theme: 'autres' }, { theme: null }, { theme: { $exists: false } } ] }
+        : { theme };
+
+    // Filtre statut : épinglées, résolues, archivées
+    if (statusFilter === 'pinned') {
+      filter = { ...filter, isPinned: true };
+    } else if (statusFilter === 'resolved') {
+      filter = { ...filter, status: 'resolved' };
+    } else if (statusFilter === 'archived') {
+      filter = { ...filter, status: 'archived' };
+    }
 
     const [threads, total] = await Promise.all([
-      ForumThread.find({})
+      ForumThread.find(filter)
         .sort({ isPinned: -1, lastReplyAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .populate('createdBy', 'prenom nom role'),
-      ForumThread.countDocuments({}),
+      ForumThread.countDocuments(filter),
     ]);
 
     res.json({
@@ -52,16 +78,20 @@ router.post(
   [
     body('title').isString().isLength({ min: 5, max: 200 }).withMessage('Le titre doit contenir entre 5 et 200 caractères'),
     body('body').isString().isLength({ min: 10 }).withMessage('Le contenu doit contenir au moins 10 caractères'),
+    body('theme').optional().isIn(THEMES).withMessage('Thème invalide'),
   ],
   handleValidationErrors,
   async (req, res) => {
     try {
       const { title, body: content, tags } = req.body;
+      const themeRaw = req.body.theme != null ? String(req.body.theme).trim() : '';
+      const theme = themeRaw && THEMES.includes(themeRaw) ? themeRaw : 'autres';
 
       const thread = await ForumThread.create({
         title,
         body: content,
         createdBy: req.user.id,
+        theme,
         tags: Array.isArray(tags) ? tags : [],
         lastReplyAt: new Date(),
         lastReplyBy: req.user.id,

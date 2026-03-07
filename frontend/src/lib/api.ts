@@ -884,16 +884,16 @@ export const documentsAPI = {
 
 // Forum - discussions et réponses
 export const forumAPI = {
-  // Lister les discussions (connecté uniquement)
-  listThreads: (params?: { page?: number; limit?: number }) =>
+  // Lister les discussions (optionnel : theme pour filtrer par thème)
+  listThreads: (params?: { page?: number; limit?: number; theme?: string; statusFilter?: 'pinned' | 'resolved' | 'archived' }) =>
     api.get('/forum/threads', { params }),
 
   // Récupérer une discussion et ses réponses
   getThread: (id: string) =>
     api.get(`/forum/threads/${id}`),
 
-  // Créer une nouvelle discussion
-  createThread: (data: { title: string; body: string; tags?: string[] }) =>
+  // Créer une nouvelle discussion (theme requis : titre-sejour-etudiant, titre-sejour-salarie, regroupement-familial, demande-visa, autres)
+  createThread: (data: { title: string; body: string; theme?: string; tags?: string[] }) =>
     api.post('/forum/threads', data),
 
   // Répondre à une discussion

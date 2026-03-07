@@ -7,14 +7,18 @@ import { useSession } from 'next-auth/react';
 import { forumAPI } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { getThemeLabel } from '../page';
 
 interface ForumThread {
   _id: string;
   title: string;
   body: string;
+  theme?: string;
   repliesCount: number;
   viewsCount: number;
   createdAt: string;
+  status?: string;
+  isPinned?: boolean;
   createdBy?: {
     prenom?: string;
     nom?: string;
@@ -195,9 +199,14 @@ export default function ForumThreadPage() {
                   <section className="mb-6 bg-white rounded-xl shadow-sm border border-gray-200 p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <h1 className="text-xl md:text-2xl font-semibold text-gray-900">
-                          {thread.title}
-                        </h1>
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs border border-slate-200">
+                            {getThemeLabel(thread.theme)}
+                          </span>
+                          <h1 className="text-xl md:text-2xl font-semibold text-gray-900">
+                            {thread.title}
+                          </h1>
+                        </div>
                         <p className="mt-2 text-sm text-gray-700">
                           {thread.body}
                         </p>
@@ -431,7 +440,10 @@ export default function ForumThreadPage() {
                             t._id === threadId ? 'bg-gray-50 font-semibold' : ''
                           }`}
                         >
-                          <div className="truncate">{t.title}</div>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] text-slate-600 mr-1">
+                            {getThemeLabel(t.theme)}
+                          </span>
+                          <div className="truncate mt-0.5">{t.title}</div>
                           <div className="text-[11px] text-gray-500 flex justify-between gap-2">
                             <span>{t.repliesCount || 0} rep.</span>
                             <span>
