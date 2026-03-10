@@ -281,6 +281,10 @@ export const userAPI = {
   
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put('/user/password', data),
+
+  // Désactiver son propre compte (soft delete)
+  deactivateMyAccount: () =>
+    api.post('/user/profile/deactivate'),
   
   // Admin - Récupérer tous les utilisateurs
   getAllUsers: () =>
