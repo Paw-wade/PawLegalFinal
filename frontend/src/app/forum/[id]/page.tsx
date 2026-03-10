@@ -35,6 +35,9 @@ interface ForumPost {
     nom?: string;
     role?: string;
   };
+  likes?: string[];
+  likesCount?: number;
+  liked?: boolean;
 }
 
 interface ThreadResponse {
@@ -44,6 +47,12 @@ interface ThreadResponse {
     posts: ForumPost[];
   };
 }
+
+const getAuthorLabel = (user?: { prenom?: string; nom?: string; role?: string }) => {
+  if (!user) return 'Auteur inconnu';
+  const fullName = `${user.prenom || ''} ${user.nom || ''}`.trim();
+  return fullName || 'Auteur inconnu';
+};
 
 export default function ForumThreadPage() {
   const params = useParams();
@@ -65,6 +74,9 @@ export default function ForumThreadPage() {
 
   const userRole = (session?.user as any)?.role || 'client';
   const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+  const currentUserId = (session?.user as any)?._id || (session?.user as any)?.id || null;
+
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   useEffect(() => {
     if (!threadId) return;
@@ -95,6 +107,30 @@ export default function ForumThreadPage() {
 
     loadThread();
   }, [threadId]);
+
+  // Charger l'état du signet pour cette discussion
+  useEffect(() => {
+    const loadBookmarks = async () => {
+      try {
+        if (!threadId || !session) return;
+        const response = await forumAPI.getBookmarks();
+        if (response.data?.success) {
+          const bookmarks = response.data.bookmarks || [];
+          const found = bookmarks.some((b: any) => {
+            const t = b.thread;
+            const id = t?._id || t?.id || t;
+            return id && id.toString() === threadId.toString();
+          });
+          setIsBookmarked(found);
+        }
+      } catch (err) {
+        // Ne pas bloquer la page en cas d'erreur
+        console.error('Erreur lors du chargement des signets forum:', err);
+      }
+    };
+
+    loadBookmarks();
+  }, [threadId, session]);
 
   // Charger la liste des discussions pour la barre latérale
   useEffect(() => {
@@ -215,11 +251,32 @@ export default function ForumThreadPage() {
                             {thread.repliesCount || posts.length} réponse{(thread.repliesCount || posts.length) === 1 ? '' : 's'} •{' '}
                             {thread.viewsCount || 0} vue{thread.viewsCount === 1 ? '' : 's'}
                           </span>
-                          <span>
-                            Publié le{' '}
-                            {thread.createdAt
-                              ? new Date(thread.createdAt).toLocaleDateString('fr-FR')
-                              : ''}
+                          <span className="flex items-center gap-2">
+                            <span>
+                              Par {getAuthorLabel(thread.createdBy)} •{' '}
+                              {thread.createdAt
+                                ? new Date(thread.createdAt).toLocaleDateString('fr-FR')
+                                : ''}
+                            </span>
+                            {session && (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 text-[11px] md:text-xs text-orange-700 hover:text-orange-900 hover:underline"
+                                onClick={async () => {
+                                  try {
+                                    const res = await forumAPI.toggleBookmarkThread(threadId);
+                                    if (res.data?.success) {
+                                      setIsBookmarked(res.data.bookmarked);
+                                    }
+                                  } catch (err) {
+                                    console.error('Erreur lors de la mise en signet:', err);
+                                  }
+                                }}
+                              >
+                                <span>{isBookmarked ? '★' : '☆'}</span>
+                                <span>{isBookmarked ? 'En signet' : 'Mettre en signet'}</span>
+                              </button>
+                            )}
                           </span>
                         </div>
                       </div>
@@ -317,6 +374,15 @@ export default function ForumThreadPage() {
                     ) : (
                       <div className="space-y-4">
                         {posts.map((post) => {
+                          const likesCount = post.likesCount ?? (post.likes ? post.likes.length : 0);
+                          const hasLiked =
+                            !!currentUserId &&
+                            Array.isArray(post.likes) &&
+                            post.likes.some((id: any) =>
+                              typeof id === 'string'
+                                ? id === currentUserId
+                                : id?._id?.toString() === currentUserId.toString()
+                            );
                           return (
                             <div
                               key={post._id}
@@ -326,8 +392,9 @@ export default function ForumThreadPage() {
                                 <p className="text-gray-800 whitespace-pre-line">
                                   {post.body}
                                 </p>
-                                <div className="mt-1 flex justify-end text-[11px] text-gray-500">
+                                <div className="mt-2 flex items-center justify-between text-[11px] text-gray-500">
                                   <span>
+                                    Par {getAuthorLabel(post.createdBy)} •{' '}
                                     {post.createdAt
                                       ? new Date(post.createdAt).toLocaleString('fr-FR', {
                                           dateStyle: 'short',
@@ -335,6 +402,42 @@ export default function ForumThreadPage() {
                                         })
                                       : ''}
                                   </span>
+                                  <div className="flex items-center gap-2">
+                                    {session && (
+                                      <button
+                                        type="button"
+                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${
+                                          hasLiked
+                                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-100'
+                                        }`}
+                                        onClick={async () => {
+                                          try {
+                                            const res = await forumAPI.toggleLikePost(post._id);
+                                            if (res.data?.success) {
+                                              const updated = res.data.data as any;
+                                              setPosts((prev) =>
+                                                prev.map((p) =>
+                                                  p._id === post._id
+                                                    ? {
+                                                        ...p,
+                                                        likesCount: updated.likesCount,
+                                                        liked: updated.liked,
+                                                      }
+                                                    : p
+                                                )
+                                              );
+                                            }
+                                          } catch (err) {
+                                            console.error('Erreur lors du like:', err);
+                                          }
+                                        }}
+                                      >
+                                        <span>👍</span>
+                                        <span>{likesCount || 0}</span>
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                               {isAdmin && (

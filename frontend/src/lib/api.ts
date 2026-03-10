@@ -919,6 +919,18 @@ export const forumAPI = {
   // Admin - supprimer une réponse
   deletePostAsAdmin: (postId: string) =>
     api.delete(`/forum/posts/${postId}`),
+
+  // Aimer / retirer son like sur une réponse
+  toggleLikePost: (postId: string) =>
+    api.post(`/forum/posts/${postId}/like`),
+
+  // Mettre en signet / retirer un signet sur une discussion
+  toggleBookmarkThread: (threadId: string) =>
+    api.post(`/forum/threads/${threadId}/bookmark`),
+
+  // Récupérer les discussions mises en signet par l'utilisateur courant
+  getBookmarks: () =>
+    api.get('/forum/bookmarks'),
 };
 
 export const creneauxAPI = {

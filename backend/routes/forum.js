@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 
 const ForumThread = require('../models/ForumThread');
 const ForumPost = require('../models/ForumPost');
+const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -264,6 +265,124 @@ router.delete(
     }
   }
 );
+
+// POST /api/forum/posts/:id/like - Aimer / retirer son like sur une réponse
+router.post('/posts/:id/like', protect, async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const userId = req.user.id;
+
+    const post = await ForumPost.findById(postId);
+    if (!post || post.isDeleted) {
+      return res.status(404).json({ success: false, message: 'Réponse introuvable' });
+    }
+
+    const hasLiked = post.likes?.some((id) => id.toString() === userId.toString());
+
+    if (hasLiked) {
+      // Retirer le like
+      post.likes = post.likes.filter((id) => id.toString() !== userId.toString());
+    } else {
+      // Ajouter le like
+      post.likes = [...(post.likes || []), userId];
+    }
+
+    await post.save();
+
+    return res.json({
+      success: true,
+      data: {
+        _id: post._id,
+        thread: post.thread,
+        body: post.body,
+        createdBy: post.createdBy,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        likesCount: (post.likes || []).length,
+        liked: !hasLiked,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur lors du like de la réponse:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// POST /api/forum/threads/:id/bookmark - Mettre en signet / retirer un signet sur une discussion
+router.post('/threads/:id/bookmark', protect, async (req, res) => {
+  try {
+    const threadId = req.params.id;
+    const userId = req.user.id;
+
+    const thread = await ForumThread.findById(threadId);
+    if (!thread) {
+      return res.status(404).json({ success: false, message: 'Discussion introuvable' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+
+    if (!Array.isArray(user.forumBookmarks)) {
+      user.forumBookmarks = [];
+    }
+
+    const existingIndex = user.forumBookmarks.findIndex(
+      (b) => b.thread.toString() === threadId.toString()
+    );
+
+    let bookmarked;
+    if (existingIndex >= 0) {
+      // Retirer des signets
+      user.forumBookmarks.splice(existingIndex, 1);
+      bookmarked = false;
+    } else {
+      // Ajouter aux signets
+      user.forumBookmarks.push({ thread: threadId, addedAt: new Date() });
+      bookmarked = true;
+    }
+
+    await user.save();
+
+    return res.json({
+      success: true,
+      bookmarked,
+    });
+  } catch (error) {
+    console.error('Erreur lors du signet de la discussion:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// GET /api/forum/bookmarks - Récupérer les discussions mises en signet par l'utilisateur courant
+router.get('/bookmarks', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).populate({
+      path: 'forumBookmarks.thread',
+      select: 'title theme status isPinned lastReplyAt repliesCount',
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+
+    const bookmarks = (user.forumBookmarks || [])
+      .filter((b) => !!b.thread)
+      .map((b) => ({
+        thread: b.thread,
+        addedAt: b.addedAt,
+      }));
+
+    return res.json({
+      success: true,
+      bookmarks,
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des signets du forum:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
 
 module.exports = router;
 

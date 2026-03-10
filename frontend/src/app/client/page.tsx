@@ -9,7 +9,7 @@ import { ReservationBadge } from '@/components/ReservationBadge';
 import { MessageNotificationModal } from '@/components/MessageNotificationModal';
 import { AppointmentBadgeModal } from '@/components/AppointmentBadgeModal';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
-import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notificationsAPI, documentRequestsAPI } from '@/lib/api';
+import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notificationsAPI, documentRequestsAPI, forumAPI } from '@/lib/api';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
 
@@ -50,6 +50,8 @@ function ClientDashboardContent() {
   const [selectedDocumentRequest, setSelectedDocumentRequest] = useState<any>(null);
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState(false);
   const [documentRequestNotification, setDocumentRequestNotification] = useState<any>(null);
+  const [bookmarkedThreads, setBookmarkedThreads] = useState<any[]>([]);
+  const [showBookmarksBar, setShowBookmarksBar] = useState(true);
 
   // Textes CMS pour le header du dashboard client
   const dashboardTitleClient = useCmsText(
@@ -139,6 +141,7 @@ function ClientDashboardContent() {
       checkDocumentRequestNotifications();
       loadNotifications();
       loadDocumentRequests();
+      loadForumBookmarks();
     } else if (token) {
       // Si on a un token mais pas de session, charger quand même les stats
       loadStats();
@@ -160,6 +163,22 @@ function ClientDashboardContent() {
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des notifications:', err);
+    }
+  };
+
+  const loadForumBookmarks = async () => {
+    try {
+      const res = await forumAPI.getBookmarks();
+      if (res.data?.success) {
+        const bookmarks = res.data.bookmarks || [];
+        const threads = bookmarks
+          .map((b: any) => b.thread)
+          .filter((t: any) => !!t)
+          .slice(0, 10);
+        setBookmarkedThreads(threads);
+      }
+    } catch (err) {
+      console.error('Erreur lors du chargement des signets forum:', err);
     }
   };
 
@@ -592,16 +611,8 @@ function ClientDashboardContent() {
             transform: translateX(-100%);
           }
         }
-        .animate-scroll-text {
-          animation: scroll-text 15s linear infinite;
-          display: inline-block;
-          padding-left: 100%;
-        }
-        .animate-scroll-text:hover {
-          animation-play-state: paused;
-        }
       `}} />
-      <main className="w-full px-4 py-8">
+      <main className="w-full max-w-6xl mx-auto px-4 py-8">
         <div id="dashboard-top" className="scroll-mt-20"></div>
 
         {/* En-tête de bienvenue */}
@@ -688,6 +699,42 @@ function ClientDashboardContent() {
               </div>
             )}
           </div>
+
+          {/* Barre des discussions mises en signet */}
+          {showBookmarksBar && bookmarkedThreads.length > 0 && (
+            <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl px-4 py-2 overflow-hidden">
+              <div className="flex items-center justify-between gap-3 mb-1">
+                <span className="text-sm font-semibold text-orange-800 flex items-center gap-1">
+                  <span>⭐</span>
+                  <span>Discussions que vous suivez</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowBookmarksBar(false)}
+                  className="text-[11px] text-orange-700 hover:text-orange-900 hover:underline"
+                >
+                  Fermer
+                </button>
+              </div>
+              <div className="whitespace-nowrap text-sm text-orange-800">
+                {bookmarkedThreads.map((thread: any) => {
+                  const id = thread._id || thread.id;
+                  return (
+                    <Link
+                      key={id}
+                      href={`/forum/${id}`}
+                      className="inline-flex items-center gap-1 mr-6 hover:underline"
+                    >
+                      <span>⭐</span>
+                      <span className="font-medium truncate max-w-[240px] inline-block align-middle">
+                        {thread.title}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Statistiques - Design professionnel et chaleureux avec accès direct */}
@@ -863,57 +910,6 @@ function ClientDashboardContent() {
             </div>
           </Link>
 
-        </div>
-
-        {/* Bloc messagerie sur le dashboard client */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="lg:col-span-2" />
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
-                    <span>✉️ Messagerie</span>
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Retrouvez vos échanges avec l&apos;équipe juridique.
-                  </p>
-                </div>
-                <Link href="/client/messages">
-                  <Button variant="outline" className="text-xs">
-                    Ouvrir la messagerie
-                  </Button>
-                </Link>
-              </div>
-              {messagesPreview.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Aucun message non lu pour le moment.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {messagesPreview.map((msg) => (
-                    <Link
-                      key={msg._id || msg.id}
-                      href={`/client/messages/${msg._id || msg.id}`}
-                      className="block rounded-lg border border-gray-100 px-3 py-2 hover:bg-primary/5 transition-colors"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold truncate">{msg.sujet}</p>
-                          <p className="text-[11px] text-muted-foreground line-clamp-2">
-                            {msg.contenu}
-                          </p>
-                        </div>
-                        <span className="ml-2 flex-shrink-0 rounded-full bg-primary text-white text-[10px] px-2 py-0.5">
-                          Voir
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
       </main>

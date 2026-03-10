@@ -380,10 +380,19 @@ export default function ForumPage() {
                                 {thread.repliesCount || 0} réponse{thread.repliesCount === 1 ? '' : 's'} •{' '}
                                 {thread.viewsCount || 0} vue{thread.viewsCount === 1 ? '' : 's'}
                               </span>
-                              <span>
-                                {thread.createdAt
-                                  ? new Date(thread.createdAt).toLocaleDateString('fr-FR')
-                                  : ''}
+                              <span className="flex items-center gap-1">
+                                <span>
+                                  Par{' '}
+                                  {thread.createdBy
+                                    ? `${thread.createdBy.prenom || ''} ${thread.createdBy.nom || ''}`.trim() || 'Auteur inconnu'
+                                    : 'Auteur inconnu'}
+                                </span>
+                                <span>•</span>
+                                <span>
+                                  {thread.createdAt
+                                    ? new Date(thread.createdAt).toLocaleDateString('fr-FR')
+                                    : ''}
+                                </span>
                               </span>
                             </div>
                           </div>
@@ -447,10 +456,10 @@ export default function ForumPage() {
                         <div className="font-medium truncate mt-0.5">{thread.title}</div>
                         <div className="text-[11px] text-gray-500 flex justify-between gap-2">
                           <span>{thread.repliesCount || 0} rep.</span>
-                          <span>
-                            {thread.createdAt
-                              ? new Date(thread.createdAt).toLocaleDateString('fr-FR')
-                              : ''}
+                          <span className="truncate text-right">
+                            {thread.createdBy
+                              ? `${thread.createdBy.prenom || ''} ${thread.createdBy.nom || ''}`.trim() || 'Auteur inconnu'
+                              : 'Auteur inconnu'}
                           </span>
                         </div>
                       </Link>

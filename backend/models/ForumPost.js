@@ -35,6 +35,11 @@ const forumPostSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
+  // Liste des utilisateurs qui ont aimé cette réponse
+  likes: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  }],
 });
 
 forumPostSchema.pre('save', function(next) {
