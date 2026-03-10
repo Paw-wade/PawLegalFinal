@@ -332,7 +332,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
     <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-50 shadow-sm">
       <div className="container mx-auto px-4 py-2.5">
         <div className="flex items-center justify-between">
-          {/* Bouton menu (logo supprimé du header ; présent dans les sidebars) */}
+          {/* Logo sur la page d'accueil ; bouton menu sur dashboard client */}
           <div className="flex items-center gap-3">
             {!showNav && onMenuClick && variant === 'client' && (
               <button
@@ -345,16 +345,24 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 </svg>
               </button>
             )}
+            {variant === 'home' && (
+              <>
+                <Link
+                  href="/"
+                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-xl"
+                >
+                  ADA Pappers
+                </Link>
+                <div className="h-4 w-px bg-gray-300" />
+                <p className="text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
+                  {subtitleHome}
+                </p>
+              </>
+            )}
           </div>
 
-          {/* Navigation - Liens permanents (Domaines, Services, FAQ, Forum, Contact, Calculateur, Dashboard) */}
+          {/* Navigation - Liens permanents (Services, FAQ, Forum, Contact, Calculateur, Dashboard) */}
           <nav className="hidden md:flex items-center gap-0.5">
-            <Link
-              href="/domaines"
-              className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-            >
-              Domaines
-            </Link>
             <Link
               href="/services"
               className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"

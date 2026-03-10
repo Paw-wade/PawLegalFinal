@@ -165,6 +165,14 @@ const dossierSchema = new mongoose.Schema({
     addedAt: { type: Date, default: Date.now },
     addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   }],
+  // Compléments au récit : informations ajoutées par le client, le créateur, l'admin ou le partenaire (visibles dans le récap et le PDF)
+  complementsRecit: [{
+    addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    addedAt: { type: Date, default: Date.now },
+    authorName: { type: String, trim: true },
+    role: { type: String, trim: true },
+    text: { type: String, required: true, trim: true }
+  }],
   transmittedTo: [{
     partenaire: {
       type: mongoose.Schema.Types.ObjectId,

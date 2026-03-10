@@ -6,20 +6,7 @@ import { useSession } from 'next-auth/react';
 import { forumAPI } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-
-export const FORUM_THEMES = [
-  { value: 'titre-sejour-etudiant', label: 'Titre de séjour étudiant' },
-  { value: 'titre-sejour-salarie', label: 'Titre de séjour salarié' },
-  { value: 'regroupement-familial', label: 'Regroupement familial' },
-  { value: 'demande-visa', label: 'Demande de visa' },
-  { value: 'autres', label: 'Autres' },
-] as const;
-
-export type ForumThemeValue = typeof FORUM_THEMES[number]['value'];
-
-export function getThemeLabel(theme: string | undefined): string {
-  return FORUM_THEMES.find((t) => t.value === theme)?.label ?? 'Autres';
-}
+import { FORUM_THEMES, getThemeLabel, type ForumThemeValue } from './forum-utils';
 
 interface ForumThread {
   _id: string;
@@ -80,12 +67,12 @@ export default function ForumPage() {
       try {
         setLoading(true);
         setError(null);
-        const params: { page: number; limit: number; theme?: string; statusFilter?: string } = { page: 1, limit: 50 };
+        const params: { page: number; limit: number; theme?: string; statusFilter?: 'archived' | 'pinned' | 'resolved' } = { page: 1, limit: 50 };
         if (filterTheme != null && filterTheme !== '') {
           params.theme = filterTheme;
         }
         if (filterStatus !== 'all') {
-          params.statusFilter = filterStatus;
+          params.statusFilter = filterStatus as 'archived' | 'pinned' | 'resolved';
         }
         const response = await forumAPI.listThreads(params);
         const data = response.data as ThreadsResponse;
@@ -154,16 +141,16 @@ export default function ForumPage() {
         setSidebarThreads((prev) => [created, ...prev]);
         // Liste principale : si filtre actif, recharger ; sinon préfixer avec la nouvelle discussion
         if (filterTheme != null && filterTheme !== '') {
-          const params: { page: number; limit: number; theme?: string; statusFilter?: string } = { page: 1, limit: 50 };
+          const params: { page: number; limit: number; theme?: string; statusFilter?: 'archived' | 'pinned' | 'resolved' } = { page: 1, limit: 50 };
           params.theme = filterTheme;
-          if (filterStatus !== 'all') params.statusFilter = filterStatus;
+          if (filterStatus !== 'all') params.statusFilter = filterStatus as 'archived' | 'pinned' | 'resolved';
           const res = await forumAPI.listThreads(params);
           const data = res.data as ThreadsResponse;
           if (data.success) setThreads(data.data);
         } else if (filterStatus === 'all') {
           setThreads((prev) => [created, ...prev]);
         } else {
-          const res = await forumAPI.listThreads({ page: 1, limit: 50, statusFilter: filterStatus });
+          const res = await forumAPI.listThreads({ page: 1, limit: 50, statusFilter: filterStatus as 'archived' | 'pinned' | 'resolved' });
           const data = res.data as ThreadsResponse;
           if (data.success) setThreads(data.data);
         }
@@ -369,11 +356,7 @@ export default function ForumPage() {
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {threads.map((thread) => {
-                    const authorName = thread.createdBy
-                      ? `${thread.createdBy.prenom || ''} ${thread.createdBy.nom || ''}`.trim() || 'Utilisateur'
-                      : 'Utilisateur';
-                    return (
+                  {threads.map((thread) => (
                       <Link
                         key={thread._id}
                         href={`/forum/${thread._id}`}
@@ -396,9 +379,6 @@ export default function ForumPage() {
                               <span>
                                 {thread.repliesCount || 0} réponse{thread.repliesCount === 1 ? '' : 's'} •{' '}
                                 {thread.viewsCount || 0} vue{thread.viewsCount === 1 ? '' : 's'}
-                              </span>
-                              <span className="truncate max-w-[60%]">
-                                par {authorName}
                               </span>
                               <span>
                                 {thread.createdAt
@@ -438,8 +418,7 @@ export default function ForumPage() {
                           </div>
                         </div>
                       </Link>
-                    );
-                  })}
+                  ))}
                 </div>
               )}
             </section>

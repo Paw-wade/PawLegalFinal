@@ -205,7 +205,7 @@ export default function DossierPDFPage() {
           <div style={{ marginTop: '15px', fontSize: '9px', color: '#666', lineHeight: '1.6', padding: '8px', backgroundColor: '#f9fafb', borderRadius: '4px' }}>
             <p style={{ margin: '2px 0', fontWeight: 'bold' }}>ADA Pappers</p>
             <p style={{ margin: '2px 0' }}>Service d&apos;Accompagnement aux démarches administratives</p>
-            <p style={{ margin: '2px 0' }}>Email: contact@pawlegal.fr</p>
+            <p style={{ margin: '2px 0' }}>Email: contact@adapappers.fr</p>
             <p style={{ margin: '2px 0' }}>Téléphone: +33 (0)1 XX XX XX XX</p>
           </div>
         </div>
@@ -395,7 +395,7 @@ export default function DossierPDFPage() {
         {/* Pied de page */}
         <div className="pdf-footer avoid-break" style={{ marginTop: '35px', paddingTop: '18px', borderTop: '2px solid #ddd', textAlign: 'center', fontSize: '9px', color: '#666', lineHeight: '1.6', backgroundColor: '#f9fafb', padding: '15px 10px', borderRadius: '4px' }}>
           <p style={{ margin: '5px 0', fontWeight: 'bold' }}>ADA Pappers - Service d&apos;Accompagnement aux démarches administratives</p>
-          <p style={{ margin: '5px 0' }}>Email: contact@pawlegal.fr | Téléphone: +33 (0)1 XX XX XX XX</p>
+          <p style={{ margin: '5px 0' }}>Email: contact@adapappers.fr | Téléphone: +33 (0)1 XX XX XX XX</p>
           <p style={{ margin: '12px 0 6px 0', fontStyle: 'italic', fontSize: '8px', color: '#888' }}>
             Ce document est confidentiel et destiné uniquement au client concerné.
           </p>

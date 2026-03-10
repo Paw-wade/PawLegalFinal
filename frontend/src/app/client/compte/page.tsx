@@ -571,10 +571,13 @@ export default function ComptePage() {
                     id="numeroEtranger"
                     type="text"
                     value={profileData.numeroEtranger}
-                    onChange={(e) => setProfileData({ ...profileData, numeroEtranger: e.target.value })}
-                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
+                    readOnly
+                    className="mt-1 h-11 border-2 bg-gray-50 text-gray-700 cursor-not-allowed"
                     placeholder="Ex: 12AB34567"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Ce numéro est défini lors de la constitution du dossier et ne peut pas être modifié depuis cet écran.
+                  </p>
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">

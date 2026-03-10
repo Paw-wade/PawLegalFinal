@@ -21,7 +21,6 @@ export default function PolitiqueConfidentialitePage() {
             <Link href="/" className="text-2xl font-bold text-primary">ADA Pappers</Link>
             <nav className="hidden md:flex items-center gap-6">
               <Link href="/" className="hover:text-primary">Accueil</Link>
-              <Link href="/domaines" className="hover:text-primary">Domaines</Link>
               <Link href="/services" className="hover:text-primary">Services</Link>
               <Link href="/calculateur" className="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600 transition-colors shadow-md">Calculateur</Link>
               <Link href="/faq" className="hover:text-primary">FAQ</Link>
@@ -78,7 +77,7 @@ export default function PolitiqueConfidentialitePage() {
             <section>
               <h2 className="text-2xl font-semibold mb-4 text-primary">6. Contact</h2>
               <p className="text-muted-foreground">
-                Pour toute question concernant vos données personnelles, contactez-nous à : contact@pawlegal.fr
+                Pour toute question concernant vos données personnelles, contactez-nous à : contact@adapappers.fr
               </p>
             </section>
           </div>

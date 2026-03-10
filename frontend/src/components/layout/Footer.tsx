@@ -15,14 +15,13 @@ export function Footer() {
           
           <div className="flex items-center gap-4 flex-wrap">
             <Link href="/" className="text-gray-400 hover:text-primary transition-colors">Accueil</Link>
-            <Link href="/domaines" className="text-gray-400 hover:text-primary transition-colors">Domaines</Link>
             <Link href="/services" className="text-gray-400 hover:text-primary transition-colors">Services</Link>
             <Link href="/contact" className="text-gray-400 hover:text-primary transition-colors">Contact</Link>
             <Link href="/faq" className="text-gray-400 hover:text-primary transition-colors">FAQ</Link>
             <Link href="/cgu" className="text-gray-400 hover:text-primary transition-colors">CGU</Link>
             <Link href="/politique-confidentialite" className="text-gray-400 hover:text-primary transition-colors">Confidentialité</Link>
             <span className="text-gray-400">|</span>
-            <span className="text-gray-400">contact@pawlegal.fr</span>
+            <span className="text-gray-400">contact@adapappers.fr</span>
             <span className="text-gray-400">|</span>
             <span className="text-gray-400">07 68 03 33 58</span>
           </div>

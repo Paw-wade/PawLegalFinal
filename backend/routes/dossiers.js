@@ -841,10 +841,12 @@ router.get('/:id/recap', protect, async (req, res) => {
       });
     }
     
-    // Vérifier l'accès
+    // Vérifier l'accès (gérer user/assignedTo populés ou non)
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
-    const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const ownerId = dossier.user ? (dossier.user._id || dossier.user).toString() : null;
+    const isOwner = ownerId && ownerId === req.user.id.toString();
+    const assignedId = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
+    const isAssigned = assignedId && assignedId === req.user.id.toString();
     const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(
       m => m._id.toString() === req.user.id.toString()
     );
@@ -1051,6 +1053,14 @@ router.get('/:id/recap', protect, async (req, res) => {
         date: log.createdAt,
         details: log.metadata
       })),
+      complementsRecit: (dossier.complementsRecit || []).map(c => ({
+        _id: c._id,
+        addedBy: c.addedBy ? c.addedBy.toString() : null,
+        addedAt: c.addedAt,
+        authorName: c.authorName || 'Inconnu',
+        role: c.role || '',
+        text: c.text
+      })),
       statistiques: {
         dureeTraitement: dureeTraitement,
         joursDepuisCreation: dureeTraitement,
@@ -1062,7 +1072,8 @@ router.get('/:id/recap', protect, async (req, res) => {
     
     res.json({
       success: true,
-      recap
+      recap,
+      currentUserId: req.user.id
     });
   } catch (error) {
     console.error('Erreur lors de la génération du récit récapitulatif:', error);
@@ -1071,6 +1082,161 @@ router.get('/:id/recap', protect, async (req, res) => {
       message: 'Erreur serveur',
       error: error.message
     });
+  }
+});
+
+// Helper : vérifier si l'utilisateur peut modifier les compléments du récit (client, créateur, admin, partenaire, assigné, membre équipe)
+function canEditRecapComplements(dossier, user) {
+  const uid = (user && user.id ? user.id : user).toString();
+  const role = user && user.role ? user.role : '';
+  if (role === 'admin' || role === 'superadmin') return true;
+  const ownerId = dossier.user ? (dossier.user._id || dossier.user).toString() : null;
+  const isOwner = ownerId && ownerId === uid;
+  const createdById = dossier.createdBy ? (dossier.createdBy._id || dossier.createdBy).toString() : null;
+  const isCreatedBy = createdById && createdById === uid;
+  const assignedId = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
+  const isAssigned = assignedId && assignedId === uid;
+  const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(m => (m._id || m).toString() === uid);
+  const isPartenaire = dossier.transmittedTo && dossier.transmittedTo.some(t => {
+    const pid = t.partenaire ? (t.partenaire._id || t.partenaire).toString() : null;
+    return pid === uid;
+  });
+  return isOwner || isCreatedBy || isAssigned || isTeamMember || isPartenaire;
+}
+
+// @route   POST /api/user/dossiers/:id/recap/complements
+// @desc    Ajouter un complément au récit (client, créateur, admin, partenaire)
+// @access  Private
+router.post('/:id/recap/complements', protect, async (req, res) => {
+  try {
+    const dossierId = req.params.id;
+    const { text } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
+    }
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName')
+      .populate('createdBy', 'firstName lastName role')
+      .populate('assignedTo', 'firstName lastName role')
+      .populate('teamMembers', 'firstName lastName role')
+      .populate('transmittedTo.partenaire', 'firstName lastName partenaireInfo');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+    }
+    const canEdit = canEditRecapComplements(dossier, req.user);
+    if (!canEdit) {
+      return res.status(403).json({ success: false, message: 'Vous n\'êtes pas autorisé à ajouter un complément à ce dossier.' });
+    }
+    const authorName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email || 'Inconnu';
+    const role = req.user.role || '';
+    const complement = {
+      addedBy: req.user.id,
+      addedAt: new Date(),
+      authorName,
+      role,
+      text: String(text).trim()
+    };
+    if (!dossier.complementsRecit) dossier.complementsRecit = [];
+    dossier.complementsRecit.push(complement);
+    await dossier.save();
+    const added = dossier.complementsRecit[dossier.complementsRecit.length - 1];
+    return res.status(201).json({
+      success: true,
+      message: 'Complément ajouté.',
+      complement: {
+        _id: added._id,
+        addedAt: added.addedAt,
+        authorName: added.authorName,
+        role: added.role,
+        text: added.text
+      }
+    });
+  } catch (error) {
+    console.error('Erreur ajout complément récit:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// @route   PATCH /api/user/dossiers/:id/recap/complements/:complementId
+// @desc    Modifier un complément (auteur du complément ou admin)
+// @access  Private
+router.patch('/:id/recap/complements/:complementId', protect, async (req, res) => {
+  try {
+    const { id: dossierId, complementId } = req.params;
+    const { text } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
+    }
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName')
+      .populate('createdBy', 'firstName lastName role')
+      .populate('assignedTo', 'firstName lastName role')
+      .populate('teamMembers', 'firstName lastName role')
+      .populate('transmittedTo.partenaire', 'firstName lastName partenaireInfo');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+    }
+    const canEdit = canEditRecapComplements(dossier, req.user);
+    if (!canEdit) {
+      return res.status(403).json({ success: false, message: 'Non autorisé.' });
+    }
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const comp = (dossier.complementsRecit || []).find(c => (c._id || c).toString() === complementId);
+    if (!comp) {
+      return res.status(404).json({ success: false, message: 'Complément non trouvé.' });
+    }
+    const isAuthor = (comp.addedBy || comp).toString() === req.user.id.toString();
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Seul l\'auteur du complément ou un administrateur peut le modifier.' });
+    }
+    comp.text = String(text).trim();
+    await dossier.save();
+    return res.json({
+      success: true,
+      message: 'Complément mis à jour.',
+      complement: { _id: comp._id, addedAt: comp.addedAt, authorName: comp.authorName, role: comp.role, text: comp.text }
+    });
+  } catch (error) {
+    console.error('Erreur modification complément récit:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// @route   DELETE /api/user/dossiers/:id/recap/complements/:complementId
+// @desc    Supprimer un complément (auteur du complément ou admin)
+// @access  Private
+router.delete('/:id/recap/complements/:complementId', protect, async (req, res) => {
+  try {
+    const { id: dossierId, complementId } = req.params;
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName')
+      .populate('createdBy', 'firstName lastName role')
+      .populate('assignedTo', 'firstName lastName role')
+      .populate('teamMembers', 'firstName lastName role')
+      .populate('transmittedTo.partenaire', 'firstName lastName partenaireInfo');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+    }
+    const canEdit = canEditRecapComplements(dossier, req.user);
+    if (!canEdit) {
+      return res.status(403).json({ success: false, message: 'Non autorisé.' });
+    }
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const index = (dossier.complementsRecit || []).findIndex(c => (c._id || c).toString() === complementId);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Complément non trouvé.' });
+    }
+    const comp = dossier.complementsRecit[index];
+    const isAuthor = (comp.addedBy || comp).toString() === req.user.id.toString();
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Seul l\'auteur du complément ou un administrateur peut le supprimer.' });
+    }
+    dossier.complementsRecit.splice(index, 1);
+    await dossier.save();
+    return res.json({ success: true, message: 'Complément supprimé.' });
+  } catch (error) {
+    console.error('Erreur suppression complément récit:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
   }
 });
 
@@ -1101,10 +1267,12 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       });
     }
     
-    // Vérifier l'accès (même logique que /recap)
+    // Vérifier l'accès (même logique que /recap, gérer user/assignedTo populés ou non)
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
-    const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const ownerIdPdf = dossier.user ? (dossier.user._id || dossier.user).toString() : null;
+    const isOwner = ownerIdPdf && ownerIdPdf === req.user.id.toString();
+    const assignedIdPdf = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
+    const isAssigned = assignedIdPdf && assignedIdPdf === req.user.id.toString();
     const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(
       m => m._id.toString() === req.user.id.toString()
     );
@@ -1282,6 +1450,14 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         utilisateur: log.user ? `${log.user.firstName || ''} ${log.user.lastName || ''}`.trim() : 'Inconnu',
         date: log.createdAt,
         details: log.metadata
+      })),
+      complementsRecit: (dossier.complementsRecit || []).map(c => ({
+        _id: c._id,
+        addedBy: c.addedBy ? c.addedBy.toString() : null,
+        addedAt: c.addedAt,
+        authorName: c.authorName || 'Inconnu',
+        role: c.role || '',
+        text: c.text
       })),
       statistiques: {
         dureeTraitement: dureeTraitement,
@@ -1535,6 +1711,24 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       yPosition = addMultilineText(recap.dossier.notes, margin, yPosition, {
         width: doc.page.width - 2 * margin,
         align: 'left'
+      });
+      yPosition += sectionSpacing;
+    }
+    
+    // Compléments au récit (visibles par tous)
+    if (recap.complementsRecit && recap.complementsRecit.length > 0) {
+      yPosition = addSection('COMPLÉMENTS AU RÉCIT', yPosition);
+      doc.fontSize(10);
+      recap.complementsRecit.forEach((c, index) => {
+        const dateStr = c.addedAt ? new Date(c.addedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const authorLabel = [c.authorName, c.role].filter(Boolean).join(' • ');
+        yPosition = addText(`${index + 1}. Le ${dateStr} — ${authorLabel}`, margin, yPosition);
+        yPosition += lineHeight * 0.5;
+        yPosition = addMultilineText(c.text, margin + 10, yPosition, {
+          width: doc.page.width - 2 * margin - 10,
+          align: 'left'
+        });
+        yPosition += lineHeight;
       });
     }
     

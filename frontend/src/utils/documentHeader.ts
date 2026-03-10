@@ -18,7 +18,7 @@ export const PLATFORM_CONFIG = {
     postalCode: '',
     country: 'France'
   },
-  email: 'contact@pawlegal.fr',
+  email: 'contact@adapappers.fr',
   website: 'https://www.pawlegal.fr',
   phone: '07 68 03 33 58'
 };
@@ -82,7 +82,7 @@ export function addDocumentHeader(doc: jsPDF, options: { margin?: number } = {})
   yPosition += 25;
 
   // ===== COORDONNÉES DE LA PLATEFORME =====
-  const contactInfo = [];
+  const contactInfo: string[] = [];
   if (PLATFORM_CONFIG.legalName) {
     contactInfo.push(PLATFORM_CONFIG.legalName);
   }

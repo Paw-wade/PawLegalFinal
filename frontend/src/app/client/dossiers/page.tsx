@@ -538,14 +538,10 @@ export default function DossiersPage() {
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                       <Link
                         href={`/client/dossiers/${dossier._id || dossier.id}`}
-                        className="p-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary"
-                        title="Voir les détails du dossier"
                         onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-primary bg-primary text-white text-xs font-medium hover:bg-primary/90 hover:border-primary/90 transition-colors whitespace-nowrap"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
+                        Voir les détails du dossier
                       </Link>
                       <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(dossier.statut)}`}>
                         {getStatutLabel(dossier.statut)}
@@ -953,6 +949,7 @@ export default function DossiersPage() {
                               <div className="relative">
                                 <div className="flex gap-3 text-xs text-muted-foreground">
                                   {hasDocuments && isDocDropdownExpanded && (
+                                    <>
                                     <div className="relative">
                                       {/* Dropdown des documents sans bouton redondant */}
                                       <div 
@@ -1022,8 +1019,8 @@ export default function DossiersPage() {
                                             </div>
                                           </div>
                                         </div>
-                                      )}
                                     </div>
+                                    </>
                                   )}
                                   {dossier.messages && dossier.messages.length > 0 && (
                                     <span>💬 {dossier.messages.length}</span>

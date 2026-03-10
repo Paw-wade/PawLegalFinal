@@ -18,7 +18,7 @@ const PLATFORM_CONFIG = {
     postalCode: '',
     country: 'France'
   },
-  email: 'contact@pawlegal.fr',
+  email: 'contact@adapappers.fr',
   website: 'https://www.pawlegal.fr',
   phone: '07 68 03 33 58'
 };

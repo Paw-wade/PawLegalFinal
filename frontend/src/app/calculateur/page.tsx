@@ -1791,7 +1791,6 @@ export default function CalculateurPage() {
             <Link href="/" className="text-2xl font-bold text-primary">ADA Pappers</Link>
             <nav className="hidden md:flex items-center gap-6">
               <Link href="/" className="hover:text-primary transition-colors">Accueil</Link>
-              <Link href="/domaines" className="hover:text-primary transition-colors">Domaines</Link>
               <Link href="/services" className="hover:text-primary transition-colors">Services</Link>
               <Link href="/calculateur" className="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600 transition-colors shadow-md">Calculateur</Link>
               <Link href="/faq" className="hover:text-primary transition-colors">FAQ</Link>

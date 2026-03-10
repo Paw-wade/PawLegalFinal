@@ -7,7 +7,7 @@ import { useSession } from 'next-auth/react';
 import { forumAPI } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { getThemeLabel } from '../page';
+import { getThemeLabel } from '../forum-utils';
 
 interface ForumThread {
   _id: string;
@@ -137,7 +137,7 @@ export default function ForumThreadPage() {
     }
   };
 
-  const handleAdminUpdateThread = async (updates: { status?: 'open' | 'closed' | 'archived'; isPinned?: boolean }) => {
+  const handleAdminUpdateThread = async (updates: { status?: 'open' | 'closed' | 'archived' | 'resolved'; isPinned?: boolean }) => {
     if (!threadId) return;
     try {
       setUpdatingThread(true);
@@ -214,11 +214,6 @@ export default function ForumThreadPage() {
                           <span>
                             {thread.repliesCount || posts.length} réponse{(thread.repliesCount || posts.length) === 1 ? '' : 's'} •{' '}
                             {thread.viewsCount || 0} vue{thread.viewsCount === 1 ? '' : 's'}
-                          </span>
-                          <span className="truncate max-w-[50%]">
-                            {thread.createdBy
-                              ? `par ${`${thread.createdBy.prenom || ''} ${thread.createdBy.nom || ''}`.trim() || 'Utilisateur'}`
-                              : ''}
                           </span>
                           <span>
                             Publié le{' '}
@@ -322,9 +317,6 @@ export default function ForumThreadPage() {
                     ) : (
                       <div className="space-y-4">
                         {posts.map((post) => {
-                          const authorName = post.createdBy
-                            ? `${post.createdBy.prenom || ''} ${post.createdBy.nom || ''}`.trim() || 'Utilisateur'
-                            : 'Utilisateur';
                           return (
                             <div
                               key={post._id}
@@ -334,10 +326,7 @@ export default function ForumThreadPage() {
                                 <p className="text-gray-800 whitespace-pre-line">
                                   {post.body}
                                 </p>
-                                <div className="mt-1 flex justify-between text-[11px] text-gray-500">
-                                  <span className="truncate max-w-[50%]">
-                                    par {authorName}
-                                  </span>
+                                <div className="mt-1 flex justify-end text-[11px] text-gray-500">
                                   <span>
                                     {post.createdAt
                                       ? new Date(post.createdAt).toLocaleString('fr-FR', {

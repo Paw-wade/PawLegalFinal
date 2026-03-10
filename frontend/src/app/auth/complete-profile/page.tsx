@@ -109,7 +109,7 @@ export default function CompleteProfilePage() {
       pays: paysInputRef,
     },
     formData,
-    setFormData: (updater) => setFormData(updater),
+    setFormData: (updater) => setFormData(updater as React.SetStateAction<typeof formData>),
   });
 
   useEffect(() => {

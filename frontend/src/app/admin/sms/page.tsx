@@ -332,7 +332,11 @@ export default function AdminSmsPage() {
       category: template.category,
       isActive: template.isActive,
     });
-    setVariables(template.variables || []);
+    setVariables((template.variables || []).map((v: { name: string; description?: string; example?: string }) => ({
+      name: v.name,
+      description: v.description ?? '',
+      example: v.example ?? ''
+    })));
   };
 
   const addVariable = () => {

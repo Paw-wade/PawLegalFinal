@@ -113,7 +113,7 @@ export default function SetupPasswordPage() {
       email: emailInputRef,
     },
     formData,
-    setFormData: (updater) => setFormData(updater),
+    setFormData: (updater) => setFormData(updater as React.SetStateAction<typeof formData>),
   });
 
   const validateField = (name: string, value: string) => {

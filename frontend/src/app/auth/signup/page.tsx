@@ -470,7 +470,6 @@ export default function SignupPage() {
                         )}
                       </Button>
                     </div>
-                  )}
                 </form>
               ) : (
                 <form onSubmit={handleVerifyOTP} className="space-y-5">

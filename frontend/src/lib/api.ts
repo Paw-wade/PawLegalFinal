@@ -704,6 +704,14 @@ export const dossiersAPI = {
       responseType: 'blob'
     });
   },
+
+  // Compléments au récit (visibles dans le récap et le PDF)
+  addRecapComplement: (dossierId: string, text: string) =>
+    api.post(`/user/dossiers/${dossierId}/recap/complements`, { text }),
+  updateRecapComplement: (dossierId: string, complementId: string, text: string) =>
+    api.patch(`/user/dossiers/${dossierId}/recap/complements/${complementId}`, { text }),
+  deleteRecapComplement: (dossierId: string, complementId: string) =>
+    api.delete(`/user/dossiers/${dossierId}/recap/complements/${complementId}`),
   
   // Client - Annuler un dossier
   cancelDossier: (id: string) =>
@@ -736,7 +744,7 @@ export const dossiersAPI = {
 
 export const notificationsAPI = {
   // Récupérer toutes les notifications
-  getNotifications: (params?: { lu?: boolean; limit?: number }) =>
+  getNotifications: (params?: { lu?: boolean; limit?: number; type?: string }) =>
     api.get('/notifications', { params }),
   
   // Récupérer le nombre de notifications non lues
@@ -901,7 +909,7 @@ export const forumAPI = {
     api.post(`/forum/threads/${id}/posts`, data),
 
   // Admin - mettre à jour une discussion (statut / épinglage)
-  updateThreadAsAdmin: (id: string, data: { status?: 'open' | 'closed' | 'archived'; isPinned?: boolean }) =>
+  updateThreadAsAdmin: (id: string, data: { status?: 'open' | 'closed' | 'archived' | 'resolved'; isPinned?: boolean }) =>
     api.patch(`/forum/threads/${id}`, data),
 
   // Admin - supprimer une réponse
@@ -1013,6 +1021,7 @@ export const cmsAPI = {
       description?: string;
       page?: string;
       section?: string;
+      status?: 'draft' | 'published' | 'archived';
       isActive?: boolean;
     }
   ) => {
