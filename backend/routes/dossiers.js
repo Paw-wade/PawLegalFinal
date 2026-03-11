@@ -2737,6 +2737,29 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
         transmittedBy: req.user.id.toString()
       }
     });
+    // SMS pour le partenaire (si téléphone disponible et préférences OK)
+    try {
+      if (partenaire.phone) {
+        const formattedPhone = formatPhoneNumber(partenaire.phone);
+        if (formattedPhone) {
+          await sendNotificationSMS(
+            formattedPhone,
+            'dossier_transmitted',
+            {
+              dossierTitle: dossier.titre || dossier.numero || 'Sans titre',
+              partenaireName: partenaire.partenaireInfo?.nomOrganisme || `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() || 'Partenaire',
+            },
+            {
+              userId: partenaire._id.toString(),
+              context: 'dossier',
+              contextId: dossier._id.toString(),
+            }
+          );
+        }
+      }
+    } catch (smsError) {
+      console.error('⚠️ Erreur lors de l\'envoi du SMS au partenaire pour la transmission du dossier:', smsError);
+    }
     
     // Notifier aussi le client si le dossier a un propriétaire
     if (dossier.user) {
@@ -2754,6 +2777,30 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
           partenaireId: partenaireId.toString ? partenaireId.toString() : String(partenaireId)
         }
       });
+      // SMS pour le client (si téléphone disponible et préférences OK)
+      try {
+        const clientUser = await User.findById(userId);
+        if (clientUser?.phone) {
+          const formattedPhone = formatPhoneNumber(clientUser.phone);
+          if (formattedPhone) {
+            await sendNotificationSMS(
+              formattedPhone,
+              'dossier_transmitted',
+              {
+                dossierTitle: dossier.titre || dossier.numero || 'Sans titre',
+                partenaireName: partenaire.partenaireInfo?.nomOrganisme || partenaire.email || 'un partenaire',
+              },
+              {
+                userId: clientUser._id.toString(),
+                context: 'dossier',
+                contextId: dossier._id.toString(),
+              }
+            );
+          }
+        }
+      } catch (smsError) {
+        console.error('⚠️ Erreur lors de l\'envoi du SMS au client pour la transmission du dossier:', smsError);
+      }
     }
     
     res.json({ 

@@ -2,7 +2,9 @@
 
 import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { forumAPI } from '@/lib/api';
 
 interface AdminSidebarProps {
   isOpen?: boolean;
@@ -39,6 +41,7 @@ const adminMenuItems: MenuItem[] = [
 export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
 
   const userRole = (session?.user as any)?.role || 'client';
 
@@ -51,6 +54,20 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
     if (href === '/admin') return pathname === href;
     return pathname.startsWith(href);
   };
+
+  useEffect(() => {
+    const loadForumCount = async () => {
+      try {
+        const res = await forumAPI.getUnreadThreadsCount();
+        if (res.data?.success && typeof res.data.count === 'number') {
+          setForumUnreadCount(res.data.count);
+        }
+      } catch (err) {
+        console.error('Erreur lors du chargement du nombre de nouvelles discussions forum (admin):', err);
+      }
+    };
+    loadForumCount();
+  }, []);
 
   return (
     <>
@@ -109,7 +126,14 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
                 }`}
               >
                 <span className="text-xl">{item.icon}</span>
-                <span>{item.label}</span>
+                <span className="flex items-center gap-1">
+                  {item.label}
+                  {item.href === '/forum' && forumUnreadCount > 0 && (
+                    <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
+                      {forumUnreadCount > 99 ? '99+' : forumUnreadCount}
+                    </span>
+                  )}
+                </span>
                 {item.badge && (
                   <span className="ml-auto px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-800 font-semibold">
                     {item.badge}

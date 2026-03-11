@@ -172,7 +172,14 @@ function ClientDashboardContent() {
       if (res.data?.success) {
         const bookmarks = res.data.bookmarks || [];
         const threads = bookmarks
-          .map((b: any) => b.thread)
+          .map((b: any) =>
+            b.thread
+              ? {
+                  ...b.thread,
+                  newRepliesCount: b.newRepliesCount ?? 0,
+                }
+              : null
+          )
           .filter((t: any) => !!t)
           .slice(0, 10);
         setBookmarkedThreads(threads);
@@ -403,18 +410,7 @@ function ClientDashboardContent() {
     }
   };
 
-  // Rafraîchissement automatique toutes les 30 secondes pour les mises à jour en temps réel
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (session || localStorage.getItem('token')) {
-        loadStats();
-        loadNotifications();
-        loadDocumentRequests();
-      }
-    }, 30000); // Rafraîchir toutes les 30 secondes
-
-    return () => clearInterval(interval);
-  }, [session]);
+  // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
   const loadUserProfile = async () => {
     try {
@@ -719,6 +715,7 @@ function ClientDashboardContent() {
               <div className="whitespace-nowrap text-sm text-orange-800">
                 {bookmarkedThreads.map((thread: any) => {
                   const id = thread._id || thread.id;
+                  const newReplies = thread.newRepliesCount ?? 0;
                   return (
                     <Link
                       key={id}
@@ -729,6 +726,11 @@ function ClientDashboardContent() {
                       <span className="font-medium truncate max-w-[240px] inline-block align-middle">
                         {thread.title}
                       </span>
+                      {newReplies > 0 && (
+                        <span className="text-xs font-semibold text-orange-700">
+                          ({newReplies} nouvelle{newReplies > 1 ? 's' : ''} réponse{newReplies > 1 ? 's' : ''})
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

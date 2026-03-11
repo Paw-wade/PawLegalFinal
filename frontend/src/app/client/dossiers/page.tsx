@@ -110,7 +110,7 @@ export default function DossiersPage() {
   const [expandedDocumentDropdowns, setExpandedDocumentDropdowns] = useState<Set<string>>(new Set());
   const [dossierDocuments, setDossierDocuments] = useState<Record<string, any[]>>({});
   const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<any>(null);
-  const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(new Set());
+  const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     // Vérifier si l'utilisateur a un token même sans session
@@ -149,19 +149,7 @@ export default function DossiersPage() {
     }
   }, [session, status, router]);
 
-  // Rafraîchissement automatique toutes les 30 secondes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (session || localStorage.getItem('token')) {
-        loadDossiers();
-        loadNotifications();
-        loadDocumentRequests();
-        loadDossierDocuments();
-      }
-    }, 30000); // Rafraîchir toutes les 30 secondes
-
-    return () => clearInterval(interval);
-  }, [session]);
+  // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
   const loadNotifications = async () => {
     try {
@@ -289,6 +277,13 @@ export default function DossiersPage() {
         console.log('✅ Dossiers chargés:', dossiersList.length);
         console.log('✅ Liste des dossiers:', dossiersList);
         setDossiers(dossiersList);
+        // Toujours déplier tous les badges pour l'espace client
+        const allIds = new Set<string>();
+        dossiersList.forEach((d: any) => {
+          const id = (d._id || d.id || d.numero || '').toString();
+          if (id) allIds.add(id);
+        });
+        setExpandedDossiers(allIds);
       } else {
         console.error('❌ Réponse API indique un échec:', response.data);
         setError(response.data.message || 'Erreur lors du chargement des dossiers');
@@ -1031,11 +1026,6 @@ export default function DossiersPage() {
                         <Link href={`/client/messages?dossierId=${dossier._id || dossier.id}&action=send`}>
                           <Button size="sm" className="text-xs h-8" title="Envoyer un message">
                             ✉️ Message
-                          </Button>
-                        </Link>
-                        <Link href={`/client/dossiers/${dossier._id || dossier.id}`}>
-                          <Button variant="outline" size="sm" className="text-xs h-8">
-                            Détails
                           </Button>
                         </Link>
                       </div>

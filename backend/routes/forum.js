@@ -23,7 +23,11 @@ const THEMES = ['titre-sejour-etudiant', 'titre-sejour-salarie', 'regroupement-f
 // Filtres statut autorisés
 const STATUS_FILTERS = ['pinned', 'resolved', 'archived'];
 
-// GET /api/forum/threads - Liste des discussions (publique), optionnel ?theme=xxx & ?statusFilter=pinned|resolved|archived
+// GET /api/forum/threads - Liste des discussions (publique)
+// Options :
+// - ?theme=xxx
+// - ?statusFilter=pinned|resolved|archived
+// - ?q=mot-clé (recherche dans titre, corps et réponses)
 router.get('/threads', async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
@@ -33,6 +37,8 @@ router.get('/threads', async (req, res) => {
     const theme = themeParam && THEMES.includes(themeParam) ? themeParam : null;
     const statusParam = typeof req.query.statusFilter === 'string' ? req.query.statusFilter.trim() : null;
     const statusFilter = statusParam && STATUS_FILTERS.includes(statusParam) ? statusParam : null;
+    const qRaw = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const hasSearch = qRaw.length >= 2;
 
     // Filtre thème : "autres" inclut aussi les documents sans thème (anciennes discussions)
     let filter = theme === null
@@ -48,6 +54,41 @@ router.get('/threads', async (req, res) => {
       filter = { ...filter, status: 'resolved' };
     } else if (statusFilter === 'archived') {
       filter = { ...filter, status: 'archived' };
+    }
+
+    // Recherche plein texte simple sur les titres, corps et réponses
+    if (hasSearch) {
+      // Découper en mots-clés et rechercher si AU MOINS un des mots est présent
+      const terms = qRaw
+        .split(/\s+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 2);
+
+      if (terms.length > 0) {
+        const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        const regex = new RegExp(escaped.join('|'), 'i');
+
+        // D'abord, trouver les discussions qui ont au moins une réponse contenant un des mots-clés
+        let threadIdsFromPosts = [];
+        try {
+          threadIdsFromPosts = await ForumPost.distinct('thread', {
+            isDeleted: false,
+            body: regex,
+          });
+        } catch (postSearchError) {
+          console.error('Erreur lors de la recherche dans les réponses du forum:', postSearchError);
+        }
+
+        const searchFilter = {
+          $or: [
+            { title: regex },
+            { body: regex },
+            { _id: { $in: threadIdsFromPosts } },
+          ],
+        };
+
+        filter = { $and: [filter, searchFilter] };
+      }
     }
 
     const [threads, total] = await Promise.all([
@@ -367,12 +408,30 @@ router.get('/bookmarks', protect, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
 
-    const bookmarks = (user.forumBookmarks || [])
-      .filter((b) => !!b.thread)
-      .map((b) => ({
-        thread: b.thread,
-        addedAt: b.addedAt,
-      }));
+    const rawBookmarks = (user.forumBookmarks || []).filter((b) => !!b.thread);
+
+    // Calculer le nombre de nouvelles réponses depuis l'ajout au signet
+    const bookmarks = await Promise.all(
+      rawBookmarks.map(async (b) => {
+        let newRepliesCount = 0;
+        try {
+          // Compter les posts non supprimés créés après la date d'ajout du signet
+          newRepliesCount = await ForumPost.countDocuments({
+            thread: b.thread._id,
+            isDeleted: false,
+            createdAt: { $gt: b.addedAt || new Date(0) },
+          });
+        } catch (err) {
+          console.error('Erreur lors du calcul des nouvelles réponses pour un signet:', err);
+        }
+
+        return {
+          thread: b.thread,
+          addedAt: b.addedAt,
+          newRepliesCount,
+        };
+      })
+    );
 
     return res.json({
       success: true,
@@ -380,6 +439,29 @@ router.get('/bookmarks', protect, async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur lors de la récupération des signets du forum:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// GET /api/forum/unread-count - Nombre de discussions avec nouvelles réponses depuis la dernière visite de l'utilisateur
+router.get('/unread-count', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+
+    // Pour simplifier, on considère qu'une "nouvelle discussion" est une discussion créée
+    // après la date de création du compte utilisateur OU qu'il n'a jamais consultée.
+    const sinceDate = user.createdAt || new Date(0);
+
+    const count = await ForumThread.countDocuments({
+      createdAt: { $gt: sinceDate },
+    });
+
+    return res.json({ success: true, count });
+  } catch (error) {
+    console.error('Erreur lors de la récupération du nombre de nouvelles discussions:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

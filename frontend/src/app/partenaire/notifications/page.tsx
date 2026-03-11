@@ -4,10 +4,13 @@ import { useEffect, useState } from 'react';
 import { notificationsAPI } from '@/lib/api';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 export default function PartenaireNotificationsPage() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
+  const [selectedDossierId, setSelectedDossierId] = useState<string>('');
   
   // Fonction pour convertir en string de manière sécurisée
   const safeString = (value: any): string => {
@@ -24,8 +27,12 @@ export default function PartenaireNotificationsPage() {
   };
   
   useEffect(() => {
+    const dossierIdParam = searchParams.get('dossierId');
+    if (dossierIdParam) {
+      setSelectedDossierId(dossierIdParam);
+    }
     loadNotifications();
-  }, []);
+  }, [searchParams]);
   
   const loadNotifications = async () => {
     try {
@@ -53,14 +60,31 @@ export default function PartenaireNotificationsPage() {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Notifications</h1>
       
-      {notifications.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <Bell className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500 text-lg">Aucune notification pour le moment</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {notifications.map((notif: any) => {
+      {(() => {
+        const filtered = selectedDossierId
+          ? notifications.filter((notif: any) => {
+              const notifDossierId = notif.data?.dossierId || notif.dossierId;
+              return notifDossierId && (
+                notifDossierId.toString() === selectedDossierId.toString() ||
+                (typeof notifDossierId === 'object' && notifDossierId._id?.toString() === selectedDossierId.toString())
+              );
+            })
+          : notifications;
+
+        if (filtered.length === 0) {
+          return (
+            <div className="bg-white rounded-lg shadow p-12 text-center">
+              <Bell className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 text-lg">
+                {selectedDossierId ? 'Aucune notification pour ce dossier' : 'Aucune notification pour le moment'}
+              </p>
+            </div>
+          );
+        }
+
+        return (
+          <div className="space-y-4">
+          {filtered.map((notif: any) => {
             // Extraire toutes les valeurs de manière sécurisée
             const notifId = safeString(notif._id) || safeString(notif.id) || `notif-${Math.random()}`;
             const notifLien = safeString(notif.lien) || '#';
@@ -109,7 +133,8 @@ export default function PartenaireNotificationsPage() {
             );
           })}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

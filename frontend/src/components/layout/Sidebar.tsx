@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import { forumAPI } from '@/lib/api';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -47,6 +48,7 @@ const adminMenuItems: MenuItem[] = [
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
   // Déterminer le rôle
   const userRole = (session?.user as any)?.role || 'client';
   const isAdmin = userRole === 'admin' || userRole === 'superadmin';
@@ -66,6 +68,21 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
     return pathname.startsWith(href);
   };
+
+  useEffect(() => {
+    // Charger une seule fois le nombre approximatif de nouvelles discussions forum
+    const loadForumCount = async () => {
+      try {
+        const res = await forumAPI.getUnreadThreadsCount();
+        if (res.data?.success && typeof res.data.count === 'number') {
+          setForumUnreadCount(res.data.count);
+        }
+      } catch (err) {
+        console.error('Erreur lors du chargement du nombre de nouvelles discussions forum:', err);
+      }
+    };
+    loadForumCount();
+  }, []);
 
   return (
     <>
@@ -123,7 +140,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 }`}
               >
                 <span className="text-xl">{item.icon}</span>
-                <span>{item.label}</span>
+                <span className="flex items-center gap-1">
+                  {item.label}
+                  {item.href === '/forum' && forumUnreadCount > 0 && (
+                    <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
+                      {forumUnreadCount > 99 ? '99+' : forumUnreadCount}
+                    </span>
+                  )}
+                </span>
               </Link>
             );
           })}

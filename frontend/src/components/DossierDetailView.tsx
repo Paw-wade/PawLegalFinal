@@ -36,39 +36,10 @@ const getCategorieLabel = (categorie: string) => {
 interface DossierDetailViewProps {
   dossier: any;
   variant?: 'client' | 'admin' | 'partenaire';
-  onDownloadPDF?: () => void;
-  onPrint?: () => void;
 }
 
 export function DossierDetailView({ dossier, variant = 'client' }: DossierDetailViewProps) {
   const componentRef = useRef<HTMLDivElement>(null);
-
-  const handlePrint = () => {
-    // Ouvrir la page PDF dédiée dans un nouvel onglet pour l'impression
-    const dossierId = dossier._id || dossier.id;
-    if (!dossierId) return;
-    
-    const pdfUrl = `/dossiers/${dossierId}/pdf`;
-    window.open(pdfUrl, '_blank');
-  };
-
-  const handleDownloadPDF = () => {
-    // Ouvrir la page PDF dédiée pour le téléchargement
-    const dossierId = dossier._id || dossier.id;
-    if (!dossierId) return;
-    
-    const pdfUrl = `/dossiers/${dossierId}/pdf`;
-    // Ouvrir dans un nouvel onglet
-    const newWindow = window.open(pdfUrl, '_blank');
-    if (newWindow) {
-      // Attendre que la page soit chargée puis déclencher l'impression (qui permet de sauvegarder en PDF)
-      newWindow.onload = () => {
-        setTimeout(() => {
-          newWindow.print();
-        }, 1000);
-      };
-    }
-  };
 
   const formatDate = (date: string | Date | null | undefined) => {
     if (!date) return 'N/A';
@@ -143,22 +114,6 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
                 </Link>
               );
             })()}
-            <button
-              onClick={handlePrint}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors shadow-sm"
-              title="Imprimer le récapitulatif"
-            >
-              <span>🖨️</span>
-              Imprimer
-            </button>
-            <button
-              onClick={handleDownloadPDF}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm"
-              title="Télécharger le récapitulatif en PDF"
-            >
-              <span>📥</span>
-              Télécharger PDF
-            </button>
           </div>
         </div>
       </div>

@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { forumAPI } from '@/lib/api';
 import { 
   LayoutDashboard,
   FolderOpen, 
@@ -27,6 +29,21 @@ const menuItems = [
 
 export function PartenaireSidebar() {
   const pathname = usePathname();
+  const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
+
+  useEffect(() => {
+    const loadForumCount = async () => {
+      try {
+        const res = await forumAPI.getUnreadThreadsCount();
+        if (res.data?.success && typeof res.data.count === 'number') {
+          setForumUnreadCount(res.data.count);
+        }
+      } catch (err) {
+        console.error('Erreur lors du chargement du nombre de nouvelles discussions forum (partenaire):', err);
+      }
+    };
+    loadForumCount();
+  }, []);
   
   return (
     <aside className="w-64 bg-white border-r border-gray-200 h-screen fixed left-0 top-0 z-30 flex flex-col">
@@ -56,7 +73,14 @@ export function PartenaireSidebar() {
               }`}
             >
               <Icon className="w-5 h-5" />
-              <span>{item.label}</span>
+              <span className="flex items-center gap-1">
+                {item.label}
+                {item.href === '/forum' && forumUnreadCount > 0 && (
+                  <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
+                    {forumUnreadCount > 99 ? '99+' : forumUnreadCount}
+                  </span>
+                )}
+              </span>
             </Link>
           );
         })}

@@ -105,20 +105,7 @@ export default function AdminDossierDetailPage() {
     }
   }, [session, status, router, dossierId]);
 
-  // Rafraîchissement automatique toutes les 30 secondes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (session || localStorage.getItem('token')) {
-        loadDossier();
-        loadNotifications();
-        loadMessagesForDossier();
-        loadDocumentRequests();
-        loadDocuments();
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [session, dossierId]);
+  // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
   const loadDossier = async () => {
     if (!dossierId) return;

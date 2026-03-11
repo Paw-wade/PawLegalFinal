@@ -39,10 +39,8 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
   const { isVisible, toggleVisibility } = useNotificationBannerVisibility();
 
   useEffect(() => {
+    // Chargement unique au montage / changement de rôle utilisateur
     loadBannerItems();
-    // Recharger toutes les 30 secondes
-    const interval = setInterval(loadBannerItems, 30000);
-    return () => clearInterval(interval);
   }, [userRole, userId]);
 
   const loadBannerItems = async () => {
@@ -248,8 +246,8 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
       >
         <span className="text-sm">×</span>
       </button>
-      <div className="overflow-hidden pr-10">
-        <div className="flex animate-scroll-banner whitespace-nowrap">
+      <div className="overflow-x-auto pr-10">
+        <div className="flex whitespace-nowrap">
           {bannerItems.map((item) => (
             <Link
               key={item.id}
@@ -267,42 +265,8 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
               <span className="text-xs text-muted-foreground">→</span>
             </Link>
           ))}
-          {/* Dupliquer pour animation continue */}
-          {bannerItems.map((item) => (
-            <Link
-              key={`${item.id}-dup`}
-              href={item.link || '#'}
-              className={`inline-flex items-center gap-2 px-6 py-3 mx-2 rounded-lg transition-all hover:bg-primary/20 ${
-                item.priority === 'high' ? 'bg-red-50 border border-red-200' : 'bg-white/50'
-              }`}
-            >
-              <span className="text-lg">{item.icon}</span>
-              <span className={`text-sm font-medium ${
-                item.priority === 'high' ? 'text-red-900' : 'text-foreground'
-              }`}>
-                {item.message}
-              </span>
-              <span className="text-xs text-muted-foreground">→</span>
-            </Link>
-          ))}
         </div>
       </div>
-      <style jsx>{`
-        @keyframes scroll-banner {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
-        }
-        .animate-scroll-banner {
-          animation: scroll-banner 30s linear infinite;
-        }
-        .animate-scroll-banner:hover {
-          animation-play-state: paused;
-        }
-      `}</style>
     </div>
   );
 }

@@ -96,24 +96,7 @@ export default function PartenaireDossierDetailPage() {
     }
   }, [session, status, router, dossierId]);
 
-  // Rafraîchissement automatique toutes les 30 secondes pour le suivi en temps réel
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (session || localStorage.getItem('token')) {
-        loadDossier();
-        loadNotifications();
-        loadMessagesForDossier();
-        loadTasks();
-        loadDocumentRequests();
-        loadDocuments();
-        if (showHistory) {
-          loadHistory();
-        }
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [session, dossierId]);
+  // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
   const loadDocuments = async () => {
     if (!dossierId) return;

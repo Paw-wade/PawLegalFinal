@@ -57,9 +57,25 @@ export default function ForumPage() {
   const [filterStatus, setFilterStatus] = useState<StatusFilterValue>('all');
   const [rulesCollapsed, setRulesCollapsed] = useState(true);
   const [createStep, setCreateStep] = useState(0);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   const userRole = (session?.user as any)?.role || 'client';
   const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+
+  // Débounce de la recherche pour éviter trop d'appels API
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const value = search.trim();
+      // Ne lancer la recherche côté API qu'à partir de 2 caractères significatifs
+      if (value.length >= 2) {
+        setDebouncedSearch(value);
+      } else {
+        setDebouncedSearch('');
+      }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [search]);
 
   // Liste principale : filtrée par thème et par statut (épinglées / résolues / archivées)
   useEffect(() => {
@@ -67,12 +83,15 @@ export default function ForumPage() {
       try {
         setLoading(true);
         setError(null);
-        const params: { page: number; limit: number; theme?: string; statusFilter?: 'archived' | 'pinned' | 'resolved' } = { page: 1, limit: 50 };
+        const params: { page: number; limit: number; theme?: string; statusFilter?: 'archived' | 'pinned' | 'resolved'; q?: string } = { page: 1, limit: 50 };
         if (filterTheme != null && filterTheme !== '') {
           params.theme = filterTheme;
         }
         if (filterStatus !== 'all') {
           params.statusFilter = filterStatus as 'archived' | 'pinned' | 'resolved';
+        }
+        if (debouncedSearch) {
+          params.q = debouncedSearch;
         }
         const response = await forumAPI.listThreads(params);
         const data = response.data as ThreadsResponse;
@@ -90,7 +109,7 @@ export default function ForumPage() {
     };
 
     loadThreads();
-  }, [filterTheme, filterStatus]);
+  }, [filterTheme, filterStatus, debouncedSearch]);
 
   // Barre latérale : toujours toutes les discussions, du plus récent au plus ancien (sans filtre thème ni statut)
   useEffect(() => {
@@ -173,6 +192,38 @@ export default function ForumPage() {
           <p className="text-sm md:text-base text-gray-600 mt-2">
             Posez vos questions et échangez avec l&apos;équipe et les autres utilisateurs sur les démarches administratives.
           </p>
+          {/* Barre de recherche dans les titres, contenus et réponses */}
+          <div className="mt-4 max-w-xl">
+            <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="forum-search">
+              Rechercher dans les discussions et les réponses
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 pointer-events-none">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z" />
+                </svg>
+              </span>
+              <input
+                id="forum-search"
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Chercher un mot-clé (titre, contenu, réponse...)"
+                className="w-full pl-9 pr-3 py-2 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+              />
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500">
+              {search && search.trim().length < 2 && (
+                <span>Saisissez au moins 2 caractères pour lancer la recherche.</span>
+              )}
+              {debouncedSearch && (
+                <span>
+                  Filtre actif sur&nbsp;
+                  <span className="font-semibold">“{debouncedSearch}”</span> — {threads.length} discussion(s) trouvée(s)
+                </span>
+              )}
+            </div>
+          </div>
         </header>
 
         {/* Règles du forum (pliable) */}

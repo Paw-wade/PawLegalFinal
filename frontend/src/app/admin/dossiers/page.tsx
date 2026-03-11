@@ -613,45 +613,28 @@ export default function AdminDossiersPage() {
     setError(null);
 
     try {
-      if (!formData.categorie) {
-        setError('Veuillez sélectionner une catégorie de dossier');
-        setIsLoading(false);
-        return;
-      }
-
-      if (!formData.type) {
-        setError('Veuillez sélectionner un type de dossier');
-        setIsLoading(false);
-        return;
-      }
-
       const dossierData: any = {
-        titre: formData.titre,
-        description: formData.description,
-        categorie: formData.categorie,
-        type: formData.type,
-        statut: formData.statut,
-        priorite: formData.priorite,
-        notes: formData.notes,
+        // Tous les champs sont optionnels côté backend.
+        // On n'envoie que les valeurs réellement renseignées.
       };
 
+      if (formData.titre) dossierData.titre = formData.titre;
+      if (formData.description) dossierData.description = formData.description;
+      if (formData.categorie) dossierData.categorie = formData.categorie;
+      if (formData.type) dossierData.type = formData.type;
+      if (formData.statut) dossierData.statut = formData.statut;
+      if (formData.priorite) dossierData.priorite = formData.priorite;
+      if (formData.notes) dossierData.notes = formData.notes;
+
       if (clientType === 'existing') {
-        if (!formData.userId) {
-          setError('Veuillez sélectionner un utilisateur');
-          setIsLoading(false);
-          return;
+        if (formData.userId) {
+          dossierData.userId = formData.userId;
         }
-        dossierData.userId = formData.userId;
       } else {
-        if (!formData.clientNom || !formData.clientPrenom || !formData.clientEmail) {
-          setError('Veuillez remplir tous les champs obligatoires du client');
-          setIsLoading(false);
-          return;
-        }
-        dossierData.clientNom = formData.clientNom;
-        dossierData.clientPrenom = formData.clientPrenom;
-        dossierData.clientEmail = formData.clientEmail;
-        dossierData.clientTelephone = formData.clientTelephone;
+        if (formData.clientNom) dossierData.clientNom = formData.clientNom;
+        if (formData.clientPrenom) dossierData.clientPrenom = formData.clientPrenom;
+        if (formData.clientEmail) dossierData.clientEmail = formData.clientEmail;
+        if (formData.clientTelephone) dossierData.clientTelephone = formData.clientTelephone;
       }
 
       if (formData.dateEcheance) {
@@ -1045,13 +1028,12 @@ export default function AdminDossiersPage() {
               {/* Sélection utilisateur existant */}
               {clientType === 'existing' && !editingDossier && (
                 <div>
-                  <Label htmlFor="userId">Sélectionner un utilisateur *</Label>
+                  <Label htmlFor="userId">Sélectionner un utilisateur</Label>
                   <select
                     id="userId"
                     value={formData.userId}
                     onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                    required
                   >
                     <option value="">-- Sélectionner un utilisateur --</option>
                     {utilisateurs.map((user) => (
@@ -1067,33 +1049,30 @@ export default function AdminDossiersPage() {
               {clientType === 'new' && !editingDossier && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="clientNom">Nom *</Label>
+                    <Label htmlFor="clientNom">Nom</Label>
                     <Input
                       id="clientNom"
                       value={formData.clientNom}
                       onChange={(e) => setFormData({ ...formData, clientNom: e.target.value })}
-                      required
                       className="mt-1"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="clientPrenom">Prénom *</Label>
+                    <Label htmlFor="clientPrenom">Prénom</Label>
                     <Input
                       id="clientPrenom"
                       value={formData.clientPrenom}
                       onChange={(e) => setFormData({ ...formData, clientPrenom: e.target.value })}
-                      required
                       className="mt-1"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="clientEmail">Email *</Label>
+                    <Label htmlFor="clientEmail">Email</Label>
                     <Input
                       id="clientEmail"
                       type="email"
                       value={formData.clientEmail}
                       onChange={(e) => setFormData({ ...formData, clientEmail: e.target.value })}
-                      required
                       className="mt-1"
                     />
                   </div>
@@ -1116,12 +1095,11 @@ export default function AdminDossiersPage() {
                 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="titre">Titre du dossier {!editingDossier && '*'}</Label>
+                    <Label htmlFor="titre">Titre du dossier</Label>
                     <Input
                       id="titre"
                       value={formData.titre}
                       onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
-                      required={!editingDossier}
                       className="mt-1"
                       placeholder="Ex: Demande de titre de séjour"
                     />
@@ -1141,13 +1119,12 @@ export default function AdminDossiersPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="categorie">Catégorie de dossier {!editingDossier && '*'}</Label>
+                      <Label htmlFor="categorie">Catégorie de dossier</Label>
                       <select
                         id="categorie"
                         value={formData.categorie}
                         onChange={(e) => setFormData({ ...formData, categorie: e.target.value, type: '' })}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                        required={!editingDossier}
                       >
                         <option value="">-- Sélectionner une catégorie --</option>
                         {Object.entries(categories).map(([key, cat]) => (
@@ -1157,13 +1134,12 @@ export default function AdminDossiersPage() {
                     </div>
 
                     <div>
-                      <Label htmlFor="type">Type de dossier {!editingDossier && '*'}</Label>
+                      <Label htmlFor="type">Type de dossier</Label>
                       <select
                         id="type"
                         value={formData.type}
                         onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                        required={!editingDossier}
                         disabled={!formData.categorie}
                       >
                         <option value="">-- Sélectionner un type --</option>
@@ -1177,39 +1153,23 @@ export default function AdminDossiersPage() {
                   <div className="grid grid-cols-2 gap-4">
 
                     <div>
-                      <Label htmlFor="statut">
-                        Statut du dossier <span className="text-primary">*</span>
+                      <Label>
+                        Étapes et statut du dossier
                       </Label>
-                      <select
-                        id="statut"
-                        value={formData.statut}
-                        onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                      >
-                        <option value="recu">Reçu</option>
-                        <option value="accepte">Accepté</option>
-                        <option value="refuse">Refusé</option>
-                        <option value="en_attente_onboarding">En attente d'onboarding (RDV)</option>
-                        <option value="en_cours_instruction">En cours d'instruction (constitution dossier)</option>
-                        <option value="pieces_manquantes">Pièces manquantes (relance client)</option>
-                        <option value="dossier_complet">Dossier Complet</option>
-                        <option value="depose">Déposé</option>
-                        <option value="reception_confirmee">Réception confirmée</option>
-                        <option value="complement_demande">Complément demandé (avec date limite)</option>
-                        <option value="decision_defavorable">Décision défavorable</option>
-                        <option value="communication_motifs">Communication des Motifs</option>
-                        <option value="recours_preparation">Recours en préparation</option>
-                        <option value="refere_mesures_utiles">Référé Mesures Utiles</option>
-                        <option value="refere_suspension_rep">Référé suspension et REP</option>
-                        <option value="gain_cause">Gain de cause</option>
-                        <option value="rejet">Rejet</option>
-                        <option value="decision_favorable">Décision favorable</option>
-                        <option value="autre">Autre (statut non prévu)</option>
-                      </select>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        📋 <strong>Fonction :</strong> Indique l'état d'avancement du dossier dans le processus administratif. 
-                        Seul le <strong>chef d'équipe</strong> ou un <strong>super administrateur</strong> peut modifier ce statut.
-                      </p>
+                      <div className="mt-1 flex flex-col gap-1.5">
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-gray-300 text-xs font-medium bg-gray-50 text-gray-400 cursor-not-allowed"
+                          title="Après la création du dossier, utilisez ce bouton dans la fiche du dossier pour définir les étapes et le statut."
+                        >
+                          ✏️ Éditer les étapes (disponible après création)
+                        </button>
+                        <p className="text-xs text-muted-foreground">
+                          Le dossier sera créé avec le statut initial <strong>« Reçu »</strong>. 
+                          Après la création, ouvrez la fiche du dossier pour définir les étapes personnalisées et le statut via le bouton <strong>« ✏️ Éditer les étapes »</strong>.
+                        </p>
+                      </div>
                     </div>
 
                     <div>

@@ -143,21 +143,28 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    const url = error.config?.url || '';
+
     // Ignorer silencieusement les 404 pour les clés CMS manquantes (comportement attendu)
     // Cette vérification doit être faite AVANT tous les logs d'erreur
     const isCmsKeyNotFound = error.response?.status === 404 && 
-                             error.config?.url?.includes('/content/value');
+                             url.includes('/content/value');
+
+    // Ne pas spammer la console si la route /forum/unread-count n'existe pas encore
+    const isForumUnreadCountNotFound = error.response?.status === 404 &&
+                                       url.includes('/forum/unread-count');
     
-    if (isCmsKeyNotFound) {
+    if (isCmsKeyNotFound || isForumUnreadCountNotFound) {
       // Ne pas logger cette erreur - c'est un comportement attendu quand une clé CMS n'existe pas encore
       // Retourner une réponse avec status 404 mais sans déclencher d'erreur
       // Cela permettra à getText de gérer le cas normalement sans polluer la console
       return Promise.reject({
         response: {
           status: 404,
-          data: { success: false, message: 'Clé non trouvée' }
+          data: { success: false, message: isCmsKeyNotFound ? 'Clé non trouvée' : 'Route forum/unread-count non disponible' }
         },
-        isCmsNotFound: true,
+        isCmsNotFound: isCmsKeyNotFound,
+        isForumUnreadCountNotFound,
         config: error.config
       });
     }
@@ -189,10 +196,10 @@ api.interceptors.response.use(
       }
     }
     
-    // Log des erreurs pour le débogage (sauf pour les erreurs CMS déjà gérées)
-    if (!isCmsKeyNotFound) {
+    // Log des erreurs pour le débogage (sauf pour les erreurs déjà gérées ci-dessus)
+    if (!isCmsKeyNotFound && !isForumUnreadCountNotFound) {
       console.error('❌ Erreur API:', {
-        url: error.config?.url,
+        url,
         status: error.response?.status,
         message: error.response?.data?.message || error.message,
         data: error.response?.data
@@ -897,7 +904,7 @@ export const documentsAPI = {
 // Forum - discussions et réponses
 export const forumAPI = {
   // Lister les discussions (optionnel : theme pour filtrer par thème)
-  listThreads: (params?: { page?: number; limit?: number; theme?: string; statusFilter?: 'pinned' | 'resolved' | 'archived' }) =>
+  listThreads: (params?: { page?: number; limit?: number; theme?: string; statusFilter?: 'pinned' | 'resolved' | 'archived'; q?: string }) =>
     api.get('/forum/threads', { params }),
 
   // Récupérer une discussion et ses réponses
@@ -931,6 +938,10 @@ export const forumAPI = {
   // Récupérer les discussions mises en signet par l'utilisateur courant
   getBookmarks: () =>
     api.get('/forum/bookmarks'),
+
+  // Récupérer le nombre de nouvelles discussions (approximation)
+  getUnreadThreadsCount: () =>
+    api.get('/forum/unread-count'),
 };
 
 export const creneauxAPI = {
