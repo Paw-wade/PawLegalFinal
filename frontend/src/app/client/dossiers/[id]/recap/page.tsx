@@ -237,6 +237,34 @@ export default function ClientDossierRecapPage() {
             )}
           </section>
           
+          {/* Compléments au récit */}
+          <section className="mb-8">
+            <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">
+              <MessageSquarePlus className="w-6 h-6 text-primary" />
+              Compléments au récit
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Les compléments ajoutés ici sont visibles par toutes les personnes ayant accès au dossier et apparaissent sur le PDF téléchargé.
+            </p>
+            {(recap.complementsRecit && recap.complementsRecit.length > 0) ? (
+              <div className="space-y-4">
+                {recap.complementsRecit.map((c: any, idx: number) => (
+                  <div key={c._id || idx} className="p-4 bg-orange-50/50 rounded-lg border border-orange-200/60">
+                    <p className="text-gray-800 whitespace-pre-wrap">{c.text}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+                      <span className="text-sm text-gray-500">
+                        {c.authorName}{c.role ? ` • ${c.role}` : ''}{' '}
+                        {c.addedAt && `— ${formatDate(c.addedAt)}`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Aucun complément n&apos;a encore été ajouté.</p>
+            )}
+          </section>
+
           {/* Documents */}
           <section className="mb-8">
             <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">

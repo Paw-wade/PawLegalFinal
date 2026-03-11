@@ -1724,47 +1724,7 @@ export default function PartenaireDossiersPage() {
                       return null;
                     })()}
 
-                    {/* Timeline complète avec toutes les étapes + étapes supplémentaires */}
-                    {(() => {
-                      const steps = getTimelineStepsWithCustom(dossier.statut, dossier.etapesSupplementaires);
-                      return (
-                        <div className="mb-3 pb-2 border-b border-gray-100">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-semibold text-muted-foreground">Étapes du dossier :</p>
-                            <button
-                              type="button"
-                              onClick={() => { setAddEtapeDossier(dossier); setNewEtapeLabel(''); setNewEtapeDate(''); }}
-                              className="text-[10px] text-primary hover:underline font-medium"
-                            >
-                              + Ajouter une étape
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {steps.map((step) => (
-                              <div key={step.key} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded ${
-                                step.isCurrent ? 'bg-blue-50 border border-blue-200' : ''
-                              } ${(step as any).isCustom ? 'bg-amber-50 border border-amber-200' : ''}`}>
-                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                  (step as any).isCustom ? 'bg-amber-500' :
-                                  step.completed && !step.isCurrent ? 'bg-green-500' :
-                                  step.isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' :
-                                  'bg-gray-300'
-                                }`}></span>
-                                <span className={`text-[10px] leading-tight ${
-                                  (step as any).isCustom ? 'text-amber-800 font-medium' :
-                                  step.completed && !step.isCurrent ? 'text-green-700 font-medium' :
-                                  step.isCurrent ? 'text-blue-700 font-bold' :
-                                  'text-gray-400'
-                                }`}>
-                                  {step.label}
-                                  {(step as any).isCustom && (step as any).date ? ` (${(step as any).date})` : ''}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })()}
+                    {/* Timeline complète avec toutes les étapes + étapes supplémentaires - masquée sur les badges */}
 
                     {/* Informations du dossier */}
                     <div className="space-y-2 mb-3">
@@ -2508,6 +2468,15 @@ export default function PartenaireDossiersPage() {
                             <option value="decision_favorable">Décision favorable</option>
                             <option value="autre">Autre (statut non prévu)</option>
                           </select>
+                          {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Étapes choisies :{' '}
+                              {dossier.etapesSupplementaires
+                                .map((etape: any) => etape.label)
+                                .filter(Boolean)
+                                .join(' • ')}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">

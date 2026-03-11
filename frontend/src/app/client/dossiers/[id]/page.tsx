@@ -8,7 +8,7 @@ import { DossierDetailView } from '@/components/DossierDetailView';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import { History, Clock } from 'lucide-react';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
@@ -379,31 +379,64 @@ export default function DossierDetailPage() {
                   );
                 })()}
                 
-                {/* Timeline */}
-                {(() => {
-                  const steps = getTimelineSteps(dossier.statut);
+                {/* Timeline basée uniquement sur les étapes choisies par l'équipe */}
+                {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (() => {
+                  const rawSteps = dossier.etapesSupplementaires;
+                  const currentIndex = rawSteps.findIndex(
+                    (s: any) =>
+                      dossier.statut &&
+                      (dossier.statut === s.id || dossier.statut === s.label)
+                  );
                   return (
                     <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
                       <div className="flex items-center gap-2 min-w-max">
-                        {steps.map((step, index) => (
-                          <div key={step.key} className="flex items-center gap-2 flex-shrink-0">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></span>
-                              <span className={`text-[10px] font-medium whitespace-nowrap ${
-                                step.completed ? 'text-green-700' : 'text-gray-400'
-                              }`}>
-                                {step.label}
-                              </span>
+                        {rawSteps.map((step: any, index: number) => {
+                          const isCurrent =
+                            currentIndex === -1
+                              ? index === rawSteps.length - 1
+                              : index === currentIndex;
+                          const completed = currentIndex === -1 ? false : index <= currentIndex;
+                          const dateLabel =
+                            step.date
+                              ? (typeof step.date === 'string'
+                                  ? step.date
+                                  : new Date(step.date).toLocaleDateString('fr-FR'))
+                              : undefined;
+                          return (
+                            <div key={step._id || step.id || index} className="flex items-center gap-2 flex-shrink-0">
+                              <div className="flex flex-col items-center gap-1">
+                                <span
+                                  className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                    isCurrent
+                                      ? 'bg-blue-500 ring-2 ring-blue-300'
+                                      : completed
+                                      ? 'bg-green-500'
+                                      : 'bg-gray-300'
+                                  }`}
+                                ></span>
+                                <span
+                                  className={`text-[10px] font-medium whitespace-nowrap ${
+                                    isCurrent
+                                      ? 'text-blue-700'
+                                      : completed
+                                      ? 'text-green-700'
+                                      : 'text-gray-400'
+                                  }`}
+                                >
+                                  {step.label}
+                                  {dateLabel ? ` (${dateLabel})` : ''}
+                                </span>
+                              </div>
+                              {index < rawSteps.length - 1 && (
+                                <div
+                                  className={`h-0.5 w-6 flex-shrink-0 ${
+                                    completed ? 'bg-green-500' : 'bg-gray-300'
+                                  }`}
+                                ></div>
+                              )}
                             </div>
-                            {index < steps.length - 1 && (
-                              <div className={`h-0.5 w-6 flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></div>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );

@@ -6,6 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, userAPI } from '@/lib/api';
+import { SUGGESTED_STEPS_BY_CATEGORY, DossierCategorie } from '@/lib/dossierStepsConfig';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
@@ -19,6 +20,27 @@ function Button({ children, variant = 'default', className = '', ...props }: any
   };
   return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} {...props}>{children}</button>;
 }
+
+const STATUT_STEPS = [
+  { id: 'recu', label: 'Reçu' },
+  { id: 'accepte', label: 'Accepté' },
+  { id: 'refuse', label: 'Refusé' },
+  { id: 'en_attente_onboarding', label: "En attente d'onboarding" },
+  { id: 'en_cours_instruction', label: "En cours d'instruction" },
+  { id: 'pieces_manquantes', label: 'Pièces manquantes' },
+  { id: 'dossier_complet', label: 'Dossier Complet' },
+  { id: 'depose', label: 'Déposé' },
+  { id: 'reception_confirmee', label: 'Réception confirmée' },
+  { id: 'complement_demande', label: 'Complément demandé' },
+  { id: 'decision_defavorable', label: 'Décision défavorable' },
+  { id: 'communication_motifs', label: 'Communication des Motifs' },
+  { id: 'recours_preparation', label: 'Recours en préparation' },
+  { id: 'refere_mesures_utiles', label: 'Référé Mesures Utiles' },
+  { id: 'refere_suspension_rep', label: 'Référé suspension et REP' },
+  { id: 'gain_cause', label: 'Gain de cause' },
+  { id: 'rejet', label: 'Rejet' },
+  { id: 'decision_favorable', label: 'Décision favorable' },
+];
 
 export default function AdminDossierDetailPage() {
   const { data: session, status } = useSession();
@@ -41,6 +63,8 @@ export default function AdminDossierDetailPage() {
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState(false);
   const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<any>(null);
   const [showDocumentPreviewModal, setShowDocumentPreviewModal] = useState(false);
+  const [showStepsModal, setShowStepsModal] = useState(false);
+  const [localSteps, setLocalSteps] = useState<any[]>([]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -111,6 +135,7 @@ export default function AdminDossierDetailPage() {
       
       if (response.data.success) {
         setDossier(response.data.dossier);
+        setLocalSteps(response.data.dossier.etapesSupplementaires || []);
       } else {
         setError('Erreur lors du chargement du dossier');
       }
@@ -236,17 +261,266 @@ export default function AdminDossierDetailPage() {
     );
   }
 
+  const currentUserId = (session?.user as any)?._id || (session?.user as any)?.id || null;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
+      {/* Modal d'édition des étapes du dossier */}
+      {showStepsModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Éditer les étapes du dossier</h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Ces étapes sont internes ADA Pappers et servent à suivre l&apos;avancement du dossier.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStepsModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <span className="sr-only">Fermer</span>
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {/* Étapes standard correspondant au statut du dossier */}
+              <div className="border border-blue-100 rounded-xl p-3 bg-blue-50/40">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-blue-800">
+                    Étapes liées au <span className="underline">statut du dossier</span>
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {STATUT_STEPS.map((step) => {
+                    const alreadySelected = localSteps.some(
+                      (s) => s.id === step.id || s.label === step.label
+                    );
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        disabled={alreadySelected}
+                        onClick={() => {
+                          setLocalSteps((prev) => [
+                            ...prev,
+                            {
+                              id: step.id,
+                              label: step.label,
+                              addedBy: currentUserId,
+                              createdAt: new Date().toISOString(),
+                            },
+                          ]);
+                        }}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          alreadySelected
+                            ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                            : 'border-blue-200 text-blue-800 bg-white hover:bg-blue-50'
+                        }`}
+                      >
+                        {step.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Étapes suggérées selon la catégorie */}
+              {dossier.categorie && (SUGGESTED_STEPS_BY_CATEGORY as any)[dossier.categorie as DossierCategorie] && (
+                <div className="border border-orange-100 rounded-xl p-3 bg-orange-50/60">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-orange-800">
+                      Étapes suggérées pour la catégorie&nbsp;
+                      <span className="underline">
+                        {dossier.categorie.replace(/_/g, ' ')}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(SUGGESTED_STEPS_BY_CATEGORY as any)[dossier.categorie as DossierCategorie].map((step: any) => {
+                      const alreadySelected = localSteps.some(
+                        (s) => s.id === step.id || s.label === step.label
+                      );
+                      return (
+                        <button
+                          key={step.id}
+                          type="button"
+                          disabled={alreadySelected}
+                          onClick={() => {
+                            setLocalSteps((prev) => [
+                              ...prev,
+                              {
+                                id: step.id,
+                                label: step.label,
+                                addedBy: currentUserId,
+                                createdAt: new Date().toISOString(),
+                              },
+                            ]);
+                          }}
+                          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                            alreadySelected
+                              ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                              : 'border-orange-200 text-orange-800 bg-white hover:bg-orange-50'
+                          }`}
+                        >
+                          {step.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Ajout manuel d'une étape */}
+              <div className="border border-gray-100 rounded-xl p-3">
+                <p className="text-xs font-semibold text-gray-700 mb-2">Ajouter une étape personnalisée</p>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = e.currentTarget;
+                    const input = form.elements.namedItem('newStep') as HTMLInputElement | null;
+                    if (!input || !input.value.trim()) return;
+                    const label = input.value.trim();
+                    setLocalSteps((prev) => [
+                      ...prev,
+                      {
+                        id: `custom_${Date.now()}`,
+                        label,
+                        addedBy: currentUserId,
+                        createdAt: new Date().toISOString(),
+                      },
+                    ]);
+                    input.value = '';
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    type="text"
+                    name="newStep"
+                    placeholder="Ex : Préparation du recours CNDA"
+                    className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500/60 focus:border-orange-400"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 text-xs font-medium rounded-md bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+                  >
+                    Ajouter
+                  </button>
+                </form>
+              </div>
+
+              {/* Liste des étapes actuelles */}
+              <div className="border border-gray-100 rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-700">
+                    Étapes actuellement enregistrées ({localSteps.length})
+                  </p>
+                </div>
+                {localSteps.length === 0 ? (
+                  <p className="text-xs text-gray-400">
+                    Aucune étape enregistrée pour le moment. Utilisez les suggestions ou ajoutez vos propres étapes.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {localSteps.map((step, index) => (
+                      <li
+                        key={step.id || index}
+                        className="flex items-center justify-between gap-3 px-2 py-1.5 rounded-md bg-gray-50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-gray-400 font-mono">
+                            {(index + 1).toString().padStart(2, '0')}
+                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-xs text-gray-800">{step.label}</span>
+                            {step.date && (
+                              <span className="text-[10px] text-gray-500">
+                                ⏰ Échéance : {new Date(step.date).toLocaleDateString('fr-FR')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={step.date ? new Date(step.date).toISOString().slice(0, 10) : ''}
+                            onChange={(e) =>
+                              setLocalSteps((prev) =>
+                                prev.map((s, i) =>
+                                  i === index ? { ...s, date: e.target.value } : s
+                                )
+                              )
+                            }
+                            className="text-[10px] px-2 py-1 rounded border border-gray-300 bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLocalSteps((prev) => prev.filter((_, i) => i !== index))
+                            }
+                            className="text-[11px] text-red-500 hover:text-red-600"
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
+              <button
+                type="button"
+                onClick={() => setShowStepsModal(false)}
+                className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 hover:bg-white"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await dossiersAPI.updateDossier(dossier._id, {
+                      etapesSupplementaires: localSteps.map((step) => ({
+                        id: step.id,
+                        label: step.label,
+                        date: step.date || null,
+                      })),
+                    });
+                    setShowStepsModal(false);
+                    await loadDossier();
+                  } catch (err) {
+                    console.error("Erreur lors de l'enregistrement des étapes:", err);
+                  }
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-md bg-orange-500 text-white hover:bg-orange-600"
+              >
+                Enregistrer les étapes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="w-full px-4 py-8 overflow-x-hidden">
         {/* En-tête amélioré */}
         <div className="mb-6">
-          <Link href="/admin/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Retour aux dossiers
-          </Link>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <Link href={`/admin/dossiers?dossierId=${encodeURIComponent(dossier._id || dossier.id || '')}`} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Retour à la vue simplifiée
+            </Link>
+            <Link href="/admin/dossiers" className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 transition-colors">
+              Vue liste complète
+            </Link>
+          </div>
           
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6 overflow-hidden">
             <div className="flex items-start justify-between mb-4">
@@ -288,34 +562,48 @@ export default function AdminDossierDetailPage() {
                 })()}
                 
                 {/* Timeline */}
-                {(() => {
-                  const steps = getTimelineSteps(dossier.statut);
-                  return (
-                    <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
-                      <div className="flex items-center gap-2 min-w-max">
-                        {steps.map((step, index) => (
-                          <div key={step.key} className="flex items-center gap-2 flex-shrink-0">
+                {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
+                  <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-muted-foreground">Étapes définies pour ce dossier</p>
+                    </div>
+                    <div className="flex items-center gap-4 min-w-max">
+                      {dossier.etapesSupplementaires.map((step: any, index: number) => {
+                        const isCurrent =
+                          dossier.statut &&
+                          (dossier.statut === step.id || dossier.statut === step.label);
+                        return (
+                          <div key={step.id || index} className="flex items-center gap-2 flex-shrink-0">
                             <div className="flex flex-col items-center gap-1">
-                              <span className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></span>
-                              <span className={`text-[10px] font-medium whitespace-nowrap ${
-                                step.completed ? 'text-green-700' : 'text-gray-400'
-                              }`}>
+                              <span
+                                className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                  isCurrent
+                                    ? 'bg-blue-500 ring-2 ring-blue-300'
+                                    : 'bg-gray-300'
+                                }`}
+                              ></span>
+                              <span
+                                className={`text-[10px] font-medium whitespace-nowrap ${
+                                  isCurrent ? 'text-blue-700' : 'text-gray-500'
+                                }`}
+                              >
                                 {step.label}
                               </span>
+                              {step.date && (
+                                <span className="text-[9px] text-gray-400 whitespace-nowrap">
+                                  ⏰ {new Date(step.date).toLocaleDateString('fr-FR')}
+                                </span>
+                              )}
                             </div>
-                            {index < steps.length - 1 && (
-                              <div className={`h-0.5 w-6 flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></div>
+                            {index < dossier.etapesSupplementaires.length - 1 && (
+                              <div className="h-0.5 w-6 flex-shrink-0 bg-gray-300"></div>
                             )}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
-                  );
-                })()}
+                  </div>
+                )}
                 
                 {/* Statuts et informations rapides */}
                 <div className="flex flex-wrap items-center gap-3">
@@ -412,6 +700,17 @@ export default function AdminDossierDetailPage() {
 
         {/* Vue détaillée du dossier */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-6">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h2 className="text-xl font-bold">Vue détaillée du dossier</h2>
+            <button
+              type="button"
+              onClick={() => setShowStepsModal(true)}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-gray-300 text-xs font-medium bg-white hover:bg-gray-50"
+            >
+              <span>✏️</span>
+              <span>Éditer les étapes</span>
+            </button>
+          </div>
           <DossierDetailView dossier={dossier} variant="admin" />
         </div>
 

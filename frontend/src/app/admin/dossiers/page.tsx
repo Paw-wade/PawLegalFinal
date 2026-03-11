@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, userAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI } from '@/lib/api';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
@@ -315,6 +315,7 @@ export default function AdminDossiersPage() {
   const [newEtapeLabel, setNewEtapeLabel] = useState('');
   const [newEtapeDate, setNewEtapeDate] = useState('');
   const [isAddingEtape, setIsAddingEtape] = useState(false);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -338,6 +339,18 @@ export default function AdminDossiersPage() {
       loadDossierTasks();
     }
   }, [session, status]);
+
+  // Ouvrir automatiquement le badge du dossier passé en paramètre (depuis la vue détail)
+  useEffect(() => {
+    const dossierIdToOpen = searchParams?.get('dossierId');
+    if (dossierIdToOpen && dossiers.length > 0) {
+      setExpandedDossiers((prev) => {
+        const next = new Set(prev);
+        next.add(dossierIdToOpen);
+        return next;
+      });
+    }
+  }, [searchParams, dossiers]);
 
   const loadNotifications = async () => {
     try {
@@ -1761,6 +1774,37 @@ export default function AdminDossiersPage() {
                               style={{width: `${progress}%`}}
                             ></div>
                           </div>
+                          {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
+                            <div className="mt-1">
+                              <div className="flex items-center gap-1 justify-between">
+                                {dossier.etapesSupplementaires.map((step: any, index: number) => {
+                                  const isCurrent =
+                                    dossier.statut &&
+                                    (dossier.statut === step.label || dossier.statut === step.id);
+                                  return (
+                                    <div
+                                      key={step.id || index}
+                                      className="flex-1 flex flex-col items-center"
+                                    >
+                                      <div
+                                        className={`w-full h-1 rounded-full ${
+                                          isCurrent ? 'bg-blue-500' : 'bg-transparent'
+                                        }`}
+                                      ></div>
+                                      <span
+                                        className={`mt-0.5 text-[9px] text-center truncate max-w-[80px] ${
+                                          isCurrent ? 'text-blue-700 font-semibold' : 'text-gray-400'
+                                        }`}
+                                        title={step.label}
+                                      >
+                                        {step.label}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -1796,53 +1840,7 @@ export default function AdminDossiersPage() {
                       return null;
                     })()}
 
-                    {/* Timeline complète avec toutes les étapes + étapes supplémentaires */}
-                    {(() => {
-                      const steps = getTimelineStepsWithCustom(dossier.statut, dossier.etapesSupplementaires);
-                      return (
-                        <div className="mb-3 pb-2 border-b border-gray-100">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-semibold text-muted-foreground">Étapes du dossier :</p>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setAddEtapeDossier(dossier);
-                                setNewEtapeLabel('');
-                                setNewEtapeDate('');
-                                setError(null);
-                              }}
-                              className="text-[10px] text-primary hover:underline font-medium"
-                            >
-                              + Ajouter une étape
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {steps.map((step) => (
-                              <div key={step.key} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded ${
-                                step.isCurrent ? 'bg-blue-50 border border-blue-200' : ''
-                              } ${(step as any).isCustom ? 'bg-amber-50 border border-amber-200' : ''}`}>
-                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                  (step as any).isCustom ? 'bg-amber-500' :
-                                  step.completed && !step.isCurrent ? 'bg-green-500' :
-                                  step.isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' :
-                                  'bg-gray-300'
-                                }`}></span>
-                                <span className={`text-[10px] leading-tight ${
-                                  (step as any).isCustom ? 'text-amber-800 font-medium' :
-                                  step.completed && !step.isCurrent ? 'text-green-700 font-medium' :
-                                  step.isCurrent ? 'text-blue-700 font-bold' :
-                                  'text-gray-400'
-                                }`}>
-                                  {step.label}
-                                  {(step as any).isCustom && (step as any).date ? ` (${(step as any).date})` : ''}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })()}
+                    {/* Timeline complète avec toutes les étapes + étapes supplémentaires - masquée sur les badges */}
 
                     {/* Informations du dossier */}
                     <div className="space-y-2 mb-3">
@@ -2585,31 +2583,32 @@ export default function AdminDossiersPage() {
                             📋 Statut du dossier
                           </label>
                           <select
-                            value={dossier.statut}
+                            value={dossier.statut || ''}
                             onChange={(e) => handleChangeStatut(dossier._id || dossier.id, e.target.value)}
                             className="text-xs px-2 py-1.5 rounded-md border border-gray-300 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors w-full"
                             disabled={isLoading}
-                            title="État d'avancement du dossier dans le processus. Modifiable par le chef d'équipe ou superadmin uniquement."
+                            title="Étape actuelle du dossier, choisie parmi les étapes définies dans l'édition des étapes."
                           >
-                            <option value="recu">Reçu</option>
-                            <option value="accepte">Accepté</option>
-                            <option value="refuse">Refusé</option>
-                            <option value="en_attente_onboarding">En attente d'onboarding</option>
-                            <option value="en_cours_instruction">En cours d'instruction</option>
-                            <option value="pieces_manquantes">Pièces manquantes</option>
-                            <option value="dossier_complet">Dossier Complet</option>
-                            <option value="depose">Déposé</option>
-                            <option value="reception_confirmee">Réception confirmée</option>
-                            <option value="complement_demande">Complément demandé</option>
-                            <option value="decision_defavorable">Décision défavorable</option>
-                            <option value="communication_motifs">Communication des Motifs</option>
-                            <option value="recours_preparation">Recours en préparation</option>
-                            <option value="refere_mesures_utiles">Référé Mesures Utiles</option>
-                            <option value="refere_suspension_rep">Référé suspension et REP</option>
-                            <option value="gain_cause">Gain de cause</option>
-                            <option value="rejet">Rejet</option>
-                            <option value="decision_favorable">Décision favorable</option>
-                            <option value="autre">Autre (statut non prévu)</option>
+                            {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 ? (
+                              <>
+                                {!dossier.statut && (
+                                  <option value="">Sélectionner une étape</option>
+                                )}
+                                {dossier.etapesSupplementaires.map((etape: any, idx: number) => {
+                                  const value = etape.id || etape.label || String(idx);
+                                  return (
+                                    <option
+                                      key={value}
+                                      value={value}
+                                    >
+                                      {etape.label || etape.id || `Étape ${idx + 1}`}
+                                    </option>
+                                  );
+                                })}
+                              </>
+                            ) : (
+                              <option value="">Aucune étape définie (ouvrir "Éditer les étapes")</option>
+                            )}
                           </select>
                         </div>
                         <div>

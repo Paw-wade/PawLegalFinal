@@ -122,7 +122,7 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
         }
       }
 
-      // Pour les clients : notifications importantes de dossiers
+      // Pour les clients : notifications importantes de dossiers (documents, échéances, explications)
       if (userRole === 'client' && userId) {
         try {
           const notificationsResponse = await notificationsAPI.getNotifications({
@@ -132,10 +132,10 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
           if (notificationsResponse.data.success) {
             const notifications = notificationsResponse.data.notifications || [];
             
-            // Filtrer les notifications importantes (documents manquants, échéances, etc.)
+            // Filtrer les notifications importantes (documents manquants, échéances, explications, etc.)
             const importantNotifications = notifications.filter((notif: any) => {
               const type = notif.type || '';
-              return type.includes('document') || type.includes('echeance') || type.includes('urgent');
+              return type.includes('document') || type.includes('echeance') || type.includes('urgent') || type === 'dossier_updated';
             });
 
             importantNotifications.slice(0, 3).forEach((notif: any) => {
@@ -183,6 +183,12 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
                 const dossierId = safeString(notif.dossierId) || safeString(notif.metadata?.dossierId);
                 if (dossierId) {
                   link = `/client/dossiers/${dossierId}`;
+                }
+              } else if (notifType === 'dossier_updated' && (notif.metadata?.source === 'complementsRecit')) {
+                icon = '📝';
+                const dossierId = safeString(notif.metadata?.dossierId);
+                if (dossierId) {
+                  link = `/client/dossiers/${dossierId}/recap`;
                 }
               }
 

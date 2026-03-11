@@ -19,7 +19,7 @@ const PLATFORM_CONFIG = {
     country: 'France'
   },
   email: 'contact@adapappers.fr',
-  website: 'https://www.pawlegal.fr',
+  website: 'https://www.adapappers.fr',
   phone: '07 68 03 33 58'
 };
 
@@ -57,22 +57,22 @@ function addDocumentHeader(doc, options = {}) {
   const textColor = '#1f2937'; // Gris foncé
   const lightGray = '#9ca3af'; // Gris clair
 
-  // ===== LOGO (en haut à gauche) =====
-  // Note: Pour ajouter une image de logo, utiliser:
-  // if (options.logoPath) {
-  //   doc.image(options.logoPath, margin, yPosition, { width: 60, height: 60 });
-  //   yPosition += 65;
-  // }
-  // Pour l'instant, on utilise du texte stylisé
-  doc.fontSize(24)
-     .fillColor(primaryColor)
-     .font('Helvetica-Bold')
-     .text('PAW', margin, yPosition, { width: 100 });
-  
-  doc.fontSize(24)
-     .fillColor(primaryColor)
-     .font('Helvetica-Bold')
-     .text('LEGAL', margin, yPosition + 20, { width: 100 });
+  // ===== LOGO / NOM (en haut à gauche) =====
+  // Si un logo image existe, on peut utiliser options.logoPath, sinon on affiche le nom ADA Pappers
+  if (options.logoPath) {
+    doc.image(options.logoPath, margin, yPosition, { width: 60, height: 60 });
+    yPosition += 65;
+  } else {
+    doc.fontSize(24)
+      .fillColor(primaryColor)
+      .font('Helvetica-Bold')
+      .text('ADA', margin, yPosition, { width: 100 });
+
+    doc.fontSize(18)
+      .fillColor(primaryColor)
+      .font('Helvetica-Bold')
+      .text('Pappers', margin, yPosition + 26, { width: 120 });
+  }
 
   // ===== NOM DE LA PLATEFORME (à droite du logo) =====
   const nameX = margin + 120;

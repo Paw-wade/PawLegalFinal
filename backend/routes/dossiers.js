@@ -144,7 +144,7 @@ router.post(
   [
     body('titre').optional().trim(),
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']),
-    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']),
+    body('statut').optional().isString().trim().isLength({ max: 200 }),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente'])
   ],
   // Middleware d'authentification optionnel
@@ -1140,6 +1140,67 @@ router.post('/:id/recap/complements', protect, async (req, res) => {
     dossier.complementsRecit.push(complement);
     await dossier.save();
     const added = dossier.complementsRecit[dossier.complementsRecit.length - 1];
+
+    // Notifications : client + partenaires/admin concernés
+    try {
+      const modifier = req.user;
+      const dossierTitle = dossier.titre || dossier.numero || 'Votre dossier';
+      const baseMessage = `Une nouvelle explication a été ajoutée au dossier "${dossierTitle}" par ${authorName}.`;
+      const lienClient = `/client/dossiers/${dossier._id.toString()}/recap`;
+      const lienAdmin = `/admin/dossiers/${dossier._id.toString()}/recap`;
+      const lienPartenaire = `/partenaire/dossiers/${dossier._id.toString()}/recap`;
+
+      // 1. Notifier le client (propriétaire) si ce n'est pas lui qui parle
+      if (dossier.user) {
+        const clientId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
+        if (clientId !== req.user.id.toString()) {
+          await createNotification(
+            clientId,
+            'dossier_updated',
+            'Nouvelle explication sur votre dossier',
+            baseMessage,
+            lienClient,
+            { dossierId: dossier._id.toString(), complementId: added._id.toString(), source: 'complementsRecit' }
+          );
+        }
+      }
+
+      // 2. Notifier les partenaires à qui le dossier est transmis
+      if (Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0) {
+        for (const trans of dossier.transmittedTo) {
+          const part = trans.partenaire;
+          const partenaireId = part?._id ? part._id.toString() : part?.toString();
+          if (partenaireId && partenaireId !== req.user.id.toString()) {
+            await createNotification(
+              partenaireId,
+              'dossier_updated',
+              'Nouvelle explication sur un dossier transmis',
+              baseMessage,
+              lienPartenaire,
+              { dossierId: dossier._id.toString(), complementId: added._id.toString(), source: 'complementsRecit' }
+            );
+          }
+        }
+      }
+
+      // 3. Notifier l'admin assigné le cas échéant (si ce n'est pas lui)
+      if (dossier.assignedTo) {
+        const assignedId = dossier.assignedTo._id ? dossier.assignedTo._id.toString() : dossier.assignedTo.toString();
+        if (assignedId !== req.user.id.toString()) {
+          await createNotification(
+            assignedId,
+            'dossier_updated',
+            'Nouvelle explication sur un dossier',
+            baseMessage,
+            lienAdmin,
+            { dossierId: dossier._id.toString(), complementId: added._id.toString(), source: 'complementsRecit' }
+          );
+        }
+      }
+    } catch (notifyError) {
+      console.error('Erreur lors de la création des notifications pour complément récit:', notifyError);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Complément ajouté.',
@@ -1469,8 +1530,10 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     };
     
     // Générer le PDF
+    const { addDocumentHeader, PLATFORM_CONFIG } = require('../utils/documentHeader');
     const PDFDocument = require('pdfkit');
-    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+    const margin = 50;
+    const doc = new PDFDocument({ margin, size: 'A4' });
     
     // Headers pour le téléchargement
     const filename = `Recit_Dossier_${recap.dossier.numero || dossierId}_${new Date().toISOString().split('T')[0]}.pdf`;
@@ -1480,10 +1543,11 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     // Pipe le PDF vers la réponse
     doc.pipe(res);
     
+    // Ajouter l'en-tête standard ADA Pappers et récupérer la position de départ du contenu
+    let yPosition = addDocumentHeader(doc, { margin });
+    
     // Fonction helper pour ajouter du texte avec gestion de la pagination
-    let yPosition = 50;
     const pageHeight = doc.page.height;
-    const margin = 50;
     const lineHeight = 15;
     const sectionSpacing = 20;
     let pageCount = 1;
@@ -1534,13 +1598,8 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       return currentY;
     };
     
-    // En-tête
-    doc.fontSize(18).font('Helvetica-Bold').fillColor('#FF6600');
-    yPosition = addText('PAW LEGAL', margin, yPosition);
-    doc.fontSize(16).fillColor('#000000');
-    yPosition += lineHeight;
-    yPosition = addText('RÉCIT RÉCAPITULATIF DU DOSSIER', margin, yPosition);
-    yPosition += sectionSpacing;
+    // Titre principal sous l'en-tête
+    yPosition = addSection('RÉCIT RÉCAPITULATIF DU DOSSIER', yPosition);
     
     // Informations du dossier
     yPosition = addSection('INFORMATIONS DU DOSSIER', yPosition);
@@ -1597,6 +1656,24 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     }
     yPosition += sectionSpacing;
     
+    // Explication du dossier (compléments au récit, visibles par tous) — placés AVANT les documents
+    if (recap.complementsRecit && recap.complementsRecit.length > 0) {
+      yPosition = addSection('EXPLICATION DU DOSSIER', yPosition);
+      doc.fontSize(10);
+      recap.complementsRecit.forEach((c, index) => {
+        const dateStr = c.addedAt ? new Date(c.addedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const authorLabel = [c.authorName, c.role].filter(Boolean).join(' • ');
+        yPosition = addText(`${index + 1}. Le ${dateStr} — ${authorLabel}`, margin, yPosition);
+        yPosition += lineHeight * 0.5;
+        yPosition = addMultilineText(c.text, margin + 10, yPosition, {
+          width: doc.page.width - 2 * margin - 10,
+          align: 'left'
+        });
+        yPosition += lineHeight;
+      });
+      yPosition += sectionSpacing;
+    }
+    
     // Documents
     yPosition = addSection('DOCUMENTS', yPosition);
     yPosition = addText(`Total : ${recap.documents.total} document(s)`, margin, yPosition);
@@ -1619,7 +1696,6 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       yPosition = addText(`En attente : ${recap.documentRequests.enAttente} | Reçus : ${recap.documentRequests.recus}`, margin, yPosition);
       yPosition += sectionSpacing;
     }
-    
     // Tâches
     if (recap.taches.total > 0) {
       yPosition = addSection('TÂCHES', yPosition);
@@ -1672,18 +1748,6 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       yPosition += sectionSpacing;
     }
     
-    // Historique récent
-    if (recap.historique && recap.historique.length > 0) {
-      yPosition = addSection('HISTORIQUE RÉCENT', yPosition);
-      recap.historique.slice(0, 10).forEach((log, index) => {
-        yPosition = addText(`${new Date(log.date).toLocaleDateString('fr-FR')} - ${log.description}`, margin + 20, yPosition);
-        yPosition += lineHeight * 0.7;
-        yPosition = addText(`   Par: ${log.utilisateur}`, margin + 20, yPosition);
-        yPosition += lineHeight;
-      });
-      yPosition += sectionSpacing;
-    }
-    
     // Statistiques
     yPosition = addSection('STATISTIQUES', yPosition);
     yPosition = addText(`Durée de traitement : ${recap.statistiques.dureeTraitement} jour(s)`, margin, yPosition);
@@ -1715,23 +1779,6 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       yPosition += sectionSpacing;
     }
     
-    // Compléments au récit (visibles par tous)
-    if (recap.complementsRecit && recap.complementsRecit.length > 0) {
-      yPosition = addSection('COMPLÉMENTS AU RÉCIT', yPosition);
-      doc.fontSize(10);
-      recap.complementsRecit.forEach((c, index) => {
-        const dateStr = c.addedAt ? new Date(c.addedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-        const authorLabel = [c.authorName, c.role].filter(Boolean).join(' • ');
-        yPosition = addText(`${index + 1}. Le ${dateStr} — ${authorLabel}`, margin, yPosition);
-        yPosition += lineHeight * 0.5;
-        yPosition = addMultilineText(c.text, margin + 10, yPosition, {
-          width: doc.page.width - 2 * margin - 10,
-          align: 'left'
-        });
-        yPosition += lineHeight;
-      });
-    }
-    
     // Gérer les erreurs du stream PDF
     doc.on('error', (err) => {
       console.error('Erreur dans le stream PDF:', err);
@@ -1754,8 +1801,9 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         for (let i = startPage; i < startPage + totalPages; i++) {
           doc.switchToPage(i);
           doc.fontSize(8).fillColor('#666666');
+          const footerText = `${PLATFORM_CONFIG.name} - ${PLATFORM_CONFIG.website} - ${PLATFORM_CONFIG.email} | Page ${i - startPage + 1}/${totalPages}`;
           doc.text(
-            `Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')} - Page ${i - startPage + 1}/${totalPages}`,
+            footerText,
             margin,
             doc.page.height - 30,
             { align: 'center', width: doc.page.width - 2 * margin }
@@ -1900,7 +1948,7 @@ router.put(
     // Validation simplifiée : tous les champs sont optionnels
     // Si un champ est fourni, il sera validé, sinon ignoré
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']).withMessage('Catégorie invalide'),
-    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']).withMessage('Statut invalide'),
+    body('statut').optional().isString().trim().isLength({ max: 200 }).withMessage('Statut invalide'),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente']).withMessage('Priorité invalide')
     // Pas de validation pour les autres champs optionnels
   ],
@@ -1967,6 +2015,7 @@ router.put(
         const etapesSupplementaires = req.body.etapesSupplementaires;
         if (Array.isArray(etapesSupplementaires)) {
           dossier.etapesSupplementaires = etapesSupplementaires.map((e, idx) => ({
+            id: e.id || e.label || `step_${idx}`,
             label: e.label || '',
             date: e.date ? new Date(e.date) : undefined,
             ordre: typeof e.ordre === 'number' ? e.ordre : idx,
@@ -2011,6 +2060,7 @@ router.put(
       // Étapes supplémentaires (admin/superadmin uniquement, partenaire géré au-dessus)
       if (Array.isArray(bodyEtapesSupplementaires)) {
         dossier.etapesSupplementaires = bodyEtapesSupplementaires.map((e, idx) => ({
+          id: e.id || e.label || `step_${idx}`,
           label: e.label || '',
           date: e.date ? new Date(e.date) : undefined,
           ordre: typeof e.ordre === 'number' ? e.ordre : idx,
