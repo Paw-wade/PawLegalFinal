@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { Footer } from '@/components/layout/Footer';
+import { Header } from '@/components/layout/Header';
 import { userAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import jsPDF from 'jspdf';
@@ -1783,63 +1784,10 @@ export default function CalculateurPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
-      {/* Header */}
-      <header className="border-b bg-white/95 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="text-2xl font-bold text-primary">ADA Pappers</Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <Link href="/" className="hover:text-primary transition-colors">Accueil</Link>
-              <Link href="/services" className="hover:text-primary transition-colors">Services</Link>
-              <Link href="/calculateur" className="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600 transition-colors shadow-md">Calculateur</Link>
-              <Link href="/faq" className="hover:text-primary transition-colors">FAQ</Link>
-              <Link href="/contact" className="hover:text-primary transition-colors">Contact</Link>
-            </nav>
-            <div className="flex items-center gap-4">
-              {session && (session.user || userProfile) ? (
-                <div className="flex items-center gap-3">
-                  <Link 
-                    href={(session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin' ? '/admin' : '/client'}
-                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                  >
-                    <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center">
-                      <span className="text-white font-bold text-sm">
-                        {userProfile?.firstName?.[0]?.toUpperCase() || session?.user?.name?.[0]?.toUpperCase() || 'U'}
-                        {userProfile?.lastName?.[0]?.toUpperCase() || ''}
-                      </span>
-                    </div>
-                    <div className="hidden sm:block">
-                      <p className="text-sm font-semibold text-foreground">
-                        {userProfile?.firstName && userProfile?.lastName
-                          ? `${userProfile.firstName} ${userProfile.lastName}`
-                          : session.user?.name || 'Utilisateur'}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {(userProfile?.role || (session.user as any)?.role || 'client').charAt(0).toUpperCase() + (userProfile?.role || (session.user as any)?.role || 'client').slice(1)}
-                      </p>
-                    </div>
-                  </Link>
-                  <Button 
-                    variant="outline" 
-                    className="text-xs"
-                    onClick={handleSignOut}
-                  >
-                    Déconnexion
-                  </Button>
-                </div>
-              ) : (
-                <>
-              <Link href="/auth/signin"><Button variant="ghost">Connexion</Button></Link>
-              <Link href="/auth/signup"><Button>Créer un compte</Button></Link>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col">
+      <Header variant="home" />
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 flex-1">
         <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* Colonne 1 : Informations du profil utilisateur (à l'extrémité gauche) */}
           <div className="w-full lg:w-auto lg:flex-shrink-0 lg:self-start">
