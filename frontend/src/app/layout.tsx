@@ -4,10 +4,10 @@ import SessionProvider from '@/providers/SessionProvider';
 
 export const metadata: Metadata = {
   // Titre court affiché à côté du favicon dans l’onglet
-  title: 'Paw Legal',
+  title: 'ADA Pappers',
   // Description SEO (on peut garder la description longue)
   description:
-    'Paw Legal - Service d\'accompagnement juridique spécialisé en droit des étrangers et droit du travail. Accompagnement professionnel pour vos démarches administratives.',
+    "ADA Pappers - Service d'Accompagnement aux démarches administratives pour vos titres de séjour, visas et démarches liées au droit des étrangers et du travail.",
 };
 
 export default function RootLayout({

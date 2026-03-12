@@ -54,10 +54,8 @@ export function TaskNotificationBanner({ userRole, userId }: TaskNotificationBan
   }, []);
 
   useEffect(() => {
+    // Chargement unique au montage / changement de rôle pour éviter les sursauts de page
     loadTaskNotifications();
-    // Recharger toutes les 30 secondes
-    const interval = setInterval(loadTaskNotifications, 30000);
-    return () => clearInterval(interval);
   }, [userRole, userId, session]);
 
   const toggleVisibility = (newValue?: boolean) => {

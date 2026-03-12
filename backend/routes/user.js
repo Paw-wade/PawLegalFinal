@@ -166,6 +166,45 @@ router.put(
   }
 );
 
+// @route   POST /api/user/profile/deactivate
+// @desc    Désactiver son propre compte (soft delete : isActive = false)
+// @access  Private
+router.post('/profile/deactivate', async (req, res) => {
+  try {
+    const effectiveUserId = req.user.id;
+    const user = await User.findById(effectiveUserId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé'
+      });
+    }
+
+    if (user.isActive === false) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce compte est déjà désactivé'
+      });
+    }
+
+    user.isActive = false;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Votre compte a été désactivé. Vous ne pourrez plus vous connecter tant qu’il ne sera pas réactivé par un administrateur.'
+    });
+  } catch (error) {
+    console.error('Erreur lors de la désactivation du compte:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: error.message
+    });
+  }
+});
+
 // @route   PUT /api/user/sms-preferences
 // @desc    Mettre à jour les préférences SMS
 // @access  Private
@@ -385,7 +424,11 @@ router.put(
     body('lastName').optional().trim().notEmpty().withMessage('Le nom ne peut pas être vide'),
     body('email').optional().isEmail().normalizeEmail().withMessage('Email invalide'),
     body('phone').optional().trim(),
-    body('role').optional().isIn(['client', 'admin', 'superadmin']).withMessage('Rôle invalide')
+    body('role').optional().isIn(['client', 'admin', 'superadmin', 'partenaire']).withMessage('Rôle invalide'),
+    body('partenaireInfo.typeOrganisme')
+      .optional()
+      .isIn(['consulat', 'association', 'avocat'])
+      .withMessage('Type d\'organisme partenaire invalide')
   ],
   async (req, res) => {
     try {
@@ -428,7 +471,8 @@ router.put(
         codePostal,
         pays,
         profilComplete,
-        isActive
+        isActive,
+        partenaireInfo
       } = req.body;
 
       // Vérifier si l'email est déjà utilisé par un autre utilisateur
@@ -462,6 +506,16 @@ router.put(
       if (pays !== undefined) user.pays = pays;
       if (profilComplete !== undefined) user.profilComplete = profilComplete;
       if (isActive !== undefined) user.isActive = isActive;
+
+      // Mettre à jour les informations partenaire si fournies
+      if (partenaireInfo) {
+        user.partenaireInfo = {
+          typeOrganisme: partenaireInfo.typeOrganisme,
+          nomOrganisme: partenaireInfo.nomOrganisme || '',
+          adresseOrganisme: partenaireInfo.adresseOrganisme || '',
+          contactPrincipal: partenaireInfo.contactPrincipal || ''
+        };
+      }
 
       await user.save();
 

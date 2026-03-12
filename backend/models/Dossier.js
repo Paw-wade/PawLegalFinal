@@ -57,28 +57,7 @@ const dossierSchema = new mongoose.Schema({
   },
   statut: {
     type: String,
-    enum: [
-      'recu',
-      'accepte',
-      'refuse',
-      'annule',
-      'en_attente_onboarding',
-      'en_cours_instruction',
-      'pieces_manquantes',
-      'dossier_complet',
-      'depose',
-      'reception_confirmee',
-      'complement_demande',
-      'decision_defavorable',
-      'communication_motifs',
-      'recours_preparation',
-      'refere_mesures_utiles',
-      'refere_suspension_rep',
-      'gain_cause',
-      'rejet',
-      'decision_favorable',
-      'autre'
-    ],
+    trim: true,
     default: 'recu'
   },
   priorite: {
@@ -156,6 +135,23 @@ const dossierSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     }
+  }],
+  // Étapes supplémentaires ajoutées manuellement par l'admin ou le partenaire (non prévues dans le flux standard)
+  etapesSupplementaires: [{
+    id: { type: String, trim: true },
+    label: { type: String, required: true, trim: true },
+    date: { type: Date },
+    ordre: { type: Number, default: 0 },
+    addedAt: { type: Date, default: Date.now },
+    addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  }],
+  // Compléments au récit : informations ajoutées par le client, le créateur, l'admin ou le partenaire (visibles dans le récap et le PDF)
+  complementsRecit: [{
+    addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    addedAt: { type: Date, default: Date.now },
+    authorName: { type: String, trim: true },
+    role: { type: String, trim: true },
+    text: { type: String, required: true, trim: true }
   }],
   transmittedTo: [{
     partenaire: {

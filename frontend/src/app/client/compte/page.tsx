@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { userAPI, smsPreferencesAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
@@ -571,10 +571,13 @@ export default function ComptePage() {
                     id="numeroEtranger"
                     type="text"
                     value={profileData.numeroEtranger}
-                    onChange={(e) => setProfileData({ ...profileData, numeroEtranger: e.target.value })}
-                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
+                    readOnly
+                    className="mt-1 h-11 border-2 bg-gray-50 text-gray-700 cursor-not-allowed"
                     placeholder="Ex: 12AB34567"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Ce numéro est défini lors de la constitution du dossier et ne peut pas être modifié depuis cet écran.
+                  </p>
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
@@ -725,82 +728,123 @@ export default function ComptePage() {
               </h2>
               <p className="text-sm text-muted-foreground mt-2">Mettez à jour votre mot de passe pour sécuriser votre compte</p>
             </div>
-            <form onSubmit={handlePasswordSubmit} className="p-8 space-y-6 max-w-2xl">
-              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
-                <p className="text-sm text-blue-800">
-                  <strong>Conseil de sécurité :</strong> Utilisez un mot de passe fort contenant au moins 8 caractères, avec des majuscules, minuscules, chiffres et symboles.
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="currentPassword" className="text-sm font-semibold">Mot de passe actuel *</Label>
-                <Input
-                  id="currentPassword"
-                  type="password"
-                  value={passwordData.currentPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                  required
-                  className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                  placeholder="Entrez votre mot de passe actuel"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="newPassword" className="text-sm font-semibold">Nouveau mot de passe *</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                  required
-                  minLength={8}
-                  className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                  placeholder="Minimum 8 caractères"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Le mot de passe doit contenir au moins 8 caractères
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm font-semibold">Confirmer le nouveau mot de passe *</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                  required
-                  className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                  placeholder="Confirmez votre nouveau mot de passe"
-                />
-                {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
-                  <p className="text-xs text-red-600 mt-1">⚠️ Les mots de passe ne correspondent pas</p>
-                )}
-                {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword === passwordData.confirmPassword && (
-                  <p className="text-xs text-green-600 mt-1">✅ Les mots de passe correspondent</p>
-                )}
-              </div>
-              
-              <div className="flex gap-4 pt-6 border-t border-border">
-                <Button 
-                  type="submit" 
-                  disabled={isSaving || (passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword)} 
-                  className="flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                >
-                  {isSaving ? (
-                    <span className="flex items-center gap-2">
-                      <span className="animate-spin">⏳</span>
-                      <span>Modification...</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <span>🔐</span>
-                      <span>Modifier le mot de passe</span>
-                    </span>
+            <div className="p-8 space-y-10">
+              <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl">
+                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
+                  <p className="text-sm text-blue-800">
+                    <strong>Conseil de sécurité :</strong> Utilisez un mot de passe fort contenant au moins 8 caractères, avec des majuscules, minuscules, chiffres et symboles.
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="currentPassword" className="text-sm font-semibold">Mot de passe actuel *</Label>
+                  <Input
+                    id="currentPassword"
+                    type="password"
+                    value={passwordData.currentPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                    required
+                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
+                    placeholder="Entrez votre mot de passe actuel"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword" className="text-sm font-semibold">Nouveau mot de passe *</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    value={passwordData.newPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                    required
+                    minLength={8}
+                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
+                    placeholder="Minimum 8 caractères"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Le mot de passe doit contenir au moins 8 caractères
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword" className="text-sm font-semibold">Confirmer le nouveau mot de passe *</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                    required
+                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
+                    placeholder="Confirmez votre nouveau mot de passe"
+                  />
+                  {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
+                    <p className="text-xs text-red-600 mt-1">⚠️ Les mots de passe ne correspondent pas</p>
                   )}
+                  {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword === passwordData.confirmPassword && (
+                    <p className="text-xs text-green-600 mt-1">✅ Les mots de passe correspondent</p>
+                  )}
+                </div>
+                
+                <div className="flex gap-4 pt-6 border-t border-border">
+                  <Button 
+                    type="submit" 
+                    disabled={isSaving || (passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword)} 
+                    className="flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                  >
+                    {isSaving ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin">⏳</span>
+                        <span>Modification...</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <span>🔐</span>
+                        <span>Modifier le mot de passe</span>
+                      </span>
+                    )}
+                  </Button>
+                </div>
+              </form>
+
+              {/* Désactivation du compte */}
+              <div className="border-t border-border pt-6 flex items-start justify-between gap-6 max-w-2xl">
+                <div>
+                  <h3 className="text-base font-semibold text-red-600 flex items-center gap-2">
+                    <span>🛑</span>
+                    <span>Désactiver mon compte</span>
+                  </h3>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-red-500 text-red-600 hover:bg-red-50"
+                  disabled={isSaving}
+                  onClick={async () => {
+                    const confirmed = window.confirm(
+                      "Êtes-vous sûr de vouloir désactiver votre compte ? Vous ne pourrez plus vous connecter sans passer par l'équipe ADA Pappers."
+                    );
+                    if (!confirmed) return;
+                    try {
+                      setIsSaving(true);
+                      setError(null);
+                      const response = await userAPI.deactivateMyAccount();
+                      if (response.data?.success) {
+                        alert('Votre compte a été désactivé. Vous allez être déconnecté.');
+                        await signOut({ callbackUrl: '/' });
+                      } else {
+                        setError(response.data?.message || 'Impossible de désactiver le compte');
+                      }
+                    } catch (e: any) {
+                      setError(e?.response?.data?.message || 'Erreur lors de la désactivation du compte');
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                >
+                  Désactiver mon compte
                 </Button>
               </div>
-            </form>
+            </div>
           </div>
         )}
 

@@ -9,7 +9,6 @@ import { DocumentPreview } from '@/components/DocumentPreview';
 
 export default function PartenaireDossierDocumentsPage() {
   const params = useParams();
-  const router = useRouter();
   const dossierId = params.id as string;
   
   const [dossier, setDossier] = useState<any>(null);
@@ -40,7 +39,7 @@ export default function PartenaireDossierDocumentsPage() {
     try {
       setLoading(true);
       // Utiliser la route spécifique pour récupérer les documents du dossier
-      const response = await documentsAPI.getDossierDocuments(dossierId);
+      const response = await dossiersAPI.getDossierDocuments(dossierId);
       if (response.data.success) {
         setDocuments(response.data.documents || []);
       } else {

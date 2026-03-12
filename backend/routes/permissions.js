@@ -391,7 +391,22 @@ router.put(
       } else {
         // Valider les rôles avant création
         const finalRoles = roles || [user.role];
-        const validRoles = ['client', 'admin', 'superadmin', 'avocat', 'consulat', 'association', 'collaborateur', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire', 'visiteur'];
+        const validRoles = [
+          'client',
+          'admin',
+          'superadmin',
+          'partenaire',
+          'avocat',
+          'consulat',
+          'association',
+          'collaborateur',
+          'assistant',
+          'comptable',
+          'secretaire',
+          'juriste',
+          'stagiaire',
+          'visiteur'
+        ];
         const invalidRoles = finalRoles.filter(r => !validRoles.includes(r));
         if (invalidRoles.length > 0) {
           return res.status(400).json({

@@ -187,9 +187,9 @@ export default function SignInPage() {
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary to-primary/80 items-center justify-center p-12 text-white">
         <div className="max-w-md">
           <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-4">Bienvenue sur Paw Legal</h1>
+            <h1 className="text-4xl font-bold mb-4">Bienvenue sur ADA Pappers</h1>
             <p className="text-lg text-white/90 mb-6">
-              Votre partenaire juridique de confiance pour toutes vos démarches administratives.
+              Service d&apos;Accompagnement aux démarches administratives.
             </p>
           </div>
           <div className="space-y-4">
@@ -226,14 +226,14 @@ export default function SignInPage() {
             <Link href="/" className="inline-block">
               <div className="flex flex-col items-center">
                 <span className="text-3xl font-bold text-orange-500 hover:text-orange-600 transition-colors">
-                  Paw Legal
+                  ADA Pappers
                 </span>
                 <p className="text-[10px] text-muted-foreground font-medium mt-1">
-                  Service d'accompagnement juridique
+                  Service d&apos;Accompagnement aux démarches administratives
                 </p>
               </div>
-              </Link>
-            </div>
+            </Link>
+          </div>
             
           <div className="bg-white rounded-xl shadow-xl border border-border overflow-hidden">
             {/* En-tête amélioré */}
@@ -241,7 +241,7 @@ export default function SignInPage() {
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-foreground mb-2">Connexion</h1>
                 <p className="text-muted-foreground">
-                  Connectez-vous à votre compte Paw Legal
+                  Connectez-vous à votre compte ADA Pappers
                 </p>
               </div>
             </div>

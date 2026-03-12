@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const morgan = require('morgan');
+const path = require('path');
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -17,6 +18,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+// Fichiers statiques (médias, documents, etc.)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Connexion à MongoDB
 const connectDB = async () => {
@@ -220,6 +224,16 @@ try {
   console.error(error.stack);
 }
 
+// Route médias (carrousel, etc.)
+try {
+  const mediaRouter = require('./routes/media');
+  app.use('/api/media', mediaRouter);
+  console.log('✅ Route /api/media enregistrée');
+} catch (error) {
+  console.error('❌ Erreur lors du chargement de la route media:', error.message);
+  console.error(error.stack);
+}
+
 // Route appointments
 try {
   const appointmentsRouter = require('./routes/appointments');
@@ -235,6 +249,16 @@ try {
   });
 } catch (error) {
   console.error('❌ Erreur lors du chargement de la route appointments:', error.message);
+  console.error(error.stack);
+}
+
+// Route forum
+try {
+  const forumRouter = require('./routes/forum');
+  app.use('/api/forum', forumRouter);
+  console.log('✅ Route /api/forum enregistrée');
+} catch (error) {
+  console.error('❌ Erreur lors du chargement de la route forum:', error.message);
   console.error(error.stack);
 }
 

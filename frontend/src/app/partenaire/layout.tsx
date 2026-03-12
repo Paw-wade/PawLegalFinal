@@ -11,7 +11,7 @@ export default function PartenaireLayout({
 }) {
   useEffect(() => {
     // Harmoniser le titre de l'onglet partenaire avec le favicon
-    document.title = 'Paw Legal';
+    document.title = 'ADA Pappers';
   }, []);
 
   return (

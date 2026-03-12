@@ -534,6 +534,7 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                         <option value="client">Client</option>
                         <option value="admin">Admin</option>
                         <option value="superadmin">Super Admin</option>
+                        <option value="partenaire">Partenaire</option>
                       </select>
                     </div>
                     <div>

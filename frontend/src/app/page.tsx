@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
-import { temoignagesAPI } from '@/lib/api';
+import { temoignagesAPI, cmsAPI } from '@/lib/api';
 import { ReservationWidget } from '@/components/ReservationWidget';
 import { ReservationBadge } from '@/components/ReservationBadge';
 import { useCmsText } from '@/lib/contentClient';
@@ -49,6 +50,12 @@ function Button({
     </button>
   );
 }
+
+type HeroSlide = {
+  type: 'image' | 'video';
+  src: string;
+  alt?: string;
+};
 
 // Composant pour les points expansibles amélioré
 function ExpandableItem({ 
@@ -99,16 +106,33 @@ export default function HomePage() {
   const [temoignages, setTemoignages] = useState<any[]>([]);
   const [loadingTemoignages, setLoadingTemoignages] = useState(true);
   const [isVisible, setIsVisible] = useState<{ [key: string]: boolean }>({});
+  const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([
+    {
+      type: 'image',
+      src: '/images/hero-1.jpg',
+      alt: 'Accompagnement administratif personnalisé',
+    },
+    {
+      type: 'image',
+      src: '/images/hero-2.jpg',
+      alt: 'Suivi des dossiers de titre de séjour',
+    },
+    {
+      type: 'image',
+      src: '/images/hero-3.jpg',
+      alt: 'Plateforme digitale de gestion des démarches',
+    },
+  ]);
+  const [currentSlide, setCurrentSlide] = useState(0);
   const [isWidgetOpen, setIsWidgetOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('reservationWidgetOpen');
-      return saved !== null ? saved === 'true' : true;
+      return saved !== null ? saved === 'true' : false;
     }
-    return true;
+    return false;
   });
 
   // Textes pilotés par le CMS (avec fallback actuels)
-  const heroBadge = useCmsText('home.hero.badge', 'Expertise juridique reconnue');
   const heroTitle = useCmsText(
     'home.hero.title',
     'Votre partenaire de confiance'
@@ -119,7 +143,7 @@ export default function HomePage() {
   );
   const heroSubtitle = useCmsText(
     'home.hero.subtitle',
-    "Spécialisés en droit des étrangers et droit du travail, nous vous accompagnons dans toutes vos démarches administratives avec expertise et professionnalisme."
+    "Nous vous accompagnons dans toutes vos démarches administratives liées au séjour en France : première demande et renouvellement de titre de séjour, regroupement familial et demande de visa. Bénéficiez d’un accompagnement personnalisé pour constituer un dossier complet, conforme et sécurisé. Suivez l'évolution de votre dossier en temps réel sur la plateforme."
   );
   const heroCtaPrimary = useCmsText(
     'home.hero.cta_primary',
@@ -127,8 +151,10 @@ export default function HomePage() {
   );
   const heroCtaSecondary = useCmsText(
     'home.hero.cta_secondary',
-    'Consultation rapide'
+    'Contactez-nous'
   );
+  const heroCtaSecondaryLabel =
+    heroCtaSecondary === 'Consultation rapide' ? 'Contactez-nous' : heroCtaSecondary;
   const heroSmallText = useCmsText(
     'home.hero.small_text',
     "Suivez en temps réel l'évolution de votre dossier"
@@ -163,7 +189,7 @@ export default function HomePage() {
           {
             nom: 'Ahmed Benali',
             role: 'Client',
-            texte: 'Grâce à Paw Legal, j\'ai pu obtenir mon titre de séjour sans difficulté. Un suivi personnalisé et des conseils précieux à chaque étape.',
+            texte: 'Grâce à ADA Pappers, j\'ai pu obtenir mon titre de séjour sans difficulté. Un suivi personnalisé et des conseils précieux à chaque étape.',
             note: 5,
           },
           {
@@ -214,172 +240,246 @@ export default function HomePage() {
     return () => observer.disconnect();
   }, []);
 
+  // Charger la configuration du carrousel depuis le CMS (si disponible)
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCarouselFromCms = async () => {
+      try {
+        const raw = await cmsAPI.getText('home.hero.carousel', 'fr-FR');
+        if (!raw || !isMounted) return;
+
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return;
+
+        const normalized: HeroSlide[] = parsed
+          .map((item: any): HeroSlide | null => {
+            if (!item || typeof item.src !== 'string' || !item.src.trim()) return null;
+            const type: HeroSlide['type'] = item.type === 'video' ? 'video' : 'image';
+            return {
+              type,
+              src: item.src,
+              alt: item.alt || '',
+            };
+          })
+          .filter((s): s is HeroSlide => s !== null);
+
+        if (normalized.length > 0) {
+          setHeroSlides(normalized);
+          setCurrentSlide(0);
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement du carrousel CMS:', error);
+      }
+    };
+
+    loadCarouselFromCms();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Carrousel automatique pour les slides du hero
+  useEffect(() => {
+    if (heroSlides.length === 0) return;
+
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [heroSlides.length]);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header Professionnel */}
       <Header variant="home" />
 
-      {/* Hero Section améliorée avec animations */}
-      <section className="relative py-16 lg:py-24 bg-gradient-to-br from-primary/10 via-primary/5 to-background overflow-hidden">
-        {/* Effet de particules animées */}
-        <div className="absolute inset-0 bg-grid-pattern opacity-5 animate-pulse"></div>
-        
-        {/* Formes géométriques flottantes */}
-        <div className="absolute top-20 right-20 w-72 h-72 bg-primary/5 rounded-full blur-3xl animate-float"></div>
-        <div className="absolute bottom-20 left-20 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl animate-float delay-1000"></div>
+      {/* Hero Section — design renforcé */}
+      <section className="relative min-h-[85vh] flex items-center py-20 lg:py-28 overflow-hidden">
+        {/* Fond : dégradé doux + formes organiques */}
+        <div className="absolute inset-0 bg-gradient-to-br from-amber-50/90 via-white to-orange-50/60" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_70%_20%,rgba(249,115,22,0.12),transparent)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_20%_80%,rgba(251,146,60,0.08),transparent)]" />
+        <div className="absolute top-1/4 right-0 w-[500px] h-[500px] rounded-full bg-orange-200/20 blur-[100px] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-amber-100/30 blur-[80px] pointer-events-none" />
         
         <div className="container mx-auto px-4 relative z-10">
-          <div className="relative">
-            {/* Contenu à gauche */}
-            <div className="max-w-3xl pr-4 lg:pr-80">
-              {/* Titre avec effet de gradient animé */}
-              <h1 className="text-5xl lg:text-6xl font-bold mb-6 text-foreground leading-tight text-left animate-in fade-in slide-in-from-left-4">
+          <div className="grid lg:grid-cols-2 gap-10 items-center">
+            <div className="relative max-w-2xl">
+              {/* Titre */}
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.1] tracking-tight mb-6">
                 {heroTitle.replace(heroTitleHighlight, '').trim() || heroTitle}{' '}
-                <span className="bg-gradient-to-r from-primary via-primary/80 to-primary bg-clip-text text-transparent animate-gradient">
+                <span className="text-orange-500">
                   {heroTitleHighlight}
                 </span>
               </h1>
               
-              {/* Sous-titre avec animation */}
-              <p className="text-lg lg:text-xl text-muted-foreground mb-8 leading-relaxed text-left animate-in fade-in slide-in-from-left-4 delay-200">
+              {/* Sous-titre */}
+              <p
+                className="text-lg lg:text-xl max-w-2xl leading-relaxed mb-10"
+                style={{
+                  display: 'grid',
+                  flexWrap: 'wrap',
+                  textAlign: 'left',
+                  verticalAlign: 'top',
+                  color: 'rgba(0, 0, 0, 1)',
+                }}
+              >
                 {heroSubtitle}
               </p>
               
-              {/* CTA avec effet hover amélioré */}
-              <div className="flex items-center gap-4 flex-wrap mt-6">
+              {/* CTAs */}
+              <div className="flex flex-wrap items-center gap-4 mb-6">
                 <Link href="/auth/signup">
                   <Button 
                     size="lg" 
-                    className="shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 group"
+                    className="min-w-[200px] shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200 group"
                   >
                     {heroCtaPrimary}
-                    <span className="ml-2 group-hover:translate-x-1 transition-transform inline-block">→</span>
+                    <span className="ml-2 group-hover:translate-x-0.5 inline-block">→</span>
                   </Button>
                 </Link>
                 <Link href="/contact">
                   <Button 
-                    size="lg" 
                     variant="outline" 
-                    className="shadow-md hover:shadow-lg transform hover:scale-105 transition-all duration-300"
+                    size="lg"
+                    className="min-w-[180px] border-2 border-gray-300 text-gray-700 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/50 transition-all duration-200"
                   >
-                    {heroCtaSecondary}
+                    {heroCtaSecondaryLabel}
                   </Button>
                 </Link>
               </div>
               
-              <p className="text-xs text-muted-foreground mt-4 text-left">
+              <p className="text-sm text-gray-500 flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                </span>
                 {heroSmallText}
               </p>
             </div>
 
-            {/* Widget de réservation flottant tout à droite */}
-            <div className="hidden lg:block absolute top-0 right-0">
-              <ReservationWidget 
-                isOpen={isWidgetOpen} 
-                onClose={() => {
-                  setIsWidgetOpen(false);
-                  localStorage.setItem('reservationWidgetOpen', 'false');
-                }}
-              />
+            {/* Carrousel du hero (images ou vidéo) */}
+            <div className="relative w-full max-w-2xl mx-auto h-[300px] sm:h-[380px] lg:h-[440px] rounded-3xl overflow-hidden shadow-2xl border border-white/60 bg-white/40 backdrop-blur">
+              {heroSlides.map((slide, index) => {
+                const isYouTube =
+                  slide.type === 'video' &&
+                  typeof slide.src === 'string' &&
+                  (slide.src.includes('youtube.com/watch') || slide.src.includes('youtu.be/'));
+
+                let embedUrl = slide.src;
+                if (isYouTube) {
+                  try {
+                    // Extraire l'ID de la vidéo pour construire l'URL embed
+                    const url = new URL(slide.src);
+                    if (url.hostname.includes('youtube.com')) {
+                      const v = url.searchParams.get('v');
+                      if (v) {
+                        embedUrl = `https://www.youtube.com/embed/${v}?autoplay=1&mute=1&loop=1&playlist=${v}`;
+                      }
+                    } else if (url.hostname.includes('youtu.be')) {
+                      const id = url.pathname.replace('/', '');
+                      if (id) {
+                        embedUrl = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}`;
+                      }
+                    }
+                  } catch {
+                    // Si l'URL est invalide, on laisse embedUrl tel quel
+                  }
+                }
+
+                return (
+                <div
+                  key={`${slide.src}-${index}`}
+                  className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+                    index === currentSlide ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  {isYouTube ? (
+                    <iframe
+                      src={embedUrl}
+                      title={slide.alt || 'Vidéo du carrousel'}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  ) : slide.type === 'video' ? (
+                    <video
+                      src={slide.src}
+                      className="w-full h-full object-cover"
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                    />
+                  ) : (
+                    <Image
+                      src={slide.src}
+                      alt={slide.alt || ''}
+                      fill
+                      priority={index === 0}
+                      className="object-cover"
+                    />
+                  )}
+                </div>
+              );
+              })}
+
+              {/* Dégradé et cadre décoratif */}
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-black/5 via-transparent to-orange-500/10" />
+              <div className="pointer-events-none absolute -inset-1 rounded-[2rem] border border-orange-500/20" />
+
+              {/* Indicateurs de slide */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                {heroSlides.map((_, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => setCurrentSlide(index)}
+                    className={`h-2.5 rounded-full transition-all duration-300 ${
+                      index === currentSlide
+                        ? 'w-6 bg-orange-500'
+                        : 'w-2.5 bg-white/70 hover:bg-white'
+                    }`}
+                    aria-label={`Afficher l'image ${index + 1}`}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Domaines d'intervention avec effets visuels améliorés */}
-      <section 
-        id="domaines"
-        data-animate
-        className={`py-20 bg-white relative transition-all duration-1000 ${
-          isVisible['domaines'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
-        }`}
-      >
-        <div className="container mx-auto px-4">
-          <div 
-            className="text-center mb-16"
-            data-animate-item
-            data-animate-id="domaines-title"
-          >
-            <h2 className={`text-4xl lg:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent transition-all duration-700 ${
-              isVisible['domaines-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}>
-              {domainsTitle}
-            </h2>
-            <p className={`text-lg text-muted-foreground max-w-2xl mx-auto transition-all duration-700 delay-200 ${
-              isVisible['domaines-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}>
-              {domainsSubtitle}
-            </p>
-          </div>
-          
-          <div className="max-w-2xl mx-auto">
-            <div 
-              data-animate-item
-              data-animate-id="domaine-card"
-              className={`group relative bg-gradient-to-br from-primary/5 to-primary/10 rounded-3xl p-8 lg:p-10 border-2 border-transparent hover:border-primary transition-all duration-500 hover:shadow-2xl transform hover:-translate-y-2 ${
-                isVisible['domaine-card'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-              }`}
-            >
-              {/* Effet de brillance au hover */}
-              <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-              
-              <h3 className="text-3xl font-bold mb-4 text-primary relative z-10">Droit des Étrangers</h3>
-              <p className="text-muted-foreground mb-6 leading-relaxed relative z-10">
-                Accompagnement complet pour toutes vos démarches administratives liées à votre séjour en France.
-              </p>
-              
-              <ul className="space-y-3 mb-6 relative z-10">
-                {['Titres de séjour (travailleur, étudiant, famille)', 'Naturalisation française', 'Regroupement familial', 'Recours contre les refus'].map((item, index) => (
-                  <li 
-                    key={index}
-                    data-animate-item
-                    data-animate-id={`domaine-item-${index}`}
-                    className={`flex items-start gap-3 transition-all duration-700 ${
-                      isVisible[`domaine-item-${index}`] ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'
-                    }`}
-                    style={{ transitionDelay: `${index * 100}ms` }}
-                  >
-                    <span className="text-foreground">{item}</span>
-                </li>
-                ))}
-              </ul>
-              
-              <Link href="/contact" className="relative z-10">
-                <Button 
-                  variant="outline" 
-                  className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300 transform group-hover:scale-105"
-                >
-                  En savoir plus →
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Séparateur visuel hero / contenu */}
+      <div className="h-px bg-gradient-to-r from-transparent via-orange-200/50 to-transparent" />
 
       {/* Section : CE QUE NOUS FAISONS */}
       <section 
         id="services"
         data-animate
-        className={`py-20 bg-gradient-to-br from-primary/5 via-background to-primary/5 transition-all duration-1000 ${
+        className={`py-24 bg-white transition-all duration-1000 ${
           isVisible['services'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
         }`}
       >
         <div className="container mx-auto px-4">
           <div 
-            className="text-center mb-16"
+            className="text-center mb-20"
             data-animate-item
             data-animate-id="services-title"
           >
-            <h2 className={`text-4xl lg:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent transition-all duration-700 ${
+            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
+              Nos services
+            </span>
+            <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900 transition-all duration-700 ${
               isVisible['services-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               CE QUE NOUS FAISONS
             </h2>
-            <p className={`text-lg text-muted-foreground max-w-3xl mx-auto transition-all duration-700 delay-200 ${
+            <p className={`text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
               isVisible['services-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
-              Nos services d'accompagnement administratif pour vos démarches de titres de séjour et visas
+              Nos services d&apos;accompagnement administratif pour vos démarches de titres de séjour et visas
             </p>
           </div>
           <div className="max-w-4xl mx-auto">
@@ -445,26 +545,104 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Section : CE QUE NOUS NE FAISONS PAS */}
+      <section 
+        id="limites"
+        data-animate
+        className={`py-24 bg-gray-50/80 transition-all duration-1000 ${
+          isVisible['limites'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        }`}
+      >
+        <div className="container mx-auto px-4">
+          <div 
+            className="text-center mb-20"
+            data-animate-item
+            data-animate-id="limites-title"
+          >
+            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-4">
+              Périmètre
+            </span>
+            <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900 transition-all duration-700 ${
+              isVisible['limites-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}>
+              CE QUE NOUS NE FAISONS PAS
+            </h2>
+            <p className={`text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
+              isVisible['limites-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}>
+              Nos limites et le périmètre de nos services
+            </p>
+          </div>
+          <div className="max-w-4xl mx-auto">
+            <div className="space-y-4">
+              {[
+                {
+                  title: "Nous ne nous représentons pas les utilisateurs en qualité d'avocats",
+                  details: "Notre plateforme fournit des services d'assistance administrative et de facilitation, mais nous ne sommes pas un cabinet d'avocats. Nous ne pouvons pas vous représenter en tant qu'avocat, ni exercer les prérogatives réservées aux avocats. Pour toute représentation juridique, vous devez faire appel à un avocat inscrit au barreau."
+                },
+                {
+                  title: "Nous ne représentons pas les utilisateurs devant les juridictions",
+                  details: "Nous n'intervenons pas dans les procédures judiciaires. Si votre dossier nécessite une représentation devant un tribunal administratif, un tribunal judiciaire, ou toute autre juridiction, vous devez obligatoirement faire appel à un avocat. Nous pouvons cependant vous aider à trouver un avocat compétent dans votre région."
+                },
+                {
+                  title: "Nous ne fournissons pas de conseil juridique personnalisé",
+                  details: "Les informations que nous mettons à disposition sont de nature générale et ne constituent pas un conseil juridique personnalisé adapté à votre situation spécifique. Pour obtenir un conseil juridique personnalisé, vous devez consulter un avocat qui pourra analyser votre situation particulière et vous donner des conseils adaptés à votre cas."
+                },
+                {
+                  title: "Nous n'assurons aucune représentation légale",
+                  details: "Nous n'assurons pas de représentation légale devant les administrations ou les juridictions. Notre rôle se limite à l'assistance administrative, à la préparation des dossiers, et à la facilitation des démarches. Pour toute représentation légale, vous devez faire appel à un professionnel habilité (avocat, huissier de justice, etc.)."
+                },
+                {
+                  title: "Nous n'intervenons pas dans les procédures contentieuses",
+                  details: "Nous n'intervenons pas dans les procédures contentieuses, c'est-à-dire les procédures qui opposent l'administration à l'étranger devant une juridiction. Si votre demande a été refusée et que vous souhaitez contester cette décision, vous devez faire appel à un avocat spécialisé qui pourra vous représenter et défendre vos intérêts devant la juridiction compétente."
+                }
+              ].map((item, index) => (
+                <div
+                  key={index}
+                  data-animate-item
+                  data-animate-id={`limite-${index}`}
+                  className={`transition-all duration-700 ${
+                    isVisible[`limite-${index}`] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+                  }`}
+                  style={{ transitionDelay: `${index * 100}ms` }}
+                >
+                  <ExpandableItem
+                    title={item.title}
+                    details={item.details}
+                    icon="✗"
+                    iconColor="text-red-500"
+                    borderColor="border-red-200"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Section : À quoi sert la plateforme */}
       <section 
         id="plateforme"
         data-animate
-        className={`py-20 bg-white transition-all duration-1000 ${
+        className={`py-24 bg-white transition-all duration-1000 ${
           isVisible['plateforme'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
         }`}
       >
         <div className="container mx-auto px-4">
           <div 
-            className="text-center mb-16"
+            className="text-center mb-20"
             data-animate-item
             data-animate-id="plateforme-title"
           >
-            <h2 className={`text-4xl lg:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent transition-all duration-700 ${
+            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
+              La plateforme
+            </span>
+            <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900 transition-all duration-700 ${
               isVisible['plateforme-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               À quoi sert la plateforme
             </h2>
-            <p className={`text-lg text-muted-foreground max-w-3xl mx-auto transition-all duration-700 delay-200 ${
+            <p className={`text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
               isVisible['plateforme-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               Des outils et services adaptés à vos besoins, que vous soyez professionnel ou particulier
@@ -593,98 +771,29 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Section : CE QUE NOUS NE FAISONS PAS */}
+      {/* Section Témoignages */}
       <section 
-        id="limites"
+        id="temoignages"
         data-animate
-        className={`py-20 bg-gradient-to-br from-red-50/50 via-background to-red-50/50 transition-all duration-1000 ${
-          isVisible['limites'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        className={`py-24 bg-gray-50/80 relative overflow-hidden transition-all duration-1000 ${
+          isVisible['temoignages'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
         }`}
       >
         <div className="container mx-auto px-4">
           <div 
             className="text-center mb-16"
             data-animate-item
-            data-animate-id="limites-title"
-          >
-            <h2 className={`text-4xl lg:text-5xl font-bold mb-4 text-foreground transition-all duration-700 ${
-              isVisible['limites-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}>
-              CE QUE NOUS NE FAISONS PAS
-            </h2>
-            <p className={`text-lg text-muted-foreground max-w-3xl mx-auto transition-all duration-700 delay-200 ${
-              isVisible['limites-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}>
-              Nos limites et le périmètre de nos services
-            </p>
-          </div>
-          <div className="max-w-4xl mx-auto">
-            <div className="space-y-4">
-              {[
-                {
-                  title: "Nous ne nous représentons pas les utilisateurs en qualité d'avocats",
-                  details: "Notre plateforme fournit des services d'assistance administrative et de facilitation, mais nous ne sommes pas un cabinet d'avocats. Nous ne pouvons pas vous représenter en tant qu'avocat, ni exercer les prérogatives réservées aux avocats. Pour toute représentation juridique, vous devez faire appel à un avocat inscrit au barreau."
-                },
-                {
-                  title: "Nous ne représentons pas les utilisateurs devant les juridictions",
-                  details: "Nous n'intervenons pas dans les procédures judiciaires. Si votre dossier nécessite une représentation devant un tribunal administratif, un tribunal judiciaire, ou toute autre juridiction, vous devez obligatoirement faire appel à un avocat. Nous pouvons cependant vous aider à trouver un avocat compétent dans votre région."
-                },
-                {
-                  title: "Nous ne fournissons pas de conseil juridique personnalisé",
-                  details: "Les informations que nous mettons à disposition sont de nature générale et ne constituent pas un conseil juridique personnalisé adapté à votre situation spécifique. Pour obtenir un conseil juridique personnalisé, vous devez consulter un avocat qui pourra analyser votre situation particulière et vous donner des conseils adaptés à votre cas."
-                },
-                {
-                  title: "Nous n'assurons aucune représentation légale",
-                  details: "Nous n'assurons pas de représentation légale devant les administrations ou les juridictions. Notre rôle se limite à l'assistance administrative, à la préparation des dossiers, et à la facilitation des démarches. Pour toute représentation légale, vous devez faire appel à un professionnel habilité (avocat, huissier de justice, etc.)."
-                },
-                {
-                  title: "Nous n'intervenons pas dans les procédures contentieuses",
-                  details: "Nous n'intervenons pas dans les procédures contentieuses, c'est-à-dire les procédures qui opposent l'administration à l'étranger devant une juridiction. Si votre demande a été refusée et que vous souhaitez contester cette décision, vous devez faire appel à un avocat spécialisé qui pourra vous représenter et défendre vos intérêts devant la juridiction compétente."
-                }
-              ].map((item, index) => (
-                <div
-                  key={index}
-                  data-animate-item
-                  data-animate-id={`limite-${index}`}
-                  className={`transition-all duration-700 ${
-                    isVisible[`limite-${index}`] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                  style={{ transitionDelay: `${index * 100}ms` }}
-                >
-                  <ExpandableItem
-                    title={item.title}
-                    details={item.details}
-                    icon="✗"
-                    iconColor="text-red-500"
-                    borderColor="border-red-200"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Section Témoignages améliorée */}
-      <section 
-        id="temoignages"
-        data-animate
-        className={`py-20 bg-gradient-to-br from-secondary/50 to-background relative overflow-hidden transition-all duration-1000 ${
-          isVisible['temoignages'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
-        }`}
-      >
-        <div className="container mx-auto px-4">
-          <div 
-            className="text-center mb-12"
-            data-animate-item
             data-animate-id="temoignages-title"
           >
-            <h2 className={`text-4xl lg:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent transition-all duration-700 ${
+            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
+              Témoignages
+            </span>
+            <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900 transition-all duration-700 ${
               isVisible['temoignages-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               Ils nous ont fait confiance
             </h2>
-            <p className={`text-lg text-muted-foreground max-w-2xl mx-auto transition-all duration-700 delay-200 ${
+            <p className={`text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
               isVisible['temoignages-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               Plus de 1000 clients nous font confiance pour leurs démarches juridiques
@@ -753,86 +862,86 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Section Services */}
+      {/* Section Services (cartes) */}
       <section 
         id="services-section"
         data-animate
-        className={`py-20 bg-white transition-all duration-1000 ${
+        className={`py-24 bg-white transition-all duration-1000 ${
           isVisible['services-section'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
         }`}
       >
         <div className="container mx-auto px-4">
           <div 
-            className="text-center mb-16"
+            className="text-center mb-20"
             data-animate-item
             data-animate-id="services-section-title"
           >
-            <div className="inline-block mb-3 px-4 py-1.5 bg-primary/10 rounded-full border border-primary/20">
-              <span className="text-sm font-medium text-primary">Nos Services Juridiques</span>
-            </div>
-            <h2 className={`text-4xl lg:text-5xl font-bold mb-4 text-foreground leading-tight transition-all duration-700 ${
+            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
+              Solutions
+            </span>
+            <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900 leading-tight transition-all duration-700 ${
               isVisible['services-section-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
-              Des solutions <span className="text-primary">sur mesure</span> pour vos besoins
+              Des solutions <span className="text-orange-500">administratives sur mesure</span> pour vos démarches
             </h2>
-            <p className={`text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
+            <p className={`text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
               isVisible['services-section-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
-              Expertise juridique, accompagnement personnalisé et tarifs transparents pour vous offrir le meilleur service
+              Accompagnement aux démarches administratives, outils de suivi et alertes intelligentes pour sécuriser vos titres de séjour et visas.
             </p>
           </div>
 
-          {/* Services côte à côte */}
+          {/* Services côte à côte : ce que fait la plateforme */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto mb-16">
             {[
               {
-                titre: 'Consultation juridique',
-                description: 'Première consultation pour évaluer votre situation',
-                duree: '30 mn',
-                prix: '25€',
+                titre: 'Assistant démarches titres de séjour',
+                description: 'Un accompagnement pas-à-pas pour préparer vos demandes de titres de séjour et de visas.',
+                duree: 'Selon votre dossier',
+                prix: 'Inclus dans la plateforme',
                 features: [
-                  'Analyse de votre dossier',
-                  'Conseils personnalisés',
-                  'Évaluation des options',
-                  'Recommandations stratégiques',
+                  'Checklist personnalisée des pièces à fournir',
+                  'Rappels d’échéances de dépôt',
+                  'Suivi de l’état de vos démarches',
+                  'Modèles de courriers administratifs',
                 ],
                 icon: '💼',
                 color: 'primary',
                 isPopular: true,
               },
               {
-                titre: 'Accompagnement complet',
-                description: 'Suivi de dossier avec représentation',
+                titre: 'Préparation et dépôt administratif (sur mandat)',
+                description: 'Nous préparons et déposons votre dossier administratif auprès de l’autorité compétente, sur la base d’un mandat écrit.',
                 duree: 'Selon le dossier',
-                prix: 'Sur dossier',
+                prix: 'Sur devis',
                 features: [
-                  'Suivi personnalisé',
-                  'Représentation juridique',
-                  'Gestion administrative',
-                  'Accompagnement jusqu\'au terme',
+                  'Organisation et vérification de la complétude du dossier',
+                  'Dépôt administratif sur mandat (préfecture, consulat, etc.)',
+                  'Suivi administratif de la demande',
+                  'Retours structurés sur les demandes de compléments',
                 ],
                 icon: '🤝',
                 color: 'primary',
               },
               {
-                titre: 'Rédaction de contrats',
-                description: 'Rédaction ou révision de documents juridiques',
-                duree: 'Selon la complexité',
-                prix: 'Sur dossier',
+                titre: 'Outils et informations administratives',
+                description: 'Une base d’informations claire et à jour sur les démarches administratives liées au séjour.',
+                duree: 'Accès en continu',
+                prix: 'Inclus dans la plateforme',
                 features: [
-                  'Rédaction sur mesure',
-                  'Révision de contrats existants',
-                  'Conseil juridique',
-                  'Mise en conformité',
+                  'Guides pratiques sur les catégories de titres et visas',
+                  'Fiches explicatives sur les délais et procédures',
+                  'Foire aux questions administratives',
+                  'Référentiels publics toujours accessibles',
                 ],
                 icon: '📝',
                 color: 'primary',
               },
               {
-                titre: 'Portail de gestion du cycle de vie et de renouvellement du titre de séjour',
-                description: 'Plateforme complète de suivi et de gestion de votre titre de séjour',
+                titre: 'Portail de gestion du cycle de vie du titre de séjour',
+                description: 'Un espace dédié pour suivre, anticiper et renouveler vos titres de séjour.',
                 duree: 'Jusqu\'au terme de renouvellement',
-                prix: '25€',
+                prix: 'À partir de 25€',
                 features: [
                   'Tableau de bord du titre de séjour',
                   'Assistant de renouvellement de titre de séjour',
@@ -947,7 +1056,28 @@ export default function HomePage() {
         <Footer />
       </div>
       
-      {/* Badge flottant pour rouvrir le widget - toujours visible quand fermé, ou au scroll */}
+      {/* Prise de rendez-vous : ouverture en overlay (détaché du hero) */}
+      {isWidgetOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => {
+            setIsWidgetOpen(false);
+            localStorage.setItem('reservationWidgetOpen', 'false');
+          }}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="relative max-h-[90vh] overflow-auto">
+            <ReservationWidget 
+              isOpen={isWidgetOpen} 
+              onClose={() => {
+                setIsWidgetOpen(false);
+                localStorage.setItem('reservationWidgetOpen', 'false');
+              }}
+            />
+          </div>
+        </div>
+      )}
+      
+      {/* Badge flottant pour ouvrir l'outil de prise de rendez-vous */}
       <ReservationBadge 
         onOpen={() => {
           setIsWidgetOpen(true);

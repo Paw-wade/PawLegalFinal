@@ -542,10 +542,13 @@ export default function AdminComptePage() {
                       <Input
                         id="numeroEtranger"
                         value={profileData.numeroEtranger}
-                        onChange={(e) => setProfileData({ ...profileData, numeroEtranger: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
+                        readOnly
+                        className="h-11 border-2 bg-gray-50 text-gray-700 cursor-not-allowed"
                         placeholder="Ex: 1234567890123"
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Ce numéro est figé pour garantir la traçabilité des dossiers. Utilisez un autre identifiant si besoin.
+                      </p>
                     </div>
 
                     <div>

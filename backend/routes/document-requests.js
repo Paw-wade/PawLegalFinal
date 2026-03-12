@@ -14,11 +14,10 @@ const { sendNotificationSMS } = require('../sendSMS');
 router.use(protect);
 
 // @route   POST /api/document-requests
-// @desc    Créer une demande de document (admin seulement)
-// @access  Private/Admin
+// @desc    Créer une demande de document (admin, superadmin, partenaire avec dossier transmis)
+// @access  Private
 router.post(
   '/',
-  authorize('admin', 'superadmin'),
   [
     body('dossierId').notEmpty().withMessage('L\'ID du dossier est requis'),
     body('documentType').notEmpty().withMessage('Le type de document est requis'),
@@ -68,6 +67,32 @@ router.post(
         return res.status(404).json({
           success: false,
           message: 'Dossier non trouvé'
+        });
+      }
+
+      // Vérifier les permissions en fonction du rôle
+      const role = req.user.role;
+      const isAdmin = role === 'admin' || role === 'superadmin';
+      const isPartenaire = role === 'partenaire';
+
+      let hasPermission = false;
+
+      if (isAdmin) {
+        hasPermission = true;
+      } else if (isPartenaire) {
+        // Le partenaire ne peut créer une demande que pour un dossier qui lui est transmis
+        const transmission = dossier.transmittedTo?.find((t) => {
+          const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
+          return partenaireId === req.user.id;
+        });
+
+        hasPermission = !!transmission && (transmission.status === 'pending' || transmission.status === 'accepted');
+      }
+
+      if (!hasPermission) {
+        return res.status(403).json({
+          success: false,
+          message: 'Vous n\'avez pas la permission de créer une demande de document pour ce dossier'
         });
       }
 
@@ -327,8 +352,10 @@ router.get('/', async (req, res) => {
     const { dossierId, status, userId } = req.query;
     const query = {};
 
+    const role = req.user.role;
+
     // Si admin, peut voir toutes les demandes ou filtrer par dossier
-    if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+    if (role === 'admin' || role === 'superadmin') {
       if (dossierId) {
         query.dossier = dossierId;
       }
@@ -338,8 +365,8 @@ router.get('/', async (req, res) => {
       if (userId) {
         query.requestedFrom = userId;
       }
-    } else {
-      // Si client, voir uniquement ses demandes
+    } else if (role === 'client') {
+      // Client: voir uniquement les demandes qui lui sont adressées
       const targetUserId = req.user.id;
       query.requestedFrom = targetUserId;
       if (status) {
@@ -348,6 +375,57 @@ router.get('/', async (req, res) => {
       if (dossierId) {
         query.dossier = dossierId;
       }
+    } else if (role === 'partenaire') {
+      // Partenaire: voir les demandes liées aux dossiers qui lui sont transmis
+      // et optionnellement filtrer par dossierId / statut
+      if (dossierId) {
+        // Vérifier que le dossier est bien transmis à ce partenaire
+        const dossier = await Dossier.findById(dossierId).select('transmittedTo');
+        if (!dossier) {
+          return res.status(404).json({
+            success: false,
+            message: 'Dossier non trouvé'
+          });
+        }
+        const isTransmittedToPartenaire = dossier.transmittedTo && dossier.transmittedTo.some((t) => {
+          if (!t.partenaire) return false;
+          const pid = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
+          return pid === req.user.id.toString();
+        });
+        if (!isTransmittedToPartenaire) {
+          return res.status(403).json({
+            success: false,
+            message: 'Accès non autorisé aux demandes de documents pour ce dossier'
+          });
+        }
+        query.dossier = dossierId;
+      } else {
+        // Sans dossierId explicite, limiter aux dossiers transmis au partenaire
+        const dossiersTransmis = await Dossier.find({
+          'transmittedTo.partenaire': req.user.id
+        }).select('_id');
+        const dossierIds = dossiersTransmis.map((d) => d._id);
+        if (dossierIds.length === 0) {
+          return res.json({
+            success: true,
+            count: 0,
+            documentRequests: []
+          });
+        }
+        query.dossier = { $in: dossierIds };
+      }
+
+      if (status) {
+        query.status = status;
+      }
+      // Pour un partenaire, on NE filtre PAS sur requestedFrom, pour qu'il voie
+      // aussi bien les demandes créées par lui que celles créées par un admin.
+    } else {
+      // Autres rôles: par défaut, aucune demande (sécurité stricte)
+      return res.status(403).json({
+        success: false,
+        message: 'Accès non autorisé aux demandes de documents'
+      });
     }
 
     const documentRequests = await DocumentRequest.find(query)

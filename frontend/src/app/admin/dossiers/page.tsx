@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, userAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI } from '@/lib/api';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -311,6 +311,11 @@ export default function AdminDossiersPage() {
   });
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [taskSuccessMessage, setTaskSuccessMessage] = useState<string | null>(null);
+  const [addEtapeDossier, setAddEtapeDossier] = useState<any>(null);
+  const [newEtapeLabel, setNewEtapeLabel] = useState('');
+  const [newEtapeDate, setNewEtapeDate] = useState('');
+  const [isAddingEtape, setIsAddingEtape] = useState(false);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -334,6 +339,18 @@ export default function AdminDossiersPage() {
       loadDossierTasks();
     }
   }, [session, status]);
+
+  // Ouvrir automatiquement le badge du dossier passé en paramètre (depuis la vue détail)
+  useEffect(() => {
+    const dossierIdToOpen = searchParams?.get('dossierId');
+    if (dossierIdToOpen && dossiers.length > 0) {
+      setExpandedDossiers((prev) => {
+        const next = new Set(prev);
+        next.add(dossierIdToOpen);
+        return next;
+      });
+    }
+  }, [searchParams, dossiers]);
 
   const loadNotifications = async () => {
     try {
@@ -596,45 +613,28 @@ export default function AdminDossiersPage() {
     setError(null);
 
     try {
-      if (!formData.categorie) {
-        setError('Veuillez sélectionner une catégorie de dossier');
-        setIsLoading(false);
-        return;
-      }
-
-      if (!formData.type) {
-        setError('Veuillez sélectionner un type de dossier');
-        setIsLoading(false);
-        return;
-      }
-
       const dossierData: any = {
-        titre: formData.titre,
-        description: formData.description,
-        categorie: formData.categorie,
-        type: formData.type,
-        statut: formData.statut,
-        priorite: formData.priorite,
-        notes: formData.notes,
+        // Tous les champs sont optionnels côté backend.
+        // On n'envoie que les valeurs réellement renseignées.
       };
 
+      if (formData.titre) dossierData.titre = formData.titre;
+      if (formData.description) dossierData.description = formData.description;
+      if (formData.categorie) dossierData.categorie = formData.categorie;
+      if (formData.type) dossierData.type = formData.type;
+      if (formData.statut) dossierData.statut = formData.statut;
+      if (formData.priorite) dossierData.priorite = formData.priorite;
+      if (formData.notes) dossierData.notes = formData.notes;
+
       if (clientType === 'existing') {
-        if (!formData.userId) {
-          setError('Veuillez sélectionner un utilisateur');
-          setIsLoading(false);
-          return;
+        if (formData.userId) {
+          dossierData.userId = formData.userId;
         }
-        dossierData.userId = formData.userId;
       } else {
-        if (!formData.clientNom || !formData.clientPrenom || !formData.clientEmail) {
-          setError('Veuillez remplir tous les champs obligatoires du client');
-          setIsLoading(false);
-          return;
-        }
-        dossierData.clientNom = formData.clientNom;
-        dossierData.clientPrenom = formData.clientPrenom;
-        dossierData.clientEmail = formData.clientEmail;
-        dossierData.clientTelephone = formData.clientTelephone;
+        if (formData.clientNom) dossierData.clientNom = formData.clientNom;
+        if (formData.clientPrenom) dossierData.clientPrenom = formData.clientPrenom;
+        if (formData.clientEmail) dossierData.clientEmail = formData.clientEmail;
+        if (formData.clientTelephone) dossierData.clientTelephone = formData.clientTelephone;
       }
 
       if (formData.dateEcheance) {
@@ -1028,13 +1028,12 @@ export default function AdminDossiersPage() {
               {/* Sélection utilisateur existant */}
               {clientType === 'existing' && !editingDossier && (
                 <div>
-                  <Label htmlFor="userId">Sélectionner un utilisateur *</Label>
+                  <Label htmlFor="userId">Sélectionner un utilisateur</Label>
                   <select
                     id="userId"
                     value={formData.userId}
                     onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                    required
                   >
                     <option value="">-- Sélectionner un utilisateur --</option>
                     {utilisateurs.map((user) => (
@@ -1050,33 +1049,30 @@ export default function AdminDossiersPage() {
               {clientType === 'new' && !editingDossier && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="clientNom">Nom *</Label>
+                    <Label htmlFor="clientNom">Nom</Label>
                     <Input
                       id="clientNom"
                       value={formData.clientNom}
                       onChange={(e) => setFormData({ ...formData, clientNom: e.target.value })}
-                      required
                       className="mt-1"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="clientPrenom">Prénom *</Label>
+                    <Label htmlFor="clientPrenom">Prénom</Label>
                     <Input
                       id="clientPrenom"
                       value={formData.clientPrenom}
                       onChange={(e) => setFormData({ ...formData, clientPrenom: e.target.value })}
-                      required
                       className="mt-1"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="clientEmail">Email *</Label>
+                    <Label htmlFor="clientEmail">Email</Label>
                     <Input
                       id="clientEmail"
                       type="email"
                       value={formData.clientEmail}
                       onChange={(e) => setFormData({ ...formData, clientEmail: e.target.value })}
-                      required
                       className="mt-1"
                     />
                   </div>
@@ -1099,12 +1095,11 @@ export default function AdminDossiersPage() {
                 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="titre">Titre du dossier {!editingDossier && '*'}</Label>
+                    <Label htmlFor="titre">Titre du dossier</Label>
                     <Input
                       id="titre"
                       value={formData.titre}
                       onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
-                      required={!editingDossier}
                       className="mt-1"
                       placeholder="Ex: Demande de titre de séjour"
                     />
@@ -1124,13 +1119,12 @@ export default function AdminDossiersPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="categorie">Catégorie de dossier {!editingDossier && '*'}</Label>
+                      <Label htmlFor="categorie">Catégorie de dossier</Label>
                       <select
                         id="categorie"
                         value={formData.categorie}
                         onChange={(e) => setFormData({ ...formData, categorie: e.target.value, type: '' })}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                        required={!editingDossier}
                       >
                         <option value="">-- Sélectionner une catégorie --</option>
                         {Object.entries(categories).map(([key, cat]) => (
@@ -1140,13 +1134,12 @@ export default function AdminDossiersPage() {
                     </div>
 
                     <div>
-                      <Label htmlFor="type">Type de dossier {!editingDossier && '*'}</Label>
+                      <Label htmlFor="type">Type de dossier</Label>
                       <select
                         id="type"
                         value={formData.type}
                         onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                        required={!editingDossier}
                         disabled={!formData.categorie}
                       >
                         <option value="">-- Sélectionner un type --</option>
@@ -1160,39 +1153,23 @@ export default function AdminDossiersPage() {
                   <div className="grid grid-cols-2 gap-4">
 
                     <div>
-                      <Label htmlFor="statut">
-                        Statut du dossier <span className="text-primary">*</span>
+                      <Label>
+                        Étapes et statut du dossier
                       </Label>
-                      <select
-                        id="statut"
-                        value={formData.statut}
-                        onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                      >
-                        <option value="recu">Reçu</option>
-                        <option value="accepte">Accepté</option>
-                        <option value="refuse">Refusé</option>
-                        <option value="en_attente_onboarding">En attente d'onboarding (RDV)</option>
-                        <option value="en_cours_instruction">En cours d'instruction (constitution dossier)</option>
-                        <option value="pieces_manquantes">Pièces manquantes (relance client)</option>
-                        <option value="dossier_complet">Dossier Complet</option>
-                        <option value="depose">Déposé</option>
-                        <option value="reception_confirmee">Réception confirmée</option>
-                        <option value="complement_demande">Complément demandé (avec date limite)</option>
-                        <option value="decision_defavorable">Décision défavorable</option>
-                        <option value="communication_motifs">Communication des Motifs</option>
-                        <option value="recours_preparation">Recours en préparation</option>
-                        <option value="refere_mesures_utiles">Référé Mesures Utiles</option>
-                        <option value="refere_suspension_rep">Référé suspension et REP</option>
-                        <option value="gain_cause">Gain de cause</option>
-                        <option value="rejet">Rejet</option>
-                        <option value="decision_favorable">Décision favorable</option>
-                        <option value="autre">Autre (statut non prévu)</option>
-                      </select>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        📋 <strong>Fonction :</strong> Indique l'état d'avancement du dossier dans le processus administratif. 
-                        Seul le <strong>chef d'équipe</strong> ou un <strong>super administrateur</strong> peut modifier ce statut.
-                      </p>
+                      <div className="mt-1 flex flex-col gap-1.5">
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-gray-300 text-xs font-medium bg-gray-50 text-gray-400 cursor-not-allowed"
+                          title="Après la création du dossier, utilisez ce bouton dans la fiche du dossier pour définir les étapes et le statut."
+                        >
+                          ✏️ Éditer les étapes (disponible après création)
+                        </button>
+                        <p className="text-xs text-muted-foreground">
+                          Le dossier sera créé avec le statut initial <strong>« Reçu »</strong>. 
+                          Après la création, ouvrez la fiche du dossier pour définir les étapes personnalisées et le statut via le bouton <strong>« ✏️ Éditer les étapes »</strong>.
+                        </p>
+                      </div>
                     </div>
 
                     <div>
@@ -1691,19 +1668,13 @@ export default function AdminDossiersPage() {
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/admin/dossiers/${dossier._id || dossier.id}`}
-                            className="p-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary"
-                            title="Voir les détails du dossier"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </Link>
-                        </div>
+                        <Link
+                          href={`/admin/dossiers/${dossier._id || dossier.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-primary bg-primary text-white text-xs font-medium hover:bg-primary/90 hover:border-primary/90 transition-colors whitespace-nowrap"
+                        >
+                          Voir les détails du dossier
+                        </Link>
                         <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(dossier.statut)}`}>
                           {getStatutLabel(dossier.statut)}
                         </span>
@@ -1763,6 +1734,37 @@ export default function AdminDossiersPage() {
                               style={{width: `${progress}%`}}
                             ></div>
                           </div>
+                          {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
+                            <div className="mt-1">
+                              <div className="flex items-center gap-1 justify-between">
+                                {dossier.etapesSupplementaires.map((step: any, index: number) => {
+                                  const isCurrent =
+                                    dossier.statut &&
+                                    (dossier.statut === step.label || dossier.statut === step.id);
+                                  return (
+                                    <div
+                                      key={step.id || index}
+                                      className="flex-1 flex flex-col items-center"
+                                    >
+                                      <div
+                                        className={`w-full h-1 rounded-full ${
+                                          isCurrent ? 'bg-blue-500' : 'bg-transparent'
+                                        }`}
+                                      ></div>
+                                      <span
+                                        className={`mt-0.5 text-[9px] text-center truncate max-w-[80px] ${
+                                          isCurrent ? 'text-blue-700 font-semibold' : 'text-gray-400'
+                                        }`}
+                                        title={step.label}
+                                      >
+                                        {step.label}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -1798,35 +1800,7 @@ export default function AdminDossiersPage() {
                       return null;
                     })()}
 
-                    {/* Timeline complète avec toutes les étapes */}
-                    {(() => {
-                      const steps = getTimelineSteps(dossier.statut);
-                      return (
-                        <div className="mb-3 pb-2 border-b border-gray-100">
-                          <p className="text-xs font-semibold text-muted-foreground mb-2">Étapes du dossier :</p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {steps.map((step) => (
-                              <div key={step.key} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded ${
-                                step.isCurrent ? 'bg-blue-50 border border-blue-200' : ''
-                              }`}>
-                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                  step.completed && !step.isCurrent ? 'bg-green-500' : 
-                                  step.isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' : 
-                                  'bg-gray-300'
-                                }`}></span>
-                                <span className={`text-[10px] leading-tight ${
-                                  step.completed && !step.isCurrent ? 'text-green-700 font-medium' : 
-                                  step.isCurrent ? 'text-blue-700 font-bold' : 
-                                  'text-gray-400'
-                                }`}>
-                                  {step.label}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })()}
+                    {/* Timeline complète avec toutes les étapes + étapes supplémentaires - masquée sur les badges */}
 
                     {/* Informations du dossier */}
                     <div className="space-y-2 mb-3">
@@ -2416,30 +2390,11 @@ export default function AdminDossiersPage() {
                             return (
                               <div className="relative">
                                 <div className="flex gap-3 text-xs text-muted-foreground">
-                                  {hasDocuments && (
+                                  {hasDocuments && isDocDropdownExpanded && (
+                                    <>
                                     <div className="relative">
-                                      <button
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          const newExpanded = new Set(expandedDossierDocumentDropdowns);
-                                          if (isDocDropdownExpanded) {
-                                            newExpanded.delete(dossier._id || dossier.id);
-                                          } else {
-                                            newExpanded.add(dossier._id || dossier.id);
-                                          }
-                                          setExpandedDossierDocumentDropdowns(newExpanded);
-                                        }}
-                                        className="flex items-center gap-1 hover:text-foreground transition-colors"
-                                        title="Voir les documents"
-                                      >
-                                        <span>📄 {dossierDocs.length}</span>
-                                        <span className="text-[10px]">{isDocDropdownExpanded ? '▲' : '▼'}</span>
-                                      </button>
-                                      
-                                      {/* Dropdown des documents */}
-                                      {isDocDropdownExpanded && (
-                                        <div 
+                                      {/* Dropdown des documents (affiché sans bouton redondant) */}
+                                      <div 
                                           className="absolute left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
                                           onClick={(e) => e.stopPropagation()}
                                         >
@@ -2507,8 +2462,8 @@ export default function AdminDossiersPage() {
                                             </div>
                                           </div>
                                         </div>
-                                      )}
                                     </div>
+                                    </>
                                   )}
                                   {dossier.messages && dossier.messages.length > 0 && (
                                     <span>💬 {dossier.messages.length}</span>
@@ -2588,31 +2543,32 @@ export default function AdminDossiersPage() {
                             📋 Statut du dossier
                           </label>
                           <select
-                            value={dossier.statut}
+                            value={dossier.statut || ''}
                             onChange={(e) => handleChangeStatut(dossier._id || dossier.id, e.target.value)}
                             className="text-xs px-2 py-1.5 rounded-md border border-gray-300 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors w-full"
                             disabled={isLoading}
-                            title="État d'avancement du dossier dans le processus. Modifiable par le chef d'équipe ou superadmin uniquement."
+                            title="Étape actuelle du dossier, choisie parmi les étapes définies dans l'édition des étapes."
                           >
-                            <option value="recu">Reçu</option>
-                            <option value="accepte">Accepté</option>
-                            <option value="refuse">Refusé</option>
-                            <option value="en_attente_onboarding">En attente d'onboarding</option>
-                            <option value="en_cours_instruction">En cours d'instruction</option>
-                            <option value="pieces_manquantes">Pièces manquantes</option>
-                            <option value="dossier_complet">Dossier Complet</option>
-                            <option value="depose">Déposé</option>
-                            <option value="reception_confirmee">Réception confirmée</option>
-                            <option value="complement_demande">Complément demandé</option>
-                            <option value="decision_defavorable">Décision défavorable</option>
-                            <option value="communication_motifs">Communication des Motifs</option>
-                            <option value="recours_preparation">Recours en préparation</option>
-                            <option value="refere_mesures_utiles">Référé Mesures Utiles</option>
-                            <option value="refere_suspension_rep">Référé suspension et REP</option>
-                            <option value="gain_cause">Gain de cause</option>
-                            <option value="rejet">Rejet</option>
-                            <option value="decision_favorable">Décision favorable</option>
-                            <option value="autre">Autre (statut non prévu)</option>
+                            {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 ? (
+                              <>
+                                {!dossier.statut && (
+                                  <option value="">Sélectionner une étape</option>
+                                )}
+                                {dossier.etapesSupplementaires.map((etape: any, idx: number) => {
+                                  const value = etape.id || etape.label || String(idx);
+                                  return (
+                                    <option
+                                      key={value}
+                                      value={value}
+                                    >
+                                      {etape.label || etape.id || `Étape ${idx + 1}`}
+                                    </option>
+                                  );
+                                })}
+                              </>
+                            ) : (
+                              <option value="">Aucune étape définie (ouvrir "Éditer les étapes")</option>
+                            )}
                           </select>
                         </div>
                         <div>
@@ -2998,8 +2954,7 @@ export default function AdminDossiersPage() {
                     onClick={() => {
                       setShowDocumentRequestModal(null);
                       setDocumentRequestData({
-                        documentType: '',
-                        documentTypeLabel: '',
+                        selectedDocumentTypes: [],
                         message: '',
                         isUrgent: false
                       });
@@ -3013,6 +2968,87 @@ export default function AdminDossiersPage() {
                     {isLoading ? 'Envoi...' : 'Envoyer la demande'}
                   </Button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Ajouter une étape du dossier */}
+      {addEtapeDossier && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => { setAddEtapeDossier(null); setNewEtapeLabel(''); setNewEtapeDate(''); setError(null); }}
+        >
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-2">Ajouter une étape (non prévue)</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Dossier : <strong>{addEtapeDossier.titre || addEtapeDossier.numero || addEtapeDossier._id}</strong>
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const label = newEtapeLabel.trim();
+                if (!label) return;
+                const dossierId = addEtapeDossier._id || addEtapeDossier.id;
+                if (!dossierId) {
+                  setError('Identifiant du dossier manquant');
+                  return;
+                }
+                setIsAddingEtape(true);
+                setError(null);
+                try {
+                  const current = addEtapeDossier.etapesSupplementaires || [];
+                  const next = [...current, { label, date: newEtapeDate || undefined, ordre: current.length }];
+                  const response = await dossiersAPI.updateDossier(dossierId, { etapesSupplementaires: next });
+                  if (response.data.success) {
+                    setDossiers(prev => prev.map(d => (d._id || d.id) === dossierId ? { ...d, etapesSupplementaires: next } : d));
+                    setAddEtapeDossier(null);
+                    setNewEtapeLabel('');
+                    setNewEtapeDate('');
+                  } else {
+                    setError(response.data.message || 'Erreur lors de l\'ajout');
+                  }
+                } catch (err: any) {
+                  setError(err.response?.data?.message || 'Erreur lors de l\'ajout de l\'étape');
+                } finally {
+                  setIsAddingEtape(false);
+                }
+              }}
+            >
+              <div className="space-y-3 mb-4">
+                <div>
+                  <Label htmlFor="newEtapeLabel">Libellé de l&apos;étape *</Label>
+                  <Input
+                    id="newEtapeLabel"
+                    value={newEtapeLabel}
+                    onChange={(e) => setNewEtapeLabel(e.target.value)}
+                    placeholder="Ex: Convocation préfecture reçue"
+                    required
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="newEtapeDate">Date (optionnel)</Label>
+                  <Input
+                    id="newEtapeDate"
+                    type="date"
+                    value={newEtapeDate}
+                    onChange={(e) => setNewEtapeDate(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              {error && (
+                <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{error}</div>
+              )}
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => { setAddEtapeDossier(null); setNewEtapeLabel(''); setNewEtapeDate(''); setError(null); }} disabled={isAddingEtape}>
+                  Annuler
+                </Button>
+                <Button type="submit" disabled={isAddingEtape || !newEtapeLabel.trim()}>
+                  {isAddingEtape ? 'Ajout...' : 'Ajouter l\'étape'}
+                </Button>
               </div>
             </form>
           </div>

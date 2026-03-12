@@ -143,21 +143,28 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    const url = error.config?.url || '';
+
     // Ignorer silencieusement les 404 pour les clés CMS manquantes (comportement attendu)
     // Cette vérification doit être faite AVANT tous les logs d'erreur
     const isCmsKeyNotFound = error.response?.status === 404 && 
-                             error.config?.url?.includes('/content/value');
+                             url.includes('/content/value');
+
+    // Ne pas spammer la console si la route /forum/unread-count n'existe pas encore
+    const isForumUnreadCountNotFound = error.response?.status === 404 &&
+                                       url.includes('/forum/unread-count');
     
-    if (isCmsKeyNotFound) {
+    if (isCmsKeyNotFound || isForumUnreadCountNotFound) {
       // Ne pas logger cette erreur - c'est un comportement attendu quand une clé CMS n'existe pas encore
       // Retourner une réponse avec status 404 mais sans déclencher d'erreur
       // Cela permettra à getText de gérer le cas normalement sans polluer la console
       return Promise.reject({
         response: {
           status: 404,
-          data: { success: false, message: 'Clé non trouvée' }
+          data: { success: false, message: isCmsKeyNotFound ? 'Clé non trouvée' : 'Route forum/unread-count non disponible' }
         },
-        isCmsNotFound: true,
+        isCmsNotFound: isCmsKeyNotFound,
+        isForumUnreadCountNotFound,
         config: error.config
       });
     }
@@ -189,10 +196,10 @@ api.interceptors.response.use(
       }
     }
     
-    // Log des erreurs pour le débogage (sauf pour les erreurs CMS déjà gérées)
-    if (!isCmsKeyNotFound) {
+    // Log des erreurs pour le débogage (sauf pour les erreurs déjà gérées ci-dessus)
+    if (!isCmsKeyNotFound && !isForumUnreadCountNotFound) {
       console.error('❌ Erreur API:', {
-        url: error.config?.url,
+        url,
         status: error.response?.status,
         message: error.response?.data?.message || error.message,
         data: error.response?.data
@@ -234,6 +241,9 @@ export const authAPI = {
   
   forgotPassword: (data: { email: string }) =>
     api.post('/auth/forgot-password', data),
+  
+  resetPassword: (data: { token: string; password: string }) =>
+    api.post('/auth/reset-password', data),
   
   getMe: () =>
     api.get('/auth/me'),
@@ -278,6 +288,10 @@ export const userAPI = {
   
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put('/user/password', data),
+
+  // Désactiver son propre compte (soft delete)
+  deactivateMyAccount: () =>
+    api.post('/user/profile/deactivate'),
   
   // Admin - Récupérer tous les utilisateurs
   getAllUsers: () =>
@@ -302,7 +316,7 @@ export const userAPI = {
     email: string;
     password: string;
     phone?: string;
-    role?: 'client' | 'admin' | 'superadmin' | 'avocat' | 'consulat' | 'collaborateur' | 'assistant' | 'comptable' | 'secretaire' | 'juriste' | 'stagiaire' | 'visiteur';
+    role?: 'client' | 'admin' | 'superadmin' | 'partenaire' | 'avocat' | 'consulat' | 'collaborateur' | 'assistant' | 'comptable' | 'secretaire' | 'juriste' | 'stagiaire' | 'visiteur';
     professionnelType?: 'consulat' | 'cabinet_avocat';
     organisationName?: string;
   }) => api.post('/user/create', data),
@@ -701,6 +715,14 @@ export const dossiersAPI = {
       responseType: 'blob'
     });
   },
+
+  // Compléments au récit (visibles dans le récap et le PDF)
+  addRecapComplement: (dossierId: string, text: string) =>
+    api.post(`/user/dossiers/${dossierId}/recap/complements`, { text }),
+  updateRecapComplement: (dossierId: string, complementId: string, text: string) =>
+    api.patch(`/user/dossiers/${dossierId}/recap/complements/${complementId}`, { text }),
+  deleteRecapComplement: (dossierId: string, complementId: string) =>
+    api.delete(`/user/dossiers/${dossierId}/recap/complements/${complementId}`),
   
   // Client - Annuler un dossier
   cancelDossier: (id: string) =>
@@ -733,7 +755,7 @@ export const dossiersAPI = {
 
 export const notificationsAPI = {
   // Récupérer toutes les notifications
-  getNotifications: (params?: { lu?: boolean; limit?: number }) =>
+  getNotifications: (params?: { lu?: boolean; limit?: number; type?: string }) =>
     api.get('/notifications', { params }),
   
   // Récupérer le nombre de notifications non lues
@@ -879,6 +901,63 @@ export const documentsAPI = {
     api.delete(`/user/documents/${id}`),
 };
 
+// Médias publics (carrousel, etc.)
+export const mediaAPI = {
+  // Upload d'un média pour le carrousel du hero (admin)
+  uploadHeroMedia: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/media/hero', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+};
+
+// Forum - discussions et réponses
+export const forumAPI = {
+  // Lister les discussions (optionnel : theme pour filtrer par thème)
+  listThreads: (params?: { page?: number; limit?: number; theme?: string; statusFilter?: 'pinned' | 'resolved' | 'archived'; q?: string }) =>
+    api.get('/forum/threads', { params }),
+
+  // Récupérer une discussion et ses réponses
+  getThread: (id: string) =>
+    api.get(`/forum/threads/${id}`),
+
+  // Créer une nouvelle discussion (theme requis : titre-sejour-etudiant, titre-sejour-salarie, regroupement-familial, demande-visa, autres)
+  createThread: (data: { title: string; body: string; theme?: string; tags?: string[] }) =>
+    api.post('/forum/threads', data),
+
+  // Répondre à une discussion
+  replyToThread: (id: string, data: { body: string }) =>
+    api.post(`/forum/threads/${id}/posts`, data),
+
+  // Admin - mettre à jour une discussion (statut / épinglage)
+  updateThreadAsAdmin: (id: string, data: { status?: 'open' | 'closed' | 'archived' | 'resolved'; isPinned?: boolean }) =>
+    api.patch(`/forum/threads/${id}`, data),
+
+  // Admin - supprimer une réponse
+  deletePostAsAdmin: (postId: string) =>
+    api.delete(`/forum/posts/${postId}`),
+
+  // Aimer / retirer son like sur une réponse
+  toggleLikePost: (postId: string) =>
+    api.post(`/forum/posts/${postId}/like`),
+
+  // Mettre en signet / retirer un signet sur une discussion
+  toggleBookmarkThread: (threadId: string) =>
+    api.post(`/forum/threads/${threadId}/bookmark`),
+
+  // Récupérer les discussions mises en signet par l'utilisateur courant
+  getBookmarks: () =>
+    api.get('/forum/bookmarks'),
+
+  // Récupérer le nombre de nouvelles discussions (approximation)
+  getUnreadThreadsCount: () =>
+    api.get('/forum/unread-count'),
+};
+
 export const creneauxAPI = {
   // Récupérer les créneaux disponibles pour une date
   getAvailableSlots: (date: string) =>
@@ -983,6 +1062,7 @@ export const cmsAPI = {
       description?: string;
       page?: string;
       section?: string;
+      status?: 'draft' | 'published' | 'archived';
       isActive?: boolean;
     }
   ) => {

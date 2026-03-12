@@ -256,16 +256,28 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
 
       if (userId) {
         // Mise à jour
+        const finalRole = selectedRoles.length > 0 ? selectedRoles[0] : 'client';
         const updateData: any = {
           firstName: userInfo.firstName,
           lastName: userInfo.lastName,
           email: userInfo.email,
           phone: userInfo.phone,
-          isActive: userInfo.isActive
+          isActive: userInfo.isActive,
+          role: finalRole
         };
         
         if (userInfo.password) {
           updateData.password = userInfo.password;
+        }
+
+        // Ajouter les informations partenaire si le rôle est partenaire
+        if (finalRole === 'partenaire') {
+          updateData.partenaireInfo = {
+            typeOrganisme: userInfo.partenaireInfo.typeOrganisme,
+            nomOrganisme: userInfo.partenaireInfo.nomOrganisme || undefined,
+            adresseOrganisme: userInfo.partenaireInfo.adresseOrganisme || undefined,
+            contactPrincipal: userInfo.partenaireInfo.contactPrincipal || undefined
+          };
         }
 
         await userAPI.updateUser(userId, updateData);

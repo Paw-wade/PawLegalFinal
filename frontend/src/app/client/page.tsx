@@ -9,7 +9,7 @@ import { ReservationBadge } from '@/components/ReservationBadge';
 import { MessageNotificationModal } from '@/components/MessageNotificationModal';
 import { AppointmentBadgeModal } from '@/components/AppointmentBadgeModal';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
-import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notificationsAPI, documentRequestsAPI } from '@/lib/api';
+import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notificationsAPI, documentRequestsAPI, forumAPI } from '@/lib/api';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
 
@@ -50,6 +50,8 @@ function ClientDashboardContent() {
   const [selectedDocumentRequest, setSelectedDocumentRequest] = useState<any>(null);
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState(false);
   const [documentRequestNotification, setDocumentRequestNotification] = useState<any>(null);
+  const [bookmarkedThreads, setBookmarkedThreads] = useState<any[]>([]);
+  const [showBookmarksBar, setShowBookmarksBar] = useState(true);
 
   // Textes CMS pour le header du dashboard client
   const dashboardTitleClient = useCmsText(
@@ -139,6 +141,7 @@ function ClientDashboardContent() {
       checkDocumentRequestNotifications();
       loadNotifications();
       loadDocumentRequests();
+      loadForumBookmarks();
     } else if (token) {
       // Si on a un token mais pas de session, charger quand même les stats
       loadStats();
@@ -160,6 +163,29 @@ function ClientDashboardContent() {
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des notifications:', err);
+    }
+  };
+
+  const loadForumBookmarks = async () => {
+    try {
+      const res = await forumAPI.getBookmarks();
+      if (res.data?.success) {
+        const bookmarks = res.data.bookmarks || [];
+        const threads = bookmarks
+          .map((b: any) =>
+            b.thread
+              ? {
+                  ...b.thread,
+                  newRepliesCount: b.newRepliesCount ?? 0,
+                }
+              : null
+          )
+          .filter((t: any) => !!t)
+          .slice(0, 10);
+        setBookmarkedThreads(threads);
+      }
+    } catch (err) {
+      console.error('Erreur lors du chargement des signets forum:', err);
     }
   };
 
@@ -384,18 +410,7 @@ function ClientDashboardContent() {
     }
   };
 
-  // Rafraîchissement automatique toutes les 30 secondes pour les mises à jour en temps réel
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (session || localStorage.getItem('token')) {
-        loadStats();
-        loadNotifications();
-        loadDocumentRequests();
-      }
-    }, 30000); // Rafraîchir toutes les 30 secondes
-
-    return () => clearInterval(interval);
-  }, [session]);
+  // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
   const loadUserProfile = async () => {
     try {
@@ -592,16 +607,8 @@ function ClientDashboardContent() {
             transform: translateX(-100%);
           }
         }
-        .animate-scroll-text {
-          animation: scroll-text 15s linear infinite;
-          display: inline-block;
-          padding-left: 100%;
-        }
-        .animate-scroll-text:hover {
-          animation-play-state: paused;
-        }
       `}} />
-      <main className="w-full px-4 py-8">
+      <main className="w-full max-w-6xl mx-auto px-4 py-8">
         <div id="dashboard-top" className="scroll-mt-20"></div>
 
         {/* En-tête de bienvenue */}
@@ -688,6 +695,48 @@ function ClientDashboardContent() {
               </div>
             )}
           </div>
+
+          {/* Barre des discussions mises en signet */}
+          {showBookmarksBar && bookmarkedThreads.length > 0 && (
+            <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl px-4 py-2 overflow-hidden">
+              <div className="flex items-center justify-between gap-3 mb-1">
+                <span className="text-sm font-semibold text-orange-800 flex items-center gap-1">
+                  <span>⭐</span>
+                  <span>Discussions que vous suivez</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowBookmarksBar(false)}
+                  className="text-[11px] text-orange-700 hover:text-orange-900 hover:underline"
+                >
+                  Fermer
+                </button>
+              </div>
+              <div className="whitespace-nowrap text-sm text-orange-800">
+                {bookmarkedThreads.map((thread: any) => {
+                  const id = thread._id || thread.id;
+                  const newReplies = thread.newRepliesCount ?? 0;
+                  return (
+                    <Link
+                      key={id}
+                      href={`/forum/${id}`}
+                      className="inline-flex items-center gap-1 mr-6 hover:underline"
+                    >
+                      <span>⭐</span>
+                      <span className="font-medium truncate max-w-[240px] inline-block align-middle">
+                        {thread.title}
+                      </span>
+                      {newReplies > 0 && (
+                        <span className="text-xs font-semibold text-orange-700">
+                          ({newReplies} nouvelle{newReplies > 1 ? 's' : ''} réponse{newReplies > 1 ? 's' : ''})
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Statistiques - Design professionnel et chaleureux avec accès direct */}
@@ -865,311 +914,6 @@ function ClientDashboardContent() {
 
         </div>
 
-        {/* Bloc messagerie sur le dashboard client */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="lg:col-span-2" />
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
-                    <span>✉️ Messagerie</span>
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Retrouvez vos échanges avec l&apos;équipe juridique.
-                  </p>
-                </div>
-                <Link href="/client/messages">
-                  <Button variant="outline" className="text-xs">
-                    Ouvrir la messagerie
-                  </Button>
-                </Link>
-              </div>
-              {messagesPreview.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Aucun message non lu pour le moment.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {messagesPreview.map((msg) => (
-                    <Link
-                      key={msg._id || msg.id}
-                      href={`/client/messages/${msg._id || msg.id}`}
-                      className="block rounded-lg border border-gray-100 px-3 py-2 hover:bg-primary/5 transition-colors"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold truncate">{msg.sujet}</p>
-                          <p className="text-[11px] text-muted-foreground line-clamp-2">
-                            {msg.contenu}
-                          </p>
-                        </div>
-                        <span className="ml-2 flex-shrink-0 rounded-full bg-primary text-white text-[10px] px-2 py-0.5">
-                          Voir
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Mes Dossiers - Format complet */}
-        <div className="bg-gradient-to-br from-white to-primary/5 rounded-2xl shadow-lg p-8 border border-primary/20">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/70 rounded-lg flex items-center justify-center">
-                <span className="text-xl">📁</span>
-              </div>
-              <h2 className="text-2xl font-bold text-foreground">Mes Dossiers</h2>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={loadStats} disabled={isLoading} size="sm">
-                Actualiser
-              </Button>
-              <Link href="/client/dossiers">
-                <Button variant="outline" size="sm">
-                  Voir tout →
-                </Button>
-              </Link>
-            </div>
-          </div>
-          <div className="space-y-4">
-            {isLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Chargement des dossiers...</p>
-              </div>
-            ) : recentDossiers.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-4xl">📋</span>
-                </div>
-                <p className="text-muted-foreground mb-4 font-medium">Aucun dossier</p>
-                <Link href="/dossiers/create">
-                  <Button className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/90 hover:to-primary/80 shadow-md">
-                    Créer mon premier dossier
-                  </Button>
-                </Link>
-              </div>
-            ) : (
-              recentDossiers.map((dossier) => (
-                <div
-                  key={dossier._id || dossier.id}
-                  className={`border rounded-xl p-5 hover:shadow-xl transition-all duration-200 bg-white w-full ${
-                    dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
-                      ? 'border-l-4 border-l-yellow-500 border-t border-r border-b border-gray-200'
-                      : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
-                      ? 'border-l-4 border-l-green-500 border-t border-r border-b border-gray-200'
-                      : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet'
-                      ? 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200'
-                      : 'border-l-4 border-l-blue-500 border-t border-r border-b border-gray-200'
-                  }`}
-                >
-                  {/* En-tête de la carte */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1 min-w-0 pr-2">
-                      <h3 className="font-bold text-base text-foreground line-clamp-2 leading-tight">
-                        {dossier.titre || 'Sans titre'}
-                      </h3>
-                      {dossier.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                          {dossier.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(dossier.statut)}`}>
-                        {getStatutLabel(dossier.statut)}
-                      </span>
-                      {dossier.priorite && (
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getPrioriteColor(dossier.priorite)}`}>
-                          {dossier.priorite}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Informations du dossier */}
-                  <div className="space-y-2 mb-3">
-                    {(dossier.numero || dossier.numeroDossier) && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-primary font-semibold">🔢</span>
-                        <span className="text-primary font-semibold">
-                          N° {dossier.numero || dossier.numeroDossier}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex items-start gap-2 text-sm">
-                      <span className="text-muted-foreground mt-0.5">📋</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground text-xs">{getCategorieLabel(dossier.categorie || 'autre')}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>📅</span>
-                      <span>
-                        {dossier.createdAt ? new Date(dossier.createdAt).toLocaleDateString('fr-FR', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        }) : '-'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="pt-3 border-t border-gray-200">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        {(() => {
-                          // Vérifier d'abord s'il y a des demandes de documents en attente
-                          const dossierRequests = documentRequests[dossier._id || dossier.id] || [];
-                          const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
-                          
-                          if (pendingRequests.length > 0) {
-                            const urgentRequests = pendingRequests.filter((r: any) => r.isUrgent);
-                            const hasUrgent = urgentRequests.length > 0;
-                            
-                            return (
-                              <div 
-                                className={`relative overflow-hidden rounded-md px-3 py-2 border cursor-pointer transition-all hover:shadow-md ${
-                                  hasUrgent 
-                                    ? 'bg-red-50/50 border-red-200/50 hover:bg-red-100/50' 
-                                    : 'bg-orange-50/50 border-orange-200/50 hover:bg-orange-100/50'
-                                }`}
-                                onClick={() => {
-                                  // Ouvrir le modal avec la première demande en attente (ou urgente si disponible)
-                                  const requestToShow = urgentRequests[0] || pendingRequests[0];
-                                  if (requestToShow) {
-                                    // Créer une notification factice pour le modal
-                                    const notification = {
-                                      _id: requestToShow._id,
-                                      id: requestToShow.id,
-                                      type: 'document_request',
-                                      titre: requestToShow.isUrgent
-                                        ? `🔴 Demande urgente de document - Dossier ${dossier.numero || dossier._id}`
-                                        : `📄 Demande de document - Dossier ${dossier.numero || dossier._id}`,
-                                      message: `Un document de type "${requestToShow.documentTypeLabel}" est requis pour votre dossier.`,
-                                      data: {
-                                        documentRequestId: requestToShow._id || requestToShow.id,
-                                        dossierId: dossier._id || dossier.id,
-                                        dossierNumero: dossier.numero,
-                                        documentType: requestToShow.documentType,
-                                        documentTypeLabel: requestToShow.documentTypeLabel,
-                                        isUrgent: requestToShow.isUrgent || false
-                                      }
-                                    };
-                                    setSelectedDocumentRequest(notification);
-                                    setShowDocumentRequestModal(true);
-                                  }
-                                }}
-                                title={`${pendingRequests.length} demande(s) de document(s) en attente${hasUrgent ? ' (urgente)' : ''}. Cliquez pour envoyer le document.`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs">{hasUrgent ? '🔴' : '📄'}</span>
-                                  <div className="flex-1 min-w-0 overflow-hidden">
-                                    <div className="animate-scroll-text whitespace-nowrap">
-                                      <span className={`text-xs font-medium ${
-                                        hasUrgent ? 'text-red-900' : 'text-orange-900'
-                                      }`}>
-                                        {hasUrgent 
-                                          ? `🔴 ${urgentRequests.length} demande(s) urgente(s) de document`
-                                          : `${pendingRequests.length} demande(s) de document en attente`
-                                        }
-                                        {pendingRequests.length > 1 && !hasUrgent && ` (${pendingRequests.length} demandes)`}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  {pendingRequests.length > 1 && (
-                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-                                      hasUrgent ? 'bg-red-200 text-red-800' : 'bg-orange-200 text-orange-800'
-                                    }`}>
-                                      {pendingRequests.length}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          }
-                          
-                          // Sinon, afficher la dernière notification défilante
-                          const lastNotification = getLastNotificationForDossier(dossier._id || dossier.id);
-                          if (lastNotification) {
-                            return (
-                              <div className="relative overflow-hidden bg-blue-50/50 rounded-md px-3 py-2 border border-blue-200/50">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs">🔔</span>
-                                  <div className="flex-1 min-w-0 overflow-hidden">
-                                    <div className="animate-scroll-text whitespace-nowrap">
-                                      <span className="text-xs text-blue-900 font-medium">
-                                        {lastNotification.title || lastNotification.message || 'Nouvelle notification'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          }
-                          
-                          return (
-                            <div className="flex gap-3 text-xs text-muted-foreground">
-                              {dossier.documents && dossier.documents.length > 0 && (
-                                <span>📄 {dossier.documents.length}</span>
-                              )}
-                              {dossier.messages && dossier.messages.length > 0 && (
-                                <span>💬 {dossier.messages.length}</span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {(() => {
-                          const unreadCount = getUnreadNotificationsCountForDossier(dossier._id || dossier.id);
-                          return (
-                            <Link href={`/client/notifications?dossierId=${dossier._id || dossier.id}&filter=unread`}>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className={`text-xs h-8 relative ${unreadCount > 0 ? 'bg-orange-50 border-orange-300 hover:bg-orange-100' : ''}`}
-                                title="Voir les notifications non lues"
-                              >
-                                🔔 Notifications
-                                {unreadCount > 0 && (
-                                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                                    {unreadCount > 9 ? '9+' : unreadCount}
-                                  </span>
-                                )}
-                              </Button>
-                            </Link>
-                          );
-                        })()}
-                        <Link href={`/client/messages?dossierId=${dossier._id || dossier.id}&action=view`}>
-                          <Button variant="outline" size="sm" className="text-xs h-8" title="Voir les discussions">
-                            💬 Discussions
-                          </Button>
-                        </Link>
-                        <Link href={`/client/messages?dossierId=${dossier._id || dossier.id}&action=send`}>
-                          <Button size="sm" className="text-xs h-8" title="Envoyer un message">
-                            ✉️ Message
-                          </Button>
-                        </Link>
-                        <Link href={`/client/dossiers/${dossier._id || dossier.id}`}>
-                          <Button variant="outline" size="sm" className="text-xs h-8">
-                            Détails
-                          </Button>
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
       </main>
       
       {/* Modal de réservation */}

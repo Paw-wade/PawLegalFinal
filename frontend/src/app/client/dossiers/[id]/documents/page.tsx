@@ -38,7 +38,7 @@ export default function ClientDossierDocumentsPage() {
   const loadDocuments = async () => {
     try {
       setLoading(true);
-      const response = await documentsAPI.getDossierDocuments(dossierId);
+      const response = await dossiersAPI.getDossierDocuments(dossierId);
       if (response.data.success) {
         setDocuments(response.data.documents || []);
       } else {

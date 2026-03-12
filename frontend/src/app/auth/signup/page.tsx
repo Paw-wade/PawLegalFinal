@@ -291,9 +291,9 @@ export default function SignupPage() {
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary to-primary/80 items-center justify-center p-12 text-white">
         <div className="max-w-md">
           <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-4">Rejoignez Paw Legal</h1>
+            <h1 className="text-4xl font-bold mb-4">Rejoignez ADA Pappers</h1>
             <p className="text-lg text-white/90 mb-6">
-              Créez votre compte et bénéficiez d&apos;un accompagnement juridique personnalisé.
+              Service d&apos;Accompagnement aux démarches administratives.
             </p>
           </div>
           <div className="space-y-4">
@@ -328,10 +328,10 @@ export default function SignupPage() {
             <Link href="/" className="inline-block">
               <div className="flex flex-col items-center">
                 <span className="text-3xl font-bold text-orange-500 hover:text-orange-600 transition-colors">
-                  Paw Legal
+                  ADA Pappers
                 </span>
                 <p className="text-[10px] text-muted-foreground font-medium mt-1">
-                  Service d&apos;accompagnement juridique
+                  Service d&apos;Accompagnement aux démarches administratives
                 </p>
               </div>
             </Link>
@@ -345,7 +345,7 @@ export default function SignupPage() {
                 </h1>
                 <p className="text-muted-foreground">
                   {step === 'info' 
-                    ? 'Créez votre compte Paw Legal'
+                    ? 'Créez votre compte ADA Pappers'
                     : 'Entrez le code reçu par SMS'
                   }
                 </p>
@@ -470,7 +470,6 @@ export default function SignupPage() {
                         )}
                       </Button>
                     </div>
-                  )}
                 </form>
               ) : (
                 <form onSubmit={handleVerifyOTP} className="space-y-5">

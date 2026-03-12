@@ -82,7 +82,7 @@ export default function ContactPage() {
       message: messageInputRef,
     },
     formData,
-    setFormData: (updater) => setFormData(updater),
+    setFormData: (updater) => setFormData(updater as React.SetStateAction<typeof formData>),
   });
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 Mo en bytes
@@ -410,8 +410,8 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <p className="font-semibold text-foreground mb-1">Email</p>
-                      <a href="mailto:contact@pawlegal.fr" className="text-primary hover:underline text-sm">
-                        contact@pawlegal.fr
+                      <a href="mailto:contact@adapappers.fr" className="text-primary hover:underline text-sm">
+                        contact@adapappers.fr
                       </a>
                     </div>
                   </div>

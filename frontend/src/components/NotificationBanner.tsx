@@ -39,10 +39,8 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
   const { isVisible, toggleVisibility } = useNotificationBannerVisibility();
 
   useEffect(() => {
+    // Chargement unique au montage / changement de rôle utilisateur
     loadBannerItems();
-    // Recharger toutes les 30 secondes
-    const interval = setInterval(loadBannerItems, 30000);
-    return () => clearInterval(interval);
   }, [userRole, userId]);
 
   const loadBannerItems = async () => {
@@ -122,7 +120,7 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
         }
       }
 
-      // Pour les clients : notifications importantes de dossiers
+      // Pour les clients : notifications importantes de dossiers (documents, échéances, explications)
       if (userRole === 'client' && userId) {
         try {
           const notificationsResponse = await notificationsAPI.getNotifications({
@@ -132,10 +130,10 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
           if (notificationsResponse.data.success) {
             const notifications = notificationsResponse.data.notifications || [];
             
-            // Filtrer les notifications importantes (documents manquants, échéances, etc.)
+            // Filtrer les notifications importantes (documents manquants, échéances, explications, etc.)
             const importantNotifications = notifications.filter((notif: any) => {
               const type = notif.type || '';
-              return type.includes('document') || type.includes('echeance') || type.includes('urgent');
+              return type.includes('document') || type.includes('echeance') || type.includes('urgent') || type === 'dossier_updated';
             });
 
             importantNotifications.slice(0, 3).forEach((notif: any) => {
@@ -144,17 +142,51 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
               let link = '/client/notifications';
               let icon = '🔔';
 
-              if (notif.type?.includes('document')) {
+              const notifType = notif.type || '';
+              const data = notif.data || notif.metadata || {};
+
+              if (notifType === 'document_request') {
+                // Cas spécifique: demande de document pour le client
+                const dossierId = safeString(data.dossierId);
+                const dossierNumero = safeString(data.dossierNumero);
+                const label =
+                  safeString(data.documentTypeLabel) ||
+                  safeString(data.documentType) ||
+                  'document';
+                const isUrgent = !!data.isUrgent;
+
+                message = `${isUrgent ? '[URGENT] ' : ''}Un document "${label}" est demandé pour votre dossier ${dossierNumero || ''}`.trim();
+                icon = '📄';
+                link = dossierId ? `/client/dossiers/${dossierId}` : '/client/documents';
+
+                items.push({
+                  id: `notification-${safeString(notif._id) || safeString(notif.id) || Math.random()}`,
+                  type: 'dossier',
+                  message,
+                  link,
+                  icon,
+                  priority: isUrgent ? 'high' : 'normal'
+                });
+                return;
+              }
+
+              if (notifType.includes('document')) {
                 icon = '📄';
                 const dossierId = safeString(notif.dossierId) || safeString(notif.metadata?.dossierId);
                 if (dossierId) {
                   link = `/client/dossiers/${dossierId}`;
                 }
-              } else if (notif.type?.includes('echeance')) {
+              } else if (notifType.includes('echeance')) {
                 icon = '⏰';
                 const dossierId = safeString(notif.dossierId) || safeString(notif.metadata?.dossierId);
                 if (dossierId) {
                   link = `/client/dossiers/${dossierId}`;
+                }
+              } else if (notifType === 'dossier_updated' && (notif.metadata?.source === 'complementsRecit')) {
+                icon = '📝';
+                const dossierId = safeString(notif.metadata?.dossierId);
+                if (dossierId) {
+                  link = `/client/dossiers/${dossierId}/recap`;
                 }
               }
 
@@ -164,7 +196,7 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
                 message,
                 link,
                 icon,
-                priority: notif.type?.includes('urgent') ? 'high' : 'normal'
+                priority: notifType.includes('urgent') ? 'high' : 'normal'
               });
             });
           }
@@ -214,8 +246,8 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
       >
         <span className="text-sm">×</span>
       </button>
-      <div className="overflow-hidden pr-10">
-        <div className="flex animate-scroll-banner whitespace-nowrap">
+      <div className="overflow-x-auto pr-10">
+        <div className="flex whitespace-nowrap">
           {bannerItems.map((item) => (
             <Link
               key={item.id}
@@ -233,42 +265,8 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
               <span className="text-xs text-muted-foreground">→</span>
             </Link>
           ))}
-          {/* Dupliquer pour animation continue */}
-          {bannerItems.map((item) => (
-            <Link
-              key={`${item.id}-dup`}
-              href={item.link || '#'}
-              className={`inline-flex items-center gap-2 px-6 py-3 mx-2 rounded-lg transition-all hover:bg-primary/20 ${
-                item.priority === 'high' ? 'bg-red-50 border border-red-200' : 'bg-white/50'
-              }`}
-            >
-              <span className="text-lg">{item.icon}</span>
-              <span className={`text-sm font-medium ${
-                item.priority === 'high' ? 'text-red-900' : 'text-foreground'
-              }`}>
-                {item.message}
-              </span>
-              <span className="text-xs text-muted-foreground">→</span>
-            </Link>
-          ))}
         </div>
       </div>
-      <style jsx>{`
-        @keyframes scroll-banner {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
-        }
-        .animate-scroll-banner {
-          animation: scroll-banner 30s linear infinite;
-        }
-        .animate-scroll-banner:hover {
-          animation-play-state: paused;
-        }
-      `}</style>
     </div>
   );
 }

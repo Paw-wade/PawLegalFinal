@@ -143,6 +143,27 @@ const userSchema = new mongoose.Schema({
       otp: { type: Boolean, default: true } // OTP toujours activé pour sécurité
     }
   },
+  // Discussions du forum mises en signet par l'utilisateur
+  forumBookmarks: [{
+    thread: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ForumThread',
+      required: true
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  // Réinitialisation de mot de passe (token temporaire)
+  resetPasswordToken: {
+    type: String,
+    select: false
+  },
+  resetPasswordExpires: {
+    type: Date,
+    select: false
+  },
   createdAt: {
     type: Date,
     default: Date.now

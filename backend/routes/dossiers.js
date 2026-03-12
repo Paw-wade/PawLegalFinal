@@ -144,7 +144,7 @@ router.post(
   [
     body('titre').optional().trim(),
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']),
-    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']),
+    body('statut').optional().isString().trim().isLength({ max: 200 }),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente'])
   ],
   // Middleware d'authentification optionnel
@@ -841,10 +841,12 @@ router.get('/:id/recap', protect, async (req, res) => {
       });
     }
     
-    // Vérifier l'accès
+    // Vérifier l'accès (gérer user/assignedTo populés ou non)
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
-    const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const ownerId = dossier.user ? (dossier.user._id || dossier.user).toString() : null;
+    const isOwner = ownerId && ownerId === req.user.id.toString();
+    const assignedId = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
+    const isAssigned = assignedId && assignedId === req.user.id.toString();
     const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(
       m => m._id.toString() === req.user.id.toString()
     );
@@ -853,7 +855,9 @@ router.get('/:id/recap', protect, async (req, res) => {
       t => {
         if (!t.partenaire) return false;
         const partenaireId = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
-        return partenaireId === req.user.id.toString() && t.status !== 'refused';
+        // Le partenaire a accès au dossier tant qu'il lui a été transmis,
+        // même si la transmission a été précédemment refusée
+        return partenaireId === req.user.id.toString();
       }
     );
     
@@ -1049,6 +1053,14 @@ router.get('/:id/recap', protect, async (req, res) => {
         date: log.createdAt,
         details: log.metadata
       })),
+      complementsRecit: (dossier.complementsRecit || []).map(c => ({
+        _id: c._id,
+        addedBy: c.addedBy ? c.addedBy.toString() : null,
+        addedAt: c.addedAt,
+        authorName: c.authorName || 'Inconnu',
+        role: c.role || '',
+        text: c.text
+      })),
       statistiques: {
         dureeTraitement: dureeTraitement,
         joursDepuisCreation: dureeTraitement,
@@ -1060,7 +1072,8 @@ router.get('/:id/recap', protect, async (req, res) => {
     
     res.json({
       success: true,
-      recap
+      recap,
+      currentUserId: req.user.id
     });
   } catch (error) {
     console.error('Erreur lors de la génération du récit récapitulatif:', error);
@@ -1069,6 +1082,222 @@ router.get('/:id/recap', protect, async (req, res) => {
       message: 'Erreur serveur',
       error: error.message
     });
+  }
+});
+
+// Helper : vérifier si l'utilisateur peut modifier les compléments du récit (client, créateur, admin, partenaire, assigné, membre équipe)
+function canEditRecapComplements(dossier, user) {
+  const uid = (user && user.id ? user.id : user).toString();
+  const role = user && user.role ? user.role : '';
+  if (role === 'admin' || role === 'superadmin') return true;
+  const ownerId = dossier.user ? (dossier.user._id || dossier.user).toString() : null;
+  const isOwner = ownerId && ownerId === uid;
+  const createdById = dossier.createdBy ? (dossier.createdBy._id || dossier.createdBy).toString() : null;
+  const isCreatedBy = createdById && createdById === uid;
+  const assignedId = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
+  const isAssigned = assignedId && assignedId === uid;
+  const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(m => (m._id || m).toString() === uid);
+  const isPartenaire = dossier.transmittedTo && dossier.transmittedTo.some(t => {
+    const pid = t.partenaire ? (t.partenaire._id || t.partenaire).toString() : null;
+    return pid === uid;
+  });
+  return isOwner || isCreatedBy || isAssigned || isTeamMember || isPartenaire;
+}
+
+// @route   POST /api/user/dossiers/:id/recap/complements
+// @desc    Ajouter un complément au récit (client, créateur, admin, partenaire)
+// @access  Private
+router.post('/:id/recap/complements', protect, async (req, res) => {
+  try {
+    const dossierId = req.params.id;
+    const { text } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
+    }
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName')
+      .populate('createdBy', 'firstName lastName role')
+      .populate('assignedTo', 'firstName lastName role')
+      .populate('teamMembers', 'firstName lastName role')
+      .populate('transmittedTo.partenaire', 'firstName lastName partenaireInfo');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+    }
+    const canEdit = canEditRecapComplements(dossier, req.user);
+    if (!canEdit) {
+      return res.status(403).json({ success: false, message: 'Vous n\'êtes pas autorisé à ajouter un complément à ce dossier.' });
+    }
+    const authorName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email || 'Inconnu';
+    const role = req.user.role || '';
+    const complement = {
+      addedBy: req.user.id,
+      addedAt: new Date(),
+      authorName,
+      role,
+      text: String(text).trim()
+    };
+    if (!dossier.complementsRecit) dossier.complementsRecit = [];
+    dossier.complementsRecit.push(complement);
+    await dossier.save();
+    const added = dossier.complementsRecit[dossier.complementsRecit.length - 1];
+
+    // Notifications : client + partenaires/admin concernés
+    try {
+      const modifier = req.user;
+      const dossierTitle = dossier.titre || dossier.numero || 'Votre dossier';
+      const baseMessage = `Une nouvelle explication a été ajoutée au dossier "${dossierTitle}" par ${authorName}.`;
+      const lienClient = `/client/dossiers/${dossier._id.toString()}/recap`;
+      const lienAdmin = `/admin/dossiers/${dossier._id.toString()}/recap`;
+      const lienPartenaire = `/partenaire/dossiers/${dossier._id.toString()}/recap`;
+
+      // 1. Notifier le client (propriétaire) si ce n'est pas lui qui parle
+      if (dossier.user) {
+        const clientId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
+        if (clientId !== req.user.id.toString()) {
+          await createNotification(
+            clientId,
+            'dossier_updated',
+            'Nouvelle explication sur votre dossier',
+            baseMessage,
+            lienClient,
+            { dossierId: dossier._id.toString(), complementId: added._id.toString(), source: 'complementsRecit' }
+          );
+        }
+      }
+
+      // 2. Notifier les partenaires à qui le dossier est transmis
+      if (Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0) {
+        for (const trans of dossier.transmittedTo) {
+          const part = trans.partenaire;
+          const partenaireId = part?._id ? part._id.toString() : part?.toString();
+          if (partenaireId && partenaireId !== req.user.id.toString()) {
+            await createNotification(
+              partenaireId,
+              'dossier_updated',
+              'Nouvelle explication sur un dossier transmis',
+              baseMessage,
+              lienPartenaire,
+              { dossierId: dossier._id.toString(), complementId: added._id.toString(), source: 'complementsRecit' }
+            );
+          }
+        }
+      }
+
+      // 3. Notifier l'admin assigné le cas échéant (si ce n'est pas lui)
+      if (dossier.assignedTo) {
+        const assignedId = dossier.assignedTo._id ? dossier.assignedTo._id.toString() : dossier.assignedTo.toString();
+        if (assignedId !== req.user.id.toString()) {
+          await createNotification(
+            assignedId,
+            'dossier_updated',
+            'Nouvelle explication sur un dossier',
+            baseMessage,
+            lienAdmin,
+            { dossierId: dossier._id.toString(), complementId: added._id.toString(), source: 'complementsRecit' }
+          );
+        }
+      }
+    } catch (notifyError) {
+      console.error('Erreur lors de la création des notifications pour complément récit:', notifyError);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Complément ajouté.',
+      complement: {
+        _id: added._id,
+        addedAt: added.addedAt,
+        authorName: added.authorName,
+        role: added.role,
+        text: added.text
+      }
+    });
+  } catch (error) {
+    console.error('Erreur ajout complément récit:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// @route   PATCH /api/user/dossiers/:id/recap/complements/:complementId
+// @desc    Modifier un complément (auteur du complément ou admin)
+// @access  Private
+router.patch('/:id/recap/complements/:complementId', protect, async (req, res) => {
+  try {
+    const { id: dossierId, complementId } = req.params;
+    const { text } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
+    }
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName')
+      .populate('createdBy', 'firstName lastName role')
+      .populate('assignedTo', 'firstName lastName role')
+      .populate('teamMembers', 'firstName lastName role')
+      .populate('transmittedTo.partenaire', 'firstName lastName partenaireInfo');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+    }
+    const canEdit = canEditRecapComplements(dossier, req.user);
+    if (!canEdit) {
+      return res.status(403).json({ success: false, message: 'Non autorisé.' });
+    }
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const comp = (dossier.complementsRecit || []).find(c => (c._id || c).toString() === complementId);
+    if (!comp) {
+      return res.status(404).json({ success: false, message: 'Complément non trouvé.' });
+    }
+    const isAuthor = (comp.addedBy || comp).toString() === req.user.id.toString();
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Seul l\'auteur du complément ou un administrateur peut le modifier.' });
+    }
+    comp.text = String(text).trim();
+    await dossier.save();
+    return res.json({
+      success: true,
+      message: 'Complément mis à jour.',
+      complement: { _id: comp._id, addedAt: comp.addedAt, authorName: comp.authorName, role: comp.role, text: comp.text }
+    });
+  } catch (error) {
+    console.error('Erreur modification complément récit:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// @route   DELETE /api/user/dossiers/:id/recap/complements/:complementId
+// @desc    Supprimer un complément (auteur du complément ou admin)
+// @access  Private
+router.delete('/:id/recap/complements/:complementId', protect, async (req, res) => {
+  try {
+    const { id: dossierId, complementId } = req.params;
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName')
+      .populate('createdBy', 'firstName lastName role')
+      .populate('assignedTo', 'firstName lastName role')
+      .populate('teamMembers', 'firstName lastName role')
+      .populate('transmittedTo.partenaire', 'firstName lastName partenaireInfo');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+    }
+    const canEdit = canEditRecapComplements(dossier, req.user);
+    if (!canEdit) {
+      return res.status(403).json({ success: false, message: 'Non autorisé.' });
+    }
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const index = (dossier.complementsRecit || []).findIndex(c => (c._id || c).toString() === complementId);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Complément non trouvé.' });
+    }
+    const comp = dossier.complementsRecit[index];
+    const isAuthor = (comp.addedBy || comp).toString() === req.user.id.toString();
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Seul l\'auteur du complément ou un administrateur peut le supprimer.' });
+    }
+    dossier.complementsRecit.splice(index, 1);
+    await dossier.save();
+    return res.json({ success: true, message: 'Complément supprimé.' });
+  } catch (error) {
+    console.error('Erreur suppression complément récit:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
   }
 });
 
@@ -1099,10 +1328,12 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       });
     }
     
-    // Vérifier l'accès (même logique que /recap)
+    // Vérifier l'accès (même logique que /recap, gérer user/assignedTo populés ou non)
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
-    const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const ownerIdPdf = dossier.user ? (dossier.user._id || dossier.user).toString() : null;
+    const isOwner = ownerIdPdf && ownerIdPdf === req.user.id.toString();
+    const assignedIdPdf = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
+    const isAssigned = assignedIdPdf && assignedIdPdf === req.user.id.toString();
     const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(
       m => m._id.toString() === req.user.id.toString()
     );
@@ -1111,7 +1342,9 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       t => {
         if (!t.partenaire) return false;
         const partenaireId = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
-        return partenaireId === req.user.id.toString() && t.status !== 'refused';
+        // Le partenaire a accès aux données détaillées du dossier
+        // tant que le dossier lui a été transmis, quel que soit le statut
+        return partenaireId === req.user.id.toString();
       }
     );
     
@@ -1279,6 +1512,14 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         date: log.createdAt,
         details: log.metadata
       })),
+      complementsRecit: (dossier.complementsRecit || []).map(c => ({
+        _id: c._id,
+        addedBy: c.addedBy ? c.addedBy.toString() : null,
+        addedAt: c.addedAt,
+        authorName: c.authorName || 'Inconnu',
+        role: c.role || '',
+        text: c.text
+      })),
       statistiques: {
         dureeTraitement: dureeTraitement,
         joursDepuisCreation: dureeTraitement,
@@ -1289,8 +1530,10 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     };
     
     // Générer le PDF
+    const { addDocumentHeader, PLATFORM_CONFIG } = require('../utils/documentHeader');
     const PDFDocument = require('pdfkit');
-    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+    const margin = 50;
+    const doc = new PDFDocument({ margin, size: 'A4' });
     
     // Headers pour le téléchargement
     const filename = `Recit_Dossier_${recap.dossier.numero || dossierId}_${new Date().toISOString().split('T')[0]}.pdf`;
@@ -1300,10 +1543,11 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     // Pipe le PDF vers la réponse
     doc.pipe(res);
     
+    // Ajouter l'en-tête standard ADA Pappers et récupérer la position de départ du contenu
+    let yPosition = addDocumentHeader(doc, { margin });
+    
     // Fonction helper pour ajouter du texte avec gestion de la pagination
-    let yPosition = 50;
     const pageHeight = doc.page.height;
-    const margin = 50;
     const lineHeight = 15;
     const sectionSpacing = 20;
     let pageCount = 1;
@@ -1354,13 +1598,8 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       return currentY;
     };
     
-    // En-tête
-    doc.fontSize(18).font('Helvetica-Bold').fillColor('#FF6600');
-    yPosition = addText('PAW LEGAL', margin, yPosition);
-    doc.fontSize(16).fillColor('#000000');
-    yPosition += lineHeight;
-    yPosition = addText('RÉCIT RÉCAPITULATIF DU DOSSIER', margin, yPosition);
-    yPosition += sectionSpacing;
+    // Titre principal sous l'en-tête
+    yPosition = addSection('RÉCIT RÉCAPITULATIF DU DOSSIER', yPosition);
     
     // Informations du dossier
     yPosition = addSection('INFORMATIONS DU DOSSIER', yPosition);
@@ -1417,6 +1656,24 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     }
     yPosition += sectionSpacing;
     
+    // Explication du dossier (compléments au récit, visibles par tous) — placés AVANT les documents
+    if (recap.complementsRecit && recap.complementsRecit.length > 0) {
+      yPosition = addSection('EXPLICATION DU DOSSIER', yPosition);
+      doc.fontSize(10);
+      recap.complementsRecit.forEach((c, index) => {
+        const dateStr = c.addedAt ? new Date(c.addedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const authorLabel = [c.authorName, c.role].filter(Boolean).join(' • ');
+        yPosition = addText(`${index + 1}. Le ${dateStr} — ${authorLabel}`, margin, yPosition);
+        yPosition += lineHeight * 0.5;
+        yPosition = addMultilineText(c.text, margin + 10, yPosition, {
+          width: doc.page.width - 2 * margin - 10,
+          align: 'left'
+        });
+        yPosition += lineHeight;
+      });
+      yPosition += sectionSpacing;
+    }
+    
     // Documents
     yPosition = addSection('DOCUMENTS', yPosition);
     yPosition = addText(`Total : ${recap.documents.total} document(s)`, margin, yPosition);
@@ -1439,7 +1696,6 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       yPosition = addText(`En attente : ${recap.documentRequests.enAttente} | Reçus : ${recap.documentRequests.recus}`, margin, yPosition);
       yPosition += sectionSpacing;
     }
-    
     // Tâches
     if (recap.taches.total > 0) {
       yPosition = addSection('TÂCHES', yPosition);
@@ -1492,18 +1748,6 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       yPosition += sectionSpacing;
     }
     
-    // Historique récent
-    if (recap.historique && recap.historique.length > 0) {
-      yPosition = addSection('HISTORIQUE RÉCENT', yPosition);
-      recap.historique.slice(0, 10).forEach((log, index) => {
-        yPosition = addText(`${new Date(log.date).toLocaleDateString('fr-FR')} - ${log.description}`, margin + 20, yPosition);
-        yPosition += lineHeight * 0.7;
-        yPosition = addText(`   Par: ${log.utilisateur}`, margin + 20, yPosition);
-        yPosition += lineHeight;
-      });
-      yPosition += sectionSpacing;
-    }
-    
     // Statistiques
     yPosition = addSection('STATISTIQUES', yPosition);
     yPosition = addText(`Durée de traitement : ${recap.statistiques.dureeTraitement} jour(s)`, margin, yPosition);
@@ -1532,6 +1776,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         width: doc.page.width - 2 * margin,
         align: 'left'
       });
+      yPosition += sectionSpacing;
     }
     
     // Gérer les erreurs du stream PDF
@@ -1556,8 +1801,9 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         for (let i = startPage; i < startPage + totalPages; i++) {
           doc.switchToPage(i);
           doc.fontSize(8).fillColor('#666666');
+          const footerText = `${PLATFORM_CONFIG.name} - ${PLATFORM_CONFIG.website} - ${PLATFORM_CONFIG.email} | Page ${i - startPage + 1}/${totalPages}`;
           doc.text(
-            `Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')} - Page ${i - startPage + 1}/${totalPages}`,
+            footerText,
             margin,
             doc.page.height - 30,
             { align: 'center', width: doc.page.width - 2 * margin }
@@ -1702,7 +1948,7 @@ router.put(
     // Validation simplifiée : tous les champs sont optionnels
     // Si un champ est fourni, il sera validé, sinon ignoré
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']).withMessage('Catégorie invalide'),
-    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']).withMessage('Statut invalide'),
+    body('statut').optional().isString().trim().isLength({ max: 200 }).withMessage('Statut invalide'),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente']).withMessage('Priorité invalide')
     // Pas de validation pour les autres champs optionnels
   ],
@@ -1736,21 +1982,50 @@ router.put(
       // Vérifier les permissions
       const dossierUserId = dossier.user ? (dossier.user._id ? dossier.user._id.toString() : dossier.user.toString()) : null;
       let hasModifyPermission = false;
-      
+      const isPartenaire = req.user.role === 'partenaire';
+      const isTransmittedToPartenaire = isPartenaire && dossier.transmittedTo && dossier.transmittedTo.some(
+        t => {
+          if (!t.partenaire) return false;
+          const pid = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
+          return pid === req.user.id.toString();
+        }
+      );
+
       // L'utilisateur peut modifier si :
       // 1. Il est le propriétaire du dossier
       // 2. Il est admin/superadmin
+      // 3. Il est partenaire et le dossier lui a été transmis et accepté
       if (dossierUserId && dossierUserId === req.user.id.toString()) {
         hasModifyPermission = true;
       } else if (req.user.role === 'admin' || req.user.role === 'superadmin') {
         hasModifyPermission = true;
+      } else if (isTransmittedToPartenaire) {
+        hasModifyPermission = true;
       }
-      
+
       if (!hasModifyPermission) {
         return res.status(403).json({
           success: false,
           message: 'Accès non autorisé à ce dossier'
         });
+      }
+
+      // Partenaire : ne peut mettre à jour que les étapes supplémentaires
+      if (isPartenaire && hasModifyPermission) {
+        const etapesSupplementaires = req.body.etapesSupplementaires;
+        if (Array.isArray(etapesSupplementaires)) {
+          dossier.etapesSupplementaires = etapesSupplementaires.map((e, idx) => ({
+            id: e.id || e.label || `step_${idx}`,
+            label: e.label || '',
+            date: e.date ? new Date(e.date) : undefined,
+            ordre: typeof e.ordre === 'number' ? e.ordre : idx,
+            addedAt: e.addedAt ? new Date(e.addedAt) : new Date(),
+            addedBy: req.user.id
+          }));
+        }
+        await dossier.save();
+        const updated = await Dossier.findById(dossier._id).populate('user', 'firstName lastName email phone');
+        return res.status(200).json({ success: true, message: 'Dossier mis à jour', dossier: updated });
       }
 
       const {
@@ -1764,7 +2039,8 @@ router.put(
         notes,
         assignedTo,
         motifRefus,
-        notificationMessage
+        notificationMessage,
+        etapesSupplementaires: bodyEtapesSupplementaires
       } = req.body;
 
       const oldStatut = dossier.statut;
@@ -1780,7 +2056,19 @@ router.put(
       if (dateEcheance) dossier.dateEcheance = dateEcheance;
       if (notes !== undefined) dossier.notes = notes;
       if (motifRefus !== undefined) dossier.motifRefus = motifRefus;
-      
+
+      // Étapes supplémentaires (admin/superadmin uniquement, partenaire géré au-dessus)
+      if (Array.isArray(bodyEtapesSupplementaires)) {
+        dossier.etapesSupplementaires = bodyEtapesSupplementaires.map((e, idx) => ({
+          id: e.id || e.label || `step_${idx}`,
+          label: e.label || '',
+          date: e.date ? new Date(e.date) : undefined,
+          ordre: typeof e.ordre === 'number' ? e.ordre : idx,
+          addedAt: e.addedAt ? new Date(e.addedAt) : new Date(),
+          addedBy: e.addedBy || req.user.id
+        }));
+      }
+
       // Gérer l'assignation
       if (assignedTo !== undefined) {
         if (assignedTo === '' || assignedTo === null) {
@@ -1885,29 +2173,8 @@ router.put(
             console.log('✅ Notification créée avec succès');
           }
           
-          // Notification si le dossier a été assigné
-          if (assignedTo !== undefined && assignedTo !== oldAssignedTo) {
-            if (assignedTo && assignedTo !== oldAssignedTo) {
-              const assignedUser = await User.findById(assignedTo);
-              await createNotification(
-                userId,
-                'dossier_assigned',
-                'Dossier assigné',
-                `Votre dossier "${dossierForNotification.titre}" a été assigné à ${assignedUser.firstName} ${assignedUser.lastName}.`,
-                `/client/dossiers`,
-                { dossierId: dossierForNotification._id.toString(), assignedTo: assignedTo }
-              );
-            } else if (!assignedTo && oldAssignedTo) {
-              await createNotification(
-                userId,
-                'dossier_updated',
-                'Dossier modifié',
-                `L'assignation de votre dossier "${dossierForNotification.titre}" a été retirée.`,
-                `/client/dossiers`,
-                { dossierId: dossierForNotification._id.toString() }
-              );
-            }
-          }
+          // ⚠️ Ne plus notifier le client sur les changements d'assignation de dossier
+          // (ni assignation ni retrait d'assignation)
           
           // Notification générale si d'autres modifications
           if (!statut || statut === oldStatut) {
@@ -2470,6 +2737,29 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
         transmittedBy: req.user.id.toString()
       }
     });
+    // SMS pour le partenaire (si téléphone disponible et préférences OK)
+    try {
+      if (partenaire.phone) {
+        const formattedPhone = formatPhoneNumber(partenaire.phone);
+        if (formattedPhone) {
+          await sendNotificationSMS(
+            formattedPhone,
+            'dossier_transmitted',
+            {
+              dossierTitle: dossier.titre || dossier.numero || 'Sans titre',
+              partenaireName: partenaire.partenaireInfo?.nomOrganisme || `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() || 'Partenaire',
+            },
+            {
+              userId: partenaire._id.toString(),
+              context: 'dossier',
+              contextId: dossier._id.toString(),
+            }
+          );
+        }
+      }
+    } catch (smsError) {
+      console.error('⚠️ Erreur lors de l\'envoi du SMS au partenaire pour la transmission du dossier:', smsError);
+    }
     
     // Notifier aussi le client si le dossier a un propriétaire
     if (dossier.user) {
@@ -2487,6 +2777,30 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
           partenaireId: partenaireId.toString ? partenaireId.toString() : String(partenaireId)
         }
       });
+      // SMS pour le client (si téléphone disponible et préférences OK)
+      try {
+        const clientUser = await User.findById(userId);
+        if (clientUser?.phone) {
+          const formattedPhone = formatPhoneNumber(clientUser.phone);
+          if (formattedPhone) {
+            await sendNotificationSMS(
+              formattedPhone,
+              'dossier_transmitted',
+              {
+                dossierTitle: dossier.titre || dossier.numero || 'Sans titre',
+                partenaireName: partenaire.partenaireInfo?.nomOrganisme || partenaire.email || 'un partenaire',
+              },
+              {
+                userId: clientUser._id.toString(),
+                context: 'dossier',
+                contextId: dossier._id.toString(),
+              }
+            );
+          }
+        }
+      } catch (smsError) {
+        console.error('⚠️ Erreur lors de l\'envoi du SMS au client pour la transmission du dossier:', smsError);
+      }
     }
     
     res.json({ 

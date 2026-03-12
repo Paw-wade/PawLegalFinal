@@ -45,7 +45,11 @@ function getRoleLabel(role: string | undefined): string {
     'client': 'Client',
     'admin': 'Administrateur',
     'superadmin': 'Super Administrateur',
+    'partenaire': 'Partenaire',
     'avocat': 'Avocat',
+    'consulat': 'Consulat',
+    'association': 'Association',
+    'collaborateur': 'Collaborateur',
     'assistant': 'Assistant',
     'comptable': 'Comptable',
     'secretaire': 'Secrétaire',
@@ -57,7 +61,7 @@ function getRoleLabel(role: string | undefined): string {
 }
 
 interface HeaderProps {
-  variant?: 'home' | 'client' | 'admin';
+  variant?: 'home' | 'client' | 'admin' | 'partenaire';
   showNav?: boolean;
   navItems?: Array<{ href: string; label: string; active?: boolean; highlight?: boolean }>;
   onMenuClick?: () => void; // Pour le bouton hamburger
@@ -78,7 +82,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
   // Textes CMS pour le sous-titre du header
   const subtitleHome = useCmsText(
     'layout.header.subtitle_home',
-    "Service d'accompagnement juridique"
+    "Service d'Accompagnement aux démarches administratives"
   );
   const subtitleAdmin = useCmsText(
     'layout.header.subtitle_admin',
@@ -328,9 +332,8 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
     <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-50 shadow-sm">
       <div className="container mx-auto px-4 py-2.5">
         <div className="flex items-center justify-between">
-          {/* Logo et bouton menu (pour dashboard) */}
+          {/* Logo sur la page d'accueil ; bouton menu sur dashboard client */}
           <div className="flex items-center gap-3">
-            {/* Bouton hamburger pour mobile/tablette sur dashboard - uniquement pour les clients */}
             {!showNav && onMenuClick && variant === 'client' && (
               <button
                 onClick={onMenuClick}
@@ -342,44 +345,24 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 </svg>
               </button>
             )}
-            {/* Logo - visible UNIQUEMENT sur la page d'accueil (variant === 'home') */}
-            {/* Sur les pages client et admin, le logo est déjà dans la sidebar, donc on ne l'affiche PAS ici */}
             {variant === 'home' && (
               <>
                 <Link
                   href="/"
                   className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-xl"
                 >
-                  Paw Legal
+                  ADA Pappers
                 </Link>
-                <div className="h-4 w-px bg-gray-300"></div>
+                <div className="h-4 w-px bg-gray-300" />
                 <p className="text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
                   {subtitleHome}
                 </p>
               </>
             )}
-            {/* Sur les pages client, afficher uniquement le sous-titre (le logo est dans la sidebar) */}
-            {variant === 'client' && (
-              <p className="text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
-                {subtitleClient}
-              </p>
-            )}
-            {/* Sur les pages admin, afficher uniquement le sous-titre */}
-            {variant === 'admin' && (
-              <p className="text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
-                {subtitleAdmin}
-              </p>
-            )}
           </div>
 
-          {/* Navigation - Liens permanents (Domaines, Services, FAQ, Contact, Calculateur, Dashboard) */}
+          {/* Navigation - Liens permanents (Services, FAQ, Forum, Contact, Calculateur, Dashboard) */}
           <nav className="hidden md:flex items-center gap-0.5">
-            <Link
-              href="/domaines"
-              className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-            >
-              Domaines
-            </Link>
             <Link
               href="/services"
               className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
@@ -391,6 +374,12 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
             >
               FAQ
+            </Link>
+            <Link
+              href="/forum"
+              className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+            >
+              Forum
             </Link>
             <Link
               href="/contact"
@@ -525,7 +514,13 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   {/* Affichage du nom et de la qualité - TOUJOURS VISIBLE */}
                   <div className="text-right border-r border-gray-200 pr-2.5 mr-2">
                     <Link 
-                      href={variant === 'admin' ? '/admin/compte' : '/client/compte'}
+                      href={
+                        variant === 'admin'
+                          ? '/admin/compte'
+                          : variant === 'partenaire'
+                          ? '/partenaire/compte'
+                          : '/client/compte'
+                      }
                       className="text-xs font-semibold text-gray-900 hover:text-orange-500 transition-colors cursor-pointer block leading-tight"
                     >
                       {userName || 'Utilisateur'}

@@ -2,17 +2,25 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { dossiersAPI } from '@/lib/api';
-import { ArrowLeft, FileText, Download, Calendar, User, FileCheck, MessageSquare, CheckCircle, Clock } from 'lucide-react';
+import { ArrowLeft, FileText, Download, Calendar, User, FileCheck, MessageSquare, CheckCircle, Clock, MessageSquarePlus, Pencil, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ClientDossierRecapPage() {
   const params = useParams();
   const dossierId = params.id as string;
+  const { data: session } = useSession();
   
   const [recap, setRecap] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [newComplementText, setNewComplementText] = useState('');
+  const [addingComplement, setAddingComplement] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [currentUserIdFromApi, setCurrentUserIdFromApi] = useState<string | null>(null);
   
   useEffect(() => {
     if (dossierId) {
@@ -26,11 +34,59 @@ export default function ClientDossierRecapPage() {
       const response = await dossiersAPI.getDossierRecap(dossierId);
       if (response.data.success) {
         setRecap(response.data.recap);
+        if (response.data.currentUserId) setCurrentUserIdFromApi(response.data.currentUserId);
       }
+      setEditingId(null);
+      setDeletingId(null);
     } catch (error) {
       console.error('Erreur lors du chargement du récit:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const currentUserId = (session?.user as any)?.id ?? currentUserIdFromApi ?? null;
+  const isAdmin = session?.user?.role === 'admin' || session?.user?.role === 'superadmin';
+  const canEditComplement = (c: any) => isAdmin || (currentUserId && c.addedBy && c.addedBy === currentUserId);
+
+  const handleAddComplement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComplementText.trim()) return;
+    try {
+      setAddingComplement(true);
+      await dossiersAPI.addRecapComplement(dossierId, newComplementText.trim());
+      setNewComplementText('');
+      await loadRecap();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erreur lors de l\'ajout du complément');
+    } finally {
+      setAddingComplement(false);
+    }
+  };
+
+  const handleUpdateComplement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingId || !editingText.trim()) return;
+    try {
+      await dossiersAPI.updateRecapComplement(dossierId, editingId, editingText.trim());
+      setEditingId(null);
+      setEditingText('');
+      await loadRecap();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erreur lors de la modification');
+    }
+  };
+
+  const handleDeleteComplement = async (complementId: string) => {
+    if (!confirm('Supprimer ce complément ?')) return;
+    try {
+      setDeletingId(complementId);
+      await dossiersAPI.deleteRecapComplement(dossierId, complementId);
+      await loadRecap();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erreur lors de la suppression');
+    } finally {
+      setDeletingId(null);
     }
   };
   
@@ -181,6 +237,34 @@ export default function ClientDossierRecapPage() {
             )}
           </section>
           
+          {/* Compléments au récit */}
+          <section className="mb-8">
+            <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">
+              <MessageSquarePlus className="w-6 h-6 text-primary" />
+              Compléments au récit
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Les compléments ajoutés ici sont visibles par toutes les personnes ayant accès au dossier et apparaissent sur le PDF téléchargé.
+            </p>
+            {(recap.complementsRecit && recap.complementsRecit.length > 0) ? (
+              <div className="space-y-4">
+                {recap.complementsRecit.map((c: any, idx: number) => (
+                  <div key={c._id || idx} className="p-4 bg-orange-50/50 rounded-lg border border-orange-200/60">
+                    <p className="text-gray-800 whitespace-pre-wrap">{c.text}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+                      <span className="text-sm text-gray-500">
+                        {c.authorName}{c.role ? ` • ${c.role}` : ''}{' '}
+                        {c.addedAt && `— ${formatDate(c.addedAt)}`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Aucun complément n&apos;a encore été ajouté.</p>
+            )}
+          </section>
+
           {/* Documents */}
           <section className="mb-8">
             <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">
@@ -289,6 +373,86 @@ export default function ClientDossierRecapPage() {
               </div>
             </section>
           )}
+          
+          {/* Compléments au récit */}
+          <section className="mb-8">
+            <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">
+              <MessageSquarePlus className="w-6 h-6 text-primary" />
+              Compléments au récit
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Les compléments ajoutés ici sont visibles par toutes les personnes ayant accès au dossier et apparaissent sur le PDF téléchargé.
+            </p>
+            {(recap.complementsRecit && recap.complementsRecit.length > 0) && (
+              <div className="space-y-4 mb-6">
+                {recap.complementsRecit.map((c: any) => (
+                  <div key={c._id} className="p-4 bg-orange-50/50 rounded-lg border border-orange-200/60">
+                    {editingId === c._id ? (
+                      <form onSubmit={handleUpdateComplement} className="space-y-3">
+                        <textarea
+                          value={editingText}
+                          onChange={(e) => setEditingText(e.target.value)}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          required
+                        />
+                        <div className="flex gap-2">
+                          <button type="submit" className="px-3 py-1.5 bg-primary text-white rounded-md text-sm hover:bg-primary/90">Enregistrer</button>
+                          <button type="button" onClick={() => { setEditingId(null); setEditingText(''); }} className="px-3 py-1.5 bg-gray-200 rounded-md text-sm">Annuler</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        <p className="text-gray-800 whitespace-pre-wrap">{c.text}</p>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+                          <span className="text-sm text-gray-500">
+                            {c.authorName}{c.role ? ` • ${c.role}` : ''} — {formatDate(c.addedAt)}
+                          </span>
+                          {canEditComplement(c) && (
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => { setEditingId(c._id); setEditingText(c.text); }}
+                                className="p-1.5 text-gray-600 hover:text-primary hover:bg-orange-100 rounded"
+                                title="Modifier"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteComplement(c._id)}
+                                disabled={deletingId === c._id}
+                                className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                                title="Supprimer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <form onSubmit={handleAddComplement} className="space-y-3">
+              <textarea
+                value={newComplementText}
+                onChange={(e) => setNewComplementText(e.target.value)}
+                placeholder="Ajouter une information, une précision ou une mise à jour pour le récit (visible sur le PDF)..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm placeholder:text-gray-400"
+              />
+              <button
+                type="submit"
+                disabled={addingComplement || !newComplementText.trim()}
+                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {addingComplement ? 'Ajout...' : 'Ajouter un complément'}
+              </button>
+            </form>
+          </section>
           
           {/* Statistiques */}
           <section className="mb-8">

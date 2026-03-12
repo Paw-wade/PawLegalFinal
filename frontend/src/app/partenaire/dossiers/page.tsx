@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI } from '@/lib/api';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -309,7 +309,12 @@ export default function PartenaireDossiersPage() {
   });
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [taskSuccessMessage, setTaskSuccessMessage] = useState<string | null>(null);
-  
+  const [addEtapeDossier, setAddEtapeDossier] = useState<any>(null);
+  const [newEtapeLabel, setNewEtapeLabel] = useState('');
+  const [newEtapeDate, setNewEtapeDate] = useState('');
+  const [isAddingEtape, setIsAddingEtape] = useState(false);
+  const [addEtapeError, setAddEtapeError] = useState<string | null>(null);
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/signin');
@@ -404,10 +409,28 @@ export default function PartenaireDossiersPage() {
             );
           }
         });
-        
-        // Ne pas charger les demandes de documents par défaut pour optimiser les performances
-        // Elles seront chargées à la demande si nécessaire
-        setDocumentRequests({});
+
+        // Charger les demandes de documents pour chaque dossier (comme pour l'admin)
+        // afin que les badges et la section "Documents demandés" soient identiques
+        const requestsMap: Record<string, any[]> = {};
+        await Promise.all(
+          dossiersList.map(async (dossier: any) => {
+            try {
+              const reqRes = await documentRequestsAPI.getRequests({
+                dossierId: dossier._id || dossier.id
+              });
+              if (reqRes.data.success) {
+                requestsMap[dossier._id || dossier.id] = reqRes.data.documentRequests || [];
+              }
+            } catch (err: any) {
+              // Ignorer silencieusement les erreurs 404, loguer les autres
+              if (err.response?.status !== 404) {
+                console.error(`Erreur lors du chargement des demandes pour le dossier ${dossier._id}:`, err);
+              }
+            }
+          })
+        );
+        setDocumentRequests(requestsMap);
       } else {
         console.error('❌ Erreur dans la réponse API:', response.data);
         setError(response.data.message || 'Erreur lors du chargement des dossiers');
@@ -1600,19 +1623,13 @@ export default function PartenaireDossiersPage() {
                     )}
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/partenaire/dossiers/${dossier._id || dossier.id}`}
-                            className="p-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary"
-                            title="Voir les détails du dossier"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </Link>
-                        </div>
+                        <Link
+                          href={`/partenaire/dossiers/${dossier._id || dossier.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-primary bg-primary text-white text-xs font-medium hover:bg-primary/90 hover:border-primary/90 transition-colors whitespace-nowrap"
+                        >
+                          Voir les détails du dossier
+                        </Link>
                         <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(dossier.statut)}`}>
                           {getStatutLabel(dossier.statut)}
                         </span>
@@ -1707,35 +1724,7 @@ export default function PartenaireDossiersPage() {
                       return null;
                     })()}
 
-                    {/* Timeline complète avec toutes les étapes */}
-                    {(() => {
-                      const steps = getTimelineSteps(dossier.statut);
-                      return (
-                        <div className="mb-3 pb-2 border-b border-gray-100">
-                          <p className="text-xs font-semibold text-muted-foreground mb-2">Étapes du dossier :</p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {steps.map((step) => (
-                              <div key={step.key} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded ${
-                                step.isCurrent ? 'bg-blue-50 border border-blue-200' : ''
-                              }`}>
-                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                  step.completed && !step.isCurrent ? 'bg-green-500' : 
-                                  step.isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' : 
-                                  'bg-gray-300'
-                                }`}></span>
-                                <span className={`text-[10px] leading-tight ${
-                                  step.completed && !step.isCurrent ? 'text-green-700 font-medium' : 
-                                  step.isCurrent ? 'text-blue-700 font-bold' : 
-                                  'text-gray-400'
-                                }`}>
-                                  {step.label}
-                    </span>
-                  </div>
-                            ))}
-                </div>
-                        </div>
-                      );
-                    })()}
+                    {/* Timeline complète avec toutes les étapes + étapes supplémentaires - masquée sur les badges */}
 
                     {/* Informations du dossier */}
                     <div className="space-y-2 mb-3">
@@ -2300,30 +2289,11 @@ export default function PartenaireDossiersPage() {
                             return (
                               <div className="relative">
                                 <div className="flex gap-3 text-xs text-muted-foreground">
-                                  {hasDocuments && (
+                                  {hasDocuments && isDocDropdownExpanded && (
+                                    <>
                                     <div className="relative">
-                                      <button
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          const newExpanded = new Set(expandedDossierDocumentDropdowns);
-                                          if (isDocDropdownExpanded) {
-                                            newExpanded.delete(dossier._id || dossier.id);
-                                          } else {
-                                            newExpanded.add(dossier._id || dossier.id);
-                                          }
-                                          setExpandedDossierDocumentDropdowns(newExpanded);
-                                        }}
-                                        className="flex items-center gap-1 hover:text-foreground transition-colors"
-                                        title="Voir les documents"
-                                      >
-                                        <span>📄 {dossierDocs.length}</span>
-                                        <span className="text-[10px]">{isDocDropdownExpanded ? '▲' : '▼'}</span>
-                                      </button>
-                                      
-                                      {/* Dropdown des documents */}
-                                      {isDocDropdownExpanded && (
-                                        <div 
+                                      {/* Dropdown des documents (affiché uniquement quand étendu par autre interaction éventuelle) */}
+                                      <div 
                                           className="absolute left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
                                           onClick={(e) => e.stopPropagation()}
                                         >
@@ -2391,8 +2361,8 @@ export default function PartenaireDossiersPage() {
                                             </div>
                                           </div>
                                         </div>
-                                      )}
                                     </div>
+                                    </>
                                   )}
                                   {dossier.messages && dossier.messages.length > 0 && (
                                     <span>💬 {dossier.messages.length}</span>
@@ -2498,6 +2468,15 @@ export default function PartenaireDossiersPage() {
                             <option value="decision_favorable">Décision favorable</option>
                             <option value="autre">Autre (statut non prévu)</option>
                           </select>
+                          {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Étapes choisies :{' '}
+                              {dossier.etapesSupplementaires
+                                .map((etape: any) => etape.label)
+                                .filter(Boolean)
+                                .join(' • ')}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">
@@ -2879,8 +2858,7 @@ export default function PartenaireDossiersPage() {
                     onClick={() => {
                       setShowDocumentRequestModal(null);
                       setDocumentRequestData({
-                        documentType: '',
-                        documentTypeLabel: '',
+                        selectedDocumentTypes: [],
                         message: '',
                         isUrgent: false
                       });
@@ -2894,6 +2872,79 @@ export default function PartenaireDossiersPage() {
                     {isLoading ? 'Envoi...' : 'Envoyer la demande'}
                   </Button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Ajouter une étape du dossier */}
+      {addEtapeDossier && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2">Ajouter une étape (non prévue)</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Dossier : <strong>{addEtapeDossier.titre || addEtapeDossier.numero || addEtapeDossier._id}</strong>
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const label = newEtapeLabel.trim();
+                if (!label) return;
+                setIsAddingEtape(true);
+                setAddEtapeError(null);
+                try {
+                  const current = addEtapeDossier.etapesSupplementaires || [];
+                  const next = [...current, { label, date: newEtapeDate || undefined, ordre: current.length }];
+                  const response = await dossiersAPI.updateDossier(addEtapeDossier._id, { etapesSupplementaires: next });
+                  if (response.data.success) {
+                    setDossiers(prev => prev.map(d => d._id === addEtapeDossier._id ? { ...d, etapesSupplementaires: next } : d));
+                    setAddEtapeDossier(null);
+                    setNewEtapeLabel('');
+                    setNewEtapeDate('');
+                  } else {
+                    setAddEtapeError(response.data.message || 'Erreur lors de l\'ajout');
+                  }
+                } catch (err: any) {
+                  setAddEtapeError(err.response?.data?.message || 'Erreur lors de l\'ajout de l\'étape');
+                } finally {
+                  setIsAddingEtape(false);
+                }
+              }}
+            >
+              <div className="space-y-3 mb-4">
+                <div>
+                  <Label htmlFor="newEtapeLabelPart">Libellé de l&apos;étape *</Label>
+                  <Input
+                    id="newEtapeLabelPart"
+                    value={newEtapeLabel}
+                    onChange={(e) => setNewEtapeLabel(e.target.value)}
+                    placeholder="Ex: Convocation préfecture reçue"
+                    required
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="newEtapeDatePart">Date (optionnel)</Label>
+                  <Input
+                    id="newEtapeDatePart"
+                    type="date"
+                    value={newEtapeDate}
+                    onChange={(e) => setNewEtapeDate(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              {addEtapeError && (
+                <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{addEtapeError}</div>
+              )}
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => { setAddEtapeDossier(null); setNewEtapeLabel(''); setNewEtapeDate(''); setAddEtapeError(null); }} disabled={isAddingEtape}>
+                  Annuler
+                </Button>
+                <Button type="submit" disabled={isAddingEtape || !newEtapeLabel.trim()}>
+                  {isAddingEtape ? 'Ajout...' : 'Ajouter l\'étape'}
+                </Button>
               </div>
             </form>
           </div>

@@ -9,16 +9,16 @@ import { jsPDF } from 'jspdf';
  * Configuration de la plateforme (coordonnées)
  */
 export const PLATFORM_CONFIG = {
-  name: 'Paw Legal',
-  legalName: 'Paw Legal',
-  subtitle: 'Service d\'accompagnement juridique',
+  name: 'ADA Pappers',
+  legalName: 'ADA Pappers',
+  subtitle: 'Service d\'Accompagnement aux démarches administratives',
   address: {
     street: '', // À compléter avec l'adresse réelle
     city: '',
     postalCode: '',
     country: 'France'
   },
-  email: 'contact@pawlegal.fr',
+  email: 'contact@adapappers.fr',
   website: 'https://www.pawlegal.fr',
   phone: '07 68 03 33 58'
 };
@@ -82,7 +82,7 @@ export function addDocumentHeader(doc: jsPDF, options: { margin?: number } = {})
   yPosition += 25;
 
   // ===== COORDONNÉES DE LA PLATEFORME =====
-  const contactInfo = [];
+  const contactInfo: string[] = [];
   if (PLATFORM_CONFIG.legalName) {
     contactInfo.push(PLATFORM_CONFIG.legalName);
   }

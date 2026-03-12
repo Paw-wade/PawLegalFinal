@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { dossiersAPI, notificationsAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -110,7 +110,7 @@ export default function DossiersPage() {
   const [expandedDocumentDropdowns, setExpandedDocumentDropdowns] = useState<Set<string>>(new Set());
   const [dossierDocuments, setDossierDocuments] = useState<Record<string, any[]>>({});
   const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<any>(null);
-  const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(new Set());
+  const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     // Vérifier si l'utilisateur a un token même sans session
@@ -149,19 +149,7 @@ export default function DossiersPage() {
     }
   }, [session, status, router]);
 
-  // Rafraîchissement automatique toutes les 30 secondes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (session || localStorage.getItem('token')) {
-        loadDossiers();
-        loadNotifications();
-        loadDocumentRequests();
-        loadDossierDocuments();
-      }
-    }, 30000); // Rafraîchir toutes les 30 secondes
-
-    return () => clearInterval(interval);
-  }, [session]);
+  // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
   const loadNotifications = async () => {
     try {
@@ -289,6 +277,13 @@ export default function DossiersPage() {
         console.log('✅ Dossiers chargés:', dossiersList.length);
         console.log('✅ Liste des dossiers:', dossiersList);
         setDossiers(dossiersList);
+        // Toujours déplier tous les badges pour l'espace client
+        const allIds = new Set<string>();
+        dossiersList.forEach((d: any) => {
+          const id = (d._id || d.id || d.numero || '').toString();
+          if (id) allIds.add(id);
+        });
+        setExpandedDossiers(allIds);
       } else {
         console.error('❌ Réponse API indique un échec:', response.data);
         setError(response.data.message || 'Erreur lors du chargement des dossiers');
@@ -538,14 +533,10 @@ export default function DossiersPage() {
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                       <Link
                         href={`/client/dossiers/${dossier._id || dossier.id}`}
-                        className="p-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary"
-                        title="Voir les détails du dossier"
                         onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-primary bg-primary text-white text-xs font-medium hover:bg-primary/90 hover:border-primary/90 transition-colors whitespace-nowrap"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
+                        Voir les détails du dossier
                       </Link>
                       <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(dossier.statut)}`}>
                         {getStatutLabel(dossier.statut)}
@@ -649,35 +640,7 @@ export default function DossiersPage() {
                     return null;
                   })()}
 
-                  {/* Timeline complète avec toutes les étapes */}
-                  {(() => {
-                    const steps = getTimelineSteps(dossier.statut);
-                    return (
-                      <div className="mb-3 pb-2 border-b border-gray-100">
-                        <p className="text-xs font-semibold text-muted-foreground mb-2">Étapes du dossier :</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          {steps.map((step) => (
-                            <div key={step.key} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded ${
-                              step.isCurrent ? 'bg-blue-50 border border-blue-200' : ''
-                            }`}>
-                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                step.completed && !step.isCurrent ? 'bg-green-500' : 
-                                step.isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' : 
-                                'bg-gray-300'
-                              }`}></span>
-                              <span className={`text-[10px] leading-tight ${
-                                step.completed && !step.isCurrent ? 'text-green-700 font-medium' : 
-                                step.isCurrent ? 'text-blue-700 font-bold' : 
-                                'text-gray-400'
-                              }`}>
-                                {step.label}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
+                  {/* Timeline complète avec toutes les étapes + étapes supplémentaires - masquée sur les badges */}
 
                   {/* Informations du dossier */}
                   <div className="space-y-2 mb-3">
@@ -949,30 +912,11 @@ export default function DossiersPage() {
                             return (
                               <div className="relative">
                                 <div className="flex gap-3 text-xs text-muted-foreground">
-                                  {hasDocuments && (
+                                  {hasDocuments && isDocDropdownExpanded && (
+                                    <>
                                     <div className="relative">
-                                      <button
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          const newExpanded = new Set(expandedDocumentDropdowns);
-                                          if (isDocDropdownExpanded) {
-                                            newExpanded.delete(dossier._id || dossier.id);
-                                          } else {
-                                            newExpanded.add(dossier._id || dossier.id);
-                                          }
-                                          setExpandedDocumentDropdowns(newExpanded);
-                                        }}
-                                        className="flex items-center gap-1 hover:text-foreground transition-colors"
-                                        title="Voir les documents"
-                                      >
-                                        <span>📄 {dossierDocs.length}</span>
-                                        <span className="text-[10px]">{isDocDropdownExpanded ? '▲' : '▼'}</span>
-                                      </button>
-                                      
-                                      {/* Dropdown des documents */}
-                                      {isDocDropdownExpanded && (
-                                        <div 
+                                      {/* Dropdown des documents sans bouton redondant */}
+                                      <div 
                                           className="absolute left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
                                           onClick={(e) => e.stopPropagation()}
                                         >
@@ -1039,8 +983,8 @@ export default function DossiersPage() {
                                             </div>
                                           </div>
                                         </div>
-                                      )}
                                     </div>
+                                    </>
                                   )}
                                   {dossier.messages && dossier.messages.length > 0 && (
                                     <span>💬 {dossier.messages.length}</span>
@@ -1082,11 +1026,6 @@ export default function DossiersPage() {
                         <Link href={`/client/messages?dossierId=${dossier._id || dossier.id}&action=send`}>
                           <Button size="sm" className="text-xs h-8" title="Envoyer un message">
                             ✉️ Message
-                          </Button>
-                        </Link>
-                        <Link href={`/client/dossiers/${dossier._id || dossier.id}`}>
-                          <Button variant="outline" size="sm" className="text-xs h-8">
-                            Détails
                           </Button>
                         </Link>
                       </div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { notificationsAPI } from '@/lib/api';
 
@@ -25,11 +25,28 @@ function Button({ children, variant = 'default', size = 'default', className = '
 export default function AdminNotificationsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('unread');
   const [categoryFilter, setCategoryFilter] = useState<'all' | NotificationCategoryKey>('all');
+  const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+
+  // Lire le dossierId depuis l'URL pour filtrer les notifications liées à un dossier
+  useEffect(() => {
+    const dossierIdParam = searchParams.get('dossierId');
+    const filterParam = searchParams.get('filter');
+    
+    if (dossierIdParam) {
+      setSelectedDossierId(dossierIdParam);
+    }
+    if (filterParam === 'unread') {
+      setFilter('unread');
+    } else if (filterParam === 'all') {
+      setFilter('all');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -179,6 +196,17 @@ export default function AdminNotificationsPage() {
 
   // Appliquer le filtre de statut (lu/non-lu) sur toutes les notifications
   let filteredByStatus = filter === 'unread' ? notifications.filter(n => !n.lu) : notifications;
+
+  // Filtrer par dossier si un dossierId est spécifié (clic depuis un badge de dossier)
+  if (selectedDossierId) {
+    filteredByStatus = filteredByStatus.filter((notif) => {
+      const notifDossierId = notif.data?.dossierId || notif.dossierId;
+      return notifDossierId && (
+        notifDossierId.toString() === selectedDossierId.toString() ||
+        (typeof notifDossierId === 'object' && notifDossierId._id?.toString() === selectedDossierId.toString())
+      );
+    });
+  }
 
   // Catégoriser les notifications filtrées par statut
   const categorizedNotifications: Record<NotificationCategoryKey, any[]> = {

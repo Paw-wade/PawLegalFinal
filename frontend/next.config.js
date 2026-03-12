@@ -6,6 +6,16 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api',
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3005',
+        pathname: '/uploads/**',
+      },
+    ],
+  },
   // Configuration pour améliorer le chargement des chunks
   onDemandEntries: {
     maxInactiveAge: 25 * 1000,
