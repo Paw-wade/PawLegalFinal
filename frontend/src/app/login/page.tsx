@@ -1,4 +1,4 @@
-import LoginForm from "./login/LoginForm";
+import LoginForm from "./LoginForm";
 
 export default function Page() {
   return (
@@ -8,3 +8,5 @@ export default function Page() {
     </div>
   );
 }
+
+
