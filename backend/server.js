@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const morgan = require('morgan');
+const path = require('path');
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -17,6 +18,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+// Fichiers statiques (médias, documents, etc.)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Connexion à MongoDB
 const connectDB = async () => {
@@ -217,6 +221,16 @@ try {
   });
 } catch (error) {
   console.error('❌ Erreur lors du chargement de la route content:', error.message);
+  console.error(error.stack);
+}
+
+// Route médias (carrousel, etc.)
+try {
+  const mediaRouter = require('./routes/media');
+  app.use('/api/media', mediaRouter);
+  console.log('✅ Route /api/media enregistrée');
+} catch (error) {
+  console.error('❌ Erreur lors du chargement de la route media:', error.message);
   console.error(error.stack);
 }
 

@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
-import { temoignagesAPI } from '@/lib/api';
+import { temoignagesAPI, cmsAPI } from '@/lib/api';
 import { ReservationWidget } from '@/components/ReservationWidget';
 import { ReservationBadge } from '@/components/ReservationBadge';
 import { useCmsText } from '@/lib/contentClient';
@@ -49,6 +50,12 @@ function Button({
     </button>
   );
 }
+
+type HeroSlide = {
+  type: 'image' | 'video';
+  src: string;
+  alt?: string;
+};
 
 // Composant pour les points expansibles amélioré
 function ExpandableItem({ 
@@ -99,6 +106,24 @@ export default function HomePage() {
   const [temoignages, setTemoignages] = useState<any[]>([]);
   const [loadingTemoignages, setLoadingTemoignages] = useState(true);
   const [isVisible, setIsVisible] = useState<{ [key: string]: boolean }>({});
+  const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([
+    {
+      type: 'image',
+      src: '/images/hero-1.jpg',
+      alt: 'Accompagnement administratif personnalisé',
+    },
+    {
+      type: 'image',
+      src: '/images/hero-2.jpg',
+      alt: 'Suivi des dossiers de titre de séjour',
+    },
+    {
+      type: 'image',
+      src: '/images/hero-3.jpg',
+      alt: 'Plateforme digitale de gestion des démarches',
+    },
+  ]);
+  const [currentSlide, setCurrentSlide] = useState(0);
   const [isWidgetOpen, setIsWidgetOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('reservationWidgetOpen');
@@ -215,6 +240,57 @@ export default function HomePage() {
     return () => observer.disconnect();
   }, []);
 
+  // Charger la configuration du carrousel depuis le CMS (si disponible)
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCarouselFromCms = async () => {
+      try {
+        const raw = await cmsAPI.getText('home.hero.carousel', 'fr-FR');
+        if (!raw || !isMounted) return;
+
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return;
+
+        const normalized: HeroSlide[] = parsed
+          .map((item: any): HeroSlide | null => {
+            if (!item || typeof item.src !== 'string' || !item.src.trim()) return null;
+            const type: HeroSlide['type'] = item.type === 'video' ? 'video' : 'image';
+            return {
+              type,
+              src: item.src,
+              alt: item.alt || '',
+            };
+          })
+          .filter((s): s is HeroSlide => s !== null);
+
+        if (normalized.length > 0) {
+          setHeroSlides(normalized);
+          setCurrentSlide(0);
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement du carrousel CMS:', error);
+      }
+    };
+
+    loadCarouselFromCms();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Carrousel automatique pour les slides du hero
+  useEffect(() => {
+    if (heroSlides.length === 0) return;
+
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [heroSlides.length]);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header Professionnel */}
@@ -230,48 +306,147 @@ export default function HomePage() {
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-amber-100/30 blur-[80px] pointer-events-none" />
         
         <div className="container mx-auto px-4 relative z-10">
-          <div className="relative max-w-4xl">
-            {/* Titre */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.1] tracking-tight mb-6">
-              {heroTitle.replace(heroTitleHighlight, '').trim() || heroTitle}{' '}
-              <span className="text-orange-500">
-                {heroTitleHighlight}
-              </span>
-            </h1>
-            
-            {/* Sous-titre */}
-            <p className="text-lg lg:text-xl text-gray-600 max-w-2xl leading-relaxed mb-10">
-              {heroSubtitle}
-            </p>
-            
-            {/* CTAs */}
-            <div className="flex flex-wrap items-center gap-4 mb-6">
-              <Link href="/auth/signup">
-                <Button 
-                  size="lg" 
-                  className="min-w-[200px] shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200 group"
-                >
-                  {heroCtaPrimary}
-                  <span className="ml-2 group-hover:translate-x-0.5 inline-block">→</span>
-                </Button>
-              </Link>
-              <Link href="/contact">
-                <Button 
-                  variant="outline" 
-                  size="lg"
-                  className="min-w-[180px] border-2 border-gray-300 text-gray-700 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/50 transition-all duration-200"
-                >
-                  {heroCtaSecondaryLabel}
-                </Button>
-              </Link>
+          <div className="grid lg:grid-cols-2 gap-10 items-center">
+            <div className="relative max-w-2xl">
+              {/* Titre */}
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.1] tracking-tight mb-6">
+                {heroTitle.replace(heroTitleHighlight, '').trim() || heroTitle}{' '}
+                <span className="text-orange-500">
+                  {heroTitleHighlight}
+                </span>
+              </h1>
+              
+              {/* Sous-titre */}
+              <p
+                className="text-lg lg:text-xl max-w-2xl leading-relaxed mb-10"
+                style={{
+                  display: 'grid',
+                  flexWrap: 'wrap',
+                  textAlign: 'left',
+                  verticalAlign: 'top',
+                  color: 'rgba(0, 0, 0, 1)',
+                }}
+              >
+                {heroSubtitle}
+              </p>
+              
+              {/* CTAs */}
+              <div className="flex flex-wrap items-center gap-4 mb-6">
+                <Link href="/auth/signup">
+                  <Button 
+                    size="lg" 
+                    className="min-w-[200px] shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200 group"
+                  >
+                    {heroCtaPrimary}
+                    <span className="ml-2 group-hover:translate-x-0.5 inline-block">→</span>
+                  </Button>
+                </Link>
+                <Link href="/contact">
+                  <Button 
+                    variant="outline" 
+                    size="lg"
+                    className="min-w-[180px] border-2 border-gray-300 text-gray-700 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/50 transition-all duration-200"
+                  >
+                    {heroCtaSecondaryLabel}
+                  </Button>
+                </Link>
+              </div>
+              
+              <p className="text-sm text-gray-500 flex items-center gap-2">
+                <span className="inline-block w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                </span>
+                {heroSmallText}
+              </p>
             </div>
-            
-            <p className="text-sm text-gray-500 flex items-center gap-2">
-              <span className="inline-block w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              </span>
-              {heroSmallText}
-            </p>
+
+            {/* Carrousel du hero (images ou vidéo) */}
+            <div className="relative w-full max-w-2xl mx-auto h-[300px] sm:h-[380px] lg:h-[440px] rounded-3xl overflow-hidden shadow-2xl border border-white/60 bg-white/40 backdrop-blur">
+              {heroSlides.map((slide, index) => {
+                const isYouTube =
+                  slide.type === 'video' &&
+                  typeof slide.src === 'string' &&
+                  (slide.src.includes('youtube.com/watch') || slide.src.includes('youtu.be/'));
+
+                let embedUrl = slide.src;
+                if (isYouTube) {
+                  try {
+                    // Extraire l'ID de la vidéo pour construire l'URL embed
+                    const url = new URL(slide.src);
+                    if (url.hostname.includes('youtube.com')) {
+                      const v = url.searchParams.get('v');
+                      if (v) {
+                        embedUrl = `https://www.youtube.com/embed/${v}?autoplay=1&mute=1&loop=1&playlist=${v}`;
+                      }
+                    } else if (url.hostname.includes('youtu.be')) {
+                      const id = url.pathname.replace('/', '');
+                      if (id) {
+                        embedUrl = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}`;
+                      }
+                    }
+                  } catch {
+                    // Si l'URL est invalide, on laisse embedUrl tel quel
+                  }
+                }
+
+                return (
+                <div
+                  key={`${slide.src}-${index}`}
+                  className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+                    index === currentSlide ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  {isYouTube ? (
+                    <iframe
+                      src={embedUrl}
+                      title={slide.alt || 'Vidéo du carrousel'}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  ) : slide.type === 'video' ? (
+                    <video
+                      src={slide.src}
+                      className="w-full h-full object-cover"
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                    />
+                  ) : (
+                    <Image
+                      src={slide.src}
+                      alt={slide.alt || ''}
+                      fill
+                      priority={index === 0}
+                      className="object-cover"
+                    />
+                  )}
+                </div>
+              );
+              })}
+
+              {/* Dégradé et cadre décoratif */}
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-black/5 via-transparent to-orange-500/10" />
+              <div className="pointer-events-none absolute -inset-1 rounded-[2rem] border border-orange-500/20" />
+
+              {/* Indicateurs de slide */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                {heroSlides.map((_, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => setCurrentSlide(index)}
+                    className={`h-2.5 rounded-full transition-all duration-300 ${
+                      index === currentSlide
+                        ? 'w-6 bg-orange-500'
+                        : 'w-2.5 bg-white/70 hover:bg-white'
+                    }`}
+                    aria-label={`Afficher l'image ${index + 1}`}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>

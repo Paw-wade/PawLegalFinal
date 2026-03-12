@@ -901,6 +901,20 @@ export const documentsAPI = {
     api.delete(`/user/documents/${id}`),
 };
 
+// Médias publics (carrousel, etc.)
+export const mediaAPI = {
+  // Upload d'un média pour le carrousel du hero (admin)
+  uploadHeroMedia: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/media/hero', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+};
+
 // Forum - discussions et réponses
 export const forumAPI = {
   // Lister les discussions (optionnel : theme pour filtrer par thème)
