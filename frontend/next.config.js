@@ -1,7 +1,21 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // si tu n’as pas de Webpack custom, pas besoin de turbo ou experimental
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3005',
+        pathname: '/uploads/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'pawlegalfinal.onrender.com',
+        pathname: '/uploads/**',
+      },
+    ],
+  },
 };
 
 module.exports = nextConfig;
