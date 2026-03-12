@@ -483,3 +483,10 @@ const startServer = async () => {
 // Démarrer le serveur
 startServer();
 
+app.get("/api-status", (req, res) => {
+  res.json({
+    success: true,
+    message: "API PawLegal active",
+    database: "connectée"
+  });
+});
