@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
 
@@ -43,7 +42,6 @@ function Label({ className = '', children, ...props }: any) {
 }
 
 export default function SignInPage() {
-  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
@@ -88,7 +86,7 @@ export default function SignInPage() {
         }
         setIsLoading(false);
       } else if (result?.ok) {
-        // Récupérer le token depuis le backend
+        // Récupérer le token et les infos utilisateur depuis le backend
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
           const loginResponse = await fetch(`${API_URL}/auth/login`, {
@@ -98,7 +96,6 @@ export default function SignInPage() {
             },
             body: JSON.stringify({ email, password }),
           });
-          
           const loginData = await loginResponse.json();
           if (loginData.success && loginData.token) {
             // Stocker le token immédiatement
@@ -109,7 +106,14 @@ export default function SignInPage() {
               console.error('Erreur lors du stockage du token:', e);
             }
             
-            // Utiliser les données de la réponse pour rediriger immédiatement
+            // Si l'utilisateur doit personnaliser son mot de passe, le rediriger vers la page dédiée
+            if (loginData.user?.needsPasswordSetup) {
+              isRedirecting.current = true;
+              window.location.href = '/auth/setup-password';
+              return;
+            }
+
+            // Utiliser les données de la réponse pour rediriger immédiatement selon le rôle
             const userRole = loginData.user?.role;
             isRedirecting.current = true;
             

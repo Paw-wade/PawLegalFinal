@@ -106,23 +106,7 @@ export default function HomePage() {
   const [temoignages, setTemoignages] = useState<any[]>([]);
   const [loadingTemoignages, setLoadingTemoignages] = useState(true);
   const [isVisible, setIsVisible] = useState<{ [key: string]: boolean }>({});
-  const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([
-    {
-      type: 'image',
-      src: '/images/hero-1.jpg',
-      alt: 'Accompagnement administratif personnalisé',
-    },
-    {
-      type: 'image',
-      src: '/images/hero-2.jpg',
-      alt: 'Suivi des dossiers de titre de séjour',
-    },
-    {
-      type: 'image',
-      src: '/images/hero-3.jpg',
-      alt: 'Plateforme digitale de gestion des démarches',
-    },
-  ]);
+  const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isWidgetOpen, setIsWidgetOpen] = useState(() => {
     if (typeof window !== 'undefined') {
