@@ -241,8 +241,8 @@ router.post(
       // Vérifier si un utilisateur avec ce numéro existe déjà
       let user = await User.findOne({ phone: formattedPhone });
       
-      // Déterminer le rôle
-      let finalRole = 'client';
+      // Rôle par défaut pour une inscription publique via OTP
+      const finalRole = 'client';
       
       if (!user) {
         // Créer un nouvel utilisateur sans mot de passe
@@ -258,9 +258,6 @@ router.post(
 
         if (otp.email && otp.email.trim() !== '') {
           userData.email = otp.email.trim().toLowerCase();
-        }
-        if (finalProfessionnelType) {
-          userData.professionnelType = finalProfessionnelType;
         }
         if (otp.organisationName && otp.organisationName.trim() !== '') {
           userData.organisationName = otp.organisationName.trim();
@@ -298,10 +295,6 @@ router.post(
         user.phoneVerified = true;
         if (otp.email && otp.email.trim() !== '' && !user.email) {
           user.email = otp.email.trim().toLowerCase();
-        }
-        if (finalProfessionnelType && !user.professionnelType) {
-          user.professionnelType = finalProfessionnelType;
-          user.role = finalRole;
         }
         if (otp.organisationName && otp.organisationName.trim() !== '' && !user.organisationName) {
           user.organisationName = otp.organisationName.trim();

@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
 import Link from 'next/link';
-import { otpAPI } from '@/lib/api';
+import { authAPI } from '@/lib/api';
 
 function Button({ 
   children, 
@@ -65,36 +64,18 @@ function Label({ className = '', children, ...props }: any) {
   );
 }
 
-type Step = 'info' | 'otp';
-
 export default function SignupPage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('info');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(0);
-  
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    phone: '',
-    otpCode: '',
     email: '',
+    phone: '',
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  const firstNameInputRef = useRef<HTMLInputElement>(null);
-  const lastNameInputRef = useRef<HTMLInputElement>(null);
-  const phoneInputRef = useRef<HTMLInputElement>(null);
-  const otpInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [countdown]);
 
   const validateField = (name: string, value: string) => {
     setFieldErrors(prev => {
@@ -128,15 +109,6 @@ export default function SignupPage() {
             delete errors.phone;
           }
           break;
-        case 'otpCode':
-          if (!value || value.trim().length === 0) {
-            errors.otpCode = 'Le code OTP est requis';
-          } else if (!/^\d{6}$/.test(value.trim())) {
-            errors.otpCode = 'Le code OTP doit contenir 6 chiffres';
-          } else {
-            delete errors.otpCode;
-          }
-          break;
       }
       
       return errors;
@@ -149,41 +121,45 @@ export default function SignupPage() {
     validateField(name, value);
   };
 
-  const handleSendOTP = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     
     const firstName = formData.firstName.trim();
     const lastName = formData.lastName.trim();
+    const email = formData.email.trim().toLowerCase();
     const cleanedPhone = formData.phone.replace(/\s/g, '');
 
-    if (!firstName || !lastName || !cleanedPhone) {
+    if (!firstName || !lastName || !email || !cleanedPhone) {
       setError('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    // Validation simple de l'email côté client
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Veuillez entrer une adresse email valide');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const sendData: any = {
-        firstName: firstName,
-        lastName: lastName,
+      const response = await authAPI.register({
+        firstName,
+        lastName,
+        email,
         phone: cleanedPhone,
-      };
-
-      if (formData.email) {
-        sendData.email = formData.email;
-      }
-
-      const response = await otpAPI.send(sendData);
+      });
 
       if (response.data.success) {
-        setStep('otp');
-        setCountdown(60);
         setError(null);
+        // Après la création du compte, rediriger vers la page de connexion
+        // Le mot de passe temporaire (Adap2026+) aura été envoyé par SMS
+        router.push('/auth/signin');
       }
     } catch (err: any) {
-      console.error('Erreur lors de l\'envoi de l\'OTP:', err);
+      console.error('Erreur lors de la création du compte:', err);
       
       if (err.response?.data?.message) {
         setError(err.response.data.message);
@@ -193,87 +169,7 @@ export default function SignupPage() {
       } else if (err.message) {
         setError(`Erreur: ${err.message}`);
       } else {
-        setError('Erreur lors de l\'envoi du SMS. Veuillez réessayer.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    
-    const otpCode = formData.otpCode.trim();
-    
-    if (!otpCode) {
-      setError('Veuillez entrer le code OTP');
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      const cleanedPhone = formData.phone.replace(/\s/g, '');
-      const response = await otpAPI.verify({
-        phone: cleanedPhone,
-        code: otpCode,
-        email: formData.email || undefined,
-      });
-
-      if (response.data.success) {
-        localStorage.setItem('token', response.data.token);
-        
-        const userRole = response.data.user?.role;
-        const profilComplete = response.data.user?.profilComplete;
-        
-        if (response.data.user.needsPasswordSetup) {
-          router.push('/auth/setup-password');
-        } else {
-          if (!profilComplete) {
-            router.push('/auth/complete-profile');
-          } else {
-            router.push('/client');
-          }
-        }
-      }
-    } catch (err: any) {
-      console.error('Erreur lors de la vérification de l\'OTP:', err);
-      
-      if (err.response?.data?.message) {
-        setError(err.response.data.message);
-      } else {
-        setError('Code OTP invalide ou expiré. Veuillez réessayer.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleResendOTP = async () => {
-    if (countdown > 0) return;
-    
-    setError(null);
-    setIsLoading(true);
-
-    try {
-      const cleanedPhone = formData.phone.replace(/\s/g, '');
-      const response = await otpAPI.send({
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        phone: cleanedPhone,
-      });
-
-      if (response.data.success) {
-        setCountdown(60);
-        setError(null);
-      }
-    } catch (err: any) {
-      console.error('Erreur lors du renvoi de l\'OTP:', err);
-      if (err.response?.data?.message) {
-        setError(err.response.data.message);
-      } else {
-        setError('Erreur lors du renvoi du code. Veuillez réessayer.');
+        setError('Erreur lors de la création du compte. Veuillez réessayer.');
       }
     } finally {
       setIsLoading(false);
@@ -341,13 +237,10 @@ export default function SignupPage() {
             <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-foreground mb-2">
-                  {step === 'info' ? 'Création de compte' : 'Vérification'}
+                  Création de compte
                 </h1>
                 <p className="text-muted-foreground">
-                  {step === 'info' 
-                    ? 'Créez votre compte ADA Pappers'
-                    : 'Entrez le code reçu par SMS'
-                  }
+                  Créez votre compte ADA Pappers
                 </p>
               </div>
             </div>
@@ -362,14 +255,12 @@ export default function SignupPage() {
                 </div>
               )}
 
-              {step === 'info' ? (
-                <form onSubmit={handleSendOTP} className="space-y-5">
+              <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="space-y-5">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="firstName">Prénom *</Label>
                         <Input
-                          ref={firstNameInputRef}
                           id="firstName"
                           name="firstName"
                           type="text"
@@ -391,7 +282,6 @@ export default function SignupPage() {
                       <div className="space-y-2">
                         <Label htmlFor="lastName">Nom *</Label>
                         <Input
-                          ref={lastNameInputRef}
                           id="lastName"
                           name="lastName"
                           type="text"
@@ -413,6 +303,7 @@ export default function SignupPage() {
 
                     <div className="space-y-2">
                       <Label htmlFor="email">Email (optionnel)</Label>
+                      {/* Email désormais requis pour la création de compte */}
                       <Input
                         id="email"
                         name="email"
@@ -421,16 +312,13 @@ export default function SignupPage() {
                         onChange={handleChange}
                         placeholder="votre.email@exemple.com"
                         autoComplete="email"
+                        required
                       />
-                      <p className="text-xs text-muted-foreground">
-                        L'email est optionnel mais recommandé pour la récupération de compte
-                      </p>
                     </div>
 
                       <div className="space-y-2">
                         <Label htmlFor="phone">Numéro de téléphone *</Label>
                         <Input
-                          ref={phoneInputRef}
                           id="phone"
                           name="phone"
                           type="tel"
@@ -448,7 +336,7 @@ export default function SignupPage() {
                           </p>
                         )}
                         <p className="text-xs text-muted-foreground">
-                          Un code de vérification vous sera envoyé par SMS
+                          Un mot de passe temporaire vous sera envoyé par SMS
                         </p>
                       </div>
 
@@ -465,82 +353,12 @@ export default function SignupPage() {
                         ) : (
                           <span className="flex items-center gap-2">
                             <span>📱</span>
-                            <span>Envoyer le code</span>
+                            <span>Créer mon compte</span>
                           </span>
                         )}
                       </Button>
                     </div>
                 </form>
-              ) : (
-                <form onSubmit={handleVerifyOTP} className="space-y-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="otpCode">Code de vérification *</Label>
-                    <Input
-                      ref={otpInputRef}
-                      id="otpCode"
-                      name="otpCode"
-                      type="text"
-                      value={formData.otpCode}
-                      onChange={handleChange}
-                      onBlur={(e) => validateField('otpCode', e.target.value)}
-                      placeholder="123456"
-                      maxLength={6}
-                      className={fieldErrors.otpCode ? 'border-red-500 focus:border-red-500 text-center text-2xl tracking-widest' : 'text-center text-2xl tracking-widest'}
-                    />
-                    {fieldErrors.otpCode && (
-                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                        <span>⚠️</span>
-                        <span>{fieldErrors.otpCode}</span>
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Code envoyé au {formData.phone}
-                    </p>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? (
-                      <span className="flex items-center gap-2">
-                        <span className="animate-spin">⏳</span>
-                        <span>Vérification...</span>
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2">
-                        <span>✅</span>
-                        <span>Vérifier le code</span>
-                      </span>
-                    )}
-                  </Button>
-
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={handleResendOTP}
-                      disabled={countdown > 0 || isLoading}
-                      className="text-sm text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
-                    >
-                      {countdown > 0 
-                        ? `Renvoyer le code dans ${countdown}s`
-                        : 'Renvoyer le code'
-                      }
-                    </button>
-                  </div>
-
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={() => setStep('info')}
-                      className="text-sm text-muted-foreground hover:text-foreground"
-                    >
-                      &larr; Modifier mes informations
-                    </button>
-                  </div>
-                </form>
-              )}
 
               <div className="mt-6 pt-6 border-t border-border text-center">
                 <p className="text-sm text-muted-foreground">

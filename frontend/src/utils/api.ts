@@ -61,7 +61,7 @@ export default api;
 
 // Fonctions utilitaires pour les appels API
 export const authAPI = {
-  register: (data: { firstName: string; lastName: string; email: string; password: string; phone?: string }) =>
+  register: (data: { firstName: string; lastName: string; email: string; phone: string }) =>
     api.post('/auth/register', data),
   
   login: (data: { email: string; password: string }) =>

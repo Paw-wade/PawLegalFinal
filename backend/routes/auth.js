@@ -5,6 +5,7 @@ const nodemailer = require('nodemailer');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
+const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 
 const router = express.Router();
 
@@ -15,8 +16,11 @@ const generateToken = (id) => {
   });
 };
 
+// Mot de passe temporaire par défaut envoyé par SMS lors de la création de compte
+const DEFAULT_TEMP_PASSWORD = process.env.DEFAULT_TEMP_PASSWORD || 'Adap2026+';
+
 // @route   POST /api/auth/register
-// @desc    Enregistrer un nouvel utilisateur
+// @desc    Enregistrer un nouvel utilisateur avec mot de passe par défaut envoyé par SMS
 // @access  Public
 router.post(
   '/register',
@@ -24,8 +28,10 @@ router.post(
     body('firstName').trim().notEmpty().withMessage('Le prénom est requis'),
     body('lastName').trim().notEmpty().withMessage('Le nom est requis'),
     body('email').isEmail().normalizeEmail().withMessage('Email invalide'),
-    body('password').isLength({ min: 6 }).withMessage('Le mot de passe doit contenir au moins 6 caractères'),
-    body('phone').optional().trim()
+    body('phone')
+      .trim()
+      .notEmpty()
+      .withMessage('Le numéro de téléphone est requis'),
   ],
   async (req, res) => {
     try {
@@ -38,13 +44,25 @@ router.post(
         });
       }
 
-      const { firstName, lastName, email, password, phone } = req.body;
+      const { firstName, lastName, email, phone } = req.body;
 
-      const existingUser = await User.findOne({ email });
+      // Normaliser le numéro de téléphone
+      const formattedPhone = formatPhoneNumber(phone);
+      if (!formattedPhone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Numéro de téléphone invalide',
+        });
+      }
+
+      // Vérifier l'unicité de l'email et du téléphone
+      const existingUser = await User.findOne({
+        $or: [{ email }, { phone: formattedPhone }],
+      });
       if (existingUser) {
         return res.status(400).json({
           success: false,
-          message: 'Un utilisateur avec cet email existe déjà'
+          message: 'Un utilisateur avec cet email ou ce numéro de téléphone existe déjà',
         });
       }
 
@@ -52,18 +70,35 @@ router.post(
         firstName,
         lastName,
         email,
-        password,
-        phone: phone || undefined,
+        // Mot de passe temporaire par défaut (sera changé à la première connexion)
+        password: DEFAULT_TEMP_PASSWORD,
+        phone: formattedPhone,
         role: 'client',
-        profilComplete: false
+        profilComplete: false,
+        phoneVerified: true,
+        needsPasswordSetup: true,
       });
 
-      const token = generateToken(user._id);
+      // Envoyer le mot de passe temporaire par SMS
+      let smsSent = false;
+      try {
+        const message = `Bonjour ${user.firstName}, votre compte ADA Pappers a été créé.\n\nVotre mot de passe temporaire est : ${DEFAULT_TEMP_PASSWORD}\n\nPour votre sécurité, changez-le lors de votre première connexion.`;
+        await sendNotificationSMS(user.phone, 'account_security', { message }, {
+          userId: user._id,
+          context: 'account',
+          contextId: user._id,
+          skipPreferences: false,
+        });
+        smsSent = true;
+      } catch (smsError) {
+        console.error('Erreur lors de l\'envoi du SMS de création de compte:', smsError);
+        // On ne bloque pas la création du compte, le mot de passe par défaut est connu (Adap2026+)
+      }
 
       res.status(201).json({
         success: true,
         message: 'Compte créé avec succès',
-        token,
+        smsSent,
         user: {
           id: user._id,
           firstName: user.firstName,
@@ -71,7 +106,9 @@ router.post(
           email: user.email,
           phone: user.phone,
           role: user.role,
-          profilComplete: user.profilComplete || false
+          phoneVerified: user.phoneVerified,
+          needsPasswordSetup: user.needsPasswordSetup,
+          profilComplete: user.profilComplete || false,
         }
       });
     } catch (error) {
@@ -183,6 +220,8 @@ router.post(
           email: user.email,
           phone: user.phone,
           role: user.role,
+          phoneVerified: user.phoneVerified,
+          needsPasswordSetup: user.needsPasswordSetup,
           profilComplete: user.profilComplete || false,
           createdAt: user.createdAt,
           daysRemaining
