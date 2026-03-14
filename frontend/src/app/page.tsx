@@ -476,7 +476,7 @@ export default function HomePage() {
               <div className="space-y-2 border border-gray-200 rounded-xl bg-gray-50/60 p-2">
                 {solutions.map((solution, index) => (
                   <button
-                    key={solution.titre}
+                    key={solution.title}
                     type="button"
                     onClick={() => setSelectedSolutionIndex(index)}
                     className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
@@ -485,7 +485,7 @@ export default function HomePage() {
                         : 'bg-transparent border border-transparent text-gray-700 hover:bg-white hover:border-gray-200'
                     }`}
                   >
-                    {solution.titre}
+                    {solution.title}
                   </button>
                 ))}
               </div>
@@ -496,52 +496,19 @@ export default function HomePage() {
                   const current = solutions[selectedSolutionIndex] || solutions[0];
                   return (
                     <div className="space-y-4">
-                      <div>
-                        <h3 className="text-2xl font-semibold text-gray-900 mb-1">
-                          {current.titre}
-                        </h3>
-                        <p className="text-sm text-gray-600 leading-relaxed">
-                          {current.description}
-                        </p>
-                      </div>
-
-                      <div className="grid gap-3 sm:grid-cols-2 text-sm text-gray-700">
-                        {current.duree && (
-                          <div>
-                            <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
-                              Durée
-                            </p>
-                            <p className="font-medium text-gray-900">
-                              {current.duree}
-                            </p>
-                          </div>
-                        )}
-                        {current.prix && (
-                          <div>
-                            <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
-                              Tarif
-                            </p>
-                            <p className="font-medium text-gray-900">
-                              {current.prix}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      {current.points?.length > 0 && (
-                        <div>
-                          <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">
-                            En pratique
-                          </p>
-                          <ul className="list-disc pl-5 space-y-1.5 text-sm text-gray-700">
-                            {current.points.map((point) => (
-                              <li key={point} className="leading-relaxed">
-                                {point}
-                              </li>
-                            ))}
-                          </ul>
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                          {current.icon}
                         </div>
-                      )}
+                        <div>
+                          <h3 className="text-2xl font-semibold text-gray-900 mb-1">
+                            {current.title}
+                          </h3>
+                          <p className="text-sm text-gray-600 leading-relaxed">
+                            {current.description}
+                          </p>
+                        </div>
+                      </div>
 
                       <div className="pt-4 border-t border-gray-200 flex flex-wrap gap-3">
                         {selectedSolutionIndex === 0 || selectedSolutionIndex === 2 ? (

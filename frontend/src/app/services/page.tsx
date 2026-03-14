@@ -21,8 +21,6 @@ function Button({ children, variant = 'default', className = '', size = 'default
 }
 
 export default function ServicesPage() {
-  const services = servicesConfig.slice(0, 3);
-
   const getColorClasses = (color: string) => {
     const colors: Record<string, { bg: string; text: string; border: string; hover: string }> = {
       primary: {
@@ -81,52 +79,31 @@ export default function ServicesPage() {
 
         {/* Cartes de services */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16">
-          {services.map((service, index) => {
-            const colors = getColorClasses(service.color ?? 'primary');
+          {servicesConfig.map((service, index) => {
+            const colors = getColorClasses(service.color);
+            const isCalculator = index === 2; // Portail titre de séjour -> calculateur
             return (
               <div
                 key={index}
                 className={`group relative bg-white rounded-2xl shadow-sm p-6 border ${colors.border} transition-all duration-200 hover:shadow-md hover:-translate-y-1 hover:border-primary/70 flex flex-col`}
               >
-                {/* En-tête de la carte */}
+                <div className={`mb-4 w-14 h-14 rounded-xl ${colors.bg} ${colors.text} flex items-center justify-center border ${colors.border}`}>
+                  {service.icon}
+                </div>
                 <div className="mb-4">
                   <h3 className="text-lg md:text-xl font-semibold text-foreground mb-1 break-words hyphens-auto">
-                    {service.titre}
+                    {service.title}
                   </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed break-words">
                     {service.description}
                   </p>
                 </div>
 
-                {/* Informations clés */}
-                <div className="mb-6 pb-4 border-b border-border/60 space-y-2">
-                  {service.duree && service.duree !== 'Selon le dossier' && (
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">Durée&nbsp;:</span> {service.duree}
-                    </p>
-                  )}
-                  {!service.isPortal && (
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">Tarif&nbsp;:</span> {service.prix}
-                    </p>
-                  )}
-                </div>
-
-                {/* Liste des fonctionnalités */}
-                <ul className="mb-6 flex-1 space-y-1.5 text-sm text-muted-foreground list-disc pl-4">
-                  {service.points.map((point, i) => (
-                    <li key={i} className="leading-relaxed">
-                      {point}
-                    </li>
-                  ))}
-                </ul>
-
-                {/* Bouton d'action */}
                 <div className="pt-4 border-t border-border/60 mt-auto">
-                  {service.isPortal ? (
+                  {isCalculator ? (
                     <Link href="/calculateur" className="block">
-                      <Button 
-                        className="w-full bg-primary text-white hover:bg-primary/90 transition-colors" 
+                      <Button
+                        className="w-full bg-primary text-white hover:bg-primary/90 transition-colors"
                         size="lg"
                       >
                         Accéder au Calculateur
@@ -134,12 +111,12 @@ export default function ServicesPage() {
                     </Link>
                   ) : (
                     <Link href="/contact" className="block">
-                      <Button 
-                        variant="outline" 
-                        className="w-full border border-border text-foreground hover:bg-primary hover:text-white hover:border-primary transition-colors" 
+                      <Button
+                        variant="outline"
+                        className="w-full border border-border text-foreground hover:bg-primary hover:text-white hover:border-primary transition-colors"
                         size="lg"
                       >
-                        Soumettre un dossier
+                        Nous contacter
                       </Button>
                     </Link>
                   )}
