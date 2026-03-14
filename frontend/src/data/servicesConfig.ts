@@ -6,6 +6,7 @@ export type ServiceConfig = {
   prix?: string;
   points: string[];
   isPortal?: boolean;
+  color?: string;
 };
 
 export const servicesConfig: ServiceConfig[] = [
