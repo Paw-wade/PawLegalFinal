@@ -25,9 +25,12 @@ export function RichTextEditor({ value, onChange, placeholder, className = '' }:
   };
 
   const exec = (command: string, value?: string) => {
+    ref.current?.focus();
     document.execCommand(command, false, value);
     handleInput();
   };
+
+  const preventFocus = (e: React.MouseEvent) => e.preventDefault();
 
   return (
     <div className={`border border-gray-200 rounded-lg bg-white ${className}`}>
@@ -35,6 +38,7 @@ export function RichTextEditor({ value, onChange, placeholder, className = '' }:
         <button
           type="button"
           className="px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded"
+          onMouseDown={preventFocus}
           onClick={() => exec('bold')}
         >
           Gras
@@ -42,6 +46,7 @@ export function RichTextEditor({ value, onChange, placeholder, className = '' }:
         <button
           type="button"
           className="px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded"
+          onMouseDown={preventFocus}
           onClick={() => exec('italic')}
         >
           Italique
@@ -49,6 +54,7 @@ export function RichTextEditor({ value, onChange, placeholder, className = '' }:
         <button
           type="button"
           className="px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded"
+          onMouseDown={preventFocus}
           onClick={() => exec('underline')}
         >
           Souligné
@@ -57,6 +63,7 @@ export function RichTextEditor({ value, onChange, placeholder, className = '' }:
         <button
           type="button"
           className="px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded"
+          onMouseDown={preventFocus}
           onClick={() => exec('insertUnorderedList')}
         >
           Liste
@@ -64,6 +71,7 @@ export function RichTextEditor({ value, onChange, placeholder, className = '' }:
         <button
           type="button"
           className="px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded"
+          onMouseDown={preventFocus}
           onClick={() => exec('insertOrderedList')}
         >
           Liste numérotée

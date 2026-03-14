@@ -4,6 +4,7 @@ const router = express.Router();
 const CollaborativeDraft = require('../models/CollaborativeDraft');
 const Dossier = require('../models/Dossier');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const { protect } = require('../middleware/auth');
 
 // Middleware d'auth obligatoire pour toutes les routes
@@ -57,6 +58,7 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
     const drafts = await CollaborativeDraft.find(query)
       .sort({ updatedAt: -1 })
       .populate('createdBy', 'firstName lastName role')
+      .populate('partnerAccess.partner', 'firstName lastName email')
       .lean();
 
     const enhancedDrafts = drafts.map((draft) => {
@@ -72,13 +74,20 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
           !(draft.excludedAdminIds || []).some((id) => id.toString() === user._id.toString())) ||
         (isPartenaire(user) && partnerAccessEntry && partnerAccessEntry.canEdit);
 
+      const canManagePermissions = isCreator || isAdmin(user);
+
       return {
         ...draft,
         canEdit,
+        canManagePermissions,
       };
     });
 
-    return res.json({ success: true, drafts: enhancedDrafts });
+    return res.json({
+      success: true,
+      drafts: enhancedDrafts,
+      currentUserIsAdmin: isAdmin(user),
+    });
   } catch (error) {
     console.error('Erreur lors de la récupération des brouillons collaboratifs:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -191,8 +200,8 @@ router.patch('/drafts/:draftId/permissions', async (req, res) => {
 
     const isCreator = draft.createdBy && draft.createdBy._id.toString() === user._id.toString();
 
-    if (!isCreator && !isAdmin(user) && !isPartenaire(user)) {
-      return res.status(403).json({ success: false, message: 'Accès refusé' });
+    if (!isCreator && !isAdmin(user)) {
+      return res.status(403).json({ success: false, message: 'Seul le créateur du document ou un administrateur peut modifier les autorisations' });
     }
 
     if (typeof visibleToAdmins === 'boolean') {
@@ -200,14 +209,54 @@ router.patch('/drafts/:draftId/permissions', async (req, res) => {
     }
 
     if (Array.isArray(excludedAdminIds)) {
-      draft.excludedAdminIds = excludedAdminIds;
+      const creatorId = draft.createdBy && (draft.createdBy._id || draft.createdBy).toString();
+      draft.excludedAdminIds = excludedAdminIds.filter(
+        (id) => id && id.toString() !== creatorId
+      );
     }
+
+    const previousPartnerAccess = (draft.partnerAccess || []).map((p) => ({
+      partner: p.partner.toString(),
+      canEdit: !!p.canEdit,
+    }));
 
     if (Array.isArray(partnerAccess)) {
       draft.partnerAccess = partnerAccess;
     }
 
     await draft.save();
+
+    const dossierId = draft.dossier.toString();
+    const draftTitle = draft.title || 'Document en préparation';
+
+    for (const entry of draft.partnerAccess || []) {
+      const partnerId = entry.partner.toString();
+      const canEditNow = !!entry.canEdit;
+      const previous = previousPartnerAccess.find((p) => p.partner === partnerId);
+      const wasNew = !previous;
+      const gainedEdit = canEditNow && (!previous || !previous.canEdit);
+      if (wasNew || gainedEdit) {
+        try {
+          await Notification.create({
+            user: partnerId,
+            type: 'draft_access_granted',
+            titre: 'Accès accordé à un document en préparation',
+            message: canEditNow
+              ? `Vous avez reçu l'accès en édition au document « ${draftTitle} » sur le dossier. Vous pouvez le modifier dans la section "Documents en préparation".`
+              : `Vous avez reçu l'accès en lecture au document « ${draftTitle} » sur le dossier. Consultez la section "Documents en préparation".`,
+            lien: `/partenaire/dossiers/${dossierId}`,
+            metadata: {
+              dossierId,
+              draftId: draft._id.toString(),
+              draftTitle,
+              canEdit: canEditNow,
+            },
+          });
+        } catch (notifErr) {
+          console.error('Erreur création notification accès draft:', notifErr);
+        }
+      }
+    }
 
     return res.json({ success: true, draft });
   } catch (error) {

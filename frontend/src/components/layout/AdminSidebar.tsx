@@ -98,7 +98,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
             >
               ADA Pappers
             </Link>
-            <span className="ml-2 text-[10px] text-gray-500 whitespace-nowrap">
+            <span className="hidden md:inline ml-2 text-[10px] text-gray-500 whitespace-nowrap">
               {userRole === 'superadmin' ? 'Super administration' : 'Panneau d&apos;administration'}
             </span>
           </div>

@@ -353,9 +353,45 @@ export default function PartenaireDossierDetailPage() {
   // mais aussi lorsqu'il l'a précédemment refusé (pour pouvoir l'accepter à nouveau)
   const canAcknowledge = statusTransmission === 'pending' || statusTransmission === 'refused';
   
+  const draftAccessNotifs = (notifications || []).filter((n: any) => n.type === 'draft_access_granted' && !n.lu);
+  const handleMarkDraftAccessAsRead = async () => {
+    for (const notif of draftAccessNotifs) {
+      try {
+        await notificationsAPI.markAsRead(notif._id);
+      } catch (_) {}
+    }
+    loadNotifications();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
       <main className="w-full px-4 py-8 overflow-x-hidden">
+        {/* Bannière visible : accès document en préparation accordé */}
+        {draftAccessNotifs.length > 0 && (
+          <div className="mb-6 rounded-xl border-2 border-orange-400 bg-gradient-to-r from-orange-50 to-amber-50 shadow-lg p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white text-lg">
+                ✓
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-orange-900 text-base mb-1">Accès accordé à un document en préparation</h3>
+                <p className="text-sm text-orange-800 mb-2">
+                  {draftAccessNotifs.length === 1
+                    ? draftAccessNotifs[0].message
+                    : `Vous avez reçu des accès à ${draftAccessNotifs.length} document(s) en préparation sur ce dossier. Consultez la section « Documents en préparation » ci-dessous.`}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleMarkDraftAccessAsRead}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
+                >
+                  J'ai compris
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* En-tête amélioré */}
         <div className="mb-6">
           <Link href="/partenaire/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
@@ -863,6 +899,7 @@ export default function PartenaireDossierDetailPage() {
               </div>
             )}
           </div>
+          </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
@@ -996,20 +1033,14 @@ export default function PartenaireDossierDetailPage() {
                               <span>
                                 Début: {new Date(task.dateDebut).toLocaleDateString('fr-FR')}
                               </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Documents en préparation (brouillons collaboratifs internes) */}
-        <div className="mt-6">
-          <DossierDraftsPanel dossierId={dossier._id || (dossier as any).id} />
-        </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
 
             {/* Messages récents */}
             {messages.length > 0 && (
@@ -1034,6 +1065,12 @@ export default function PartenaireDossierDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Documents en préparation (brouillons collaboratifs internes) — même affichage que l'admin */}
+        <DossierDraftsPanel
+          dossierId={dossier._id || (dossier as any).id}
+          linkToDedicatedPageHref={`/partenaire/dossiers/${dossierId}/documents-en-preparation`}
+        />
       </main>
       
       {/* Modal d'accusé de réception */}

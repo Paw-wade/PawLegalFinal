@@ -751,27 +751,24 @@ export default function AdminDashboardPage() {
   const isAdmin = userRole === 'admin' || userRole === 'superadmin';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
+    <div className="min-h-screen bg-background">
       <main className="w-full px-4 py-8 max-w-full">
-        {/* En-tête avec navigation rapide */}
-        <div id="dashboard-top" className="mb-8 scroll-mt-20">
-          <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                {dashboardTitle}
-              </h1>
-              <p className="text-muted-foreground text-lg">{dashboardSubtitle}</p>
-            </div>
-          </div>
+        <div id="dashboard-top" className="mb-6 scroll-mt-20">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Tableau de bord</p>
+          <h1 className="text-2xl font-bold text-foreground mb-1">
+            {dashboardTitle}
+          </h1>
+          <p className="text-sm text-muted-foreground">{dashboardSubtitle}</p>
         </div>
 
-
-        {/* Statistiques principales - Disposition optimisée */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+        {/* Vue d'ensemble */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Vue d'ensemble</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {/* Badge Utilisateurs - Seulement pour les admins */}
           {isAdmin && (
             <Link href="/admin/utilisateurs" className="group" id="utilisateurs-section">
-              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-primary hover:shadow-lg hover:border-primary/80 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
+              <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer h-full">
                 <div className="flex items-center justify-between mb-3">
                   <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                     <span className="text-2xl">👥</span>
@@ -794,7 +791,7 @@ export default function AdminDashboardPage() {
 
           {/* Badge Dossiers */}
           <Link href="/admin/dossiers" className="group" id="dossiers-section">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 hover:shadow-lg hover:border-blue-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer h-full">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
                   <span className="text-2xl">📁</span>
@@ -814,7 +811,7 @@ export default function AdminDashboardPage() {
 
           {/* Badge Documents */}
           <Link href="/admin/documents" className="group" id="documents-section">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 hover:shadow-lg hover:border-purple-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer h-full">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
                   <span className="text-2xl">📄</span>
@@ -834,7 +831,7 @@ export default function AdminDashboardPage() {
 
           {/* Badge Tâches */}
           <Link href="/admin/taches" className="group">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-500 hover:shadow-lg hover:border-orange-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer h-full">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-orange-500/10 rounded-lg flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
                   <span className="text-2xl">✅</span>
@@ -856,7 +853,7 @@ export default function AdminDashboardPage() {
 
           {/* Badge Rendez-vous */}
           <Link href="/admin/rendez-vous" className="group" id="rendez-vous-section">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 hover:shadow-lg hover:border-green-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer h-full">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
                   <span className="text-2xl">📅</span>
@@ -877,7 +874,7 @@ export default function AdminDashboardPage() {
           {/* Badge Témoignages - Seulement pour les admins */}
           {isAdmin && (
             <Link href="/admin/temoignages" className="group" id="temoignages-section">
-              <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500 hover:shadow-lg hover:border-yellow-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
+              <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer h-full">
                 <div className="flex items-center justify-between mb-3">
                   <div className="w-12 h-12 bg-yellow-500/10 rounded-lg flex items-center justify-center group-hover:bg-yellow-500/20 transition-colors">
                     <span className="text-2xl">⭐</span>
@@ -895,28 +892,17 @@ export default function AdminDashboardPage() {
               </div>
             </Link>
           )}
+          </div>
         </div>
 
-
-        {/* Statistiques professionnelles - Seulement pour les admins */}
         {isAdmin && (
           <div className="mb-8">
-            <div className="bg-gradient-to-br from-white via-blue-50/20 to-white rounded-2xl shadow-xl p-8 border border-blue-200/50 backdrop-blur-sm">
-              {/* En-tête avec toggle période */}
-              <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <span className="text-2xl">📈</span>
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-foreground">Statistiques {statsPeriod === 'week' ? 'hebdomadaires' : 'mensuelles'}</h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {statsPeriod === 'week' 
-                        ? '7 derniers jours' 
-                        : `Mois de ${new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}`}
-                    </p>
-                  </div>
-                </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Statistiques</p>
+              <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+                <h2 className="text-lg font-bold text-foreground">
+                  {statsPeriod === 'week' ? 'Hebdomadaires' : 'Mensuelles'}
+                </h2>
                 <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
                   <button
                     onClick={() => setStatsPeriod('week')}
@@ -941,81 +927,41 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Grille de statistiques avec diagrammes */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Nouveaux clients */}
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-6 border border-orange-200/50 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm">
-                        <span className="text-white text-lg">👥</span>
-                      </div>
-                      <span className="text-sm font-semibold text-gray-700">Nouveaux clients</span>
-                    </div>
-                    <span className="text-2xl font-bold text-orange-600">{stats.nouveauxClients}</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-muted-foreground">Nouveaux clients</span>
+                    <span className="text-xl font-semibold text-foreground">{stats.nouveauxClients}</span>
                   </div>
-                  <div className="w-full bg-orange-200/50 rounded-full h-4 overflow-hidden shadow-inner">
-                    <div 
-                      className="bg-gradient-to-r from-orange-500 to-orange-600 h-4 rounded-full transition-all duration-700 shadow-sm" 
-                      style={{ width: `${Math.min((stats.nouveauxClients / Math.max(stats.nouveauxClients, 1)) * 100, 100)}%` }}
-                    ></div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="bg-orange-500 h-2 rounded-full transition-all" style={{ width: `${Math.min((stats.nouveauxClients / Math.max(stats.nouveauxClients, 1)) * 100, 100)}%` }} />
                   </div>
                 </div>
-
-                {/* Dossiers traités */}
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-6 border border-blue-200/50 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                        <span className="text-white text-lg">📁</span>
-                      </div>
-                      <span className="text-sm font-semibold text-gray-700">Dossiers traités</span>
-                    </div>
-                    <span className="text-2xl font-bold text-blue-600">{stats.dossiersEnCours}</span>
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-muted-foreground">Dossiers traités</span>
+                    <span className="text-xl font-semibold text-foreground">{stats.dossiersEnCours}</span>
                   </div>
-                  <div className="w-full bg-blue-200/50 rounded-full h-4 overflow-hidden shadow-inner">
-                    <div 
-                      className="bg-gradient-to-r from-blue-500 to-blue-600 h-4 rounded-full transition-all duration-700 shadow-sm" 
-                      style={{ width: `${Math.min((stats.dossiersEnCours / Math.max(stats.dossiersEnCours, 1)) * 100, 100)}%` }}
-                    ></div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="bg-blue-500 h-2 rounded-full transition-all" style={{ width: `${Math.min((stats.dossiersEnCours / Math.max(stats.dossiersEnCours, 1)) * 100, 100)}%` }} />
                   </div>
                 </div>
-
-                {/* Dossiers transmis */}
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl p-6 border border-purple-200/50 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center shadow-sm">
-                        <span className="text-white text-lg">📤</span>
-                      </div>
-                      <span className="text-sm font-semibold text-gray-700">Dossiers transmis</span>
-                    </div>
-                    <span className="text-2xl font-bold text-purple-600">{stats.dossiersTransmis}</span>
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-muted-foreground">Dossiers transmis</span>
+                    <span className="text-xl font-semibold text-foreground">{stats.dossiersTransmis}</span>
                   </div>
-                  <div className="w-full bg-purple-200/50 rounded-full h-4 overflow-hidden shadow-inner">
-                    <div 
-                      className="bg-gradient-to-r from-purple-500 to-purple-600 h-4 rounded-full transition-all duration-700 shadow-sm" 
-                      style={{ width: `${Math.min((stats.dossiersTransmis / Math.max(stats.dossiersEnCours, 1)) * 100, 100)}%` }}
-                    ></div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="bg-purple-500 h-2 rounded-full transition-all" style={{ width: `${Math.min((stats.dossiersTransmis / Math.max(stats.dossiersEnCours, 1)) * 100, 100)}%` }} />
                   </div>
                 </div>
-
-                {/* Taux de transmission */}
-                <div className="bg-gradient-to-br from-green-50 to-green-100/50 rounded-xl p-6 border border-green-200/50 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center shadow-sm">
-                        <span className="text-white text-lg">📊</span>
-                      </div>
-                      <span className="text-sm font-semibold text-gray-700">Taux de transmission</span>
-                    </div>
-                    <span className="text-2xl font-bold text-green-600">{stats.tauxTransmission}%</span>
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-muted-foreground">Taux de transmission</span>
+                    <span className="text-xl font-semibold text-foreground">{stats.tauxTransmission} %</span>
                   </div>
-                  <div className="w-full bg-green-200/50 rounded-full h-4 overflow-hidden shadow-inner">
-                    <div 
-                      className="bg-gradient-to-r from-green-500 to-green-600 h-4 rounded-full transition-all duration-700 shadow-sm" 
-                      style={{ width: `${stats.tauxTransmission}%` }}
-                    ></div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${stats.tauxTransmission}%` }} />
                   </div>
                 </div>
               </div>

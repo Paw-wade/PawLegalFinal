@@ -25,6 +25,7 @@ const notificationSchema = new mongoose.Schema({
       'message_read',
       'message_sent',
       'account_created',
+      'draft_access_granted',
       'other'
     ]
   },

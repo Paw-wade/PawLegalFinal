@@ -33,19 +33,14 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
   const showAdminSidebar = variant === 'admin' && isAdmin;
   const showPartenaireSidebar = variant === 'partenaire' && isPartenaire;
 
-  // Fermer la sidebar client sur desktop (large screens)
+  // Fermer la sidebar sur desktop (large screens) pour client, admin, partenaire
   useEffect(() => {
-    if (!showClientSidebar) return;
-    
     const handleResize = () => {
-      if (window.innerWidth >= 1024) {
-        setSidebarOpen(false);
-      }
+      if (window.innerWidth >= 1024) setSidebarOpen(false);
     };
-
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [showClientSidebar]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -54,14 +49,14 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar admin - fixe pour tous les admins */}
+      {/* Sidebar admin - drawer sur mobile, fixe sur desktop */}
       {showAdminSidebar && (
-        <AdminSidebar isOpen={true} onClose={() => setSidebarOpen(false)} />
+        <AdminSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar partenaire - fixe pour tous les partenaires */}
+      {/* Sidebar partenaire - drawer sur mobile, fixe sur desktop */}
       {showPartenaireSidebar && (
-        <PartenaireSidebar />
+        <PartenaireSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       )}
 
       {/* Contenu principal */}
@@ -70,7 +65,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
         <Header 
           variant={variant} 
           showNav={false}
-          onMenuClick={showClientSidebar ? () => setSidebarOpen(!sidebarOpen) : undefined}
+          onMenuClick={(showClientSidebar || showAdminSidebar || showPartenaireSidebar) ? () => setSidebarOpen(!sidebarOpen) : undefined}
         />
 
         {/* Barre de notification défilante */}

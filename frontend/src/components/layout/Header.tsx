@@ -332,15 +332,15 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
     <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-50 shadow-sm">
       <div className="container mx-auto px-4 py-2.5">
         <div className="flex items-center justify-between">
-          {/* Logo sur la page d'accueil ; bouton menu sur dashboard client */}
-          <div className="flex items-center gap-3">
-            {!showNav && onMenuClick && variant === 'client' && (
+          {/* Logo ; bouton menu (mobile) pour client, admin, partenaire */}
+          <div className="flex items-center gap-2 min-w-0">
+            {onMenuClick && (
               <button
                 onClick={onMenuClick}
-                className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors"
+                className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0"
                 aria-label="Ouvrir le menu"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
@@ -349,15 +349,23 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               <>
                 <Link
                   href="/"
-                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-xl"
+                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg sm:text-xl truncate"
                 >
                   ADA Pappers
                 </Link>
-                <div className="h-4 w-px bg-gray-300" />
-                <p className="text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
+                <div className="hidden md:block h-4 w-px bg-gray-300 flex-shrink-0" />
+                <p className="hidden md:inline text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
                   {subtitleHome}
                 </p>
               </>
+            )}
+            {(variant === 'admin' || variant === 'partenaire' || variant === 'client') && (
+              <Link
+                href={variant === 'admin' ? '/admin' : variant === 'partenaire' ? '/partenaire' : '/client'}
+                className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg truncate"
+              >
+                ADA Pappers
+              </Link>
             )}
           </div>
 
@@ -502,17 +510,12 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
 
 
           {/* Informations utilisateur et actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {isAuthenticated ? (
                 <>
-                  {/* Badge de notification */}
-                  <NotificationBadge 
-                    variant="header" 
-                    className="mr-2"
-                  />
-                  
-                  {/* Affichage du nom et de la qualité - TOUJOURS VISIBLE */}
-                  <div className="text-right border-r border-gray-200 pr-2.5 mr-2">
+                  <NotificationBadge variant="header" className="mr-1 sm:mr-2" />
+                  {/* Nom + rôle : masquer le sous-titre (rôle) sur mobile */}
+                  <div className="text-right border-r border-gray-200 pr-2 sm:pr-2.5 mr-1 sm:mr-2">
                     <Link 
                       href={
                         variant === 'admin'
@@ -521,11 +524,11 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                           ? '/partenaire/compte'
                           : '/client/compte'
                       }
-                      className="text-xs font-semibold text-gray-900 hover:text-orange-500 transition-colors cursor-pointer block leading-tight"
+                      className="text-xs font-semibold text-gray-900 hover:text-orange-500 transition-colors cursor-pointer block leading-tight truncate max-w-[120px] sm:max-w-none"
                     >
                       {userName || 'Utilisateur'}
                     </Link>
-                    <p className="text-[10px] text-gray-500 font-normal leading-tight">{roleLabel}</p>
+                    <p className="hidden sm:block text-[10px] text-gray-500 font-normal leading-tight">{roleLabel}</p>
                   </div>
                   <Button 
                     variant="ghost" 

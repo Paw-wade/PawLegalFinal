@@ -496,6 +496,37 @@ export default function AdminDossierDetailPage() {
       )}
 
       <main className="w-full px-4 py-8 overflow-x-hidden">
+        {/* Bannière visible : accès document en préparation accordé (pour cohérence affichage) */}
+        {(() => {
+          const draftAccessNotifs = (notifications || []).filter((n: any) => n.type === 'draft_access_granted' && !n.lu);
+          if (draftAccessNotifs.length === 0) return null;
+          return (
+            <div className="mb-6 rounded-xl border-2 border-orange-400 bg-gradient-to-r from-orange-50 to-amber-50 shadow-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white text-lg">✓</div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-orange-900 text-base mb-1">Accès accordé à un document en préparation</h3>
+                  <p className="text-sm text-orange-800 mb-2">
+                    {draftAccessNotifs.length === 1 ? draftAccessNotifs[0].message : `Vous avez reçu des accès à ${draftAccessNotifs.length} document(s) en préparation sur ce dossier.`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      for (const notif of draftAccessNotifs) {
+                        try { await notificationsAPI.markAsRead(notif._id); } catch (_) {}
+                      }
+                      loadNotifications();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
+                  >
+                    J'ai compris
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* En-tête amélioré */}
         <div className="mb-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
