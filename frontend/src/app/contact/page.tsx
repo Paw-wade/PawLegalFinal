@@ -219,12 +219,68 @@ export default function ContactPage() {
         </div>
       </section>
 
-      <main className="container mx-auto px-4 py-20">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Formulaire - 2 colonnes */}
-            <div className="lg:col-span-2">
-              <div className="bg-white rounded-3xl shadow-xl p-8 lg:p-10 border-2 border-primary/10">
+      <main className="container mx-auto px-4 py-16">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid gap-6 md:grid-cols-2 items-start max-w-3xl mx-auto">
+            {/* Informations de contact - colonne gauche */}
+            <div>
+              <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-3xl shadow-xl p-8 border-2 border-primary/20">
+                <h2 className="text-2xl font-bold mb-6 text-foreground">Informations de contact</h2>
+                <div className="space-y-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-xl">📧</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground mb-1 text-sm">Email</p>
+                      <a href="mailto:contact@adapapers.fr" className="text-primary hover:underline text-sm">
+                        contact@adapapers.fr
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-xl">📞</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground mb-1 text-sm">Téléphone</p>
+                      <a href="tel:0768033358" className="text-primary hover:underline text-sm">
+                        07 68 03 33 58
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-xl">🕐</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground mb-1 text-sm">Horaires</p>
+                      <p className="text-muted-foreground text-sm">
+                        Lundi - Vendredi<br />
+                        9h - 18h
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-border">
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Réponse sous 24h pour toutes vos demandes.
+                    </p>
+                    <Link href="/faq">
+                      <Button variant="outline" className="w-full text-sm">
+                        Consulter la FAQ
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Formulaire - colonne droite */}
+            <div>
+              <div className="bg-white rounded-3xl shadow-xl p-8 border-2 border-primary/10">
                 <h2 className="text-3xl font-bold mb-6 text-foreground">Envoyez-nous un message</h2>
 
                 {success && (
@@ -396,62 +452,6 @@ export default function ContactPage() {
                     )}
                   </Button>
                 </form>
-              </div>
-            </div>
-
-            {/* Informations de contact - 1 colonne */}
-            <div className="lg:col-span-1">
-              <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-3xl shadow-xl p-8 border-2 border-primary/20 sticky top-24">
-                <h2 className="text-2xl font-bold mb-6 text-foreground">Informations de contact</h2>
-                <div className="space-y-6">
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-2xl">📧</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Email</p>
-                      <a href="mailto:contact@adapappers.fr" className="text-primary hover:underline text-sm">
-                        contact@adapappers.fr
-                      </a>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-2xl">📞</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Téléphone</p>
-                      <a href="tel:0768033358" className="text-primary hover:underline text-sm">
-                        07 68 03 33 58
-                      </a>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-2xl">🕐</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Horaires</p>
-                      <p className="text-muted-foreground text-sm">
-                        Lundi - Vendredi<br />
-                        9h - 18h
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="pt-6 border-t border-border">
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Réponse sous 24h pour toutes vos demandes
-                    </p>
-                    <Link href="/faq">
-                      <Button variant="outline" className="w-full">
-                        Consulter la FAQ
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

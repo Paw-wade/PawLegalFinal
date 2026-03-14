@@ -5,10 +5,11 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
+import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, tasksAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { History, Clock, CheckCircle, XCircle } from 'lucide-react';
 
@@ -352,9 +353,45 @@ export default function PartenaireDossierDetailPage() {
   // mais aussi lorsqu'il l'a précédemment refusé (pour pouvoir l'accepter à nouveau)
   const canAcknowledge = statusTransmission === 'pending' || statusTransmission === 'refused';
   
+  const draftAccessNotifs = (notifications || []).filter((n: any) => n.type === 'draft_access_granted' && !n.lu);
+  const handleMarkDraftAccessAsRead = async () => {
+    for (const notif of draftAccessNotifs) {
+      try {
+        await notificationsAPI.markAsRead(notif._id);
+      } catch (_) {}
+    }
+    loadNotifications();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
       <main className="w-full px-4 py-8 overflow-x-hidden">
+        {/* Bannière visible : accès document en préparation accordé */}
+        {draftAccessNotifs.length > 0 && (
+          <div className="mb-6 rounded-xl border-2 border-orange-400 bg-gradient-to-r from-orange-50 to-amber-50 shadow-lg p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white text-lg">
+                ✓
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-orange-900 text-base mb-1">Accès accordé à un document en préparation</h3>
+                <p className="text-sm text-orange-800 mb-2">
+                  {draftAccessNotifs.length === 1
+                    ? draftAccessNotifs[0].message
+                    : `Vous avez reçu des accès à ${draftAccessNotifs.length} document(s) en préparation sur ce dossier. Consultez la section « Documents en préparation » ci-dessous.`}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleMarkDraftAccessAsRead}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
+                >
+                  J'ai compris
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* En-tête amélioré */}
         <div className="mb-6">
           <Link href="/partenaire/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
@@ -390,55 +427,64 @@ export default function PartenaireDossierDetailPage() {
                   <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
                 )}
         
-                {/* Barre de progression */}
-                {(() => {
-                  const progress = getDossierProgress(dossier.statut);
-                  return (
-          <div className="mb-4">
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-muted-foreground font-medium">Progression du dossier</span>
-                        <span className="font-bold text-foreground">{progress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                        <div 
-                          className={`h-3 rounded-full transition-all duration-500 ${
-                            progress >= 80 ? 'bg-green-500' : 
-                            progress >= 50 ? 'bg-blue-500' : 
-                            progress >= 25 ? 'bg-yellow-500' : 
-                            'bg-gray-400'
-                          }`}
-                          style={{width: `${Math.min(progress, 100)}%`, maxWidth: '100%'}}
-                        ></div>
-                      </div>
-                    </div>
+                {/* Barre de progression basée uniquement sur les étapes choisies pour ce dossier */}
+                {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (() => {
+                  const rawSteps = dossier.etapesSupplementaires;
+                  const currentIndex = rawSteps.findIndex(
+                    (s: any) =>
+                      dossier.statut &&
+                      (dossier.statut === s.id || dossier.statut === s.label)
                   );
-                })()}
-                
-                {/* Timeline */}
-                {(() => {
-                  const steps = getTimelineSteps(dossier.statut);
                   return (
                     <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
                       <div className="flex items-center gap-2 min-w-max">
-                        {steps.map((step, index) => (
-                          <div key={step.key} className="flex items-center gap-2 flex-shrink-0">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></span>
-                              <span className={`text-[10px] font-medium whitespace-nowrap ${
-                                step.completed ? 'text-green-700' : 'text-gray-400'
-                              }`}>
-                                {step.label}
-                              </span>
-          </div>
-                            {index < steps.length - 1 && (
-                              <div className={`h-0.5 w-6 flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></div>
-                            )}
-                          </div>
-                        ))}
+                        {rawSteps.map((step: any, index: number) => {
+                          const isCurrent =
+                            currentIndex === -1
+                              ? index === rawSteps.length - 1
+                              : index === currentIndex;
+                          const completed = currentIndex === -1 ? false : index <= currentIndex;
+                          const dateLabel =
+                            step.date
+                              ? (typeof step.date === 'string'
+                                  ? step.date
+                                  : new Date(step.date).toLocaleDateString('fr-FR'))
+                              : undefined;
+                          return (
+                            <div key={step._id || step.id || index} className="flex items-center gap-2 flex-shrink-0">
+                              <div className="flex flex-col items-center gap-1">
+                                <span
+                                  className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                    isCurrent
+                                      ? 'bg-blue-500 ring-2 ring-blue-300'
+                                      : completed
+                                      ? 'bg-green-500'
+                                      : 'bg-gray-300'
+                                  }`}
+                                ></span>
+                                <span
+                                  className={`text-[10px] font-medium whitespace-nowrap ${
+                                    isCurrent
+                                      ? 'text-blue-700'
+                                      : completed
+                                      ? 'text-green-700'
+                                      : 'text-gray-400'
+                                  }`}
+                                >
+                                  {step.label}
+                                  {dateLabel ? ` (${dateLabel})` : ''}
+                                </span>
+                              </div>
+                              {index < rawSteps.length - 1 && (
+                                <div
+                                  className={`h-0.5 w-6 flex-shrink-0 ${
+                                    completed ? 'bg-green-500' : 'bg-gray-300'
+                                  }`}
+                                ></div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -853,6 +899,7 @@ export default function PartenaireDossierDetailPage() {
               </div>
             )}
           </div>
+          </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
@@ -994,7 +1041,6 @@ export default function PartenaireDossierDetailPage() {
                   ))}
                 </div>
               )}
-            </div>
 
             {/* Messages récents */}
             {messages.length > 0 && (
@@ -1019,6 +1065,12 @@ export default function PartenaireDossierDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Documents en préparation (brouillons collaboratifs internes) — même affichage que l'admin */}
+        <DossierDraftsPanel
+          dossierId={dossier._id || (dossier as any).id}
+          linkToDedicatedPageHref={`/partenaire/dossiers/${dossierId}/documents-en-preparation`}
+        />
       </main>
       
       {/* Modal d'accusé de réception */}

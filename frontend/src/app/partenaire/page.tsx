@@ -157,25 +157,19 @@ export default function PartenaireDashboard() {
   }
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
+    <div className="min-h-screen bg-background">
       <main className="w-full px-4 py-8 max-w-full">
-        {/* En-tête avec navigation rapide */}
-        <div id="dashboard-top" className="mb-8 scroll-mt-20">
-          <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                Tableau de bord Partenaire
-              </h1>
-              <p className="text-muted-foreground text-lg">Gérez vos dossiers transmis et communiquez avec l'équipe</p>
-            </div>
-          </div>
+        <div id="dashboard-top" className="mb-6 scroll-mt-20">
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Tableau de bord</p>
+          <h1 className="text-2xl font-bold text-foreground mb-1">Partenaire</h1>
+          <p className="text-sm text-gray-700">Dossiers transmis et communication avec l'équipe</p>
         </div>
-        
-        {/* Statistiques principales - Design professionnel avec accès direct */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 scroll-mt-20">
-          {/* Badge Dossiers transmis */}
+
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <Link href="/partenaire/dossiers" className="group">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-primary hover:shadow-lg hover:border-primary/80 transition-all duration-200 hover:-translate-y-1 cursor-pointer">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <FolderOpen className="w-6 h-6 text-primary" />
@@ -184,17 +178,16 @@ export default function PartenaireDashboard() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-primary transition-colors">{stats.dossiersTransmis}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Dossiers transmis</h3>
-              <p className="text-xs text-muted-foreground mb-3">Total des dossiers</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Dossiers transmis</h3>
+              <p className="text-xs text-gray-600 mb-3">Total des dossiers</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-muted-foreground">Tous les dossiers</span>
+                <span className="text-xs text-gray-600">Tous les dossiers</span>
                 <span className="text-primary text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
           </Link>
 
-          {/* Badge En attente */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500 hover:shadow-lg hover:border-yellow-600 transition-all duration-200">
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="w-12 h-12 bg-yellow-500/10 rounded-lg flex items-center justify-center">
                 <Clock className="w-6 h-6 text-yellow-600" />
@@ -203,8 +196,8 @@ export default function PartenaireDashboard() {
                 <p className="text-3xl font-bold text-foreground mb-0">{stats.dossiersEnAttente}</p>
           </div>
         </div>
-            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">En attente</h3>
-            <p className="text-xs text-muted-foreground mb-3">Dossiers en attente de traitement</p>
+            <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">En attente</h3>
+            <p className="text-xs text-gray-600 mb-3">Dossiers en attente de traitement</p>
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
               <span className="inline-flex items-center px-2 py-1 rounded-md bg-yellow-500/10 text-yellow-600 text-xs font-semibold">
                 En attente d'action
@@ -212,8 +205,7 @@ export default function PartenaireDashboard() {
             </div>
           </div>
 
-          {/* Badge Acceptés */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 hover:shadow-lg hover:border-green-600 transition-all duration-200">
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-green-600" />
@@ -222,8 +214,8 @@ export default function PartenaireDashboard() {
                 <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.dossiersAcceptes}</p>
           </div>
         </div>
-            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Acceptés</h3>
-            <p className="text-xs text-muted-foreground mb-3">Dossiers acceptés</p>
+            <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Acceptés</h3>
+            <p className="text-xs text-gray-600 mb-3">Dossiers acceptés</p>
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
               <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-500/10 text-green-600 text-xs font-semibold">
                 En cours de traitement
@@ -231,8 +223,7 @@ export default function PartenaireDashboard() {
             </div>
           </div>
 
-          {/* Badge Refusés */}
-          <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-red-500 hover:shadow-lg hover:border-red-600 transition-all duration-200">
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="w-12 h-12 bg-red-500/10 rounded-lg flex items-center justify-center">
                 <XCircle className="w-6 h-6 text-red-600" />
@@ -241,8 +232,8 @@ export default function PartenaireDashboard() {
                 <p className="text-3xl font-bold text-foreground mb-0">{stats.dossiersRefuses}</p>
           </div>
         </div>
-            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Refusés</h3>
-            <p className="text-xs text-muted-foreground mb-3">Dossiers refusés</p>
+            <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Refusés</h3>
+            <p className="text-xs text-gray-600 mb-3">Dossiers refusés</p>
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
               <span className="inline-flex items-center px-2 py-1 rounded-md bg-red-500/10 text-red-600 text-xs font-semibold">
                 Dossiers refusés
@@ -261,18 +252,17 @@ export default function PartenaireDashboard() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-blue-600 transition-colors">{stats.messagesNonLus}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Messages</h3>
-              <p className="text-xs text-muted-foreground mb-3">Messages non lus</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Messages</h3>
+              <p className="text-xs text-gray-600 mb-3">Messages non lus</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-muted-foreground">Consulter les messages</span>
+                <span className="text-xs text-gray-600">Consulter les messages</span>
                 <span className="text-blue-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
           </Link>
 
-          {/* Badge Notifications */}
           <Link href="/partenaire/notifications" className="group">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500 hover:shadow-lg hover:border-purple-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
                   <Bell className="w-6 h-6 text-purple-600" />
@@ -281,17 +271,16 @@ export default function PartenaireDashboard() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-purple-600 transition-colors">{stats.notificationsNonLues}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Notifications</h3>
-              <p className="text-xs text-muted-foreground mb-3">Notifications non lues</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Notifications</h3>
+              <p className="text-xs text-gray-600 mb-3">Notifications non lues</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-muted-foreground">Consulter les notifications</span>
+                <span className="text-xs text-gray-600">Consulter les notifications</span>
                 <span className="text-purple-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
           </Link>
+          </div>
         </div>
-        
-      {/* (Sections Dossiers / Messages rapides supprimées pour éviter les répétitions) */}
       </main>
     </div>
   );

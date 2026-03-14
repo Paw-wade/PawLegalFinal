@@ -8,7 +8,7 @@ import { DossierDetailView } from '@/components/DossierDetailView';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import { History, Clock } from 'lucide-react';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
@@ -342,31 +342,7 @@ export default function DossierDetailPage() {
                   <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
                 )}
                 
-                {/* Barre de progression */}
-                {(() => {
-                  const progress = getDossierProgress(dossier.statut);
-                  return (
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-muted-foreground font-medium">Progression du dossier</span>
-                        <span className="font-bold text-foreground">{progress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                        <div 
-                          className={`h-3 rounded-full transition-all duration-500 ${
-                            progress >= 80 ? 'bg-green-500' : 
-                            progress >= 50 ? 'bg-blue-500' : 
-                            progress >= 25 ? 'bg-yellow-500' : 
-                            'bg-gray-400'
-                          }`}
-                          style={{width: `${Math.min(progress, 100)}%`, maxWidth: '100%'}}
-                        ></div>
-                      </div>
-                    </div>
-                  );
-                })()}
-                
-                {/* Timeline basée uniquement sur les étapes choisies par l'équipe */}
+                {/* Barre de progression basée uniquement sur les étapes choisies par l'équipe */}
                 {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (() => {
                   const rawSteps = dossier.etapesSupplementaires;
                   const currentIndex = rawSteps.findIndex(

@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const PDFDocument = require('pdfkit');
 const Log = require('../models/Log');
 const { protect, authorize } = require('../middleware/auth');
@@ -344,11 +345,11 @@ router.get('/', authorize('superadmin'), async (req, res) => {
       filter.action = action;
     }
 
-    if (userId) {
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
       filter.user = userId;
     }
 
-    if (targetUserId) {
+    if (targetUserId && mongoose.Types.ObjectId.isValid(targetUserId)) {
       filter.targetUser = targetUserId;
     }
 

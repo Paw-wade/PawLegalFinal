@@ -26,18 +26,8 @@ interface FAQSection {
 }
 
 export default function FAQPage() {
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
+  const [activeSectionIndex, setActiveSectionIndex] = useState<number>(0);
   const [openItems, setOpenItems] = useState<Set<string>>(new Set());
-
-  const toggleSection = (sectionId: string) => {
-    const newOpenSections = new Set(openSections);
-    if (newOpenSections.has(sectionId)) {
-      newOpenSections.delete(sectionId);
-    } else {
-      newOpenSections.add(sectionId);
-    }
-    setOpenSections(newOpenSections);
-  };
 
   const toggleItem = (itemId: string) => {
     const newOpenItems = new Set(openItems);
@@ -520,74 +510,111 @@ export default function FAQPage() {
       </section>
 
       <main className="container mx-auto px-4 py-16">
-        <div className="max-w-5xl mx-auto">
-          {faqSections.map((section, sectionIndex) => {
-            const sectionId = `section-${sectionIndex}`;
-            const isSectionOpen = openSections.has(sectionId);
-
-            return (
-              <div key={sectionIndex} className="mb-8">
+          <div className="max-w-5xl mx-auto">
+          <div className="grid gap-6 md:grid-cols-2 items-start max-w-3xl mx-auto">
+            {/* Liste des thèmes de FAQ (gauche) */}
+            <div className="space-y-2.5">
+              {faqSections.map((section, index) => (
                 <button
-                  onClick={() => toggleSection(sectionId)}
-                  className="w-full flex items-center justify-between p-6 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all border-2 border-primary/20 hover:border-primary mb-4"
+                  key={section.title}
+                  type="button"
+                  onClick={() => {
+                    setActiveSectionIndex(index);
+                    setOpenItems(new Set());
+                  }}
+                  className={`w-full flex items-start gap-3 rounded-lg px-3 py-2 text-sm text-left transition-colors ${
+                    activeSectionIndex === index
+                      ? 'bg-white border border-orange-300 shadow-sm'
+                      : 'bg-transparent border border-transparent hover:bg-white/60'
+                  }`}
                 >
-                  <h2 className="text-2xl font-bold text-foreground text-left">{section.title}</h2>
-                  <span className="text-2xl text-primary ml-4 transform transition-transform">
-                    {isSectionOpen ? '−' : '+'}
+                  <span className="mt-0.5 h-6 w-6 flex items-center justify-center rounded-full bg-orange-50 text-orange-500 text-xs font-semibold">
+                    {index + 1}
                   </span>
+                  <p className="font-medium text-foreground">{section.title}</p>
                 </button>
+              ))}
+            </div>
 
-                {isSectionOpen && (
-                  <div className="space-y-4 pl-4">
-                    {section.items.map((item, itemIndex) => {
-                      const itemId = `${sectionId}-item-${itemIndex}`;
-                      const isItemOpen = openItems.has(itemId);
+            {/* Détail de la section active (droite) */}
+            <div className="space-y-3 text-sm text-gray-700">
+              {(() => {
+                const currentSection = faqSections[activeSectionIndex] || faqSections[0];
+                const sectionId = `section-${activeSectionIndex}`;
 
-                      return (
-                        <div key={itemIndex} className="bg-white rounded-lg border border-border shadow-md">
-                          <button
-                            onClick={() => toggleItem(itemId)}
-                            className="w-full flex items-start justify-between p-5 text-left hover:bg-muted/50 transition-colors rounded-lg"
+                if (!currentSection) {
+                  return (
+                    <div className="rounded-lg border border-dashed border-gray-200 bg-white/60 p-4 text-gray-500 text-sm">
+                      Sélectionnez un thème à gauche pour afficher les questions correspondantes.
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    <h2 className="text-lg font-semibold text-foreground mb-2">
+                      {currentSection.title}
+                    </h2>
+                    <div className="space-y-3">
+                      {currentSection.items.map((item, itemIndex) => {
+                        const itemId = `${sectionId}-item-${itemIndex}`;
+                        const isItemOpen = openItems.has(itemId);
+
+                        return (
+                          <div
+                            key={itemIndex}
+                            className="bg-white rounded-lg border border-border shadow-sm"
                           >
-                            <span className="font-semibold text-foreground pr-4 flex-1">{item.question}</span>
-                            <span className={`text-primary text-xl flex-shrink-0 transform transition-transform ${isItemOpen ? 'rotate-180' : ''}`}>
-                              ▼
-                            </span>
-                          </button>
-                          {isItemOpen && (
-                            <div className="px-5 pb-5 text-muted-foreground leading-relaxed whitespace-pre-line">
-                              {item.answer}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                            <button
+                              onClick={() => toggleItem(itemId)}
+                              className="w-full flex items-start justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors rounded-lg"
+                            >
+                              <span className="font-semibold text-foreground pr-4 flex-1 text-sm">
+                                {item.question}
+                              </span>
+                              <span
+                                className={`text-primary text-lg flex-shrink-0 transform transition-transform ${
+                                  isItemOpen ? 'rotate-180' : ''
+                                }`}
+                              >
+                                ▼
+                              </span>
+                            </button>
+                            {isItemOpen && (
+                              <div className="px-4 pb-4 text-muted-foreground leading-relaxed whitespace-pre-line text-sm">
+                                {item.answer}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
 
-        {/* CTA Section */}
-        <div className="max-w-4xl mx-auto mt-16 bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl p-12 border border-primary/20 text-center">
-          <h2 className="text-3xl font-bold mb-4 text-foreground">
-            Besoin d'aide supplémentaire ?
-          </h2>
-          <p className="text-lg text-muted-foreground mb-8">
-            Nos experts sont à votre disposition pour répondre à toutes vos questions
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/contact">
-              <Button size="lg" className="shadow-lg">
-                Nous contacter
-              </Button>
-            </Link>
-            <Link href="/auth/signup">
-              <Button size="lg" variant="outline" className="shadow-lg">
-                Créer un compte
-              </Button>
-            </Link>
+          {/* CTA Section */}
+          <div className="max-w-4xl mx-auto mt-16 bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl p-12 border border-primary/20 text-center">
+            <h2 className="text-3xl font-bold mb-4 text-foreground">
+              Besoin d'aide supplémentaire ?
+            </h2>
+            <p className="text-lg text-muted-foreground mb-8">
+              Nos experts sont à votre disposition pour répondre à toutes vos questions
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link href="/contact">
+                <Button size="lg" className="shadow-lg">
+                  Nous contacter
+                </Button>
+              </Link>
+              <Link href="/auth/signup">
+                <Button size="lg" variant="outline" className="shadow-lg">
+                  Créer un compte
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </main>

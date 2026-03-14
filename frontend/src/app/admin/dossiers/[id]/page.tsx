@@ -5,11 +5,12 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
+import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, userAPI } from '@/lib/api';
 import { SUGGESTED_STEPS_BY_CATEGORY, DossierCategorie } from '@/lib/dossierStepsConfig';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -260,7 +261,7 @@ export default function AdminDossierDetailPage() {
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Éditer les étapes du dossier</h2>
                 <p className="text-xs text-gray-500 mt-1">
-                  Ces étapes sont internes ADA Pappers et servent à suivre l&apos;avancement du dossier.
+                  Ces étapes sont internes Ada Papers et servent à suivre l&apos;avancement du dossier.
                 </p>
               </div>
               <button
@@ -495,6 +496,37 @@ export default function AdminDossierDetailPage() {
       )}
 
       <main className="w-full px-4 py-8 overflow-x-hidden">
+        {/* Bannière visible : accès document en préparation accordé (pour cohérence affichage) */}
+        {(() => {
+          const draftAccessNotifs = (notifications || []).filter((n: any) => n.type === 'draft_access_granted' && !n.lu);
+          if (draftAccessNotifs.length === 0) return null;
+          return (
+            <div className="mb-6 rounded-xl border-2 border-orange-400 bg-gradient-to-r from-orange-50 to-amber-50 shadow-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white text-lg">✓</div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-orange-900 text-base mb-1">Accès accordé à un document en préparation</h3>
+                  <p className="text-sm text-orange-800 mb-2">
+                    {draftAccessNotifs.length === 1 ? draftAccessNotifs[0].message : `Vous avez reçu des accès à ${draftAccessNotifs.length} document(s) en préparation sur ce dossier.`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      for (const notif of draftAccessNotifs) {
+                        try { await notificationsAPI.markAsRead(notif._id); } catch (_) {}
+                      }
+                      loadNotifications();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
+                  >
+                    J'ai compris
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* En-tête amélioré */}
         <div className="mb-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -524,31 +556,7 @@ export default function AdminDossierDetailPage() {
                   <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
                 )}
                 
-                {/* Barre de progression */}
-                {(() => {
-                  const progress = getDossierProgress(dossier.statut);
-                  return (
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-muted-foreground font-medium">Progression du dossier</span>
-                        <span className="font-bold text-foreground">{progress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                        <div 
-                          className={`h-3 rounded-full transition-all duration-500 ${
-                            progress >= 80 ? 'bg-green-500' : 
-                            progress >= 50 ? 'bg-blue-500' : 
-                            progress >= 25 ? 'bg-yellow-500' : 
-                            'bg-gray-400'
-                          }`}
-                          style={{width: `${Math.min(progress, 100)}%`, maxWidth: '100%'}}
-                        ></div>
-                      </div>
-                    </div>
-                  );
-                })()}
-                
-                {/* Timeline */}
+                {/* Barre de progression basée sur les étapes définies pour ce dossier */}
                 {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
                   <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
                     <div className="flex items-center justify-between mb-2">
@@ -1164,6 +1172,9 @@ export default function AdminDossierDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Documents en préparation (brouillons collaboratifs internes) */}
+        <DossierDraftsPanel dossierId={dossier._id || (dossier as any).id} />
 
         {/* Messages du dossier */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">

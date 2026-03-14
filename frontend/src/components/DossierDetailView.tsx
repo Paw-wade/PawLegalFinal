@@ -615,7 +615,7 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
 
         {/* Pied de page */}
         <div className="mt-8 pt-6 border-t text-center text-xs text-muted-foreground">
-          <p>Document généré automatiquement par ADA Pappers</p>
+          <p>Document généré automatiquement par Ada Papers</p>
           <p>Ce document est confidentiel et destiné uniquement au client concerné</p>
         </div>
       </div>

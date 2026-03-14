@@ -9,8 +9,8 @@ const PDFDocument = require('pdfkit');
  * Configuration de la plateforme (coordonnées)
  */
 const PLATFORM_CONFIG = {
-  name: 'ADA Pappers',
-  legalName: 'ADA Pappers',
+  name: 'Ada Papers',
+  legalName: 'Ada Papers',
   subtitle: 'Service d\'Accompagnement aux démarches administratives',
   address: {
     street: '', // À compléter avec l'adresse réelle
@@ -18,8 +18,8 @@ const PLATFORM_CONFIG = {
     postalCode: '',
     country: 'France'
   },
-  email: 'contact@adapappers.fr',
-  website: 'https://www.adapappers.fr',
+  email: 'contact@adapapers.fr',
+  website: 'https://www.adapapers.fr',
   phone: '07 68 03 33 58'
 };
 
@@ -58,7 +58,7 @@ function addDocumentHeader(doc, options = {}) {
   const lightGray = '#9ca3af'; // Gris clair
 
   // ===== LOGO / NOM (en haut à gauche) =====
-  // Si un logo image existe, on peut utiliser options.logoPath, sinon on affiche le nom ADA Pappers
+  // Si un logo image existe, on peut utiliser options.logoPath, sinon on affiche le nom Ada Papers
   if (options.logoPath) {
     doc.image(options.logoPath, margin, yPosition, { width: 60, height: 60 });
     yPosition += 65;
@@ -66,12 +66,12 @@ function addDocumentHeader(doc, options = {}) {
     doc.fontSize(24)
       .fillColor(primaryColor)
       .font('Helvetica-Bold')
-      .text('ADA', margin, yPosition, { width: 100 });
+      .text('Ada', margin, yPosition, { width: 100 });
 
     doc.fontSize(18)
       .fillColor(primaryColor)
       .font('Helvetica-Bold')
-      .text('Pappers', margin, yPosition + 26, { width: 120 });
+      .text('Papers', margin, yPosition + 26, { width: 120 });
   }
 
   // ===== NOM DE LA PLATEFORME (à droite du logo) =====

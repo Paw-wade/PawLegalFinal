@@ -191,7 +191,7 @@ export default function SignInPage() {
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary to-primary/80 items-center justify-center p-12 text-white">
         <div className="max-w-md">
           <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-4">Bienvenue sur ADA Pappers</h1>
+            <h1 className="text-4xl font-bold mb-4">Bienvenue sur Ada Papers</h1>
             <p className="text-lg text-white/90 mb-6">
               Service d&apos;Accompagnement aux démarches administratives.
             </p>
@@ -230,7 +230,7 @@ export default function SignInPage() {
             <Link href="/" className="inline-block">
               <div className="flex flex-col items-center">
                 <span className="text-3xl font-bold text-orange-500 hover:text-orange-600 transition-colors">
-                  ADA Pappers
+                  Ada Papers
                 </span>
                 <p className="text-[10px] text-muted-foreground font-medium mt-1">
                   Service d&apos;Accompagnement aux démarches administratives
@@ -245,7 +245,7 @@ export default function SignInPage() {
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-foreground mb-2">Connexion</h1>
                 <p className="text-muted-foreground">
-                  Connectez-vous à votre compte ADA Pappers
+                  Connectez-vous à votre compte Ada Papers
                 </p>
               </div>
             </div>

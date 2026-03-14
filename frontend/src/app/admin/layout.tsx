@@ -11,7 +11,7 @@ export default function AdminLayout({
 }) {
   useEffect(() => {
     // Harmoniser le titre de l'onglet admin avec le favicon
-    document.title = 'ADA Pappers';
+    document.title = 'Ada Papers';
   }, []);
 
   return (

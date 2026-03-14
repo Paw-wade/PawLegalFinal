@@ -4,10 +4,11 @@ import SessionProvider from '@/providers/SessionProvider';
 
 export const metadata: Metadata = {
   // Titre court affiché à côté du favicon dans l’onglet
-  title: 'ADA Pappers',
+  title: 'Ada Papers',
   // Description SEO (on peut garder la description longue)
   description:
-    "ADA Pappers - Service d'Accompagnement aux démarches administratives pour vos titres de séjour, visas et démarches liées au droit des étrangers et du travail.",
+    "Ada Papers - Service d'Accompagnement aux démarches administratives pour vos titres de séjour, visas et démarches liées au droit des étrangers et du travail.",
+  viewport: { width: 'device-width', initialScale: 1, maximumScale: 5 },
 };
 
 export default function RootLayout({
@@ -17,7 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr">
-      <body className="antialiased">
+      <body className="antialiased overflow-x-hidden min-w-0">
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>

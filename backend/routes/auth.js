@@ -82,7 +82,7 @@ router.post(
       // Envoyer le mot de passe temporaire par SMS
       let smsSent = false;
       try {
-        const message = `Bonjour ${user.firstName}, votre compte ADA Pappers a été créé.\n\nVotre mot de passe temporaire est : ${DEFAULT_TEMP_PASSWORD}\n\nPour votre sécurité, changez-le lors de votre première connexion.`;
+        const message = `Bonjour ${user.firstName}, votre compte Ada Papers a été créé.\n\nVotre mot de passe temporaire est : ${DEFAULT_TEMP_PASSWORD}\n\nPour votre sécurité, changez-le lors de votre première connexion.`;
         await sendNotificationSMS(user.phone, 'account_security', { message }, {
           userId: user._id,
           context: 'account',
@@ -296,7 +296,7 @@ ${resetUrl}
 
 Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet email.
 
-ADA Pappers`;
+Ada Papers`;
 
       const html = `
         <p>Bonjour ${user.firstName || ''},</p>
@@ -304,7 +304,7 @@ ADA Pappers`;
         <p>Cliquez sur le lien suivant pour définir un nouveau mot de passe (valable 1 heure) :</p>
         <p><a href="${resetUrl}" target="_blank" rel="noopener noreferrer">${resetUrl}</a></p>
         <p>Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet email.</p>
-        <p>ADA Pappers</p>
+        <p>Ada Papers</p>
       `;
 
       // Essayer d'envoyer l'email si la configuration SMTP est présente

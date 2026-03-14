@@ -1543,7 +1543,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     // Pipe le PDF vers la réponse
     doc.pipe(res);
     
-    // Ajouter l'en-tête standard ADA Pappers et récupérer la position de départ du contenu
+    // Ajouter l'en-tête standard Ada Papers et récupérer la position de départ du contenu
     let yPosition = addDocumentHeader(doc, { margin });
     
     // Fonction helper pour ajouter du texte avec gestion de la pagination

@@ -597,31 +597,27 @@ function ClientDashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
+    <div className="min-h-screen bg-background">
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes scroll-text {
-          0% {
-            transform: translateX(100%);
-          }
-          100% {
-            transform: translateX(-100%);
-          }
+          0% { transform: translateX(100%); }
+          100% { transform: translateX(-100%); }
         }
       `}} />
       <main className="w-full max-w-6xl mx-auto px-4 py-8">
-        <div id="dashboard-top" className="scroll-mt-20"></div>
+        <div id="dashboard-top" className="scroll-mt-20" />
 
-        {/* En-tête de bienvenue */}
-        <div className="mb-8">
-          <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                {dashboardTitleClient}, {userName.split(' ')[0]}
-              </h1>
-              <p className="text-muted-foreground text-lg">
-                {dashboardSubtitleClient}
-              </p>
-            </div>
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Tableau de bord</p>
+          <h1 className="text-2xl font-bold text-foreground mb-1">
+            {dashboardTitleClient}{userName ? `, ${userName.split(' ')[0]}` : ''}
+          </h1>
+          <p className="text-sm text-gray-700">
+            {dashboardSubtitleClient}
+          </p>
+        </div>
+        <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
+            <div className="flex-1 min-w-0">
             
             {/* Badge de renouvellement du titre de séjour */}
             {hasTitreInfoValue && daysRemainingValue !== null && (
@@ -649,7 +645,7 @@ function ClientDashboardContent() {
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Renouvellement du titre de séjour</p>
+                    <p className="text-xs font-medium text-gray-700 mb-1">Renouvellement du titre de séjour</p>
                     {daysRemainingValue < 0 ? (
                       <p className="text-lg font-bold text-red-600">
                         Expiré depuis {Math.abs(daysRemainingValue)} jour{Math.abs(daysRemainingValue) > 1 ? 's' : ''}
@@ -664,7 +660,7 @@ function ClientDashboardContent() {
                       </p>
                     )}
                     {userProfile?.dateExpiration && (
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-gray-600 mt-1">
                         Échéance: {new Date(userProfile.dateExpiration).toLocaleDateString('fr-FR', {
                           year: 'numeric',
                           month: 'long',
@@ -739,11 +735,10 @@ function ClientDashboardContent() {
           )}
         </div>
 
-        {/* Statistiques - Design professionnel et chaleureux avec accès direct */}
-        <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 scroll-mt-20">
-          {/* Badge Dossiers avec lien direct - Fusion des deux badges */}
+        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
+        <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 scroll-mt-20">
           <Link href="/client/dossiers" className="group">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-primary hover:shadow-lg hover:border-primary/80 transition-all duration-200 hover:-translate-y-1 cursor-pointer">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <span className="text-2xl">📁</span>
@@ -752,8 +747,8 @@ function ClientDashboardContent() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-primary transition-colors">{stats.dossiers}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Mes Dossiers</h3>
-              <p className="text-xs text-muted-foreground mb-3">Total de vos dossiers</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Mes Dossiers</h3>
+              <p className="text-xs text-gray-600 mb-3">Total de vos dossiers</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                 <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 text-xs font-semibold group-hover:bg-blue-500/20 transition-colors">
                   {stats.dossiersEnCours} en cours
@@ -766,7 +761,7 @@ function ClientDashboardContent() {
           {/* Badge Documents avec lien direct */}
           <div id="documents-section" className="scroll-mt-20">
           <Link href="/client/documents" className="group">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 hover:shadow-lg hover:border-green-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
                   <span className="text-2xl">📄</span>
@@ -775,10 +770,10 @@ function ClientDashboardContent() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.documents}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Documents</h3>
-              <p className="text-xs text-muted-foreground mb-3">Documents disponibles</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Documents</h3>
+              <p className="text-xs text-gray-600 mb-3">Documents disponibles</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-muted-foreground">Tous vos documents</span>
+                <span className="text-xs text-gray-600">Tous vos documents</span>
                 <span className="text-green-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
@@ -786,17 +781,17 @@ function ClientDashboardContent() {
           </div>
         </div>
 
-        {/* Actions rapides - Seulement les sections sans doublons */}
-        <div id="rendez-vous-section" className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8 scroll-mt-20">
+        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Rendez-vous et accès</p>
+        <div id="rendez-vous-section" className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 scroll-mt-20">
           <div className="group">
-            <div className="bg-gradient-to-br from-white to-blue-50 rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 border border-blue-200 hover:border-blue-400 hover:scale-105">
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                  <span className="text-3xl">📅</span>
+                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <span className="text-2xl">📅</span>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground group-hover:text-blue-600 transition-colors mb-1">Rendez-vous</h3>
-                  <p className="text-sm text-muted-foreground">Gérez vos rendez-vous</p>
+                  <h3 className="font-semibold text-foreground mb-0.5">Rendez-vous</h3>
+                  <p className="text-xs text-gray-600">Gérez vos rendez-vous</p>
                 </div>
               </div>
               {/* Rendez-vous récents avec alertes */}
@@ -837,7 +832,7 @@ function ClientDashboardContent() {
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-muted-foreground">⏰ {apt.heure?.substring(0, 5) || '-'}</p>
+                            <p className="text-xs text-gray-600">⏰ {apt.heure?.substring(0, 5) || '-'}</p>
                           </div>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                             apt.statut === 'confirme' ? 'bg-blue-100 text-blue-800' :
@@ -853,7 +848,7 @@ function ClientDashboardContent() {
                 </div>
               )}
               
-              <div className="flex gap-2 pt-4 border-t border-blue-200">
+              <div className="flex gap-2 pt-4 border-t border-gray-100">
                 <Button 
                   variant="outline" 
                   className="flex-1 text-xs border-blue-300 text-blue-600 hover:bg-blue-50"
@@ -872,43 +867,33 @@ function ClientDashboardContent() {
 
           <div id="temoignages-section" className="scroll-mt-20">
           <Link href="/client/temoignages" className="group">
-            <div className="bg-gradient-to-br from-white to-purple-50 rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 border border-purple-200 hover:border-purple-400 hover:scale-105">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                  <span className="text-3xl">⭐</span>
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all">
+              <div className="flex items-center gap-4 mb-2">
+                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <span className="text-2xl">⭐</span>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground group-hover:text-purple-600 transition-colors mb-1">Témoignage</h3>
-                  <p className="text-sm text-muted-foreground">Partagez votre expérience</p>
+                  <h3 className="font-semibold text-foreground mb-0.5">Témoignage</h3>
+                  <p className="text-xs text-gray-600">Partagez votre expérience</p>
                 </div>
               </div>
-              <div className="flex items-center justify-between pt-4 border-t border-purple-200">
-                <span className="text-xs font-medium text-purple-600">Accéder →</span>
-                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-                  <span className="text-purple-600 text-sm">→</span>
-                </div>
-              </div>
+              <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
             </div>
           </Link>
           </div>
 
           <Link href="/client/compte" className="group">
-            <div className="bg-gradient-to-br from-white to-indigo-50 rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 border border-indigo-200 hover:border-indigo-400 hover:scale-105">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                  <span className="text-3xl">👤</span>
+            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all">
+              <div className="flex items-center gap-4 mb-2">
+                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <span className="text-2xl">👤</span>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground group-hover:text-indigo-600 transition-colors mb-1">Mon compte</h3>
-                  <p className="text-sm text-muted-foreground">Gérez vos informations</p>
+                  <h3 className="font-semibold text-foreground mb-0.5">Mon compte</h3>
+                  <p className="text-xs text-gray-600">Gérez vos informations</p>
                 </div>
               </div>
-              <div className="flex items-center justify-between pt-4 border-t border-indigo-200">
-                <span className="text-xs font-medium text-indigo-600">Accéder →</span>
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center group-hover:bg-indigo-200 transition-colors">
-                  <span className="text-indigo-600 text-sm">→</span>
-                </div>
-              </div>
+              <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
             </div>
           </Link>
 

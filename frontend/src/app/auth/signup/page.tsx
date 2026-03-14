@@ -68,6 +68,7 @@ export default function SignupPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -124,6 +125,7 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     
     const firstName = formData.firstName.trim();
     const lastName = formData.lastName.trim();
@@ -154,9 +156,14 @@ export default function SignupPage() {
 
       if (response.data.success) {
         setError(null);
-        // Après la création du compte, rediriger vers la page de connexion
-        // Le mot de passe temporaire (Adap2026+) aura été envoyé par SMS
-        router.push('/auth/signin');
+        setSuccess('Votre compte a été créé avec succès. Un mot de passe temporaire vous a été envoyé par SMS.');
+        // Réinitialiser le formulaire pour éviter une double soumission
+        setFormData({
+          firstName: '',
+          lastName: '',
+          email: '',
+          phone: '',
+        });
       }
     } catch (err: any) {
       console.error('Erreur lors de la création du compte:', err);
@@ -187,7 +194,7 @@ export default function SignupPage() {
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary to-primary/80 items-center justify-center p-12 text-white">
         <div className="max-w-md">
           <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-4">Rejoignez ADA Pappers</h1>
+            <h1 className="text-4xl font-bold mb-4">Rejoignez Ada Papers</h1>
             <p className="text-lg text-white/90 mb-6">
               Service d&apos;Accompagnement aux démarches administratives.
             </p>
@@ -224,7 +231,7 @@ export default function SignupPage() {
             <Link href="/" className="inline-block">
               <div className="flex flex-col items-center">
                 <span className="text-3xl font-bold text-orange-500 hover:text-orange-600 transition-colors">
-                  ADA Pappers
+                  Ada Papers
                 </span>
                 <p className="text-[10px] text-muted-foreground font-medium mt-1">
                   Service d&apos;Accompagnement aux démarches administratives
@@ -240,7 +247,7 @@ export default function SignupPage() {
                   Création de compte
                 </h1>
                 <p className="text-muted-foreground">
-                  Créez votre compte ADA Pappers
+                  Créez votre compte Ada Papers
                 </p>
               </div>
             </div>
@@ -251,6 +258,40 @@ export default function SignupPage() {
                   <div className="flex items-center gap-2">
                     <span className="text-xl">⚠️</span>
                     <p className="text-sm font-medium text-red-800">{error}</p>
+                  </div>
+                </div>
+              )}
+
+              {success && (
+                <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 rounded-lg shadow-sm">
+                  <div className="flex items-start gap-3 justify-between">
+                    <div className="flex items-start gap-2">
+                      <span className="text-xl">✅</span>
+                      <div>
+                        <p className="text-sm font-medium text-green-800">{success}</p>
+                        <p className="text-xs text-green-800 mt-1">
+                          Vous pouvez maintenant vous connecter avec l&apos;email renseigné et le mot de passe reçu par SMS.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0">
+                      <Button
+                        type="button"
+                        variant="default"
+                        className="text-xs px-3 py-2 h-9"
+                        onClick={() => router.push('/auth/signin')}
+                      >
+                        Aller à la connexion
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="text-xs px-3 py-2 h-9"
+                        onClick={() => router.push('/')}
+                      >
+                        Retour à l&apos;accueil
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
