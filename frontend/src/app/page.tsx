@@ -494,11 +494,12 @@ export default function HomePage() {
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 md:p-8">
                 {(() => {
                   const current = solutions[selectedSolutionIndex] || solutions[0];
+                  const Icon = current.icon;
                   return (
                     <div className="space-y-4">
                       <div className="flex items-start gap-3">
                         <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                          {current.icon}
+                          <Icon className="w-6 h-6" />
                         </div>
                         <div>
                           <h3 className="text-2xl font-semibold text-gray-900 mb-1">
