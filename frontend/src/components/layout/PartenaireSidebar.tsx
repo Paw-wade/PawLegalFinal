@@ -75,7 +75,7 @@ export function PartenaireSidebar({ isOpen = true, onClose }: PartenaireSidebarP
               href="/"
               className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg tracking-tight"
             >
-              ADA Pappers
+              Ada Papers
             </Link>
             <span className="hidden md:inline ml-2 text-[10px] text-gray-500">Espace partenaire</span>
           </div>

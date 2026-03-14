@@ -5,6 +5,24 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { forumAPI } from '@/lib/api';
+import {
+  LayoutDashboard,
+  Users,
+  FolderOpen,
+  CheckSquare,
+  Calendar,
+  Clock,
+  MessageSquare,
+  FileText,
+  Star,
+  Bell,
+  Smartphone,
+  Image,
+  FileEdit,
+  ScrollText,
+  Trash2,
+  User,
+} from 'lucide-react';
 
 interface AdminSidebarProps {
   isOpen?: boolean;
@@ -14,29 +32,29 @@ interface AdminSidebarProps {
 interface MenuItem {
   href: string;
   label: string;
-  icon: string;
+  icon: React.ComponentType<{ className?: string }>;
   roles?: string[];
   badge?: string;
 }
 
 const adminMenuItems: MenuItem[] = [
-  { href: '/admin', label: 'Tableau de bord', icon: '📊' },
-  { href: '/admin/utilisateurs', label: 'Utilisateurs', icon: '👥' },
-  { href: '/admin/dossiers', label: 'Dossiers', icon: '📁' },
-  { href: '/admin/taches', label: 'Tâches', icon: '✅' },
-  { href: '/admin/rendez-vous', label: 'Rendez-vous', icon: '📅' },
-  { href: '/admin/creneaux', label: 'Créneaux', icon: '⏰' },
-  { href: '/admin/messages', label: 'Messages', icon: '💬' },
-  { href: '/admin/documents', label: 'Documents', icon: '📄' },
-  { href: '/admin/temoignages', label: 'Témoignages', icon: '⭐' },
-  { href: '/admin/notifications', label: 'Notifications', icon: '🔔' },
-  { href: '/admin/sms', label: 'SMS', icon: '📱' },
-  { href: '/admin/carousel', label: 'Carrousel home', icon: '🖼️' },
-  { href: '/admin/cms', label: 'CMS', icon: '✏️' },
-  { href: '/admin/logs', label: 'Logs', icon: '📋', roles: ['superadmin'] },
-  { href: '/admin/corbeille', label: 'Corbeille', icon: '🗑️' },
-  { href: '/forum', label: 'Forum', icon: '🗣️' },
-  { href: '/admin/compte', label: 'Mon Compte', icon: '👤' },
+  { href: '/admin', label: 'Tableau de bord', icon: LayoutDashboard },
+  { href: '/admin/utilisateurs', label: 'Utilisateurs', icon: Users },
+  { href: '/admin/dossiers', label: 'Dossiers', icon: FolderOpen },
+  { href: '/admin/taches', label: 'Tâches', icon: CheckSquare },
+  { href: '/admin/rendez-vous', label: 'Rendez-vous', icon: Calendar },
+  { href: '/admin/creneaux', label: 'Créneaux', icon: Clock },
+  { href: '/admin/messages', label: 'Messages', icon: MessageSquare },
+  { href: '/admin/documents', label: 'Documents', icon: FileText },
+  { href: '/admin/temoignages', label: 'Témoignages', icon: Star },
+  { href: '/admin/notifications', label: 'Notifications', icon: Bell },
+  { href: '/admin/sms', label: 'SMS', icon: Smartphone },
+  { href: '/admin/carousel', label: 'Carrousel home', icon: Image },
+  { href: '/admin/cms', label: 'CMS', icon: FileEdit },
+  { href: '/admin/logs', label: 'Logs', icon: ScrollText, roles: ['superadmin'] },
+  { href: '/admin/corbeille', label: 'Corbeille', icon: Trash2 },
+  { href: '/forum', label: 'Forum', icon: MessageSquare },
+  { href: '/admin/compte', label: 'Mon compte', icon: User },
 ];
 
 export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
@@ -76,6 +94,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={onClose}
+          aria-hidden="true"
         />
       )}
 
@@ -96,37 +115,40 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
               href="/"
               className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg tracking-tight"
             >
-              ADA Pappers
+              Ada Papers
             </Link>
-            <span className="hidden md:inline ml-2 text-[10px] text-gray-500 whitespace-nowrap">
+            <span className="hidden md:inline ml-2 text-[10px] text-gray-500">
               {userRole === 'superadmin' ? 'Super administration' : 'Panneau d&apos;administration'}
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors shrink-0"
-            aria-label="Fermer le menu"
-          >
-            <span className="text-2xl">×</span>
-          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors shrink-0"
+              aria-label="Fermer le menu"
+            >
+              <span className="text-2xl">×</span>
+            </button>
+          )}
         </div>
 
         {/* Navigation */}
         <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
           {filteredMenuItems.map((item) => {
+            const Icon = item.icon;
             const active = isActive(item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => {
-                  if (window.innerWidth < 1024 && onClose) onClose();
+                  if (typeof window !== 'undefined' && window.innerWidth < 1024 && onClose) onClose();
                 }}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   active ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                <span className="text-xl">{item.icon}</span>
+                <Icon className="w-5 h-5" />
                 <span className="flex items-center gap-1">
                   {item.label}
                   {item.href === '/forum' && forumUnreadCount > 0 && (

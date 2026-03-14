@@ -233,8 +233,8 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <p className="font-semibold text-foreground mb-1 text-sm">Email</p>
-                      <a href="mailto:contact@adapappers.fr" className="text-primary hover:underline text-sm">
-                        contact@adapappers.fr
+                      <a href="mailto:contact@adapapers.fr" className="text-primary hover:underline text-sm">
+                        contact@adapapers.fr
                       </a>
                     </div>
                   </div>

@@ -821,7 +821,7 @@ export default function ComptePage() {
                   disabled={isSaving}
                   onClick={async () => {
                     const confirmed = window.confirm(
-                      "Êtes-vous sûr de vouloir désactiver votre compte ? Vous ne pourrez plus vous connecter sans passer par l'équipe ADA Pappers."
+                      "Êtes-vous sûr de vouloir désactiver votre compte ? Vous ne pourrez plus vous connecter sans passer par l'équipe Ada Papers."
                     );
                     if (!confirmed) return;
                     try {

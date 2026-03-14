@@ -123,7 +123,7 @@ export default function AdminDashboardPage() {
   );
   const dashboardSubtitle = useCmsText(
     'admin.dashboard.subtitle',
-    "Vue d'ensemble de votre cabinet juridique"
+    "Service d'Accompagnement aux démarches administratives"
   );
 
   useEffect(() => {
@@ -754,16 +754,16 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-background">
       <main className="w-full px-4 py-8 max-w-full">
         <div id="dashboard-top" className="mb-6 scroll-mt-20">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Tableau de bord</p>
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Tableau de bord</p>
           <h1 className="text-2xl font-bold text-foreground mb-1">
             {dashboardTitle}
           </h1>
-          <p className="text-sm text-muted-foreground">{dashboardSubtitle}</p>
+          <p className="text-sm text-gray-700">{dashboardSubtitle}</p>
         </div>
 
         {/* Vue d'ensemble */}
         <div className="mb-6">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Vue d'ensemble</p>
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {/* Badge Utilisateurs - Seulement pour les admins */}
           {isAdmin && (
@@ -777,8 +777,8 @@ export default function AdminDashboardPage() {
                     <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-primary transition-colors">{stats.utilisateurs}</p>
                   </div>
                 </div>
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Utilisateurs</h3>
-                <p className="text-xs text-muted-foreground mb-3">Clients actifs</p>
+                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Utilisateurs</h3>
+                <p className="text-xs text-gray-600 mb-3">Clients actifs</p>
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-semibold group-hover:bg-primary/20 transition-colors">
                     +{stats.nouveauxClients} ce mois
@@ -800,10 +800,10 @@ export default function AdminDashboardPage() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-blue-600 transition-colors">{stats.dossiers}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Dossiers</h3>
-              <p className="text-xs text-muted-foreground mb-3">Tous les dossiers</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Dossiers</h3>
+              <p className="text-xs text-gray-600 mb-3">Tous les dossiers</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-muted-foreground">Gestion complète</span>
+                <span className="text-xs text-gray-600">Gestion complète</span>
                 <span className="text-blue-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
@@ -820,10 +820,10 @@ export default function AdminDashboardPage() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-purple-600 transition-colors">{stats.documents}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Documents</h3>
-              <p className="text-xs text-muted-foreground mb-3">Total des documents</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Documents</h3>
+              <p className="text-xs text-gray-600 mb-3">Total des documents</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-muted-foreground">Téléversés par les clients</span>
+                <span className="text-xs text-gray-600">Téléversés par les clients</span>
                 <span className="text-purple-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
@@ -840,8 +840,8 @@ export default function AdminDashboardPage() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-orange-600 transition-colors">{stats.tasks}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Tâches</h3>
-              <p className="text-xs text-muted-foreground mb-3">Gestion complète des tâches</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Tâches</h3>
+              <p className="text-xs text-gray-600 mb-3">Gestion complète des tâches</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                 <span className="inline-flex items-center px-2 py-1 rounded-md bg-orange-500/10 text-orange-600 text-xs font-semibold">
                   {stats.tasksEnCours} en cours
@@ -862,10 +862,10 @@ export default function AdminDashboardPage() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.rendezVous}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Rendez-vous</h3>
-              <p className="text-xs text-muted-foreground mb-3">Gérez le calendrier</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Rendez-vous</h3>
+              <p className="text-xs text-gray-600 mb-3">Gérez le calendrier</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-muted-foreground">Planification</span>
+                <span className="text-xs text-gray-600">Planification</span>
                 <span className="text-green-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
@@ -883,10 +883,10 @@ export default function AdminDashboardPage() {
                     <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-yellow-600 transition-colors">-</p>
                   </div>
                 </div>
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Témoignages</h3>
-                <p className="text-xs text-muted-foreground mb-3">Validez les avis</p>
+                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Témoignages</h3>
+                <p className="text-xs text-gray-600 mb-3">Validez les avis</p>
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                  <span className="text-xs text-muted-foreground">Avis clients</span>
+                  <span className="text-xs text-gray-600">Avis clients</span>
                   <span className="text-yellow-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
                 </div>
               </div>
@@ -898,7 +898,7 @@ export default function AdminDashboardPage() {
         {isAdmin && (
           <div className="mb-8">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Statistiques</p>
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Statistiques</p>
               <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                 <h2 className="text-lg font-bold text-foreground">
                   {statsPeriod === 'week' ? 'Hebdomadaires' : 'Mensuelles'}
@@ -930,7 +930,7 @@ export default function AdminDashboardPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-muted-foreground">Nouveaux clients</span>
+                    <span className="text-sm font-medium text-gray-700">Nouveaux clients</span>
                     <span className="text-xl font-semibold text-foreground">{stats.nouveauxClients}</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
@@ -939,7 +939,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-muted-foreground">Dossiers traités</span>
+                    <span className="text-sm font-medium text-gray-700">Dossiers traités</span>
                     <span className="text-xl font-semibold text-foreground">{stats.dossiersEnCours}</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
@@ -957,7 +957,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-muted-foreground">Taux de transmission</span>
+                    <span className="text-sm font-medium text-gray-700">Taux de transmission</span>
                     <span className="text-xl font-semibold text-foreground">{stats.tauxTransmission} %</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">

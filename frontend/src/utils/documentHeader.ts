@@ -9,8 +9,8 @@ import { jsPDF } from 'jspdf';
  * Configuration de la plateforme (coordonnées)
  */
 export const PLATFORM_CONFIG = {
-  name: 'ADA Pappers',
-  legalName: 'ADA Pappers',
+  name: 'Ada Papers',
+  legalName: 'Ada Papers',
   subtitle: 'Service d\'Accompagnement aux démarches administratives',
   address: {
     street: '', // À compléter avec l'adresse réelle
@@ -18,7 +18,7 @@ export const PLATFORM_CONFIG = {
     postalCode: '',
     country: 'France'
   },
-  email: 'contact@adapappers.fr',
+  email: 'contact@adapapers.fr',
   website: 'https://www.pawlegal.fr',
   phone: '07 68 03 33 58'
 };

@@ -176,7 +176,7 @@ export default function HomePage() {
           {
             nom: 'Ahmed Benali',
             role: 'Client',
-            texte: 'Grâce à ADA Pappers, j\'ai pu obtenir mon titre de séjour sans difficulté. Un suivi personnalisé et des conseils précieux à chaque étape.',
+            texte: 'Grâce à Ada Papers, j\'ai pu obtenir mon titre de séjour sans difficulté. Un suivi personnalisé et des conseils précieux à chaque étape.',
             note: 5,
           },
           {

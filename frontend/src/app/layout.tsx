@@ -4,10 +4,10 @@ import SessionProvider from '@/providers/SessionProvider';
 
 export const metadata: Metadata = {
   // Titre court affiché à côté du favicon dans l’onglet
-  title: 'ADA Pappers',
+  title: 'Ada Papers',
   // Description SEO (on peut garder la description longue)
   description:
-    "ADA Pappers - Service d'Accompagnement aux démarches administratives pour vos titres de séjour, visas et démarches liées au droit des étrangers et du travail.",
+    "Ada Papers - Service d'Accompagnement aux démarches administratives pour vos titres de séjour, visas et démarches liées au droit des étrangers et du travail.",
   viewport: { width: 'device-width', initialScale: 1, maximumScale: 5 },
 };
 

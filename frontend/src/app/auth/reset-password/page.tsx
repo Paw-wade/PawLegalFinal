@@ -105,7 +105,7 @@ function ResetPasswordContent() {
             <Link href="/" className="inline-block">
               <div className="flex flex-col items-center">
                 <span className="text-3xl font-bold text-orange-500 hover:text-orange-600 transition-colors">
-                  ADA Pappers
+                  Ada Papers
                 </span>
                 <p className="text-[10px] text-muted-foreground font-medium mt-1">
                   Service d&apos;Accompagnement aux démarches administratives

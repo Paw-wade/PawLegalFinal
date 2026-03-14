@@ -351,7 +351,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   href="/"
                   className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg sm:text-xl truncate"
                 >
-                  ADA Pappers
+                  Ada Papers
                 </Link>
                 <div className="hidden md:block h-4 w-px bg-gray-300 flex-shrink-0" />
                 <p className="hidden md:inline text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
@@ -364,7 +364,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 href={variant === 'admin' ? '/admin' : variant === 'partenaire' ? '/partenaire' : '/client'}
                 className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg truncate"
               >
-                ADA Pappers
+                Ada Papers
               </Link>
             )}
           </div>

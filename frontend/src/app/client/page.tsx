@@ -608,11 +608,11 @@ function ClientDashboardContent() {
         <div id="dashboard-top" className="scroll-mt-20" />
 
         <div className="mb-6">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Tableau de bord</p>
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Tableau de bord</p>
           <h1 className="text-2xl font-bold text-foreground mb-1">
             {dashboardTitleClient}{userName ? `, ${userName.split(' ')[0]}` : ''}
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-gray-700">
             {dashboardSubtitleClient}
           </p>
         </div>
@@ -645,7 +645,7 @@ function ClientDashboardContent() {
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Renouvellement du titre de séjour</p>
+                    <p className="text-xs font-medium text-gray-700 mb-1">Renouvellement du titre de séjour</p>
                     {daysRemainingValue < 0 ? (
                       <p className="text-lg font-bold text-red-600">
                         Expiré depuis {Math.abs(daysRemainingValue)} jour{Math.abs(daysRemainingValue) > 1 ? 's' : ''}
@@ -660,7 +660,7 @@ function ClientDashboardContent() {
                       </p>
                     )}
                     {userProfile?.dateExpiration && (
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-gray-600 mt-1">
                         Échéance: {new Date(userProfile.dateExpiration).toLocaleDateString('fr-FR', {
                           year: 'numeric',
                           month: 'long',
@@ -735,7 +735,7 @@ function ClientDashboardContent() {
           )}
         </div>
 
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Vue d'ensemble</p>
+        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
         <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 scroll-mt-20">
           <Link href="/client/dossiers" className="group">
             <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
@@ -747,8 +747,8 @@ function ClientDashboardContent() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-primary transition-colors">{stats.dossiers}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Mes Dossiers</h3>
-              <p className="text-xs text-muted-foreground mb-3">Total de vos dossiers</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Mes Dossiers</h3>
+              <p className="text-xs text-gray-600 mb-3">Total de vos dossiers</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                 <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 text-xs font-semibold group-hover:bg-blue-500/20 transition-colors">
                   {stats.dossiersEnCours} en cours
@@ -770,10 +770,10 @@ function ClientDashboardContent() {
                   <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.documents}</p>
                 </div>
               </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Documents</h3>
-              <p className="text-xs text-muted-foreground mb-3">Documents disponibles</p>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Documents</h3>
+              <p className="text-xs text-gray-600 mb-3">Documents disponibles</p>
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-muted-foreground">Tous vos documents</span>
+                <span className="text-xs text-gray-600">Tous vos documents</span>
                 <span className="text-green-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
@@ -781,7 +781,7 @@ function ClientDashboardContent() {
           </div>
         </div>
 
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Rendez-vous et accès</p>
+        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Rendez-vous et accès</p>
         <div id="rendez-vous-section" className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 scroll-mt-20">
           <div className="group">
             <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all">
@@ -791,7 +791,7 @@ function ClientDashboardContent() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground mb-0.5">Rendez-vous</h3>
-                  <p className="text-xs text-muted-foreground">Gérez vos rendez-vous</p>
+                  <p className="text-xs text-gray-600">Gérez vos rendez-vous</p>
                 </div>
               </div>
               {/* Rendez-vous récents avec alertes */}
@@ -832,7 +832,7 @@ function ClientDashboardContent() {
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-muted-foreground">⏰ {apt.heure?.substring(0, 5) || '-'}</p>
+                            <p className="text-xs text-gray-600">⏰ {apt.heure?.substring(0, 5) || '-'}</p>
                           </div>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                             apt.statut === 'confirme' ? 'bg-blue-100 text-blue-800' :
@@ -874,10 +874,10 @@ function ClientDashboardContent() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground mb-0.5">Témoignage</h3>
-                  <p className="text-xs text-muted-foreground">Partagez votre expérience</p>
+                  <p className="text-xs text-gray-600">Partagez votre expérience</p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground pt-2 border-t border-gray-100">Accéder →</p>
+              <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
             </div>
           </Link>
           </div>
@@ -890,10 +890,10 @@ function ClientDashboardContent() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground mb-0.5">Mon compte</h3>
-                  <p className="text-xs text-muted-foreground">Gérez vos informations</p>
+                  <p className="text-xs text-gray-600">Gérez vos informations</p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground pt-2 border-t border-gray-100">Accéder →</p>
+              <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
             </div>
           </Link>
 

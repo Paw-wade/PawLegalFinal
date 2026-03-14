@@ -18,7 +18,7 @@ export default function CGUPage() {
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <Link href="/" className="text-2xl font-bold text-primary">ADA Pappers</Link>
+            <Link href="/" className="text-2xl font-bold text-primary">Ada Papers</Link>
             <nav className="hidden md:flex items-center gap-6">
               <Link href="/" className="hover:text-primary">Accueil</Link>
               <Link href="/services" className="hover:text-primary">Services</Link>
@@ -42,7 +42,7 @@ export default function CGUPage() {
             <section>
               <h2 className="text-2xl font-semibold mb-4 text-primary">1. Objet</h2>
               <p className="text-muted-foreground">
-                Les présentes Conditions Générales d&apos;Utilisation (CGU) régissent l&apos;utilisation du site web et des services proposés par ADA Pappers.
+                Les présentes Conditions Générales d&apos;Utilisation (CGU) régissent l&apos;utilisation du site web et des services proposés par Ada Papers.
               </p>
             </section>
 
@@ -56,7 +56,7 @@ export default function CGUPage() {
             <section>
               <h2 className="text-2xl font-semibold mb-4 text-primary">3. Services</h2>
               <p className="text-muted-foreground">
-                ADA Pappers propose des services d&apos;accompagnement aux démarches administratives, notamment pour les titres de séjour, les visas et les démarches liées au droit des étrangers et du travail.
+                Ada Papers propose des services d&apos;accompagnement aux démarches administratives, notamment pour les titres de séjour, les visas et les démarches liées au droit des étrangers et du travail.
               </p>
             </section>
 

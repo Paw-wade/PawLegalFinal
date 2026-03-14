@@ -188,7 +188,7 @@ export default function ForumPage() {
       <main className="min-h-screen bg-gray-50">
         <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <header className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold">Forum ADA Pappers</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">Forum Ada Papers</h1>
           <p className="text-sm md:text-base text-gray-600 mt-2">
             Posez vos questions et échangez avec l&apos;équipe et les autres utilisateurs sur les démarches administratives.
           </p>

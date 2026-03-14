@@ -52,7 +52,7 @@ export default function ApiStatusPage() {
               Statut de l&apos;API
             </h1>
             <p className="text-lg text-muted-foreground">
-              Vérification de l&apos;état de l&apos;API Cabinet Juridique
+              Vérification de l&apos;état de l&apos;API - Service d&apos;Accompagnement aux démarches administratives
             </p>
           </div>
 

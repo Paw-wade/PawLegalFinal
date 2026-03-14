@@ -1784,18 +1784,24 @@ export default function CalculateurPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       <Header variant="home" />
 
       <main className="container mx-auto px-4 py-8 flex-1">
+        <div id="calculateur-top" className="mb-6 scroll-mt-20">
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Calculateur</p>
+          <h1 className="text-2xl font-bold text-foreground mb-1">Délais et titres de séjour</h1>
+          <p className="text-sm text-gray-700">Estimez les délais légaux et les échéances pour vos démarches</p>
+        </div>
+
         <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* Colonne 1 : Informations du profil utilisateur (à l'extrémité gauche) */}
           <div className="w-full lg:w-auto lg:flex-shrink-0 lg:self-start">
-            <div className="bg-gradient-to-br from-white to-primary/5 rounded-xl shadow-xl p-6 border-2 border-primary/20 lg:sticky lg:top-24 lg:w-72">
+            <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all lg:sticky lg:top-24 lg:w-72">
               {/* En-tête avec avatar et nom */}
               <div className="mb-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center shadow-lg">
+                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
                     <span className="text-white font-bold text-lg">
                       {userProfile?.firstName?.[0]?.toUpperCase() || session?.user?.name?.[0]?.toUpperCase() || 'U'}
                       {userProfile?.lastName?.[0]?.toUpperCase() || ''}
@@ -1813,7 +1819,7 @@ export default function CalculateurPage() {
 
                 {/* Nom et email en en-tête */}
                 {session && (session.user || userProfile) && (
-                  <div className="bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-primary/10 mb-4">
+                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 mb-4">
                     <p className="text-sm font-bold text-foreground mb-1">
                       {userProfile?.firstName && userProfile?.lastName
                         ? `${userProfile.firstName} ${userProfile.lastName}`
@@ -1867,39 +1873,39 @@ export default function CalculateurPage() {
                     
                     {isPersonalInfoOpen && (
                       <div className="space-y-2.5">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-lg p-3 border border-blue-200/50 shadow-sm">
+                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-blue-800 mb-1 uppercase tracking-wide">Nom complet</p>
-                        <p className="text-xs font-medium text-blue-900 break-words">
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Nom complet</p>
+                        <p className="text-xs font-medium text-foreground break-words">
                           {userProfile.firstName && userProfile.lastName
                             ? `${userProfile.firstName} ${userProfile.lastName}`
-                            : <span className="text-blue-600/70 italic">Information non fournie</span>}
+                            : <span className="text-muted-foreground italic">Information non fournie</span>}
                         </p>
                       </div>
                       </div>
 
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-lg p-3 border border-blue-200/50 shadow-sm">
+                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-blue-800 mb-1 uppercase tracking-wide">Email</p>
-                        <p className="text-xs font-medium text-blue-900 break-all">
-                          {userProfile.email || <span className="text-blue-600/70 italic">Information non fournie</span>}
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Email</p>
+                        <p className="text-xs font-medium text-foreground break-all">
+                          {userProfile.email || <span className="text-muted-foreground italic">Information non fournie</span>}
                         </p>
                     </div>
                   </div>
 
-                    <div className="bg-gradient-to-br from-green-50 to-green-100/50 rounded-lg p-3 border border-green-200/50 shadow-sm">
+                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-green-800 mb-1 uppercase tracking-wide">Téléphone</p>
-                        <p className="text-xs font-medium text-green-900">
-                          {userProfile.phone || <span className="text-green-600/70 italic">Information non fournie</span>}
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Téléphone</p>
+                        <p className="text-xs font-medium text-foreground">
+                          {userProfile.phone || <span className="text-muted-foreground italic">Information non fournie</span>}
                         </p>
                       </div>
                     </div>
 
-                    <div className="bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-lg p-3 border border-gray-200/50 shadow-sm">
+                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-gray-800 mb-1 uppercase tracking-wide">Adresse</p>
-                        <p className="text-xs font-medium text-gray-900 break-words">
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Adresse</p>
+                        <p className="text-xs font-medium text-foreground break-words">
                           {(userProfile.adressePostale || userProfile.ville || userProfile.codePostal) ? (
                             <>
                               {userProfile.adressePostale || ''}
@@ -1910,7 +1916,7 @@ export default function CalculateurPage() {
                               {userProfile.pays && (userProfile.ville || userProfile.codePostal || userProfile.adressePostale) ? `, ${userProfile.pays}` : ''}
                             </>
                           ) : (
-                            <span className="text-gray-600/70 italic">Information non fournie</span>
+                            <span className="text-muted-foreground italic">Information non fournie</span>
                           )}
                         </p>
                         </div>
@@ -1920,7 +1926,7 @@ export default function CalculateurPage() {
                   </div>
 
                   {/* 🟩 2. Informations administratives liées au séjour */}
-                  <div className="space-y-2.5 pt-4 border-t border-primary/20">
+                  <div className="space-y-2.5 pt-4 border-t border-gray-200">
                     <button
                       onClick={() => setIsAdminInfoOpen(!isAdminInfoOpen)}
                       className="flex items-center justify-between w-full gap-2 mb-3 hover:opacity-80 transition-opacity cursor-pointer group"
@@ -1938,27 +1944,27 @@ export default function CalculateurPage() {
                     {isAdminInfoOpen && (
                       <div className="space-y-2.5">
                     {/* Catégorie du titre de séjour */}
-                    <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 rounded-lg p-3 border border-indigo-200/50 shadow-sm">
+                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-indigo-800 mb-1 uppercase tracking-wide">Catégorie du titre</p>
-                        <p className="text-xs font-medium text-indigo-900 break-words">
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Catégorie du titre</p>
+                        <p className="text-xs font-medium text-foreground break-words">
                           {userProfile.typeTitre 
                             ? (typesTitres.find(t => t.value === userProfile.typeTitre)?.label || userProfile.typeTitre)
-                            : <span className="text-indigo-600/70 italic">Information non fournie</span>}
+                            : <span className="text-muted-foreground italic">Information non fournie</span>}
                         </p>
                       </div>
                     </div>
 
                     {/* Nature du document */}
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-lg p-3 border border-purple-200/50 shadow-sm">
+                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-purple-800 mb-1 uppercase tracking-wide">Nature du document</p>
-                        <p className="text-xs font-medium text-purple-900 break-words">
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Nature du document</p>
+                        <p className="text-xs font-medium text-foreground break-words">
                           {userProfile.typeTitre 
                             ? (userProfile.typeTitre.includes('visa') || userProfile.typeTitre.includes('VLS') 
                                 ? 'Visa long séjour (VLS-TS ou visa autre nature)' 
                                 : 'Titre de séjour')
-                            : <span className="text-purple-600/70 italic">Information non fournie</span>}
+                            : <span className="text-muted-foreground italic">Information non fournie</span>}
                         </p>
                       </div>
                     </div>
@@ -1966,25 +1972,25 @@ export default function CalculateurPage() {
                     {/* Dates de délivrance et d'expiration côte à côte */}
                     <div className="grid grid-cols-2 gap-3">
                       {/* Date de délivrance */}
-                      <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-lg p-3 border border-purple-200/50 shadow-sm">
+                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                         <div className="flex-1 min-w-0">
-                          <p className="text-[10px] font-semibold text-purple-800 mb-1 uppercase tracking-wide">Date de délivrance</p>
-                          <p className="text-xs font-medium text-purple-900">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Date de délivrance</p>
+                          <p className="text-xs font-medium text-foreground">
                             {userProfile.dateDelivrance 
                               ? formatDateCourte(new Date(userProfile.dateDelivrance))
-                              : <span className="text-purple-600/70 italic">Information non fournie</span>}
+                              : <span className="text-muted-foreground italic">Information non fournie</span>}
                           </p>
                         </div>
                       </div>
 
                       {/* Date d'expiration */}
-                      <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-lg p-3 border border-orange-200/50 shadow-sm">
+                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                         <div className="flex-1 min-w-0">
-                          <p className="text-[10px] font-semibold text-orange-800 mb-1 uppercase tracking-wide">Date d'expiration</p>
-                          <p className="text-xs font-medium text-orange-900">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Date d'expiration</p>
+                          <p className="text-xs font-medium text-foreground">
                             {userProfile.dateExpiration 
                               ? formatDateCourte(new Date(userProfile.dateExpiration))
-                              : <span className="text-orange-600/70 italic">Information non fournie</span>}
+                              : <span className="text-muted-foreground italic">Information non fournie</span>}
                           </p>
                         </div>
                       </div>
@@ -1992,12 +1998,12 @@ export default function CalculateurPage() {
 
                     {/* Statut du titre de séjour avec minuteur dynamique */}
                     {userProfile.dateExpiration && (
-                      <div className={`rounded-lg p-4 border-2 shadow-lg ${
+                      <div className={`rounded-lg p-4 border ${
                         joursRestants !== null && joursRestants <= 0
-                          ? 'bg-gradient-to-br from-red-50 to-red-100 border-red-400'
+                          ? 'bg-red-50 border-red-200'
                           : joursRestants !== null && joursRestants < 30
-                          ? 'bg-gradient-to-br from-orange-50 to-orange-100 border-orange-400'
-                          : 'bg-gradient-to-br from-green-50 to-green-100 border-green-400'
+                          ? 'bg-orange-50 border-orange-200'
+                          : 'bg-green-50 border-green-200'
                       }`}>
                         <div className="flex items-start gap-3">
                           <div className="flex-1">
@@ -2080,11 +2086,11 @@ export default function CalculateurPage() {
                     )}
 
                     {/* Numéro du titre de séjour */}
-                    <div className="bg-gradient-to-br from-yellow-50 to-yellow-100/50 rounded-lg p-3 border border-yellow-200/50 shadow-sm">
+                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-yellow-800 mb-1 uppercase tracking-wide">Numéro de titre</p>
-                        <p className="text-xs font-medium text-yellow-900 break-all">
-                          {userProfile.numeroTitre || <span className="text-yellow-600/70 italic">Information non fournie</span>}
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Numéro de titre</p>
+                        <p className="text-xs font-medium text-foreground break-all">
+                          {userProfile.numeroTitre || <span className="text-muted-foreground italic">Information non fournie</span>}
                         </p>
                         </div>
                     </div>
@@ -2104,7 +2110,7 @@ export default function CalculateurPage() {
                       return null;
                     } else if (moisRestants < 5) {
                       return (
-                        <div className="mt-4 p-3.5 bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-400 rounded-xl shadow-lg">
+                        <div className="mt-4 p-3.5 bg-orange-50 border border-orange-200 rounded-xl">
                           <div className="flex-1">
                             <p className="text-xs font-bold text-orange-900 mb-1.5">Expiration proche</p>
                             <p className="text-[11px] text-orange-800 leading-relaxed">
@@ -2118,9 +2124,9 @@ export default function CalculateurPage() {
                   })()}
 
                   {/* 🟨 4. Bouton de modification (pour tous les utilisateurs) */}
-                  <div className="pt-4 border-t border-primary/20">
+                  <div className="pt-4 border-t border-gray-200">
                     <Link href={(session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin' ? '/admin/compte' : '/client/compte'}>
-                      <Button variant="outline" className="w-full text-xs h-9 font-semibold border-2 hover:bg-primary/10 hover:border-primary transition-all shadow-sm">
+                      <Button variant="outline" className="w-full text-xs h-9 font-semibold border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all">
                         ✏️ Modifier mon profil
                       </Button>
                     </Link>
@@ -2142,9 +2148,9 @@ export default function CalculateurPage() {
 
           {/* Colonne 2 : Informations sur le titre de séjour (centré, largeur augmentée) */}
           <div className="flex-1 w-full lg:max-w-4xl mx-auto lg:self-start">
-            <div className="bg-white rounded-xl shadow-lg p-4 border-2 border-primary/20 lg:sticky lg:top-24">
+            <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all lg:sticky lg:top-24">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
                   <span className="text-xl">📋</span>
                 </div>
                 <h2 className="text-xl font-bold text-foreground">Nature du calcul</h2>
@@ -2164,10 +2170,10 @@ export default function CalculateurPage() {
                         natureDecision: '',
                         dateDecision: ''
                       })}
-                      className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
+                      className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
                         formData.situation === 'demande'
-                          ? 'bg-blue-500 text-white shadow-lg scale-105'
-                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-2 border-blue-300'
+                          ? 'bg-blue-600 text-white border-2 border-blue-600'
+                          : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 hover:border-gray-400'
                       }`}
                     >
                       <span className="text-lg">📄</span>
@@ -2187,10 +2193,10 @@ export default function CalculateurPage() {
                         sousCategorieTitreSejour: '',
                         typePrecisTitreSejour: ''
                       })}
-                      className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
+                      className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
                         formData.situation === 'contentieux_titre'
-                          ? 'bg-red-500 text-white shadow-lg scale-105'
-                          : 'bg-red-100 text-red-700 hover:bg-red-200 border-2 border-red-300'
+                          ? 'bg-red-600 text-white border-2 border-red-600'
+                          : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 hover:border-gray-400'
                       }`}
                     >
                       <span className="text-lg">⚖️</span>
@@ -2224,10 +2230,10 @@ export default function CalculateurPage() {
                         });
                         setCalculs(null);
                       }}
-                      className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
+                      className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
                         formData.situation === 'contentieux_visa'
-                          ? 'bg-orange-500 text-white shadow-lg scale-105'
-                          : 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-2 border-orange-300'
+                          ? 'bg-orange-600 text-white border-2 border-orange-600'
+                          : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 hover:border-gray-400'
                       }`}
                     >
                       <span className="text-lg">✈️</span>
@@ -2758,7 +2764,7 @@ export default function CalculateurPage() {
 
               {/* Affichage des résultats du calcul */}
               {calculs && (
-                <div className="mt-6 pt-6 border-t border-primary/20">
+                <div className="mt-6 pt-6 border-t border-gray-200">
                   {/* Résultats pour recours contre refus de visa */}
                   {calculs.type === 'contentieux_visa' && (
                     <div className="space-y-4">
@@ -2877,7 +2883,7 @@ export default function CalculateurPage() {
 
                       {/* Timeline */}
                       {calculs.timeline && calculs.timeline.length > 0 && (
-                        <div className="bg-white rounded-lg p-4 border-2 border-primary/20">
+                        <div className="bg-white rounded-lg p-4 border border-gray-200">
                           <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                             <span>📅</span>
                             <span>Timeline des délais</span>
@@ -3631,9 +3637,9 @@ export default function CalculateurPage() {
 
           {/* Colonne 3 : Explications (à l'extrémité droite) */}
           <div className="w-full lg:w-auto lg:flex-shrink-0 lg:self-start">
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-primary/20 lg:sticky lg:top-24 lg:w-80">
+            <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all lg:sticky lg:top-24 lg:w-80">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
                   <span className="text-xl">ℹ️</span>
                 </div>
                 <h2 className="text-xl font-bold text-foreground">Explications</h2>
@@ -3728,7 +3734,7 @@ export default function CalculateurPage() {
 
               {formData.typeTitre && infosTitres[formData.typeTitre] && (
                 <div className="space-y-4">
-                  <div className="bg-primary/5 rounded-lg p-4 border border-primary/20">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                     <h3 className="font-semibold mb-2 text-primary">Description</h3>
                     <p className="text-sm text-foreground">
                       {infosTitres[formData.typeTitre].description}

@@ -261,7 +261,7 @@ export default function AdminDossierDetailPage() {
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Éditer les étapes du dossier</h2>
                 <p className="text-xs text-gray-500 mt-1">
-                  Ces étapes sont internes ADA Pappers et servent à suivre l&apos;avancement du dossier.
+                  Ces étapes sont internes Ada Papers et servent à suivre l&apos;avancement du dossier.
                 </p>
               </div>
               <button

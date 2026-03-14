@@ -1,10 +1,19 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { forumAPI } from '@/lib/api';
+import {
+  LayoutDashboard,
+  FolderOpen,
+  FileText,
+  Calendar,
+  MessageSquare,
+  Bell,
+  Calculator,
+  User,
+} from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -14,53 +23,25 @@ interface SidebarProps {
 interface MenuItem {
   href: string;
   label: string;
-  icon: string;
+  icon: React.ComponentType<{ className?: string }>;
   roles?: string[];
 }
 
 const clientMenuItems: MenuItem[] = [
-  { href: '/client', label: 'Accueil', icon: '🏠' },
-  { href: '/client/dossiers', label: 'Mes Dossiers', icon: '📁' },
-  { href: '/client/documents', label: 'Mes Documents', icon: '📄' },
-  { href: '/client/rendez-vous', label: 'Mes Rendez-vous', icon: '📅' },
-  { href: '/client/messages', label: 'Messagerie', icon: '💬' },
-  { href: '/client/notifications', label: 'Notifications', icon: '🔔' },
-  { href: '/forum', label: 'Forum', icon: '🗣️' },
-  { href: '/calculateur', label: 'Calculateur', icon: '🧮' },
-  { href: '/client/compte', label: 'Mon Compte', icon: '👤' },
-];
-
-const adminMenuItems: MenuItem[] = [
-  { href: '/admin', label: 'Accueil', icon: '🏠' },
-  { href: '/admin/utilisateurs', label: 'Utilisateurs', icon: '👥' },
-  { href: '/admin/dossiers', label: 'Mes Dossiers', icon: '📁' },
-  { href: '/admin/documents', label: 'Documents', icon: '📄' },
-  { href: '/admin/rendez-vous', label: 'Rendez-vous', icon: '📅' },
-  { href: '/admin/creneaux', label: 'Créneaux', icon: '⏰' },
-  { href: '/admin/messages', label: 'Messagerie', icon: '💬' },
-  { href: '/admin/notifications', label: 'Notifications', icon: '🔔' },
-  { href: '/admin/temoignages', label: 'Témoignages', icon: '⭐' },
-  { href: '/admin/logs', label: 'Logs', icon: '📋' },
-  { href: '/forum', label: 'Forum', icon: '🗣️' },
-  { href: '/admin/compte', label: 'Mon Compte', icon: '👤' },
+  { href: '/client', label: 'Tableau de bord', icon: LayoutDashboard },
+  { href: '/client/dossiers', label: 'Mes dossiers', icon: FolderOpen },
+  { href: '/client/documents', label: 'Documents', icon: FileText },
+  { href: '/client/rendez-vous', label: 'Rendez-vous', icon: Calendar },
+  { href: '/client/messages', label: 'Messages', icon: MessageSquare },
+  { href: '/client/notifications', label: 'Notifications', icon: Bell },
+  { href: '/forum', label: 'Forum', icon: MessageSquare },
+  { href: '/calculateur', label: 'Calculateur', icon: Calculator },
+  { href: '/client/compte', label: 'Mon compte', icon: User },
 ];
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const { data: session } = useSession();
   const pathname = usePathname();
   const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
-  // Déterminer le rôle
-  const userRole = (session?.user as any)?.role || 'client';
-  const isAdmin = userRole === 'admin' || userRole === 'superadmin';
-  
-  // Sélectionner les items de menu selon le rôle
-  const menuItems = isAdmin ? adminMenuItems : clientMenuItems;
-
-  // Filtrer les items selon les permissions
-  const filteredMenuItems = menuItems.filter(item => {
-    if (!item.roles) return true;
-    return item.roles.includes(userRole);
-  });
 
   const isActive = (href: string) => {
     if (href === '/client' || href === '/admin') {
@@ -86,60 +67,60 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Overlay pour mobile */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={onClose}
+          aria-hidden="true"
         />
       )}
-
-      {/* Sidebar — même design que partenaire */}
       <aside
         className={`
           w-64 bg-white border-r border-gray-200 h-screen flex flex-col
-          fixed top-0 left-0 z-50
+          fixed top-0 left-0 z-30
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:translate-x-0 lg:static lg:z-auto
+          lg:translate-x-0
         `}
       >
-        {/* Bande logo alignée avec le header (même hauteur h-16) */}
         <div className="h-16 shrink-0 flex items-center justify-between px-4 border-b border-gray-200">
           <div className="flex items-center min-w-0">
             <Link
               href="/"
               className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg tracking-tight"
             >
-              ADA Pappers
+              Ada Papers
             </Link>
-            <span className="ml-2 text-[10px] text-gray-500 whitespace-nowrap">Espace client</span>
+            <span className="hidden md:inline ml-2 text-[10px] text-gray-500">Espace client</span>
           </div>
-          <button
-            onClick={onClose}
-            className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors shrink-0"
-            aria-label="Fermer le menu"
-          >
-            <span className="text-2xl">×</span>
-          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors shrink-0"
+              aria-label="Fermer le menu"
+            >
+              <span className="text-2xl">×</span>
+            </button>
+          )}
         </div>
 
         {/* Navigation */}
         <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
-          {filteredMenuItems.map((item) => {
+          {clientMenuItems.map((item) => {
+            const Icon = item.icon;
             const active = isActive(item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => {
-                  if (window.innerWidth < 1024) onClose();
+                  if (typeof window !== 'undefined' && window.innerWidth < 1024 && onClose) onClose();
                 }}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   active ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                <span className="text-xl">{item.icon}</span>
+                <Icon className="w-5 h-5" />
                 <span className="flex items-center gap-1">
                   {item.label}
                   {item.href === '/forum' && forumUnreadCount > 0 && (

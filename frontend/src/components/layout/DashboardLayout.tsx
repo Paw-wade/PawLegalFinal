@@ -60,7 +60,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
       )}
 
       {/* Contenu principal */}
-      <div className={`flex-1 flex flex-col ${(showAdminSidebar || showPartenaireSidebar) ? 'ml-0 lg:ml-64' : ''} transition-all duration-300 min-w-0`}>
+      <div className={`flex-1 flex flex-col ${(showClientSidebar || showAdminSidebar || showPartenaireSidebar) ? 'ml-0 lg:ml-64' : ''} transition-all duration-300 min-w-0`}>
         {/* Header simplifié (sans navigation) */}
         <Header 
           variant={variant} 

@@ -18,7 +18,7 @@ export default function PolitiqueConfidentialitePage() {
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <Link href="/" className="text-2xl font-bold text-primary">ADA Pappers</Link>
+            <Link href="/" className="text-2xl font-bold text-primary">Ada Papers</Link>
             <nav className="hidden md:flex items-center gap-6">
               <Link href="/" className="hover:text-primary">Accueil</Link>
               <Link href="/services" className="hover:text-primary">Services</Link>
@@ -77,7 +77,7 @@ export default function PolitiqueConfidentialitePage() {
             <section>
               <h2 className="text-2xl font-semibold mb-4 text-primary">6. Contact</h2>
               <p className="text-muted-foreground">
-                Pour toute question concernant vos données personnelles, contactez-nous à : contact@adapappers.fr
+                Pour toute question concernant vos données personnelles, contactez-nous à : contact@adapapers.fr
               </p>
             </section>
           </div>
