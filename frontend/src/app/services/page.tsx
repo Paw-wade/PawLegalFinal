@@ -82,7 +82,7 @@ export default function ServicesPage() {
         {/* Cartes de services */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16">
           {services.map((service, index) => {
-            const colors = getColorClasses(service.color);
+            const colors = getColorClasses(service.color ?? 'primary');
             return (
               <div
                 key={index}
