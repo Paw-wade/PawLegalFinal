@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import { Scale, HeartHandshake, LayoutDashboard, FileCheck } from 'lucide-react';
 
@@ -26,14 +28,14 @@ export const servicesConfig: ServiceConfig[] = [
   {
     title: 'Portail titre de séjour',
     description:
-      'Plateforme complète de suivi et de gestion de votre titre de séjour, pour anticiper les échéances et sécuriser vos démarches.',
+      'Plateforme complète de suivi et de gestion de votre titre de séjour.',
     icon: LayoutDashboard,
     color: 'green',
   },
   {
     title: 'Assistant démarches',
     description:
-      'Un accompagnement pas-à-pas pour préparer vos demandes de titres de séjour et de visas, avec une vision claire de chaque étape.',
+      'Un accompagnement pas-à-pas pour préparer vos demandes.',
     icon: FileCheck,
     color: 'purple',
   },
