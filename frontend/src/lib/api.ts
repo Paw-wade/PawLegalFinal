@@ -901,6 +901,19 @@ export const documentsAPI = {
     api.delete(`/user/documents/${id}`),
 };
 
+export const collaborativeDraftsAPI = {
+  getDossierDrafts: (dossierId: string) =>
+    api.get(`/dossiers/${dossierId}/drafts`),
+  createDraft: (dossierId: string, data: { title: string; content?: any }) =>
+    api.post(`/dossiers/${dossierId}/drafts`, data),
+  updateDraft: (draftId: string, data: { title?: string; content?: any }) =>
+    api.patch(`/drafts/${draftId}`, data),
+  updatePermissions: (draftId: string, data: { visibleToAdmins?: boolean; excludedAdminIds?: string[]; partnerAccess?: { partner: string; canEdit: boolean }[] }) =>
+    api.patch(`/drafts/${draftId}/permissions`, data),
+  archiveDraft: (draftId: string) =>
+    api.delete(`/drafts/${draftId}`),
+};
+
 // Médias publics (carrousel, etc.)
 export const mediaAPI = {
   // Upload d'un média pour le carrousel du hero (admin)

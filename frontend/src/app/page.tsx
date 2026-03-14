@@ -10,6 +10,7 @@ import { temoignagesAPI, cmsAPI } from '@/lib/api';
 import { ReservationWidget } from '@/components/ReservationWidget';
 import { ReservationBadge } from '@/components/ReservationBadge';
 import { useCmsText } from '@/lib/contentClient';
+import { servicesConfig } from '@/data/servicesConfig';
 
 // Composant Button simplifié temporairement
 function Button({ 
@@ -108,6 +109,8 @@ export default function HomePage() {
   const [isVisible, setIsVisible] = useState<{ [key: string]: boolean }>({});
   const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [hoveredLimiteIndex, setHoveredLimiteIndex] = useState<number | null>(0);
+  const [hoveredPlateformeIndex, setHoveredPlateformeIndex] = useState<number | null>(0);
   const [isWidgetOpen, setIsWidgetOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('reservationWidgetOpen');
@@ -275,6 +278,10 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [heroSlides.length]);
 
+  // Données structurées pour la section "Solutions" (thèmes à gauche / détail à droite)
+  const solutions = servicesConfig;
+  const [selectedSolutionIndex, setSelectedSolutionIndex] = useState(0);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header Professionnel */}
@@ -435,170 +442,257 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Séparateur visuel hero / contenu */}
-      <div className="h-px bg-gradient-to-r from-transparent via-orange-200/50 to-transparent" />
-
-      {/* Section : CE QUE NOUS FAISONS */}
+      {/* Section Services (cartes) – thèmes à gauche / détail à droite */}
       <section 
-        id="services"
+        id="services-section"
         data-animate
         className={`py-24 bg-white transition-all duration-1000 ${
-          isVisible['services'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+          isVisible['services-section'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
         }`}
       >
         <div className="container mx-auto px-4">
           <div 
-            className="text-center mb-20"
+            className="max-w-6xl mx-auto"
             data-animate-item
-            data-animate-id="services-title"
+            data-animate-id="services-section-title"
           >
-            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
-              Nos services
-            </span>
-            <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900 transition-all duration-700 ${
-              isVisible['services-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            <div className={`mb-12 transition-all duration-700 ${
+              isVisible['services-section-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
-              CE QUE NOUS FAISONS
-            </h2>
-            <p className={`text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
-              isVisible['services-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}>
-              Nos services d&apos;accompagnement administratif pour vos démarches de titres de séjour et visas
-            </p>
-          </div>
-          <div className="max-w-4xl mx-auto">
-            <div className="space-y-4">
-              {[
-                {
-                  title: "Accompagnement administratif pour le dépôt et le renouvellement de titres de séjour",
-                  details: "Nous vous accompagnons dans toutes les étapes de votre demande de titre de séjour, qu'il s'agisse d'une première demande ou d'un renouvellement. Notre équipe vérifie la complétude de votre dossier, vous guide dans la préparation des documents nécessaires et vous assiste lors du dépôt de votre demande auprès de la préfecture compétente. Nous assurons également le suivi de votre dossier jusqu'à l'obtention de votre titre de séjour."
-                },
-                {
-                  title: "Assistance administrative pour le dépôt de demandes de visa",
-                  details: "Notre service d'assistance vous aide à préparer et déposer votre demande de visa. Nous vous informons sur les différents types de visas disponibles selon votre situation, vérifions que vous réunissez toutes les conditions requises, et vous accompagnons dans la constitution de votre dossier. Nous pouvons également vous assister lors du dépôt de votre demande au consulat ou à l'ambassade compétente."
-                },
-                {
-                  title: "Mise à disposition d'informations générales et publiques sur les démarches administratives liées aux titres de séjour et aux visas",
-                  details: "Notre plateforme met à votre disposition un ensemble d'informations actualisées sur les différentes démarches administratives liées aux titres de séjour et aux visas. Vous trouverez des guides détaillés, des fiches pratiques, et des réponses aux questions fréquentes. Ces informations sont régulièrement mises à jour pour refléter les dernières évolutions réglementaires."
-                },
-                {
-                  title: "Vérification de la liste des pièces exigées par l'administration",
-                  details: "Avant de constituer votre dossier, nous vérifions avec vous la liste complète des pièces exigées par l'administration selon votre situation. Cette vérification permet d'éviter les oublis et les retards dans le traitement de votre demande. Nous vous indiquons également les documents qui doivent être traduits, légalisés ou certifiés conformes."
-                },
-                {
-                  title: "Organisation et vérification de la complétude administrative du dossier",
-                  details: "Nous organisons et vérifions méthodiquement votre dossier pour nous assurer qu'il est complet et conforme aux exigences de l'administration. Cette vérification comprend l'ordre des documents, leur format, leur validité, et leur conformité aux normes requises. Un dossier bien organisé et complet facilite le traitement de votre demande par l'administration."
-                },
-                {
-                  title: "Dépôt du dossier administratif auprès de l'administration, sur la base d'un mandat écrit",
-                  details: "Sur la base d'un mandat écrit que vous nous confiez, nous pouvons déposer votre dossier administratif auprès de l'administration compétente (préfecture, consulat, etc.). Ce service vous permet de gagner du temps et de vous assurer que votre dossier est déposé dans les délais requis. Le mandat écrit précise l'étendue de notre mission et vos droits."
-                },
-                {
-                  title: "Suivi administratif de la demande",
-                  details: "Une fois votre dossier déposé, nous assurons un suivi régulier de votre demande auprès de l'administration. Nous vous tenons informé de l'avancement de votre dossier, des éventuelles demandes de compléments, et des décisions prises. Ce suivi vous permet de rester informé à chaque étape de la procédure administrative."
-                },
-                {
-                  title: "Aide matérielle à la constitution d'un dossier de demande d'aide juridictionnelle, le cas échéant",
-                  details: "Si vous êtes éligible à l'aide juridictionnelle, nous vous assistons dans la constitution de votre dossier de demande. Nous vous aidons à remplir les formulaires nécessaires, à rassembler les justificatifs de vos ressources, et à constituer un dossier complet. Cette aide vous permet de bénéficier d'une prise en charge partielle ou totale de vos frais juridiques."
-                },
-                {
-                  title: "Aide à la rédaction formelle de courriers",
-                  details: "Nous vous assistons dans la rédaction de vos courriers administratifs (lettres de motivation, recours gracieux, demandes de régularisation, etc.). Nous vous aidons à structurer vos courriers, à utiliser le vocabulaire administratif approprié, et à mettre en avant les éléments pertinents de votre situation. Cette assistance vous permet de communiquer efficacement avec l'administration."
-                }
-              ].map((item, index) => (
-                <div
-                  key={index}
-                  data-animate-item
-                  data-animate-id={`service-${index}`}
-                  className={`transition-all duration-700 ${
-                    isVisible[`service-${index}`] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                  style={{ transitionDelay: `${index * 50}ms` }}
-                >
-                  <ExpandableItem
-                    title={item.title}
-                    details={item.details}
-                    icon="✓"
-                    iconColor="text-primary"
-                    borderColor="border-primary/20"
-                  />
-                </div>
-              ))}
+              <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-3">
+                Solutions
+              </span>
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-3 text-gray-900 leading-tight">
+                Des solutions administratives structurées pour vos démarches
+              </h2>
+              <p className="text-base md:text-lg text-gray-600 max-w-3xl leading-relaxed">
+                Les thèmes sont listés à gauche, le détail de la solution sélectionnée apparaît à droite pour une
+                lecture confortable.
+              </p>
+            </div>
+
+            <div className="grid gap-8 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-start">
+              {/* Thèmes (gauche) */}
+              <div className="space-y-2 border border-gray-200 rounded-xl bg-gray-50/60 p-2">
+                {solutions.map((solution, index) => (
+                  <button
+                    key={solution.titre}
+                    type="button"
+                    onClick={() => setSelectedSolutionIndex(index)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                      selectedSolutionIndex === index
+                        ? 'bg-white border border-orange-400 text-orange-700 font-semibold shadow-sm'
+                        : 'bg-transparent border border-transparent text-gray-700 hover:bg-white hover:border-gray-200'
+                    }`}
+                  >
+                    {solution.titre}
+                  </button>
+                ))}
+              </div>
+
+              {/* Détail (droite) */}
+              <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 md:p-8">
+                {(() => {
+                  const current = solutions[selectedSolutionIndex] || solutions[0];
+                  return (
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-2xl font-semibold text-gray-900 mb-1">
+                          {current.titre}
+                        </h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                          {current.description}
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2 text-sm text-gray-700">
+                        {current.duree && (
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+                              Durée
+                            </p>
+                            <p className="font-medium text-gray-900">
+                              {current.duree}
+                            </p>
+                          </div>
+                        )}
+                        {current.prix && (
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+                              Tarif
+                            </p>
+                            <p className="font-medium text-gray-900">
+                              {current.prix}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {current.points?.length > 0 && (
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">
+                            En pratique
+                          </p>
+                          <ul className="list-disc pl-5 space-y-1.5 text-sm text-gray-700">
+                            {current.points.map((point) => (
+                              <li key={point} className="leading-relaxed">
+                                {point}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <div className="pt-4 border-t border-gray-200 flex flex-wrap gap-3">
+                        {selectedSolutionIndex === 0 || selectedSolutionIndex === 2 ? (
+                          <Link href="/auth/signup">
+                            <Button size="lg" className="min-w-[180px]">
+                              Créer mon compte
+                            </Button>
+                          </Link>
+                        ) : selectedSolutionIndex === 3 ? (
+                          <Link href="/calculateur">
+                            <Button size="lg" className="min-w-[200px]">
+                              Accéder au calculateur
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Link href="/contact">
+                            <Button
+                              variant="outline"
+                              size="lg"
+                              className="min-w-[200px]"
+                            >
+                              Échanger sur mon dossier
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         </div>
       </section>
-
+      
       {/* Section : CE QUE NOUS NE FAISONS PAS */}
       <section 
         id="limites"
         data-animate
-        className={`py-24 bg-gray-50/80 transition-all duration-1000 ${
+        className={`py-16 bg-gray-50/80 transition-all duration-1000 ${
           isVisible['limites'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
         }`}
       >
         <div className="container mx-auto px-4">
           <div 
-            className="text-center mb-20"
+            className="max-w-5xl mx-auto"
             data-animate-item
             data-animate-id="limites-title"
           >
-            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-4">
-              Périmètre
-            </span>
-            <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900 transition-all duration-700 ${
+            <div className={`mb-8 text-center transition-all duration-700 ${
               isVisible['limites-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
-              CE QUE NOUS NE FAISONS PAS
-            </h2>
-            <p className={`text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
-              isVisible['limites-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}>
-              Nos limites et le périmètre de nos services
-            </p>
-          </div>
-          <div className="max-w-4xl mx-auto">
-            <div className="space-y-4">
-              {[
-                {
-                  title: "Nous ne nous représentons pas les utilisateurs en qualité d'avocats",
-                  details: "Notre plateforme fournit des services d'assistance administrative et de facilitation, mais nous ne sommes pas un cabinet d'avocats. Nous ne pouvons pas vous représenter en tant qu'avocat, ni exercer les prérogatives réservées aux avocats. Pour toute représentation juridique, vous devez faire appel à un avocat inscrit au barreau."
-                },
-                {
-                  title: "Nous ne représentons pas les utilisateurs devant les juridictions",
-                  details: "Nous n'intervenons pas dans les procédures judiciaires. Si votre dossier nécessite une représentation devant un tribunal administratif, un tribunal judiciaire, ou toute autre juridiction, vous devez obligatoirement faire appel à un avocat. Nous pouvons cependant vous aider à trouver un avocat compétent dans votre région."
-                },
-                {
-                  title: "Nous ne fournissons pas de conseil juridique personnalisé",
-                  details: "Les informations que nous mettons à disposition sont de nature générale et ne constituent pas un conseil juridique personnalisé adapté à votre situation spécifique. Pour obtenir un conseil juridique personnalisé, vous devez consulter un avocat qui pourra analyser votre situation particulière et vous donner des conseils adaptés à votre cas."
-                },
-                {
-                  title: "Nous n'assurons aucune représentation légale",
-                  details: "Nous n'assurons pas de représentation légale devant les administrations ou les juridictions. Notre rôle se limite à l'assistance administrative, à la préparation des dossiers, et à la facilitation des démarches. Pour toute représentation légale, vous devez faire appel à un professionnel habilité (avocat, huissier de justice, etc.)."
-                },
-                {
-                  title: "Nous n'intervenons pas dans les procédures contentieuses",
-                  details: "Nous n'intervenons pas dans les procédures contentieuses, c'est-à-dire les procédures qui opposent l'administration à l'étranger devant une juridiction. Si votre demande a été refusée et que vous souhaitez contester cette décision, vous devez faire appel à un avocat spécialisé qui pourra vous représenter et défendre vos intérêts devant la juridiction compétente."
-                }
-              ].map((item, index) => (
-                <div
-                  key={index}
-                  data-animate-item
-                  data-animate-id={`limite-${index}`}
-                  className={`transition-all duration-700 ${
-                    isVisible[`limite-${index}`] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                  style={{ transitionDelay: `${index * 100}ms` }}
-                >
-                  <ExpandableItem
-                    title={item.title}
-                    details={item.details}
-                    icon="✗"
-                    iconColor="text-red-500"
-                    borderColor="border-red-200"
-                  />
-                </div>
-              ))}
+              <span className="inline-block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-4">
+                Périmètre
+              </span>
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900">
+                CE QUE NOUS NE FAISONS PAS
+              </h2>
+              <p className="text-base text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                Nos limites et le périmètre de nos services
+              </p>
+            </div>
+
+            {/* Modèle interactif : thèmes à gauche / détail au survol à droite (deux colonnes égales) */}
+            <div className="grid gap-6 md:grid-cols-2 items-start max-w-3xl mx-auto">
+              {/* Thèmes (gauche) */}
+              <div className="space-y-2.5">
+                {[
+                  "Pas de représentation en qualité d'avocat",
+                  "Pas de représentation devant les juridictions",
+                  "Pas de conseil juridique personnalisé",
+                  "Pas de représentation légale devant l'administration",
+                  "Pas d'intervention dans les procédures contentieuses",
+                ].map((label, index) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onMouseEnter={() => setHoveredLimiteIndex(index)}
+                    onFocus={() => setHoveredLimiteIndex(index)}
+                    className={`w-full flex items-start gap-2.5 rounded-lg px-3 py-1.5 text-sm text-left transition-colors ${
+                      hoveredLimiteIndex === index
+                        ? 'bg-white border border-red-200 shadow-sm'
+                        : 'bg-transparent border border-transparent hover:bg-white/60'
+                    }`}
+                  >
+                    <span className="mt-0.5 h-6 w-6 flex items-center justify-center rounded-full bg-red-50 text-red-500 text-xs font-semibold">
+                      {index + 1}
+                    </span>
+                    <p className="font-medium text-gray-800">{label}</p>
+                  </button>
+                ))}
+              </div>
+
+              {/* Détail (droite) – ne s'affiche que lorsque l'on survole un thème */}
+              <div className="text-sm text-gray-700">
+                {(() => {
+                  const items = [
+                    {
+                      title: "Nous ne nous représentons pas les utilisateurs en qualité d'avocats",
+                      details:
+                        "Notre plateforme fournit des services d'assistance administrative et de facilitation, mais nous ne sommes pas un cabinet d'avocats. Nous ne pouvons pas vous représenter en tant qu'avocat, ni exercer les prérogatives réservées aux avocats. Pour toute représentation juridique, vous devez faire appel à un avocat inscrit au barreau.",
+                    },
+                    {
+                      title: "Nous ne représentons pas les utilisateurs devant les juridictions",
+                      details:
+                        "Nous n'intervenons pas dans les procédures judiciaires. Si votre dossier nécessite une représentation devant un tribunal administratif, un tribunal judiciaire, ou toute autre juridiction, vous devez obligatoirement faire appel à un avocat. Nous pouvons cependant vous aider à trouver un avocat compétent dans votre région.",
+                    },
+                    {
+                      title: "Nous ne fournissons pas de conseil juridique personnalisé",
+                      details:
+                        "Les informations que nous mettons à disposition sont de nature générale et ne constituent pas un conseil juridique personnalisé adapté à votre situation spécifique. Pour obtenir un conseil juridique personnalisé, vous devez consulter un avocat qui pourra analyser votre situation particulière et vous donner des conseils adaptés à votre cas.",
+                    },
+                    {
+                      title: "Nous n'assurons aucune représentation légale",
+                      details:
+                        "Nous n'assurons pas de représentation légale devant les administrations ou les juridictions. Notre rôle se limite à l'assistance administrative, à la préparation des dossiers, et à la facilitation des démarches. Pour toute représentation légale, vous devez faire appel à un professionnel habilité (avocat, huissier de justice, etc.).",
+                    },
+                    {
+                      title: "Nous n'intervenons pas dans les procédures contentieuses",
+                      details:
+                        "Nous n'intervenons pas dans les procédures contentieuses, c'est-à-dire les procédures qui opposent l'administration à l'étranger devant une juridiction. Si votre demande a été refusée et que vous souhaitez contester cette décision, vous devez faire appel à un avocat spécialisé qui pourra vous représenter et défendre vos intérêts devant la juridiction compétente.",
+                    },
+                  ] as const;
+
+                  const index =
+                    hoveredLimiteIndex !== null && hoveredLimiteIndex >= 0 && hoveredLimiteIndex < items.length
+                      ? hoveredLimiteIndex
+                      : null;
+
+                  if (index === null) {
+                    return (
+                      <div className="rounded-lg border border-dashed border-gray-200 bg-white/60 p-4 text-gray-500 text-sm">
+                        Survolez un thème à gauche pour afficher le détail.
+                      </div>
+                    );
+                  }
+
+                  const item = items[index];
+
+                  return (
+                    <div className="rounded-lg border border-gray-200 bg-white/80 p-4">
+                      <h3 className="font-semibold text-gray-900 mb-2 text-sm md:text-base">
+                        {item.title}
+                      </h3>
+                      <p className="text-gray-700 leading-relaxed text-sm">
+                        {item.details}
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         </div>
@@ -608,147 +702,121 @@ export default function HomePage() {
       <section 
         id="plateforme"
         data-animate
-        className={`py-24 bg-white transition-all duration-1000 ${
+        className={`py-16 bg-white transition-all duration-1000 ${
           isVisible['plateforme'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
         }`}
       >
         <div className="container mx-auto px-4">
           <div 
-            className="text-center mb-20"
+            className="max-w-5xl mx-auto"
             data-animate-item
             data-animate-id="plateforme-title"
           >
-            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
-              La plateforme
-            </span>
-            <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900 transition-all duration-700 ${
+            <div className={`mb-8 text-center transition-all duration-700 ${
               isVisible['plateforme-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
-              À quoi sert la plateforme
-            </h2>
-            <p className={`text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
-              isVisible['plateforme-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}>
-              Des outils et services adaptés à vos besoins, que vous soyez professionnel ou particulier
-            </p>
-          </div>
-          
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-2xl p-8 shadow-lg border border-primary/10">
-              <div className="space-y-8">
-                {/* Pour les professionnels et organismes */}
-                <div
-                  data-animate-item
-                  data-animate-id="plateforme-pro"
-                  className={`transition-all duration-700 ${
-                    isVisible['plateforme-pro'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                >
-                  <h3 className="text-2xl font-bold mb-6 text-foreground">
-                    Pour les professionnels et organismes
-                  </h3>
-                  <div className="space-y-4">
-                    {[
-                      {
-                        title: "Mise à disposition d'un espace de suivi administratif des dossiers, transmis à un consulat, une association ou un avocat, à la demande de l'étranger",
-                        details: "Notre plateforme offre un espace dédié permettant aux professionnels (consulats, associations, avocats) de suivre l'état d'avancement des dossiers qui leur sont transmis par les étrangers. Cet espace sécurisé permet un suivi en temps réel, l'accès aux documents nécessaires, et une meilleure coordination entre tous les acteurs impliqués dans le processus administratif."
-                      },
-                      {
-                        title: "Mise à disposition d'un canal de communication sécurisé entre l'étranger et les acteurs concernés (consulat, avocat, association)",
-                        details: "Nous mettons à disposition un système de messagerie sécurisé permettant une communication fluide et confidentielle entre l'étranger et les professionnels qui l'accompagnent. Ce canal de communication permet d'échanger des documents, de poser des questions, de recevoir des mises à jour sur le dossier, tout en garantissant la confidentialité et la sécurité des données échangées."
-                      }
-                    ].map((item, index) => (
-                      <div
-                        key={index}
-                        data-animate-item
-                        data-animate-id={`plateforme-pro-item-${index}`}
-                        className={`transition-all duration-700 ${
-                          isVisible[`plateforme-pro-item-${index}`] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                        }`}
-                        style={{ transitionDelay: `${index * 100}ms` }}
-                      >
-                        <ExpandableItem
-                          title={item.title}
-                          details={item.details}
-                          icon="✓"
-                          iconColor="text-primary"
-                          borderColor="border-primary/20"
-                        />
+              <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
+                La plateforme
+              </span>
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900">
+                À quoi sert la plateforme
+              </h2>
+              <p className="text-base text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                Des outils et services adaptés à vos besoins, que vous soyez professionnel ou particulier
+              </p>
+            </div>
+
+            {/* Modèle interactif : types d'utilisateurs à gauche / détail au survol à droite (deux colonnes égales) */}
+            <div className="grid gap-6 md:grid-cols-2 items-start max-w-3xl mx-auto">
+              {/* Thèmes (gauche) */}
+              <div className="space-y-2.5">
+                {[
+                  "Pour les professionnels et organismes",
+                  "Pour les particuliers",
+                ].map((label, index) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onMouseEnter={() => setHoveredPlateformeIndex(index)}
+                    onFocus={() => setHoveredPlateformeIndex(index)}
+                    className={`w-full flex items-start gap-2.5 rounded-lg px-3 py-1.5 text-sm text-left transition-colors ${
+                      hoveredPlateformeIndex === index
+                        ? 'bg-white border border-orange-200 shadow-sm'
+                        : 'bg-transparent border border-transparent hover:bg-white/60'
+                    }`}
+                  >
+                    <span className="mt-0.5 h-6 w-6 flex items-center justify-center rounded-full bg-orange-50 text-orange-500 text-xs font-semibold">
+                      {index + 1}
+                    </span>
+                    <p className="font-medium text-gray-800">{label}</p>
+                  </button>
+                ))}
+              </div>
+
+              {/* Détail (droite) – ne s'affiche que lorsque l'on survole un thème */}
+              <div className="text-sm text-gray-700 space-y-3">
+                {(() => {
+                  const blocks = [
+                    {
+                      title: "Pour les professionnels et organismes",
+                      points: [
+                        "Mise à disposition d'un espace de suivi administratif des dossiers transmis à un consulat, une association ou un avocat, à la demande de l'étranger.",
+                        "Mise à disposition d'un canal de communication sécurisé entre l'étranger et les acteurs concernés (consulat, avocat, association) pour échanger des documents et des informations en toute confidentialité.",
+                      ],
+                    },
+                    {
+                      title: "Pour les particuliers",
+                      points: [
+                        "Déléguer les formalités de demande et de renouvellement de titres de séjour et de visas, avec préparation et dépôt complet du dossier.",
+                        "Accéder à des informations générales sur les différentes catégories de titres de séjour et leurs conditions.",
+                        "Suivre l'avancement de tous vos dossiers dans un espace personnel sécurisé.",
+                        "Utiliser un outil de calcul des délais applicables aux titres de séjour et aux visas.",
+                        "Accéder à un répertoire de professionnels du droit (avocats) spécialisés en droit des étrangers pour être orienté en cas de situation complexe ou contentieuse.",
+                      ],
+                    },
+                  ] as const;
+
+                  const index =
+                    hoveredPlateformeIndex !== null &&
+                    hoveredPlateformeIndex >= 0 &&
+                    hoveredPlateformeIndex < blocks.length
+                      ? hoveredPlateformeIndex
+                      : null;
+
+                  if (index === null) {
+                    return (
+                      <div className="rounded-lg border border-dashed border-gray-200 bg-white/60 p-4 text-gray-500 text-sm">
+                        Survolez un thème à gauche pour afficher le détail.
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    );
+                  }
 
-                {/* Séparateur */}
-                <div className="border-t border-primary/20"></div>
+                  const block = blocks[index];
 
-                {/* Pour les particuliers */}
-                <div
-                  data-animate-item
-                  data-animate-id="plateforme-part"
-                  className={`transition-all duration-700 ${
-                    isVisible['plateforme-part'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                >
-                  <h3 className="text-2xl font-bold mb-6 text-foreground">
-                    Pour les particuliers
-                  </h3>
-                  <div className="space-y-4">
-                    {[
-                      {
-                        title: "Déléguer les formalités de demande et de renouvellement de titre de séjours et de demande de visa",
-                        details: "Vous pouvez nous confier la gestion complète de vos démarches administratives. Nous nous chargeons de préparer votre dossier, de vérifier sa complétude, et de le déposer auprès de l'administration compétente. Ce service vous permet de gagner du temps et de vous assurer que votre dossier est correctement constitué et déposé dans les délais."
-                      },
-                      {
-                        title: "Accéder à des informations générales sur les différentes catégories de titres de séjour",
-                        details: "Notre plateforme vous donne accès à une base d'informations complète sur les différents types de titres de séjour (travailleur, étudiant, famille, visiteur, etc.). Vous trouverez des explications détaillées sur les conditions d'obtention, les documents requis, les délais de traitement, et les droits associés à chaque type de titre de séjour."
-                      },
-                      {
-                        title: "Espace de suivi administratif complet des dossiers transmis",
-                        details: "Votre espace personnel vous permet de suivre en temps réel l'état d'avancement de tous vos dossiers. Vous pouvez consulter l'historique de vos démarches, télécharger vos documents, recevoir des notifications sur les évolutions de votre dossier, et accéder à toutes les informations relatives à vos demandes en cours."
-                      },
-                      {
-                        title: "Mise à disposition d'un outil de calcul des délais applicables aux titres de séjour et aux visas",
-                        details: "Notre calculateur de délais vous permet de connaître précisément les délais légaux applicables à votre situation. Il calcule automatiquement les délais de traitement, les dates limites de dépôt, les délais de recours, et vous alerte sur les échéances importantes. Cet outil vous aide à mieux planifier vos démarches et à respecter les délais légaux."
-                      },
-                      {
-                        title: "Mise à disposition d'un répertoire de professionnels du droit (avocats) spécialisé en droit des étrangers",
-                        details: "Notre répertoire vous permet de trouver facilement un avocat spécialisé en droit des étrangers près de chez vous. Chaque professionnel est présenté avec ses spécialités, son expérience, et ses coordonnées. En cas de situation complexe, de refus, ou de procédure contentieuse, nous vous recommandons de consulter un avocat. La plateforme facilite la mise en relation mais n'intervient pas juridiquement."
-                      }
-                    ].map((item, index) => (
-                      <div
-                        key={index}
-                        data-animate-item
-                        data-animate-id={`plateforme-part-item-${index}`}
-                        className={`transition-all duration-700 ${
-                          isVisible[`plateforme-part-item-${index}`] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                        }`}
-                        style={{ transitionDelay: `${index * 100}ms` }}
-                      >
-                        <ExpandableItem
-                          title={item.title}
-                          details={item.details}
-                          icon="✓"
-                          iconColor="text-primary"
-                          borderColor="border-primary/20"
-                        />
+                  return (
+                    <>
+                      <div className="rounded-lg border border-gray-200 bg-white/80 p-4">
+                        <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3">
+                          {block.title}
+                        </h3>
+                        <ul className="list-disc pl-5 space-y-2">
+                          {block.points.map((pt) => (
+                            <li key={pt}>{pt}</li>
+                          ))}
+                        </ul>
                       </div>
-                    ))}
-                  </div>
-                </div>
 
-                {/* Note importante */}
-                <div
-                  data-animate-item
-                  data-animate-id="plateforme-note"
-                  className={`mt-6 p-4 bg-primary/5 rounded-lg border border-primary/20 transition-all duration-700 ${
-                    isVisible['plateforme-note'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                >
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    <strong className="text-foreground">Note importante :</strong> La Plateforme facilite la mise en relation, elle n'intervient pas juridiquement. En cas de situation complexe, de refus, ou de procédure contentieuse, l'utilisateur est invité à consulter un avocat. La plateforme peut faciliter la mise en relation avec un professionnel du droit.
-                  </p>
-                </div>
+                      <div className="mt-1 p-3 bg-orange-50 rounded-lg border border-orange-100 text-xs md:text-sm">
+                        <p className="text-gray-700 leading-relaxed">
+                          <strong className="text-gray-900">Note importante :</strong> La plateforme facilite la
+                          mise en relation et le suivi administratif, mais n'intervient pas juridiquement. En cas de
+                          refus, de contestation ou de procédure contentieuse, l'utilisateur est invité à consulter
+                          un avocat. La plateforme peut faciliter la mise en relation avec un professionnel du droit.
+                        </p>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -803,9 +871,6 @@ export default function HomePage() {
                     animation: isVisible['temoignages'] ? `fadeIn 0.6s ease-out ${index * 150}ms both` : 'none'
                   }}
                 >
-                  {/* Icône de guillemets décorative */}
-                  <div className="absolute top-4 right-4 text-primary/20 text-6xl font-serif leading-none">"</div>
-                  
                   {/* Note avec étoiles améliorée */}
                   <div className="flex items-center gap-1 mb-4 relative z-10">
                     {[...Array(5)].map((_, i) => (
@@ -826,213 +891,19 @@ export default function HomePage() {
                   
                   {/* Informations client améliorées */}
                   <div className="flex items-center gap-3 pt-4 border-t border-primary/20 relative z-10">
-                    <div className="w-14 h-14 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-300 group-hover:scale-110">
-                      <span className="text-white font-bold text-lg">
-                        {temoignage.nom?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || 'C'}
-                      </span>
-                    </div>
                     <div className="flex-1">
-                      <p className="font-bold text-foreground text-sm font-semibold">{temoignage.nom || 'Client'}</p>
-                      <p className="text-xs text-primary/70 font-medium">{temoignage.role || 'Client'}</p>
+                      <p className="font-bold text-foreground text-sm font-semibold">
+                        {temoignage.nom || 'Client'}
+                      </p>
+                      <p className="text-xs text-primary/70 font-medium">
+                        {temoignage.role || 'Client'}
+                      </p>
                     </div>
                   </div>
-                  
-                  {/* Effet de brillance au hover */}
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                 </div>
               ))}
             </div>
           )}
-        </div>
-      </section>
-
-      {/* Section Services (cartes) */}
-      <section 
-        id="services-section"
-        data-animate
-        className={`py-24 bg-white transition-all duration-1000 ${
-          isVisible['services-section'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
-        }`}
-      >
-        <div className="container mx-auto px-4">
-          <div 
-            className="text-center mb-20"
-            data-animate-item
-            data-animate-id="services-section-title"
-          >
-            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
-              Solutions
-            </span>
-            <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900 leading-tight transition-all duration-700 ${
-              isVisible['services-section-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}>
-              Des solutions <span className="text-orange-500">administratives sur mesure</span> pour vos démarches
-            </h2>
-            <p className={`text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
-              isVisible['services-section-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}>
-              Accompagnement aux démarches administratives, outils de suivi et alertes intelligentes pour sécuriser vos titres de séjour et visas.
-            </p>
-          </div>
-
-          {/* Services côte à côte : ce que fait la plateforme */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto mb-16">
-            {[
-              {
-                titre: 'Assistant démarches titres de séjour',
-                description: 'Un accompagnement pas-à-pas pour préparer vos demandes de titres de séjour et de visas.',
-                duree: 'Selon votre dossier',
-                prix: 'Inclus dans la plateforme',
-                features: [
-                  'Checklist personnalisée des pièces à fournir',
-                  'Rappels d’échéances de dépôt',
-                  'Suivi de l’état de vos démarches',
-                  'Modèles de courriers administratifs',
-                ],
-                icon: '💼',
-                color: 'primary',
-                isPopular: true,
-              },
-              {
-                titre: 'Préparation et dépôt administratif (sur mandat)',
-                description: 'Nous préparons et déposons votre dossier administratif auprès de l’autorité compétente, sur la base d’un mandat écrit.',
-                duree: 'Selon le dossier',
-                prix: 'Sur devis',
-                features: [
-                  'Organisation et vérification de la complétude du dossier',
-                  'Dépôt administratif sur mandat (préfecture, consulat, etc.)',
-                  'Suivi administratif de la demande',
-                  'Retours structurés sur les demandes de compléments',
-                ],
-                icon: '🤝',
-                color: 'primary',
-              },
-              {
-                titre: 'Outils et informations administratives',
-                description: 'Une base d’informations claire et à jour sur les démarches administratives liées au séjour.',
-                duree: 'Accès en continu',
-                prix: 'Inclus dans la plateforme',
-                features: [
-                  'Guides pratiques sur les catégories de titres et visas',
-                  'Fiches explicatives sur les délais et procédures',
-                  'Foire aux questions administratives',
-                  'Référentiels publics toujours accessibles',
-                ],
-                icon: '📝',
-                color: 'primary',
-              },
-              {
-                titre: 'Portail de gestion du cycle de vie du titre de séjour',
-                description: 'Un espace dédié pour suivre, anticiper et renouveler vos titres de séjour.',
-                duree: 'Jusqu\'au terme de renouvellement',
-                prix: 'À partir de 25€',
-                features: [
-                  'Tableau de bord du titre de séjour',
-                  'Assistant de renouvellement de titre de séjour',
-                  'Tracker de titre de séjour',
-                  'Système d\'alertes et de rappel pour titres de séjour',
-                ],
-                icon: '🌐',
-                color: 'primary',
-                isPortal: true,
-              },
-            ].map((service, index) => {
-              const colors = {
-                bg: 'bg-primary/5',
-                text: 'text-primary',
-                border: 'border-primary/20',
-                hover: 'hover:border-primary',
-              };
-              return (
-                <div
-                  key={index}
-                  data-animate-item
-                  data-animate-id={`service-card-${index}`}
-                  className={`group relative bg-white rounded-3xl shadow-xl p-6 border-2 ${colors.border} ${colors.hover} transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 flex flex-col ${
-                    isVisible[`service-card-${index}`] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                  }`}
-                  style={{
-                    transitionDelay: `${index * 100}ms`,
-                    background: `linear-gradient(135deg, ${colors.bg} 0%, white 50%, white 100%)`,
-                  }}
-                >
-                  {/* Badge de popularité */}
-                  {service.isPopular && (
-                    <div className="absolute -top-4 right-6 bg-primary text-white px-4 py-1 rounded-full text-xs font-bold shadow-lg z-10">
-                      Le plus populaire
-                    </div>
-                  )}
-
-                  {/* En-tête de la carte */}
-                  <div className="mb-6">
-                    <div className="flex items-start gap-4 mb-4">
-                      <div className={`w-14 h-14 ${colors.bg} rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-all duration-300 shadow-md flex-shrink-0`}>
-                        {service.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className={`text-lg md:text-xl font-bold mb-2 ${colors.text} break-words`}>
-                          {service.titre}
-                        </h3>
-                      </div>
-              </div>
-                    <p className="text-muted-foreground text-sm leading-relaxed mb-4 break-words">
-                      {service.description}
-              </p>
-            </div>
-
-                  {/* Informations prix et durée */}
-                  <div className="flex flex-col gap-3 mb-6 pb-6 border-b-2 border-border/50">
-                    <div className="flex items-center justify-between bg-muted/50 px-3 py-2 rounded-lg">
-                      <span className="text-muted-foreground text-xs font-medium">⏱️ Durée:</span>
-                      <span className="font-bold text-foreground text-sm">{service.duree}</span>
-              </div>
-                    <div className="flex items-center justify-between bg-primary/10 px-3 py-2 rounded-lg">
-                      <span className="text-muted-foreground text-xs font-medium">Tarif:</span>
-                      <span className={`text-2xl font-bold ${colors.text}`}>{service.prix}</span>
-            </div>
-              </div>
-
-                  {/* Liste des fonctionnalités */}
-                  <ul className="space-y-3 mb-6 flex-1">
-                    {service.features.map((feature, i) => (
-                      <li key={i} className="flex items-start gap-3 group/item">
-                        <div className={`w-5 h-5 ${colors.bg} rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 group-hover/item:scale-110 transition-transform`}>
-                          <span className={`${colors.text} text-xs font-bold`}>✓</span>
-            </div>
-                        <span className="text-foreground text-sm leading-relaxed font-medium break-words">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* Bouton d'action */}
-                  <div className="pt-6 border-t-2 border-border/50 mt-auto">
-                    {service.isPortal ? (
-                      <Link href="/calculateur" className="block">
-                        <Button 
-                          className="w-full bg-gradient-to-r from-primary to-primary/80 text-white hover:shadow-xl hover:scale-105 transition-all duration-300" 
-                          size="lg"
-                        >
-                          <span className="mr-2">🚀</span>
-                          Accéder au Calculateur
-                        </Button>
-                      </Link>
-                    ) : (
-                      <Link href="/contact" className="block">
-                        <Button 
-                          variant="outline" 
-                          className={`w-full border-2 transition-all duration-300 hover:scale-105 ${colors.border} ${colors.text} group-hover:bg-primary group-hover:text-white group-hover:border-primary`} 
-                          size="lg"
-                        >
-                          <span className="mr-2">📧</span>
-                          Soumettre un dossier
-                        </Button>
-                      </Link>
-                    )}
-              </div>
-            </div>
-              );
-            })}
-          </div>
         </div>
       </section>
 

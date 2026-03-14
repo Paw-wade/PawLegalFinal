@@ -341,6 +341,15 @@ try {
   console.error('❌ Erreur lors du chargement de la route sms-history:', e.message);
 }
 
+// Brouillons collaboratifs liés aux dossiers
+try {
+  const collaborativeDraftsRouter = require('./routes/collaborativeDrafts');
+  app.use('/api', collaborativeDraftsRouter);
+  console.log('✅ Routes de brouillons collaboratifs enregistrées');
+} catch (error) {
+  console.error('❌ Erreur lors du chargement des routes de brouillons collaboratifs:', error.message);
+}
+
 // Middleware de gestion d'erreurs (doit être après les routes)
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);
@@ -490,3 +499,4 @@ app.get("/api-status", (req, res) => {
     database: "connectée"
   });
 });
+

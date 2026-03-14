@@ -2442,31 +2442,35 @@ export default function PartenaireDossiersPage() {
                             📋 Statut du dossier
                           </label>
                           <select
-                            value={dossier.statut}
-                            onChange={(e) => handleChangeStatut(dossier._id || dossier.id, e.target.value)}
+                            value={dossier.statut || ''}
+                            // Les partenaires ne peuvent pas modifier le statut du dossier
+                            onChange={() => {}}
                             className="text-xs px-2 py-1.5 rounded-md border border-gray-300 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors w-full"
-                            disabled={isLoading}
-                            title="État d'avancement du dossier dans le processus. Modifiable par le chef d'équipe ou superadmin uniquement."
+                            disabled={true}
+                            title="Le changement de statut est réservé aux administrateurs."
                           >
-                            <option value="recu">Reçu</option>
-                            <option value="accepte">Accepté</option>
-                            <option value="refuse">Refusé</option>
-                            <option value="en_attente_onboarding">En attente d'onboarding</option>
-                            <option value="en_cours_instruction">En cours d'instruction</option>
-                            <option value="pieces_manquantes">Pièces manquantes</option>
-                            <option value="dossier_complet">Dossier Complet</option>
-                            <option value="depose">Déposé</option>
-                            <option value="reception_confirmee">Réception confirmée</option>
-                            <option value="complement_demande">Complément demandé</option>
-                            <option value="decision_defavorable">Décision défavorable</option>
-                            <option value="communication_motifs">Communication des Motifs</option>
-                            <option value="recours_preparation">Recours en préparation</option>
-                            <option value="refere_mesures_utiles">Référé Mesures Utiles</option>
-                            <option value="refere_suspension_rep">Référé suspension et REP</option>
-                            <option value="gain_cause">Gain de cause</option>
-                            <option value="rejet">Rejet</option>
-                            <option value="decision_favorable">Décision favorable</option>
-                            <option value="autre">Autre (statut non prévu)</option>
+                            {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 ? (
+                              <>
+                                {!dossier.statut && (
+                                  <option value="">Sélectionner une étape</option>
+                                )}
+                                {dossier.etapesSupplementaires.map((etape: any, idx: number) => {
+                                  const value = etape.id || etape.label || String(idx);
+                                  return (
+                                    <option
+                                      key={value}
+                                      value={value}
+                                    >
+                                      {etape.label || etape.id || `Étape ${idx + 1}`}
+                                    </option>
+                                  );
+                                })}
+                              </>
+                            ) : (
+                              <option value="">
+                                Aucune étape définie (ouvrir &quot;Ajouter une étape&quot; dans les détails)
+                              </option>
+                            )}
                           </select>
                           {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
                             <p className="mt-1 text-[11px] text-muted-foreground">
@@ -2484,10 +2488,11 @@ export default function PartenaireDossiersPage() {
                           </label>
                           <select
                             value={dossier.assignedTo?._id || dossier.assignedTo || ''}
-                            onChange={(e) => handleAssignDossier(dossier._id || dossier.id, e.target.value)}
+                            // Les partenaires ne peuvent pas modifier l'assignation
+                            onChange={() => {}}
                             className="text-xs px-2 py-1.5 rounded-md border border-gray-300 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors w-full"
-                            disabled={isLoading}
-                            title="Assignation rapide d'un membre pour le suivi. Pour une équipe complète, utilisez la gestion d'équipe dans les détails."
+                            disabled={true}
+                            title="L'assignation des dossiers est réservée aux administrateurs."
                           >
                             <option value="">Non assigné</option>
                             {/* Les partenaires n'ont pas accès à la liste des membres de l'équipe */}

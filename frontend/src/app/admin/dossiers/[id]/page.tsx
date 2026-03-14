@@ -5,11 +5,12 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
+import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, userAPI } from '@/lib/api';
 import { SUGGESTED_STEPS_BY_CATEGORY, DossierCategorie } from '@/lib/dossierStepsConfig';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -524,31 +525,7 @@ export default function AdminDossierDetailPage() {
                   <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
                 )}
                 
-                {/* Barre de progression */}
-                {(() => {
-                  const progress = getDossierProgress(dossier.statut);
-                  return (
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-muted-foreground font-medium">Progression du dossier</span>
-                        <span className="font-bold text-foreground">{progress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                        <div 
-                          className={`h-3 rounded-full transition-all duration-500 ${
-                            progress >= 80 ? 'bg-green-500' : 
-                            progress >= 50 ? 'bg-blue-500' : 
-                            progress >= 25 ? 'bg-yellow-500' : 
-                            'bg-gray-400'
-                          }`}
-                          style={{width: `${Math.min(progress, 100)}%`, maxWidth: '100%'}}
-                        ></div>
-                      </div>
-                    </div>
-                  );
-                })()}
-                
-                {/* Timeline */}
+                {/* Barre de progression basée sur les étapes définies pour ce dossier */}
                 {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
                   <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
                     <div className="flex items-center justify-between mb-2">
@@ -1164,6 +1141,9 @@ export default function AdminDossierDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Documents en préparation (brouillons collaboratifs internes) */}
+        <DossierDraftsPanel dossierId={dossier._id || (dossier as any).id} />
 
         {/* Messages du dossier */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
