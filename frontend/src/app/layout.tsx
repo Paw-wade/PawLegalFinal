@@ -1,6 +1,12 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import SessionProvider from '@/providers/SessionProvider';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+};
 
 export const metadata: Metadata = {
   // Titre court affiché à côté du favicon dans l’onglet
@@ -8,7 +14,6 @@ export const metadata: Metadata = {
   // Description SEO (on peut garder la description longue)
   description:
     "Ada Papers - Service d'Accompagnement aux démarches administratives pour vos titres de séjour, visas et démarches liées au droit des étrangers et du travail.",
-  viewport: { width: 'device-width', initialScale: 1, maximumScale: 5 },
 };
 
 export default function RootLayout({

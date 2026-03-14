@@ -80,6 +80,7 @@ export default function ServicesPage() {
         {/* Cartes de services */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16">
           {servicesConfig.map((service, index) => {
+            const Icon = service.icon;
             const colors = getColorClasses(service.color);
             const isCalculator = index === 2; // Portail titre de séjour -> calculateur
             return (
@@ -88,7 +89,7 @@ export default function ServicesPage() {
                 className={`group relative bg-white rounded-2xl shadow-sm p-6 border ${colors.border} transition-all duration-200 hover:shadow-md hover:-translate-y-1 hover:border-primary/70 flex flex-col`}
               >
                 <div className={`mb-4 w-14 h-14 rounded-xl ${colors.bg} ${colors.text} flex items-center justify-center border ${colors.border}`}>
-                  {service.icon}
+                  <Icon className="w-8 h-8" />
                 </div>
                 <div className="mb-4">
                   <h3 className="text-lg md:text-xl font-semibold text-foreground mb-1 break-words hyphens-auto">

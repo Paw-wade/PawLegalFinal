@@ -244,9 +244,12 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
   const adminUsers = allUsers.filter((u) => u.role && ADMIN_ROLES.includes(u.role));
   const partnerUsers = allUsers.filter((u) => u.role === 'partenaire');
   const partnersFromDossier = dossierTransmittedTo.map((t) => t.partenaire).filter(Boolean);
-  const partnerOptions = Array.from(
-    new Map([...partnersFromDossier.map((p) => [p._id, p]), ...partnerUsers.map((p) => [p._id, { _id: p._id, firstName: p.firstName, lastName: p.lastName }])]).values()
-  );
+  type PartnerOption = { _id: string; firstName?: string; lastName?: string };
+  const partnerEntries: [string, PartnerOption][] = [
+    ...partnersFromDossier.map((p) => [p._id, p] as [string, PartnerOption]),
+    ...partnerUsers.map((p) => [p._id, { _id: p._id, firstName: p.firstName, lastName: p.lastName }] as [string, PartnerOption]),
+  ];
+  const partnerOptions = Array.from(new Map(partnerEntries).values());
 
   const getPartnerLabel = (partnerId: string) => {
     const fromAccess = selectedDraft?.partnerAccess?.find((pa) => {
