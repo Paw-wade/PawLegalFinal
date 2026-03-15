@@ -294,26 +294,99 @@ const titresSejourHierarchiques: MotifTitre[] = [
 ];
 
 // Types de décisions défavorables (hors visa)
+// Types de décisions défavorables (hors visa) – utilisé pour la logique "Demande de titre"
 const typesDecisions = [
   {
     value: 'absence_reponse',
     label: 'Je n’ai pas reçu de réponse à ma demande',
-    delai: 0, // Cas particulier : pas de délai simple à calculer, géré séparément dans la logique
   },
   {
     value: 'refus_titre',
     label: 'J’ai reçu un refus de titre de séjour',
-    delai: 30,
   },
   {
     value: 'refus_enregistrement',
     label: 'J’ai un refus d’enregistrement de ma demande',
-    delai: 15,
   },
   {
     value: 'oqtf',
     label: 'J’ai reçu une OQTF (Obligation de quitter le territoire)',
-    delai: 30,
+  },
+];
+
+// Types de titres pour la logique "Demande de titre de séjour et recours"
+const titresSejourDemande = [
+  {
+    value: 'talent_carte_bleue',
+    label: 'Talent carte bleue européenne',
+    delaiDirJours: 90,
+    article: 'R.421-23',
+  },
+  {
+    value: 'salarie_detache_ict',
+    label: 'Salarié détaché ICT',
+    delaiDirJours: 90,
+    article: 'R.421-43',
+  },
+  {
+    value: 'salarie_detache_mobile_ict',
+    label: 'Salarié détaché mobile ICT',
+    delaiDirJours: 90,
+    article: 'R.421-47',
+  },
+  {
+    value: 'stagiaire_mobile_ict',
+    label: 'Stagiaire mobile ICT',
+    delaiDirJours: 90,
+    article: 'R.421-54',
+  },
+  {
+    value: 'travailleur_saisonnier',
+    label: 'Travailleur saisonnier',
+    delaiDirJours: 90,
+    article: 'R.421-60',
+  },
+  {
+    value: 'etudiant',
+    label: 'Étudiant / étudiant mobilité',
+    delaiDirJours: 90,
+    article: 'R.422-5',
+  },
+  {
+    value: 'recherche_emploi',
+    label: 'Recherche d’emploi ou création d’entreprise',
+    delaiDirJours: 90,
+    article: 'R.422-12',
+  },
+  {
+    value: 'jeune_au_pair',
+    label: 'Jeune au pair',
+    delaiDirJours: 90,
+    article: 'R.426-14',
+  },
+  {
+    value: 'stagiaire_classique',
+    label: 'Stagiaire',
+    delaiDirJours: 90,
+    article: 'R.426-17',
+  },
+  {
+    value: 'talent_chercheur',
+    label: 'Talent-chercheur',
+    delaiDirJours: 60,
+    article: 'R.421-26',
+  },
+  {
+    value: 'talent_chercheur_mobilite',
+    label: 'Talent-chercheur-programme de mobilité',
+    delaiDirJours: 60,
+    article: 'R.421-26',
+  },
+  {
+    value: 'autres',
+    label: 'Autres titres de séjour',
+    delaiDirJours: 120, // 4 mois
+    article: 'R.432-2',
   },
 ];
 
@@ -495,7 +568,7 @@ export default function CalculateurPage() {
     dateDecision: getTodayDate(),
     natureDecision: '',
     dureeTitre: '',
-    situation: 'demande', // 'demande', 'contentieux_visa', 'contentieux_titre' - Par défaut, afficher le formulaire de dépôt
+    situation: 'contentieux_visa',
     dateAttributionTitre: '', // Date d'attribution du titre ou du visa
     dateExpirationTitre: '', // Date d'expiration du titre ou du visa
     dateFinValiditeTitreActuel: '', // Date de fin de validité du titre actuel ou du visa
@@ -516,7 +589,13 @@ export default function CalculateurPage() {
     dateDemandeMotifs: '', // Date de demande de communication des motifs
     dateReceptionMotifs: '', // Date de réception des motifs
     actionApresRapo: '', // 'saisir_tribunal' ou 'demander_motifs'
-    rapoDepose: null as boolean | null // null = pas encore demandé, true = oui, false = non
+    rapoDepose: null as boolean | null, // null = pas encore demandé, true = oui, false = non
+    // Champs pour "Demande de titre de séjour et recours"
+    typeTitreDemande: '',
+    dateFinValiditeTitreDemande: '',
+    natureDecisionDemande: '',
+    dateConfirmationDepotDemande: '',
+    dateNotificationRefusDemande: ''
   });
 
   const [dateErrors, setDateErrors] = useState<{ [key: string]: string }>({});
@@ -1011,61 +1090,7 @@ export default function CalculateurPage() {
       return;
     }
     
-    // Calcul pour recours concernant le titre de séjour
-    if (formData.situation === 'contentieux_titre' && formData.natureDecision) {
-      // Cas particulier : absence de réponse à la demande
-      if (formData.natureDecision === 'absence_reponse') {
-        setCalculs({
-          type: 'contentieux',
-          delai: null,
-          dateDecision: null,
-          dateLimite: null,
-          joursRestants: null,
-          typeRecours: getTypeRecours(formData.natureDecision),
-          urgence: false,
-          recoursDansDelais: null,
-          messagePersonnalise:
-            'Vous indiquez ne pas avoir reçu de réponse à votre demande de titre de séjour. ' +
-            'Les délais de recours et les actions possibles dépendent de la nature exacte de votre demande et de sa date de dépôt. ' +
-            'Nous vous recommandons de prendre contact avec un professionnel ou avec la plateforme pour une analyse personnalisée.',
-        });
-        return;
-      }
-
-      // Cas général : décision formelle avec date et délai légal chiffré
-      if (formData.dateDecision) {
-        const decision = typesDecisions.find((d) => d.value === formData.natureDecision);
-        if (decision) {
-          const dateDecision = new Date(formData.dateDecision);
-          const dateLimite = new Date(dateDecision);
-          dateLimite.setDate(dateLimite.getDate() + decision.delai);
-
-          const aujourdhui = new Date();
-          const joursRestants = Math.ceil(
-            (dateLimite.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24)
-          );
-
-          // Vérifier si le recours est introduit dans les délais
-          const recoursDansDelais = joursRestants > 0;
-
-          setCalculs({
-            type: 'contentieux',
-            delai: decision.delai,
-            dateDecision: dateDecision,
-            dateLimite: dateLimite,
-            joursRestants: joursRestants,
-            typeRecours: getTypeRecours(formData.natureDecision),
-            urgence: joursRestants <= 7,
-            recoursDansDelais: recoursDansDelais,
-            messagePersonnalise: recoursDansDelais
-              ? `✅ Vous avez encore ${joursRestants} jour(s) pour introduire votre recours.`
-              : `⚠️ Le délai de recours est dépassé de ${Math.abs(
-                  joursRestants
-                )} jour(s). Consultez un avocat rapidement.`,
-          });
-        }
-      }
-    } else if (formData.situation === 'demande') {
+    if (formData.situation === 'demande') {
       // Calcul détaillé pour renouvellement avec dateFinValiditeTitreActuel
       if (formData.typeDemande === 'renouvellement' && formData.dateFinValiditeTitreActuel && formData.typePrecisTitreSejour) {
         const resultatRenouvellement = calculerDelaisRenouvellement();
@@ -2161,15 +2186,18 @@ export default function CalculateurPage() {
                 <div className="space-y-2">
                   <Label className="text-base font-bold">Sélectionnez le type de calcul :</Label>
                   <div className="flex flex-nowrap gap-3 overflow-x-auto pb-2">
-                    {/* Badge Dépôt de titre de séjour */}
+                    {/* Badge Demande de titre de séjour et recours */}
                     <button
                       type="button"
-                      onClick={() => setFormData({ 
-                        ...formData, 
-                        situation: 'demande',
-                        natureDecision: '',
-                        dateDecision: ''
-                      })}
+                      onClick={() => {
+                        setFormData({
+                          ...formData,
+                          situation: 'demande',
+                          natureDecision: '',
+                          dateDecision: ''
+                        });
+                        setCalculs(null);
+                      }}
                       className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
                         formData.situation === 'demande'
                           ? 'bg-blue-600 text-white border-2 border-blue-600'
@@ -2177,30 +2205,7 @@ export default function CalculateurPage() {
                       }`}
                     >
                       <span className="text-lg">📄</span>
-                      <span>Dépôt de titre de séjour</span>
-                    </button>
-
-                    {/* Badge Recours concernant le titre de séjour */}
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ 
-                        ...formData, 
-                        situation: 'contentieux_titre',
-                        typeDemande: '',
-                        typeTitre: '',
-                        typeTitreAutre: '',
-                        motifTitreSejour: '',
-                        sousCategorieTitreSejour: '',
-                        typePrecisTitreSejour: ''
-                      })}
-                      className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
-                        formData.situation === 'contentieux_titre'
-                          ? 'bg-red-600 text-white border-2 border-red-600'
-                          : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 hover:border-gray-400'
-                      }`}
-                    >
-                      <span className="text-lg">⚖️</span>
-                      <span>Recours concernant le titre de séjour</span>
+                      <span>Demande de titre de séjour et recours</span>
                     </button>
 
                     {/* Badge Recours contre refus de visa */}
@@ -2242,231 +2247,17 @@ export default function CalculateurPage() {
                   </div>
                 </div>
 
-                {/* Champs pour Dépôt de titre de séjour */}
+                {/* Champs pour Demande de titre de séjour et recours */}
                 {formData.situation === 'demande' && (
                   <div className="space-y-3 pt-3 border-t">
-                    {/* Bouton de réinitialisation pour admins et partenaires */}
-                    {(isAdmin || isPartenaire) && (
-                      <div className="flex justify-end mb-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setFormData({
-                              typeTitre: '',
-                              typeTitreAutre: '',
-                              motifTitreSejour: '',
-                              sousCategorieTitreSejour: '',
-                              typePrecisTitreSejour: '',
-                              typeDemande: 'premiere',
-                              prefecture: '',
-                              dateDelivrance: getTodayDate(),
-                              dateExpiration: getTodayDate(),
-                              dateDecision: getTodayDate(),
-                              natureDecision: '',
-                              dureeTitre: '',
-                              situation: 'demande',
-                              dateAttributionTitre: '',
-                              dateExpirationTitre: '',
-                              dateFinValiditeTitreActuel: '',
-                              renouvellementDepose: null,
-                              confirmationDepotRenouvellement: null,
-                              dateConfirmationDepotRenouvellement: '',
-                              natureVisa: '',
-                              consulatDepot: '',
-                              dateConfirmationDepot: '',
-                              typeRefusVisa: '',
-                              dateNotificationRefus: '',
-                              dateDepotRapo: '',
-                              reponseRapoRecue: false,
-                              dateReponseRapo: '',
-                              demandeCommunicationMotifs: false,
-                              dateDemandeMotifs: '',
-                              dateReceptionMotifs: '',
-                              actionApresRapo: '',
-                              rapoDepose: null
-                            });
-                            setCalculs(null);
-                          }}
-                          className="text-xs"
-                        >
-                          🔄 Réinitialiser le formulaire
-                        </Button>
-                      </div>
-                    )}
-                    <div className="space-y-2">
-                      <Label htmlFor="typeDemande">Type de demande *</Label>
-                      <Select
-                        id="typeDemande"
-                        value={formData.typeDemande}
-                        onChange={(e) => setFormData({ ...formData, typeDemande: e.target.value })}
-                        required
-                      >
-                        <option value="">-- Sélectionner --</option>
-                        <option value="premiere">Première demande</option>
-                        <option value="renouvellement">Renouvellement</option>
-                      </Select>
+                    <div className="rounded-lg border-2 border-dashed border-blue-200 bg-blue-50/50 p-6 text-center">
+                      <p className="text-sm text-blue-800 font-medium">
+                        Formulaire demande de titre de séjour et recours — à venir.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Sélectionnez « Recours contre un refus de visa » pour calculer les délais de recours visa.
+                      </p>
                     </div>
-
-                    {/* Nouveau champ hiérarchisé pour le type de titre de séjour selon CESEDA */}
-                    <div className="space-y-4 bg-blue-50/50 rounded-lg p-4 border-2 border-blue-200">
-                      <Label htmlFor="motifTitreSejour">Type de titre de séjour demandé *</Label>
-                      
-                      {/* Si la sélection est complète, afficher uniquement le résumé */}
-                      {formData.typePrecisTitreSejour ? (
-                        <div className="p-3 bg-white rounded-md border border-blue-300">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
-                              <p className="text-xs font-semibold text-blue-800 mb-1">Sélection complète :</p>
-                              <p className="text-sm text-gray-700">
-                                {titresSejourHierarchiques
-                                  .find(m => m.value === formData.motifTitreSejour)?.label} → {' '}
-                                {titresSejourHierarchiques
-                                  .find(m => m.value === formData.motifTitreSejour)
-                                  ?.sousCategories.find(sc => sc.value === formData.sousCategorieTitreSejour)?.label} → {' '}
-                                {titresSejourHierarchiques
-                                  .find(m => m.value === formData.motifTitreSejour)
-                                  ?.sousCategories.find(sc => sc.value === formData.sousCategorieTitreSejour)
-                                  ?.types.find(t => t.value === formData.typePrecisTitreSejour)?.label}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFormData({ 
-                                  ...formData, 
-                                  motifTitreSejour: '',
-                                  sousCategorieTitreSejour: '',
-                                  typePrecisTitreSejour: ''
-                                });
-                              }}
-                              className="text-xs text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
-                            >
-                              Modifier
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-xs text-muted-foreground mb-3">
-                            Sélectionnez le motif de délivrance, puis la catégorie du titre de séjour, puis le type précis de titre de séjour.
-                          </p>
-                          
-                          {/* Niveau 1: Motif de délivrance */}
-                          <div className="space-y-2">
-                            <Label htmlFor="motifTitreSejour" className="text-sm font-semibold text-gray-700">
-                              1. Motif de délivrance du titre de séjour *
-                            </Label>
-                            <Select
-                              id="motifTitreSejour"
-                              value={formData.motifTitreSejour}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setFormData({ 
-                                  ...formData, 
-                                  motifTitreSejour: value,
-                                  sousCategorieTitreSejour: '', // Réinitialiser les niveaux inférieurs
-                                  typePrecisTitreSejour: ''
-                                });
-                              }}
-                              required
-                              className="bg-white"
-                            >
-                              <option value="">-- Sélectionner un motif --</option>
-                              {titresSejourHierarchiques.map((motif) => (
-                                <option key={motif.value} value={motif.value}>
-                                  {motif.label}
-                                </option>
-                              ))}
-                            </Select>
-                          </div>
-
-                          {/* Niveau 2: Catégorie du titre de séjour */}
-                          {formData.motifTitreSejour && (
-                            <div className="space-y-2">
-                              <Label htmlFor="sousCategorieTitreSejour" className="text-sm font-semibold text-gray-700">
-                                2. Catégorie du titre de séjour *
-                              </Label>
-                              <Select
-                                id="sousCategorieTitreSejour"
-                                value={formData.sousCategorieTitreSejour}
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  setFormData({ 
-                                    ...formData, 
-                                    sousCategorieTitreSejour: value,
-                                    typePrecisTitreSejour: '' // Réinitialiser le niveau inférieur
-                                  });
-                                }}
-                                required
-                                className="bg-white"
-                              >
-                                <option value="">-- Sélectionner une sous-catégorie --</option>
-                                {titresSejourHierarchiques
-                                  .find(m => m.value === formData.motifTitreSejour)
-                                  ?.sousCategories.map((sousCat) => (
-                                    <option key={sousCat.value} value={sousCat.value}>
-                                      {sousCat.label}
-                                    </option>
-                                  ))}
-                              </Select>
-                            </div>
-                          )}
-
-                          {/* Niveau 3: Type précis */}
-                          {formData.sousCategorieTitreSejour && (
-                            <div className="space-y-2">
-                              <Label htmlFor="typePrecisTitreSejour" className="text-sm font-semibold text-gray-700">
-                                3. Type précis de titre *
-                              </Label>
-                              <Select
-                                id="typePrecisTitreSejour"
-                                value={formData.typePrecisTitreSejour}
-                                onChange={(e) => {
-                                  setFormData({ 
-                                    ...formData, 
-                                    typePrecisTitreSejour: e.target.value
-                                  });
-                                }}
-                                required
-                                className="bg-white"
-                              >
-                                <option value="">-- Sélectionner un type précis --</option>
-                                {titresSejourHierarchiques
-                                  .find(m => m.value === formData.motifTitreSejour)
-                                  ?.sousCategories.find(sc => sc.value === formData.sousCategorieTitreSejour)
-                                  ?.types.map((type) => (
-                                    <option key={type.value} value={type.value}>
-                                      {type.label}
-                                    </option>
-                                  ))}
-                              </Select>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-
-                    {/* Champ conditionnel : Date de fin de validité du titre actuel ou du visa */}
-                    {formData.typePrecisTitreSejour && (
-                      <div className="space-y-2">
-                        <Label htmlFor="dateFinValiditeTitreActuel">
-                          {formData.typeDemande === 'premiere' 
-                            ? 'Date de fin de validité du visa *' 
-                            : 'Date de fin de validité du titre actuel *'}
-                        </Label>
-                        <Input
-                          id="dateFinValiditeTitreActuel"
-                          type="date"
-                          value={formData.dateFinValiditeTitreActuel}
-                          onChange={(e) => setFormData({ ...formData, dateFinValiditeTitreActuel: e.target.value })}
-                          required
-                          className={dateErrors.dateFinValiditeTitreActuel ? 'border-red-500' : ''}
-                        />
-                        {dateErrors.dateFinValiditeTitreActuel && (
-                          <p className="text-xs text-red-600 mt-1">{dateErrors.dateFinValiditeTitreActuel}</p>
-                        )}
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -2729,37 +2520,6 @@ export default function CalculateurPage() {
                   </div>
                 )}
 
-                {/* Champs pour Recours concernant le titre de séjour */}
-                {formData.situation === 'contentieux_titre' && (
-                  <div className="space-y-3 pt-3 border-t">
-                    <div className="space-y-2">
-                      <Label htmlFor="natureDecision_titre">Nature de la décision *</Label>
-                      <Select
-                        id="natureDecision_titre"
-                        value={formData.natureDecision}
-                        onChange={(e) => setFormData({ ...formData, natureDecision: e.target.value })}
-                        required
-                      >
-                        <option value="">-- Sélectionner --</option>
-                        {typesDecisions.filter(d => d.value !== 'refus_visa').map((decision) => (
-                          <option key={decision.value} value={decision.value}>{decision.label}</option>
-                        ))}
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="dateDecision_titre">Date de la décision *</Label>
-                      <Input
-                        id="dateDecision_titre"
-                        type="date"
-                        value={formData.dateDecision}
-                        onChange={(e) => setFormData({ ...formData, dateDecision: e.target.value })}
-                        required
-                      />
-                    </div>
-
-                  </div>
-                )}
               </form>
 
               {/* Affichage des résultats du calcul */}
@@ -3026,32 +2786,6 @@ export default function CalculateurPage() {
                           </ul>
                         </div>
                       )}
-                    </div>
-                  )}
-
-                  {calculs.type === 'contentieux' && calculs.messagePersonnalise && (
-                    <div className={`rounded-lg p-4 border-2 ${
-                      calculs.urgence 
-                        ? 'bg-red-50 border-red-300' 
-                        : calculs.recoursDansDelais 
-                        ? 'bg-orange-50 border-orange-300' 
-                        : 'bg-green-50 border-green-300'
-                    }`}>
-                      <div className="flex items-start gap-3">
-                        <span className="text-2xl">{calculs.urgence ? '⚠️' : calculs.recoursDansDelais ? '⏰' : '✅'}</span>
-                        <div className="flex-1">
-                          <h3 className="font-bold text-lg mb-2">
-                            {calculs.urgence ? 'URGENT' : 'Délai de recours'}
-                          </h3>
-                          <p className="text-sm mb-2">{calculs.messagePersonnalise}</p>
-                          <div className="text-xs space-y-1">
-                            <p><strong>Date de décision :</strong> {formatDateCourte(calculs.dateDecision)}</p>
-                            <p><strong>Date limite de recours :</strong> {formatDateCourte(calculs.dateLimite)}</p>
-                            <p><strong>Jours restants :</strong> <span className={getAlertColor(calculs.joursRestants).split(' ')[0]}>{calculs.joursRestants} jour(s)</span></p>
-                            <p><strong>Type de recours :</strong> {calculs.typeRecours}</p>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   )}
 
@@ -3680,53 +3414,6 @@ export default function CalculateurPage() {
                       <li>• Conservez tous les justificatifs de votre demande</li>
                       <li>• Consultez un avocat spécialisé si le délai est court</li>
                       <li>• Le recours gracieux peut être une première étape avant le recours contentieux</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-
-              {formData.situation === 'contentieux_titre' && (
-                <div className="space-y-4">
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                    <h3 className="font-semibold mb-2 text-blue-800">Délais de recours</h3>
-                    <p className="text-sm text-blue-700 mb-3">
-                      Les délais de recours varient selon le type de décision :
-                    </p>
-                    <ul className="space-y-2 text-sm text-blue-700">
-                      <li className="flex items-start gap-2">
-                        <span>•</span>
-                        <span><strong>Rejet CNDA :</strong> 1 mois</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span>•</span>
-                        <span><strong>Refus d'enregistrement :</strong> 15 jours</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span>•</span>
-                        <span><strong>Autres décisions :</strong> 30 jours</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                    <h3 className="font-semibold mb-2 text-purple-800">Procédures d'urgence</h3>
-                    <p className="text-sm text-purple-700 mb-2">
-                      En cas d'urgence, vous pouvez engager :
-                    </p>
-                    <ul className="space-y-1 text-sm text-purple-700">
-                      <li>• Référé suspension</li>
-                      <li>• Référé liberté</li>
-                      <li>• Référé mesures utiles</li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                    <h3 className="font-semibold mb-2 text-green-800">Conseils pratiques</h3>
-                    <ul className="space-y-2 text-sm text-green-700">
-                      <li>• Déposez votre recours le plus tôt possible</li>
-                      <li>• Conservez tous les justificatifs</li>
-                      <li>• Consultez un avocat spécialisé si le délai est court</li>
-                      <li>• En cas de délai dépassé, un recours en annulation peut encore être possible</li>
                     </ul>
                   </div>
                 </div>

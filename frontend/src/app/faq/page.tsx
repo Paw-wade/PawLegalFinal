@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { Search } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 
@@ -25,9 +26,16 @@ interface FAQSection {
   items: FAQItem[];
 }
 
+function matchQuery(text: string, query: string): boolean {
+  if (!query.trim()) return true;
+  const q = query.trim().toLowerCase();
+  return text.toLowerCase().includes(q);
+}
+
 export default function FAQPage() {
   const [activeSectionIndex, setActiveSectionIndex] = useState<number>(0);
   const [openItems, setOpenItems] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   const toggleItem = (itemId: string) => {
     const newOpenItems = new Set(openItems);
@@ -454,7 +462,19 @@ export default function FAQPage() {
       items: [
         {
           question: 'Qu\'est-ce qu\'une décision implicite de rejet et quel est son délai de survenance ?',
-          answer: 'Une décision implicite de rejet intervient lorsque l\'autorité administrative garde le silence pendant plus de quatre mois sur une demande de titre de séjour. Ceci est régi par les dispositions des articles R*432-1 et R*432-2 du code de l\'entrée et du séjour des étrangers et du droit d\'asile.'
+          answer: `La décision implicite de rejet est un mécanisme important pour éviter qu'une administration ne laisse un demandeur sans réponse indéfiniment. C'est fréquent dans les demandes de titre de séjour.
+
+Principe de la décision implicite de rejet : Lorsqu'une personne dépose une demande auprès de l'administration (par exemple une demande de titre de séjour auprès de la préfecture), celle-ci dispose d'un délai pour répondre (4 mois en principe pour la plupart des titres de séjour). Si l'administration ne répond pas dans ce délai, le silence vaut décision implicite de rejet. Dans le domaine des titres de séjour, le délai est en général de 4 mois après le dépôt d'un dossier complet. Cependant, il n'y a pas de lettre de refus, mais juridiquement on considère qu'une décision de refus existe.
+
+Cela ne signifie pas forcément que la demande est réellement rejetée. La décision implicite est une fiction juridique. Elle ne veut pas dire que la préfecture a examiné le dossier et décidé de refuser. Elle signifie seulement que le délai légal de réponse est dépassé. Dans la pratique, plusieurs situations peuvent expliquer ce silence :
+• le dossier est toujours en cours d'instruction
+• l'administration est en retard
+• il manque des documents
+• le service est saturé
+
+Il est donc possible que la préfecture réponde plus tard et accorde finalement le titre de séjour.
+
+Pourquoi ce mécanisme existe ? Sans cette règle, une personne pourrait rester bloquée pendant longtemps sans réponse. La décision implicite sert donc à ouvrir les voies de recours à l'intéressé afin d'éviter l'attente indéfinie. Autrement dit, c'est un outil de protection pour le demandeur. Ainsi, le silence de l'administration n'est pas une situation neutre : il produit une décision juridique qui permet au demandeur d'agir.`
         },
         {
           question: 'Pourquoi une décision de refus de carte de séjour doit-elle être motivée ?',
@@ -484,6 +504,22 @@ export default function FAQPage() {
     }
   ];
 
+  const filteredSections = useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q) return faqSections;
+    return faqSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter(
+          (item) => matchQuery(item.question, q) || matchQuery(item.answer, q)
+        ),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [searchQuery]);
+
+  const effectiveSectionIndex = Math.min(activeSectionIndex, Math.max(0, filteredSections.length - 1));
+  const currentSection = filteredSections[effectiveSectionIndex];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
       <Header variant="home" />
@@ -511,10 +547,39 @@ export default function FAQPage() {
 
       <main className="container mx-auto px-4 py-16">
           <div className="max-w-5xl mx-auto">
+          {/* Barre de recherche */}
+          <div className="max-w-3xl mx-auto mb-8">
+            <label htmlFor="faq-search" className="sr-only">
+              Rechercher par mot-clé dans la FAQ
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" aria-hidden />
+              <input
+                id="faq-search"
+                type="search"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setActiveSectionIndex(0);
+                }}
+                placeholder="Rechercher un terme (ex. titre de séjour, recours, délai, CIR…)"
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-white text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary shadow-sm"
+                aria-describedby={searchQuery.trim() && filteredSections.length === 0 ? 'faq-search-no-results' : undefined}
+              />
+            </div>
+            {searchQuery.trim() && (
+              <p id="faq-search-no-results" className="mt-2 text-sm text-muted-foreground">
+                {filteredSections.length === 0
+                  ? 'Aucun résultat pour ce terme. Essayez un autre mot-clé.'
+                  : `${filteredSections.reduce((acc, s) => acc + s.items.length, 0)} question(s) trouvée(s) dans ${filteredSections.length} thème(s).`}
+              </p>
+            )}
+          </div>
+
           <div className="grid gap-6 md:grid-cols-2 items-start max-w-3xl mx-auto">
             {/* Liste des thèmes de FAQ (gauche) */}
             <div className="space-y-2.5">
-              {faqSections.map((section, index) => (
+              {filteredSections.map((section, index) => (
                 <button
                   key={section.title}
                   type="button"
@@ -523,7 +588,7 @@ export default function FAQPage() {
                     setOpenItems(new Set());
                   }}
                   className={`w-full flex items-start gap-3 rounded-lg px-3 py-2 text-sm text-left transition-colors ${
-                    activeSectionIndex === index
+                    effectiveSectionIndex === index
                       ? 'bg-white border border-orange-300 shadow-sm'
                       : 'bg-transparent border border-transparent hover:bg-white/60'
                   }`}
@@ -538,60 +603,54 @@ export default function FAQPage() {
 
             {/* Détail de la section active (droite) */}
             <div className="space-y-3 text-sm text-gray-700">
-              {(() => {
-                const currentSection = faqSections[activeSectionIndex] || faqSections[0];
-                const sectionId = `section-${activeSectionIndex}`;
+              {!currentSection ? (
+                <div className="rounded-lg border border-dashed border-gray-200 bg-white/60 p-4 text-gray-500 text-sm">
+                  {filteredSections.length === 0
+                    ? 'Aucun thème ne correspond à votre recherche. Modifiez les termes ou effacez la recherche.'
+                    : 'Sélectionnez un thème à gauche pour afficher les questions correspondantes.'}
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-lg font-semibold text-foreground mb-2">
+                    {currentSection.title}
+                  </h2>
+                  <div className="space-y-3">
+                    {currentSection.items.map((item, itemIndex) => {
+                      const sectionId = `section-${effectiveSectionIndex}`;
+                      const itemId = `${sectionId}-item-${itemIndex}`;
+                      const isItemOpen = openItems.has(itemId);
 
-                if (!currentSection) {
-                  return (
-                    <div className="rounded-lg border border-dashed border-gray-200 bg-white/60 p-4 text-gray-500 text-sm">
-                      Sélectionnez un thème à gauche pour afficher les questions correspondantes.
-                    </div>
-                  );
-                }
-
-                return (
-                  <>
-                    <h2 className="text-lg font-semibold text-foreground mb-2">
-                      {currentSection.title}
-                    </h2>
-                    <div className="space-y-3">
-                      {currentSection.items.map((item, itemIndex) => {
-                        const itemId = `${sectionId}-item-${itemIndex}`;
-                        const isItemOpen = openItems.has(itemId);
-
-                        return (
-                          <div
-                            key={itemIndex}
-                            className="bg-white rounded-lg border border-border shadow-sm"
+                      return (
+                        <div
+                          key={itemIndex}
+                          className="bg-white rounded-lg border border-border shadow-sm"
+                        >
+                          <button
+                            onClick={() => toggleItem(itemId)}
+                            className="w-full flex items-start justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors rounded-lg"
                           >
-                            <button
-                              onClick={() => toggleItem(itemId)}
-                              className="w-full flex items-start justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors rounded-lg"
+                            <span className="font-semibold text-foreground pr-4 flex-1 text-sm">
+                              {item.question}
+                            </span>
+                            <span
+                              className={`text-primary text-lg flex-shrink-0 transform transition-transform ${
+                                isItemOpen ? 'rotate-180' : ''
+                              }`}
                             >
-                              <span className="font-semibold text-foreground pr-4 flex-1 text-sm">
-                                {item.question}
-                              </span>
-                              <span
-                                className={`text-primary text-lg flex-shrink-0 transform transition-transform ${
-                                  isItemOpen ? 'rotate-180' : ''
-                                }`}
-                              >
-                                ▼
-                              </span>
-                            </button>
-                            {isItemOpen && (
-                              <div className="px-4 pb-4 text-muted-foreground leading-relaxed whitespace-pre-line text-sm">
-                                {item.answer}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                );
-              })()}
+                              ▼
+                            </span>
+                          </button>
+                          {isItemOpen && (
+                            <div className="px-4 pb-4 text-muted-foreground leading-relaxed whitespace-pre-line text-sm">
+                              {item.answer}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
