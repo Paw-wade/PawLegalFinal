@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
@@ -294,26 +295,99 @@ const titresSejourHierarchiques: MotifTitre[] = [
 ];
 
 // Types de décisions défavorables (hors visa)
+// Types de décisions défavorables (hors visa) – utilisé pour la logique "Demande de titre"
 const typesDecisions = [
   {
     value: 'absence_reponse',
     label: 'Je n’ai pas reçu de réponse à ma demande',
-    delai: 0, // Cas particulier : pas de délai simple à calculer, géré séparément dans la logique
   },
   {
     value: 'refus_titre',
     label: 'J’ai reçu un refus de titre de séjour',
-    delai: 30,
   },
   {
     value: 'refus_enregistrement',
     label: 'J’ai un refus d’enregistrement de ma demande',
-    delai: 15,
   },
   {
     value: 'oqtf',
     label: 'J’ai reçu une OQTF (Obligation de quitter le territoire)',
-    delai: 30,
+  },
+];
+
+// Types de titres pour la logique "Demande de titre de séjour et recours"
+const titresSejourDemande = [
+  {
+    value: 'talent_carte_bleue',
+    label: 'Talent carte bleue européenne',
+    delaiDirJours: 90,
+    article: 'R.421-23',
+  },
+  {
+    value: 'salarie_detache_ict',
+    label: 'Salarié détaché ICT',
+    delaiDirJours: 90,
+    article: 'R.421-43',
+  },
+  {
+    value: 'salarie_detache_mobile_ict',
+    label: 'Salarié détaché mobile ICT',
+    delaiDirJours: 90,
+    article: 'R.421-47',
+  },
+  {
+    value: 'stagiaire_mobile_ict',
+    label: 'Stagiaire mobile ICT',
+    delaiDirJours: 90,
+    article: 'R.421-54',
+  },
+  {
+    value: 'travailleur_saisonnier',
+    label: 'Travailleur saisonnier',
+    delaiDirJours: 90,
+    article: 'R.421-60',
+  },
+  {
+    value: 'etudiant',
+    label: 'Étudiant / étudiant mobilité',
+    delaiDirJours: 90,
+    article: 'R.422-5',
+  },
+  {
+    value: 'recherche_emploi',
+    label: 'Recherche d’emploi ou création d’entreprise',
+    delaiDirJours: 90,
+    article: 'R.422-12',
+  },
+  {
+    value: 'jeune_au_pair',
+    label: 'Jeune au pair',
+    delaiDirJours: 90,
+    article: 'R.426-14',
+  },
+  {
+    value: 'stagiaire_classique',
+    label: 'Stagiaire',
+    delaiDirJours: 90,
+    article: 'R.426-17',
+  },
+  {
+    value: 'talent_chercheur',
+    label: 'Talent-chercheur',
+    delaiDirJours: 60,
+    article: 'R.421-26',
+  },
+  {
+    value: 'talent_chercheur_mobilite',
+    label: 'Talent-chercheur-programme de mobilité',
+    delaiDirJours: 60,
+    article: 'R.421-26',
+  },
+  {
+    value: 'autres',
+    label: 'Autres titres de séjour',
+    delaiDirJours: 120, // 4 mois
+    article: 'R.432-2',
   },
 ];
 
@@ -438,6 +512,7 @@ const infosTitres: Record<string, any> = {
 };
 
 export default function CalculateurPage() {
+  const router = useRouter();
   const { data: session, status } = useSession();
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
@@ -455,7 +530,17 @@ export default function CalculateurPage() {
   const isAdmin = userRole === 'admin' || userRole === 'superadmin';
   const isPartenaire = userRole === 'partenaire';
   const isClient = userRole === 'client';
-  
+
+  // Pour les comptes client : bloquer l'accès au calculateur si le profil n'est pas complété
+  useEffect(() => {
+    if (status !== 'authenticated' || !session) return;
+    const role = (session.user as any)?.role ?? 'client';
+    const profilComplete = (session.user as any)?.profilComplete;
+    if (role === 'client' && !profilComplete) {
+      router.push('/auth/complete-profile');
+    }
+  }, [status, session, router]);
+
   // Fonction de déconnexion
   const handleSignOut = async () => {
     if (typeof window === 'undefined') return;
@@ -495,7 +580,7 @@ export default function CalculateurPage() {
     dateDecision: getTodayDate(),
     natureDecision: '',
     dureeTitre: '',
-    situation: 'demande', // 'demande', 'contentieux_visa', 'contentieux_titre' - Par défaut, afficher le formulaire de dépôt
+    situation: 'demande',
     dateAttributionTitre: '', // Date d'attribution du titre ou du visa
     dateExpirationTitre: '', // Date d'expiration du titre ou du visa
     dateFinValiditeTitreActuel: '', // Date de fin de validité du titre actuel ou du visa
@@ -516,7 +601,13 @@ export default function CalculateurPage() {
     dateDemandeMotifs: '', // Date de demande de communication des motifs
     dateReceptionMotifs: '', // Date de réception des motifs
     actionApresRapo: '', // 'saisir_tribunal' ou 'demander_motifs'
-    rapoDepose: null as boolean | null // null = pas encore demandé, true = oui, false = non
+    rapoDepose: null as boolean | null, // null = pas encore demandé, true = oui, false = non
+    // Champs pour "Demande de titre de séjour et recours"
+    typeTitreDemande: '',
+    dateFinValiditeTitreDemande: '',
+    natureDecisionDemande: '',
+    dateConfirmationDepotDemande: '',
+    dateNotificationRefusDemande: ''
   });
 
   const [dateErrors, setDateErrors] = useState<{ [key: string]: string }>({});
@@ -525,6 +616,8 @@ export default function CalculateurPage() {
   
   // Référence pour suivre la valeur précédente de dateFinValiditeTitreActuel
   const prevDateFinValiditeRef = useRef<string>('');
+  // Référence pour scroll vers la timeline "absence de réponse" quand elle s'affiche
+  const timelineAbsenceReponseRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     calculerDelais();
@@ -543,6 +636,13 @@ export default function CalculateurPage() {
       }));
     }
   }, [formData.dateFinValiditeTitreActuel]);
+
+  // Scroll vers la timeline "absence de réponse" quand l'utilisateur sélectionne cette option
+  useEffect(() => {
+    if (formData.natureDecisionDemande === 'absence_reponse' && formData.dateConfirmationDepotDemande && timelineAbsenceReponseRef.current) {
+      timelineAbsenceReponseRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [formData.natureDecisionDemande, formData.dateConfirmationDepotDemande]);
 
   const validateDates = () => {
     const errors: { [key: string]: string } = {};
@@ -566,7 +666,18 @@ export default function CalculateurPage() {
         errors.dateExpiration = 'La date d\'expiration doit être postérieure à la date de délivrance';
       }
     }
-    
+
+    // Date d'introduction de la demande complète : ne peut pas être au-delà du jour
+    if (formData.dateConfirmationDepotDemande) {
+      const dateIntro = new Date(formData.dateConfirmationDepotDemande);
+      const aujourdhui = new Date();
+      aujourdhui.setHours(0, 0, 0, 0);
+      dateIntro.setHours(0, 0, 0, 0);
+      if (!isNaN(dateIntro.getTime()) && dateIntro.getTime() > aujourdhui.getTime()) {
+        errors.dateConfirmationDepotDemande = 'Cette date ne peut pas être postérieure à la date du jour';
+      }
+    }
+
     setDateErrors(errors);
   };
 
@@ -732,10 +843,13 @@ export default function CalculateurPage() {
             // Dates d'attribution et d'expiration du titre (utilisées dans tous les formulaires)
             dateAttributionTitre: prev.dateAttributionTitre || dateDelivranceFormatted || prev.dateAttributionTitre,
             dateExpirationTitre: prev.dateExpirationTitre || dateExpirationFormatted || prev.dateExpirationTitre,
-            // Pour les clients uniquement, préremplir dateFinValiditeTitreActuel depuis leur profil
+            // Pour les clients uniquement, préremplir dateFinValiditeTitreActuel et dateFinValiditeTitreDemande depuis leur profil
             dateFinValiditeTitreActuel: isClientUser && !prev.dateFinValiditeTitreActuel 
               ? (dateExpirationFormatted || prev.dateFinValiditeTitreActuel)
               : prev.dateFinValiditeTitreActuel,
+            dateFinValiditeTitreDemande: isClientUser && !prev.dateFinValiditeTitreDemande
+              ? (dateExpirationFormatted || prev.dateFinValiditeTitreDemande)
+              : prev.dateFinValiditeTitreDemande,
           }));
         }
       }
@@ -1011,61 +1125,39 @@ export default function CalculateurPage() {
       return;
     }
     
-    // Calcul pour recours concernant le titre de séjour
-    if (formData.situation === 'contentieux_titre' && formData.natureDecision) {
-      // Cas particulier : absence de réponse à la demande
-      if (formData.natureDecision === 'absence_reponse') {
-        setCalculs({
-          type: 'contentieux',
-          delai: null,
-          dateDecision: null,
-          dateLimite: null,
-          joursRestants: null,
-          typeRecours: getTypeRecours(formData.natureDecision),
-          urgence: false,
-          recoursDansDelais: null,
-          messagePersonnalise:
-            'Vous indiquez ne pas avoir reçu de réponse à votre demande de titre de séjour. ' +
-            'Les délais de recours et les actions possibles dépendent de la nature exacte de votre demande et de sa date de dépôt. ' +
-            'Nous vous recommandons de prendre contact avec un professionnel ou avec la plateforme pour une analyse personnalisée.',
-        });
-        return;
-      }
-
-      // Cas général : décision formelle avec date et délai légal chiffré
-      if (formData.dateDecision) {
-        const decision = typesDecisions.find((d) => d.value === formData.natureDecision);
-        if (decision) {
-          const dateDecision = new Date(formData.dateDecision);
-          const dateLimite = new Date(dateDecision);
-          dateLimite.setDate(dateLimite.getDate() + decision.delai);
-
+    if (formData.situation === 'demande') {
+      // Calcul à partir des champs du formulaire "Demande" (visible avec ou sans connexion)
+      if (formData.typeTitreDemande && formData.dateFinValiditeTitreDemande) {
+        const dateFin = new Date(formData.dateFinValiditeTitreDemande);
+        if (!isNaN(dateFin.getTime())) {
+          dateFin.setHours(0, 0, 0, 0);
+          const debutPeriode = new Date(dateFin.getTime() - 120 * 24 * 60 * 60 * 1000);
+          const finPeriode = new Date(dateFin.getTime() - 60 * 24 * 60 * 60 * 1000);
           const aujourdhui = new Date();
-          const joursRestants = Math.ceil(
-            (dateLimite.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24)
-          );
-
-          // Vérifier si le recours est introduit dans les délais
-          const recoursDansDelais = joursRestants > 0;
-
+          aujourdhui.setHours(0, 0, 0, 0);
+          const dansPeriode = aujourdhui >= debutPeriode && aujourdhui <= finPeriode;
+          const avantPeriode = aujourdhui < debutPeriode;
+          const apresPeriode = aujourdhui > finPeriode;
+          const joursRestantsAvantZone2Mois = dansPeriode
+            ? Math.ceil((finPeriode.getTime() - aujourdhui.getTime()) / (24 * 60 * 60 * 1000))
+            : 0;
+          const config = titresSejourDemande.find((t) => t.value === formData.typeTitreDemande);
           setCalculs({
-            type: 'contentieux',
-            delai: decision.delai,
-            dateDecision: dateDecision,
-            dateLimite: dateLimite,
-            joursRestants: joursRestants,
-            typeRecours: getTypeRecours(formData.natureDecision),
-            urgence: joursRestants <= 7,
-            recoursDansDelais: recoursDansDelais,
-            messagePersonnalise: recoursDansDelais
-              ? `✅ Vous avez encore ${joursRestants} jour(s) pour introduire votre recours.`
-              : `⚠️ Le délai de recours est dépassé de ${Math.abs(
-                  joursRestants
-                )} jour(s). Consultez un avocat rapidement.`,
+            type: 'demande_periode',
+            dateFinValidite: dateFin,
+            debutPeriode,
+            finPeriode,
+            dansPeriode,
+            avantPeriode,
+            apresPeriode,
+            joursRestantsAvantZone2Mois,
+            typeTitreDemande: formData.typeTitreDemande,
+            labelTitre: config?.label || formData.typeTitreDemande
           });
+          return;
         }
       }
-    } else if (formData.situation === 'demande') {
+
       // Calcul détaillé pour renouvellement avec dateFinValiditeTitreActuel
       if (formData.typeDemande === 'renouvellement' && formData.dateFinValiditeTitreActuel && formData.typePrecisTitreSejour) {
         const resultatRenouvellement = calculerDelaisRenouvellement();
@@ -1783,6 +1875,23 @@ export default function CalculateurPage() {
     return 'text-green-600 bg-green-50 border-green-500';
   };
 
+  // Compte client avec profil incomplet : afficher un message pendant la redirection
+  const sessionRole = (session?.user as any)?.role ?? 'client';
+  const isClientIncomplete = status === 'authenticated' && session && sessionRole === 'client' && !(session.user as any)?.profilComplete;
+  if (isClientIncomplete) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header variant="home" />
+        <main className="flex-1 flex items-center justify-center px-4 py-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Accès au calculateur réservé aux comptes avec profil complété. Redirection...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header variant="home" />
@@ -2161,15 +2270,18 @@ export default function CalculateurPage() {
                 <div className="space-y-2">
                   <Label className="text-base font-bold">Sélectionnez le type de calcul :</Label>
                   <div className="flex flex-nowrap gap-3 overflow-x-auto pb-2">
-                    {/* Badge Dépôt de titre de séjour */}
+                    {/* Badge Demande de titre de séjour et recours */}
                     <button
                       type="button"
-                      onClick={() => setFormData({ 
-                        ...formData, 
-                        situation: 'demande',
-                        natureDecision: '',
-                        dateDecision: ''
-                      })}
+                      onClick={() => {
+                        setFormData({
+                          ...formData,
+                          situation: 'demande',
+                          natureDecision: '',
+                          dateDecision: ''
+                        });
+                        setCalculs(null);
+                      }}
                       className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
                         formData.situation === 'demande'
                           ? 'bg-blue-600 text-white border-2 border-blue-600'
@@ -2177,30 +2289,7 @@ export default function CalculateurPage() {
                       }`}
                     >
                       <span className="text-lg">📄</span>
-                      <span>Dépôt de titre de séjour</span>
-                    </button>
-
-                    {/* Badge Recours concernant le titre de séjour */}
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ 
-                        ...formData, 
-                        situation: 'contentieux_titre',
-                        typeDemande: '',
-                        typeTitre: '',
-                        typeTitreAutre: '',
-                        motifTitreSejour: '',
-                        sousCategorieTitreSejour: '',
-                        typePrecisTitreSejour: ''
-                      })}
-                      className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
-                        formData.situation === 'contentieux_titre'
-                          ? 'bg-red-600 text-white border-2 border-red-600'
-                          : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 hover:border-gray-400'
-                      }`}
-                    >
-                      <span className="text-lg">⚖️</span>
-                      <span>Recours concernant le titre de séjour</span>
+                      <span>Demande de titre de séjour et recours</span>
                     </button>
 
                     {/* Badge Recours contre refus de visa */}
@@ -2242,529 +2331,532 @@ export default function CalculateurPage() {
                   </div>
                 </div>
 
-                {/* Champs pour Dépôt de titre de séjour */}
+                {/* Champs pour Demande de titre de séjour et recours (doc calculateur-delais-titres-sejour.md) */}
                 {formData.situation === 'demande' && (
-                  <div className="space-y-3 pt-3 border-t">
-                    {/* Bouton de réinitialisation pour admins et partenaires */}
-                    {(isAdmin || isPartenaire) && (
-                      <div className="flex justify-end mb-2">
+                  <div className="space-y-4 pt-3 border-t">
+                    <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/80 via-white to-blue-50/40 p-4 space-y-4">
+                      <h3 className="text-sm font-semibold text-blue-900">
+                        Situation de votre titre de séjour
+                      </h3>
+
+                      {/* 1. Type de titre de séjour */}
+                      <div className="space-y-2">
+                        <Label htmlFor="typeTitreDemande">Type de titre de séjour *</Label>
+                        <Select
+                          id="typeTitreDemande"
+                          value={formData.typeTitreDemande}
+                          onChange={(e) => setFormData({ ...formData, typeTitreDemande: e.target.value })}
+                          required
+                          className="bg-white"
+                        >
+                          <option value="">-- Sélectionner --</option>
+                          {titresSejourDemande.map((t) => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </Select>
+                      </div>
+
+                      {/* 2. Date de fin de validité du titre (ou du visa) - format JJ/MM/AAAA, icône calendrier */}
+                      <div className="space-y-2">
+                        <Label htmlFor="dateFinValiditeTitreDemande">Date de fin de validité du titre (ou du visa) *</Label>
+                        <div className="relative">
+                          <Input
+                            id="dateFinValiditeTitreDemande"
+                            type="date"
+                            value={formData.dateFinValiditeTitreDemande}
+                            onChange={(e) => setFormData({ ...formData, dateFinValiditeTitreDemande: e.target.value })}
+                            required
+                            readOnly={isClient && !!userProfile?.dateExpiration}
+                            disabled={isClient && !!userProfile?.dateExpiration}
+                            className="pr-10 bg-white"
+                          />
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-lg" aria-hidden>📅</span>
+                        </div>
+                        {isClient && userProfile?.dateExpiration ? (
+                          <p className="text-[11px] text-muted-foreground">Renseignée automatiquement depuis votre profil (Date d'expiration).</p>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground">Format jour/mois/année (JJ/MM/AAAA). Utilisez l'icône calendrier pour un choix rapide.</p>
+                        )}
+                      </div>
+
+                      {/* 3. Date d'introduction de la demande complète (optionnel) */}
+                      <div className="space-y-2">
+                        <Label htmlFor="dateConfirmationDepotDemande">
+                          Date d’introduction de la demande complète <span className="text-muted-foreground font-normal">(ce champ n’est pas obligatoire)</span>
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="dateConfirmationDepotDemande"
+                            type="date"
+                            value={formData.dateConfirmationDepotDemande}
+                            onChange={(e) => setFormData({ ...formData, dateConfirmationDepotDemande: e.target.value })}
+                            max={(() => {
+                              const d = new Date();
+                              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                            })()}
+                            className={`pr-10 bg-white ${dateErrors.dateConfirmationDepotDemande ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                          />
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-lg" aria-hidden>📅</span>
+                        </div>
+                        {dateErrors.dateConfirmationDepotDemande ? (
+                          <p className="text-[11px] text-red-600 font-medium">{dateErrors.dateConfirmationDepotDemande}</p>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground">Date de notification de la confirmation de dépôt de la demande (récepissé / accusé de réception).</p>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-blue-200/60">
                         <Button
+                          type="button"
                           variant="outline"
+                          size="sm"
                           onClick={() => {
                             setFormData({
-                              typeTitre: '',
-                              typeTitreAutre: '',
-                              motifTitreSejour: '',
-                              sousCategorieTitreSejour: '',
-                              typePrecisTitreSejour: '',
-                              typeDemande: 'premiere',
-                              prefecture: '',
-                              dateDelivrance: getTodayDate(),
-                              dateExpiration: getTodayDate(),
-                              dateDecision: getTodayDate(),
-                              natureDecision: '',
-                              dureeTitre: '',
-                              situation: 'demande',
-                              dateAttributionTitre: '',
-                              dateExpirationTitre: '',
-                              dateFinValiditeTitreActuel: '',
-                              renouvellementDepose: null,
-                              confirmationDepotRenouvellement: null,
-                              dateConfirmationDepotRenouvellement: '',
-                              natureVisa: '',
-                              consulatDepot: '',
-                              dateConfirmationDepot: '',
-                              typeRefusVisa: '',
-                              dateNotificationRefus: '',
-                              dateDepotRapo: '',
-                              reponseRapoRecue: false,
-                              dateReponseRapo: '',
-                              demandeCommunicationMotifs: false,
-                              dateDemandeMotifs: '',
-                              dateReceptionMotifs: '',
-                              actionApresRapo: '',
-                              rapoDepose: null
+                              ...formData,
+                              typeTitreDemande: '',
+                              dateFinValiditeTitreDemande: '',
+                              natureDecisionDemande: '',
+                              dateConfirmationDepotDemande: '',
+                              dateNotificationRefusDemande: '',
                             });
                             setCalculs(null);
                           }}
-                          className="text-xs"
+                          className="text-xs text-blue-800 border-blue-300 hover:bg-blue-100 hover:border-blue-400"
                         >
-                          🔄 Réinitialiser le formulaire
+                          Réinitialiser ce formulaire
                         </Button>
                       </div>
-                    )}
-                    <div className="space-y-2">
-                      <Label htmlFor="typeDemande">Type de demande *</Label>
-                      <Select
-                        id="typeDemande"
-                        value={formData.typeDemande}
-                        onChange={(e) => setFormData({ ...formData, typeDemande: e.target.value })}
-                        required
-                      >
-                        <option value="">-- Sélectionner --</option>
-                        <option value="premiere">Première demande</option>
-                        <option value="renouvellement">Renouvellement</option>
-                      </Select>
                     </div>
 
-                    {/* Nouveau champ hiérarchisé pour le type de titre de séjour selon CESEDA */}
-                    <div className="space-y-4 bg-blue-50/50 rounded-lg p-4 border-2 border-blue-200">
-                      <Label htmlFor="motifTitreSejour">Type de titre de séjour demandé *</Label>
-                      
-                      {/* Si la sélection est complète, afficher uniquement le résumé */}
-                      {formData.typePrecisTitreSejour ? (
-                        <div className="p-3 bg-white rounded-md border border-blue-300">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
-                              <p className="text-xs font-semibold text-blue-800 mb-1">Sélection complète :</p>
-                              <p className="text-sm text-gray-700">
-                                {titresSejourHierarchiques
-                                  .find(m => m.value === formData.motifTitreSejour)?.label} → {' '}
-                                {titresSejourHierarchiques
-                                  .find(m => m.value === formData.motifTitreSejour)
-                                  ?.sousCategories.find(sc => sc.value === formData.sousCategorieTitreSejour)?.label} → {' '}
-                                {titresSejourHierarchiques
-                                  .find(m => m.value === formData.motifTitreSejour)
-                                  ?.sousCategories.find(sc => sc.value === formData.sousCategorieTitreSejour)
-                                  ?.types.find(t => t.value === formData.typePrecisTitreSejour)?.label}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFormData({ 
-                                  ...formData, 
-                                  motifTitreSejour: '',
-                                  sousCategorieTitreSejour: '',
-                                  typePrecisTitreSejour: ''
-                                });
-                              }}
-                              className="text-xs text-blue-600 hover:text-blue-800 underline whitespace-nowrap"
-                            >
-                              Modifier
-                            </button>
+                    {/* 1. Période d'introduction de la demande (R.431-5 CESEDA) — doc §29-45 */}
+                    {formData.dateFinValiditeTitreDemande && (() => {
+                      const dateFin = new Date(formData.dateFinValiditeTitreDemande);
+                      if (isNaN(dateFin.getTime())) return null;
+                      dateFin.setHours(0, 0, 0, 0);
+                      const debutPeriode = new Date(dateFin.getTime() - 120 * 24 * 60 * 60 * 1000);
+                      const finPeriode = new Date(dateFin.getTime() - 60 * 24 * 60 * 60 * 1000);
+                      const aujourdhui = new Date();
+                      aujourdhui.setHours(0, 0, 0, 0);
+
+                      const dansPeriode = aujourdhui >= debutPeriode && aujourdhui <= finPeriode;
+                      const avantPeriode = aujourdhui < debutPeriode;
+                      const apresPeriode = aujourdhui > finPeriode;
+
+                      const joursRestantsAvantZone2Mois = dansPeriode
+                        ? Math.ceil((finPeriode.getTime() - aujourdhui.getTime()) / (24 * 60 * 60 * 1000))
+                        : 0;
+
+                      return (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                            <span className="h-px flex-1 bg-gray-200" />
+                            <span>Période d’introduction de la demande (art. R.431-5 CESEDA)</span>
+                            <span className="h-px flex-1 bg-gray-200" />
                           </div>
+
+                          {avantPeriode && (
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 flex gap-3 items-start">
+                              <span className="text-lg">ℹ️</span>
+                              <div className="space-y-1 text-sm">
+                                <p className="font-semibold text-blue-900">La période de renouvellement n’est pas encore ouverte.</p>
+                                <p className="text-blue-800">
+                                  Période d’ouverture : du <strong>{formatDateCourte(debutPeriode)}</strong> au <strong>{formatDateCourte(finPeriode)}</strong> (entre quatre mois et deux mois avant la date de fin de validité du titre ou du visa).
+                                </p>
+                                <p className="text-xs text-blue-700">Référence : article R.431-5 du CESEDA.</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {dansPeriode && (
+                            <div className="rounded-lg border border-green-200 bg-green-50 p-4 flex gap-3 items-start">
+                              <span className="text-lg">✅</span>
+                              <div className="space-y-1 text-sm">
+                                <p className="font-semibold text-green-900">La période de renouvellement est ouverte.</p>
+                                <p className="text-green-800">
+                                  Le renouvellement (ou la première demande) doit être effectué entre quatre mois et deux mois avant la date de fin de validité, soit du{' '}
+                                  <strong>{formatDateCourte(debutPeriode)}</strong> au <strong>{formatDateCourte(finPeriode)}</strong>.
+                                </p>
+                                <p className="text-green-800">
+                                  Il reste <strong>{joursRestantsAvantZone2Mois} jour{joursRestantsAvantZone2Mois > 1 ? 's' : ''}</strong> avant d’entrer dans la zone des 2 mois (fin de la période légale de dépôt).
+                                </p>
+                                <p className="text-xs text-green-700">Référence : article R.431-5 du CESEDA.</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {apresPeriode && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 p-4 flex gap-3 items-start">
+                              <span className="text-lg">⚠️</span>
+                              <div className="space-y-1 text-sm">
+                                <p className="font-semibold text-red-900">La période légale de dépôt est dépassée.</p>
+                                <p className="text-red-800">
+                                  L’étranger devra payer un visa de régularisation de 180 euros qui doit être acquitté, sauf cas de force majeure ou présentation d’un visa en cours de validité.
+                                </p>
+                                <p className="text-red-800">
+                                  L’administration n’a plus l’obligation de respecter les délais car l’étranger n’a pas été diligent.
+                                </p>
+                                <p className="text-xs text-red-700">Référence : article R.431-5 du CESEDA.</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <>
-                          <p className="text-xs text-muted-foreground mb-3">
-                            Sélectionnez le motif de délivrance, puis la catégorie du titre de séjour, puis le type précis de titre de séjour.
-                          </p>
-                          
-                          {/* Niveau 1: Motif de délivrance */}
-                          <div className="space-y-2">
-                            <Label htmlFor="motifTitreSejour" className="text-sm font-semibold text-gray-700">
-                              1. Motif de délivrance du titre de séjour *
-                            </Label>
-                            <Select
-                              id="motifTitreSejour"
-                              value={formData.motifTitreSejour}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setFormData({ 
-                                  ...formData, 
-                                  motifTitreSejour: value,
-                                  sousCategorieTitreSejour: '', // Réinitialiser les niveaux inférieurs
-                                  typePrecisTitreSejour: ''
-                                });
-                              }}
-                              required
-                              className="bg-white"
-                            >
-                              <option value="">-- Sélectionner un motif --</option>
-                              {titresSejourHierarchiques.map((motif) => (
-                                <option key={motif.value} value={motif.value}>
-                                  {motif.label}
-                                </option>
+                      );
+                    })()}
+
+                    {/* Si "Date d'introduction de la demande complète" est renseignée : choix unique (doc §56-64) */}
+                    {formData.dateConfirmationDepotDemande && (
+                      <div className="space-y-3 pt-2 border-t">
+                        <h3 className="text-sm font-semibold text-foreground">Situation de votre demande</h3>
+                        {!formData.natureDecisionDemande ? (
+                          <>
+                            <p className="text-xs text-muted-foreground">
+                              Sélectionnez la situation qui correspond à votre cas. Une seule situation peut être retenue ; une fois choisie, les autres options disparaîtront jusqu’à réinitialisation.
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {typesDecisions.map((decision) => (
+                                <label
+                                  key={decision.value}
+                                  htmlFor={`natureDecisionDemande-${decision.value}`}
+                                  className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 px-3 py-2.5 text-sm cursor-pointer transition-colors"
+                                >
+                                  <input
+                                    id={`natureDecisionDemande-${decision.value}`}
+                                    type="radio"
+                                    name="natureDecisionDemande"
+                                    value={decision.value}
+                                    checked={false}
+                                    onChange={(e) =>
+                                      setFormData({ ...formData, natureDecisionDemande: e.target.value })
+                                    }
+                                    className="mt-1 h-4 w-4 shrink-0 text-primary border-gray-300"
+                                  />
+                                  <span>{decision.label}</span>
+                                </label>
                               ))}
-                            </Select>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="rounded-lg border border-primary bg-primary/5 text-foreground px-3 py-2.5 text-sm font-medium">
+                              {typesDecisions.find((d) => d.value === formData.natureDecisionDemande)?.label}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                setFormData({
+                                  ...formData,
+                                  natureDecisionDemande: '',
+                                  dateNotificationRefusDemande: '',
+                                })
+                              }
+                              className="text-xs"
+                            >
+                              Changer de situation
+                            </Button>
                           </div>
-
-                          {/* Niveau 2: Catégorie du titre de séjour */}
-                          {formData.motifTitreSejour && (
-                            <div className="space-y-2">
-                              <Label htmlFor="sousCategorieTitreSejour" className="text-sm font-semibold text-gray-700">
-                                2. Catégorie du titre de séjour *
-                              </Label>
-                              <Select
-                                id="sousCategorieTitreSejour"
-                                value={formData.sousCategorieTitreSejour}
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  setFormData({ 
-                                    ...formData, 
-                                    sousCategorieTitreSejour: value,
-                                    typePrecisTitreSejour: '' // Réinitialiser le niveau inférieur
-                                  });
-                                }}
-                                required
-                                className="bg-white"
-                              >
-                                <option value="">-- Sélectionner une sous-catégorie --</option>
-                                {titresSejourHierarchiques
-                                  .find(m => m.value === formData.motifTitreSejour)
-                                  ?.sousCategories.map((sousCat) => (
-                                    <option key={sousCat.value} value={sousCat.value}>
-                                      {sousCat.label}
-                                    </option>
-                                  ))}
-                              </Select>
-                            </div>
-                          )}
-
-                          {/* Niveau 3: Type précis */}
-                          {formData.sousCategorieTitreSejour && (
-                            <div className="space-y-2">
-                              <Label htmlFor="typePrecisTitreSejour" className="text-sm font-semibold text-gray-700">
-                                3. Type précis de titre *
-                              </Label>
-                              <Select
-                                id="typePrecisTitreSejour"
-                                value={formData.typePrecisTitreSejour}
-                                onChange={(e) => {
-                                  setFormData({ 
-                                    ...formData, 
-                                    typePrecisTitreSejour: e.target.value
-                                  });
-                                }}
-                                required
-                                className="bg-white"
-                              >
-                                <option value="">-- Sélectionner un type précis --</option>
-                                {titresSejourHierarchiques
-                                  .find(m => m.value === formData.motifTitreSejour)
-                                  ?.sousCategories.find(sc => sc.value === formData.sousCategorieTitreSejour)
-                                  ?.types.map((type) => (
-                                    <option key={type.value} value={type.value}>
-                                      {type.label}
-                                    </option>
-                                  ))}
-                              </Select>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-
-                    {/* Champ conditionnel : Date de fin de validité du titre actuel ou du visa */}
-                    {formData.typePrecisTitreSejour && (
-                      <div className="space-y-2">
-                        <Label htmlFor="dateFinValiditeTitreActuel">
-                          {formData.typeDemande === 'premiere' 
-                            ? 'Date de fin de validité du visa *' 
-                            : 'Date de fin de validité du titre actuel *'}
-                        </Label>
-                        <Input
-                          id="dateFinValiditeTitreActuel"
-                          type="date"
-                          value={formData.dateFinValiditeTitreActuel}
-                          onChange={(e) => setFormData({ ...formData, dateFinValiditeTitreActuel: e.target.value })}
-                          required
-                          className={dateErrors.dateFinValiditeTitreActuel ? 'border-red-500' : ''}
-                        />
-                        {dateErrors.dateFinValiditeTitreActuel && (
-                          <p className="text-xs text-red-600 mt-1">{dateErrors.dateFinValiditeTitreActuel}</p>
                         )}
                       </div>
                     )}
-                  </div>
-                )}
 
-                {/* Champs pour Recours contre refus de visa */}
-                {formData.situation === 'contentieux_visa' && (
-                  <div className="space-y-3 pt-3 border-t">
-                    {/* Champs de base */}
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 mb-4">
-                      <h3 className="font-semibold text-sm text-blue-800 mb-3">Informations de base</h3>
-                      
-                      <div className="space-y-3">
-                    <div className="space-y-2">
-                          <Label htmlFor="natureVisa">Nature du visa *</Label>
-                      <Select
-                            id="natureVisa"
-                            value={formData.natureVisa}
-                            onChange={(e) => setFormData({ ...formData, natureVisa: e.target.value })}
-                        required
-                      >
-                        <option value="">-- Sélectionner --</option>
-                            {typesVisas.map((visa) => (
-                              <option key={visa.value} value={visa.value}>{visa.label}</option>
-                            ))}
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                          <Label htmlFor="dateConfirmationDepot">Date de confirmation du dépôt *</Label>
-                      <Input
-                            id="dateConfirmationDepot"
-                        type="date"
-                            value={formData.dateConfirmationDepot}
-                            onChange={(e) => {
-                              setFormData({ ...formData, dateConfirmationDepot: e.target.value, rapoDepose: null });
-                            }}
-                        required
-                      />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Message d'information si plus de 4 mois */}
-                    {formData.dateConfirmationDepot && (() => {
-                      const aujourdhui = new Date();
-                      const dateConfirmationDepot = new Date(formData.dateConfirmationDepot);
-                      const dateLimite4Mois = new Date(dateConfirmationDepot);
-                      dateLimite4Mois.setMonth(dateLimite4Mois.getMonth() + 4);
-                      const plusDe4Mois = aujourdhui > dateLimite4Mois;
-                      const joursDepuis4Mois = plusDe4Mois ? Math.ceil((aujourdhui.getTime() - dateLimite4Mois.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-                      
-                      if (plusDe4Mois && formData.rapoDepose === null && !formData.dateDepotRapo) {
-                        return (
-                          <div className="bg-orange-50 rounded-lg p-4 border-2 border-orange-400 mb-4">
-                            <h3 className="font-semibold text-sm text-orange-800 mb-3">⚠️ Attention</h3>
-                            <p className="text-sm text-orange-700 mb-3">
-                              Plus de 4 mois se sont écoulés depuis la date de confirmation du dépôt ({joursDepuis4Mois} jour(s) de retard). En principe, aucun recours n'est plus possible après ce délai.
-                            </p>
-                            <p className="text-xs text-orange-600 mb-3">
-                              Si vous avez déposé un Recours Administratif Préalable Obligatoire (RAPO) avant l'expiration du délai, vous pouvez continuer en renseignant la date de dépôt du RAPO ci-dessous.
-                            </p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-
-                    {/* Type de refus */}
-                    <div className="space-y-2">
-                      <Label>Type de refus *</Label>
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="typeRefusVisa"
-                            value="explicite"
-                            checked={formData.typeRefusVisa === 'explicite'}
-                            onChange={(e) => setFormData({ ...formData, typeRefusVisa: e.target.value, dateNotificationRefus: '' })}
-                            className="w-4 h-4 text-primary"
-                            required
-                          />
-                          <span className="text-sm">J'ai reçu une notification de refus (refus explicite)</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="typeRefusVisa"
-                            value="implicite"
-                            checked={formData.typeRefusVisa === 'implicite'}
-                            onChange={(e) => setFormData({ ...formData, typeRefusVisa: e.target.value, dateNotificationRefus: '' })}
-                            className="w-4 h-4 text-primary"
-                            required
-                          />
-                          <span className="text-sm">Je n'ai pas reçu de réponse après 4 mois (refus implicite)</span>
-                        </label>
-                    </div>
-                    </div>
-
-                    {/* Date de notification (si refus explicite) */}
-                    {formData.typeRefusVisa === 'explicite' && (
-                      <div className="space-y-2">
-                        <Label htmlFor="dateNotificationRefus">Date de notification du refus *</Label>
-                        <Input
-                          id="dateNotificationRefus"
-                          type="date"
-                          value={formData.dateNotificationRefus}
-                          onChange={(e) => setFormData({ ...formData, dateNotificationRefus: e.target.value })}
-                          required
-                        />
-                      </div>
-                    )}
-
-                    {/* Section RAPO */}
-                    {(formData.typeRefusVisa === 'explicite' || formData.typeRefusVisa === 'implicite') && (
-                      <div className="bg-orange-50 rounded-lg p-4 border border-orange-200 space-y-3">
-                        <h3 className="font-semibold text-sm text-orange-800 mb-2">Recours Administratif Préalable Obligatoire (RAPO)</h3>
-                        
-                        {/* Afficher le champ date - toujours disponible si type de refus sélectionné */}
-                        <div className="space-y-2">
-                          <Label htmlFor="dateDepotRapo">Date de dépôt du RAPO (si applicable)</Label>
-                          <Input
-                            id="dateDepotRapo"
-                            type="date"
-                            value={formData.dateDepotRapo}
-                            onChange={(e) => setFormData({ ...formData, dateDepotRapo: e.target.value, rapoDepose: e.target.value ? true : null })}
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            Si vous avez déposé un RAPO, indiquez la date de dépôt pour calculer les délais qui suivent (réponse de la commission, recours tribunal, etc.).
-                          </p>
-                        </div>
-
-                        {formData.dateDepotRapo && (() => {
-                          const dateDepotRapo = new Date(formData.dateDepotRapo);
-                          const dateLimiteReponse = new Date(dateDepotRapo);
-                          dateLimiteReponse.setMonth(dateLimiteReponse.getMonth() + 2);
-                          const aujourdhui = new Date();
-                          const joursRestantsCommission = Math.ceil((dateLimiteReponse.getTime() - aujourdhui.getTime()) / (1000 * 60 * 60 * 24));
-                          const delaiDepasse = joursRestantsCommission < 0;
-                          
+                    {/* Timeline "Je n'ai pas reçu de réponse" : DIR, référé MU, demande motifs, référé suspension (doc §65-212) */}
+                    {formData.dateConfirmationDepotDemande &&
+                      formData.natureDecisionDemande === 'absence_reponse' &&
+                      (() => {
+                        const baseDate = new Date(formData.dateConfirmationDepotDemande);
+                        if (isNaN(baseDate.getTime())) {
                           return (
-                            <>
-                              {/* Affichage de la date limite de réponse de la commission */}
-                              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mb-3">
-                                <p className="text-xs font-semibold text-blue-800 mb-1">📅 Date limite de réponse de la commission</p>
-                                <p className="text-sm text-blue-700 font-medium">{formatDateCourte(dateLimiteReponse)}</p>
-                                {delaiDepasse ? (
-                                  <p className="text-xs text-red-600 font-medium mt-1">
-                                    ⚠️ Délai dépassé de {Math.abs(joursRestantsCommission)} jour(s)
-                                  </p>
-                                ) : (
-                                  <p className="text-xs text-blue-600 mt-1">
-                                    {joursRestantsCommission} jour(s) restant{joursRestantsCommission > 1 ? 's' : ''}
-                                  </p>
-                                )}
+                            <div ref={timelineAbsenceReponseRef} className="space-y-4 pt-4 border-t">
+                              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                Veuillez vérifier le format de la date d’introduction de la demande complète (format jour/mois/année).
                               </div>
+                            </div>
+                          );
+                        }
+                        baseDate.setHours(0, 0, 0, 0);
+                        const typeTitre = formData.typeTitreDemande || 'autres';
+                        const config = titresSejourDemande.find((t) => t.value === typeTitre) || titresSejourDemande.find((t) => t.value === 'autres')!;
+                        const dateDIR = new Date(baseDate.getTime() + config.delaiDirJours * 24 * 60 * 60 * 1000);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const dateLimiteMotifs = new Date(dateDIR.getTime() + 30 * 24 * 60 * 60 * 1000);
+                        const dateFinRefereSuspension = new Date(dateDIR);
+                        dateFinRefereSuspension.setMonth(dateFinRefereSuspension.getMonth() + 2);
+                        const dateLimiteMuRecommandee = new Date(dateDIR.getTime() - 15 * 24 * 60 * 60 * 1000);
 
-                              {/* Case à cocher pour indiquer qu'une réponse a été reçue */}
-                              <div className="space-y-2">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    id="reponseRapoRecue"
-                                    checked={formData.reponseRapoRecue}
-                                    onChange={(e) => setFormData({ 
-                                      ...formData, 
-                                      reponseRapoRecue: e.target.checked,
-                                      dateReponseRapo: e.target.checked ? formData.dateReponseRapo : '' // Réinitialiser la date si la case est décochée
-                                    })}
-                                    className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
-                                  />
-                                  <span className="text-sm font-medium">J'ai reçu une réponse à mon RAPO</span>
-                                </label>
-                                <p className="text-xs text-muted-foreground ml-6">
-                                  Cochez cette case si vous avez reçu une réponse de la commission.
-                                </p>
-                              </div>
+                        const statut = (dansDelai: boolean, pasEncore: boolean) => (pasEncore ? 'bleu' : dansDelai ? 'vert' : 'rouge');
 
-                              {/* Champ de date conditionnel */}
-                              {formData.reponseRapoRecue && (
-                                <div className="space-y-2">
-                                  <Label htmlFor="dateReponseRapo">Date de réponse du RAPO *</Label>
-                                  <Input
-                                    id="dateReponseRapo"
-                                    type="date"
-                                    value={formData.dateReponseRapo}
-                                    onChange={(e) => setFormData({ ...formData, dateReponseRapo: e.target.value })}
-                                    required
-                                  />
-                                  <p className="text-xs text-muted-foreground">
-                                    Indiquez la date de réception de la réponse pour calculer les délais de recours tribunal.
+                        return (
+                          <div ref={timelineAbsenceReponseRef} className="space-y-4 pt-4 border-t" id="timeline-absence-reponse">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                              <span className="h-px flex-1 bg-gray-200" />
+                              <span>Timeline — Absence de réponse (art. R.432-1 et R.432-2 CESEDA)</span>
+                              <span className="h-px flex-1 bg-gray-200" />
+                            </div>
+
+                            {/* 1. Date de naissance de la décision implicite de rejet */}
+                            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                              <div className="flex gap-3 items-start">
+                                <span className="flex h-8 w-8 shrink-0 rounded-full bg-slate-200 text-slate-700 text-sm font-bold items-center justify-center">1</span>
+                                <div className="space-y-2 text-sm">
+                                  <h4 className="font-semibold text-slate-900">Date de naissance de la décision implicite de rejet</h4>
+                                  <p className="text-slate-700">
+                                    Selon les articles R.432-1 et R.432-2 du CESEDA, le silence de l’administration vaut décision implicite de rejet. Cette décision naît à l’expiration d’un délai qui dépend du type de titre sélectionné. Point de départ : la date d’introduction de la demande complète (notification de la confirmation de dépôt).
+                                  </p>
+                                  <p className="text-slate-800 font-medium">
+                                    Pour <strong>{config.label}</strong> (art. {config.article}) : délai de <strong>{config.delaiDirJours} jours</strong> → date de naissance de la DIR : <strong>{formatDateCourte(dateDIR)}</strong>.
+                                  </p>
+                                  <p className="text-xs text-slate-600">
+                                    La décision implicite est une fiction juridique : elle ouvre les voies de recours sans signifier que la préfecture a refusé au fond. Il est possible qu’une réponse positive arrive plus tard.
                                   </p>
                                 </div>
-                              )}
+                              </div>
+                            </div>
 
-                              {!formData.dateReponseRapo && (
-                                <div className="space-y-2">
-                                  <Label>Action après 2 mois sans réponse *</Label>
-                                  <p className="text-xs text-muted-foreground mb-2">
-                                    Si vous n'avez pas reçu de réponse après {formatDateCourte(dateLimiteReponse)}, choisissez votre action :
-                                  </p>
-                                  <div className="space-y-2">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                      <input
-                                        type="radio"
-                                        name="actionApresRapo"
-                                        value="saisir_tribunal"
-                                        checked={formData.actionApresRapo === 'saisir_tribunal'}
-                                        onChange={(e) => setFormData({ ...formData, actionApresRapo: e.target.value, demandeCommunicationMotifs: false })}
-                                        className="w-4 h-4 text-primary"
-                                      />
-                                      <span className="text-sm">Saisir le tribunal</span>
-                                    </label>
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                      <input
-                                        type="radio"
-                                        name="actionApresRapo"
-                                        value="demander_motifs"
-                                        checked={formData.actionApresRapo === 'demander_motifs'}
-                                        onChange={(e) => setFormData({ ...formData, actionApresRapo: e.target.value, demandeCommunicationMotifs: true })}
-                                        className="w-4 h-4 text-primary"
-                                      />
-                                      <span className="text-sm">Demander communication des motifs</span>
-                                    </label>
+                            {/* 2. Référé mesures utiles */}
+                            {(() => {
+                              const pasEncore = today < baseDate;
+                              const dansDelai = today >= baseDate && today <= dateDIR;
+                              const depasse = today > dateDIR;
+                              const couleur = statut(dansDelai, pasEncore);
+                              const borderBg = couleur === 'bleu' ? 'border-blue-200 bg-blue-50' : couleur === 'vert' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50';
+                              const textC = couleur === 'bleu' ? 'text-blue-800' : couleur === 'vert' ? 'text-green-800' : 'text-red-800';
+                              const msg =
+                                pasEncore
+                                  ? 'La fenêtre ne sera ouverte qu’après la date de dépôt de votre demande.'
+                                  : dansDelai
+                                    ? `Déposez le référé au plus tard le ${formatDateCourte(dateLimiteMuRecommandee)} (15 jours avant la DIR) pour maximiser la recevabilité.`
+                                    : 'Le référé mesures utiles n’est plus possible après la naissance de la DIR. Privilégiez une demande de communication des motifs puis, si besoin, un référé suspension.';
+                              return (
+                                <div className={`rounded-xl border p-4 ${borderBg}`}>
+                                  <div className="flex gap-3 items-start">
+                                    <span className="flex h-8 w-8 shrink-0 rounded-full bg-slate-700 text-white text-sm font-bold items-center justify-center">2</span>
+                                    <div className="space-y-2 text-sm">
+                                      <h4 className="font-semibold text-slate-900">Référé mesures utiles</h4>
+                                      <p className="text-slate-700">
+                                        À déposer avant la naissance de la DIR. Pour la recevabilité, de préférence au plus tard 15 jours avant la DIR ({formatDateCourte(dateLimiteMuRecommandee)}). Après la DIR, ce recours n’est plus possible → référé suspension (il est recommandé de demander d’abord la communication des motifs).
+                                      </p>
+                                      <p className={`font-medium ${textC}`}>{msg}</p>
+                                    </div>
                                   </div>
                                 </div>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    )}
+                              );
+                            })()}
 
-                    {/* Communication des motifs */}
-                    {(formData.demandeCommunicationMotifs || formData.actionApresRapo === 'demander_motifs') && (
-                      <div className="bg-purple-50 rounded-lg p-4 border border-purple-200 space-y-3">
-                        <h3 className="font-semibold text-sm text-purple-800 mb-2">Communication des motifs</h3>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="dateDemandeMotifs">Date de demande de communication des motifs *</Label>
-                          <Input
-                            id="dateDemandeMotifs"
-                            type="date"
-                            value={formData.dateDemandeMotifs}
-                            onChange={(e) => setFormData({ ...formData, dateDemandeMotifs: e.target.value })}
-                            required
-                          />
+                            {/* 3. Demande de communication des motifs */}
+                            {(() => {
+                              const pasEncore = today < dateDIR;
+                              const dansDelai = today >= dateDIR && today <= dateLimiteMotifs;
+                              const depasse = today > dateLimiteMotifs;
+                              const couleur = statut(dansDelai, pasEncore);
+                              const borderBg = couleur === 'bleu' ? 'border-blue-200 bg-blue-50' : couleur === 'vert' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50';
+                              const textC = couleur === 'bleu' ? 'text-blue-800' : couleur === 'vert' ? 'text-green-800' : 'text-red-800';
+                              const msg =
+                                pasEncore
+                                  ? `Possible à partir du ${formatDateCourte(dateDIR)} (naissance de la DIR).`
+                                  : dansDelai
+                                    ? `Introduisez la demande dans les 30 jours suivant la DIR, soit avant le ${formatDateCourte(dateLimiteMotifs)}. L’administration dispose d’un mois pour répondre.`
+                                    : 'Le délai de 30 jours pour demander les motifs est dépassé. Une demande de communication des motifs peut encore être utile avant un référé suspension ; faites-vous accompagner.';
+                              return (
+                                <div className={`rounded-xl border p-4 ${borderBg}`}>
+                                  <div className="flex gap-3 items-start">
+                                    <span className="flex h-8 w-8 shrink-0 rounded-full bg-slate-700 text-white text-sm font-bold items-center justify-center">3</span>
+                                    <div className="space-y-2 text-sm">
+                                      <h4 className="font-semibold text-slate-900">Demande de communication des motifs</h4>
+                                      <p className="text-slate-700">
+                                        À introduire dans les 30 jours après la naissance de la DIR (art. L232-4 CRPA). L’administration a 1 mois pour communiquer les motifs. En cas de réponse, le délai du recours contentieux est prorogé jusqu’à 2 mois après notification des motifs. Avant un référé suspension, il est fortement conseillé de demander les motifs (l’absence de réponse sous 30 jours peut entraîner l’illégalité de la DIR).
+                                      </p>
+                                      <p className={`font-medium ${textC}`}>{msg}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* 4. Référé suspension et recours en annulation */}
+                            {(() => {
+                              const pasEncore = today < dateDIR;
+                              const dansDelai = today >= dateDIR && today <= dateFinRefereSuspension;
+                              const couleur = statut(dansDelai, pasEncore);
+                              const borderBg = couleur === 'bleu' ? 'border-blue-200 bg-blue-50' : couleur === 'vert' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50';
+                              const textC = couleur === 'bleu' ? 'text-blue-800' : couleur === 'vert' ? 'text-green-800' : 'text-red-800';
+                              const msg =
+                                pasEncore
+                                  ? `Le référé suspension n’est possible qu’à partir du ${formatDateCourte(dateDIR)}.`
+                                  : dansDelai
+                                    ? `Vous disposez d’un délai de 2 mois à compter de la DIR pour introduire le recours en annulation et, le cas échéant, le référé suspension (avant le ${formatDateCourte(dateFinRefereSuspension)}).`
+                                    : 'Le délai de 2 mois est en principe écoulé. Une analyse personnalisée (information sur les délais, circonstances particulières) peut permettre d’identifier des voies de droit ; faites-vous accompagner.';
+                              return (
+                                <div className={`rounded-xl border p-4 ${borderBg}`}>
+                                  <div className="flex gap-3 items-start">
+                                    <span className="flex h-8 w-8 shrink-0 rounded-full bg-slate-700 text-white text-sm font-bold items-center justify-center">4</span>
+                                    <div className="space-y-2 text-sm">
+                                      <h4 className="font-semibold text-slate-900">Référé suspension et recours en annulation</h4>
+                                      <p className="text-slate-700">
+                                        Fondement : art. L.521-1 du code de justice administrative. Le référé suspension est possible à partir de la naissance de la DIR jusqu’à l’expiration d’un délai de 2 mois. Pour la recevabilité du référé suspension, un recours en annulation (recours au fond) doit être introduit ; les délais se calculent de la même façon. Si une demande de communication des motifs a été faite, les délais peuvent être décalés (2 mois à compter de la notification des motifs ou, à défaut de réponse, 2 mois à compter de l’expiration du délai de 30 jours).
+                                      </p>
+                                      <p className={`font-medium ${textC}`}>{msg}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                              Nous vous invitons à vous faire accompagner par la plateforme pour analyser votre situation et préparer vos démarches, en lien avec un avocat lorsque cela est nécessaire.
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                    {/* Refus de titre ou refus d'enregistrement (doc §215-221) */}
+                    {(formData.natureDecisionDemande === 'refus_titre' || formData.natureDecisionDemande === 'refus_enregistrement') && (
+                        <div className="space-y-4 pt-4 border-t">
+                          <div className="space-y-2">
+                            <Label htmlFor="dateNotificationRefusDemande">Date de notification du refus *</Label>
+                            <div className="relative">
+                              <Input
+                                id="dateNotificationRefusDemande"
+                                type="date"
+                                value={formData.dateNotificationRefusDemande}
+                                onChange={(e) => setFormData({ ...formData, dateNotificationRefusDemande: e.target.value })}
+                                className="pr-10 bg-white"
+                              />
+                              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-lg" aria-hidden>📅</span>
+                            </div>
+                          </div>
+
+                          {formData.dateNotificationRefusDemande && (() => {
+                            const dateNotif = new Date(formData.dateNotificationRefusDemande);
+                            if (isNaN(dateNotif.getTime())) return null;
+                            dateNotif.setHours(0, 0, 0, 0);
+                            const dateFin2Mois = new Date(dateNotif);
+                            dateFin2Mois.setMonth(dateFin2Mois.getMonth() + 2);
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const pasEncore = today < dateNotif;
+                            const dansDelai = today >= dateNotif && today <= dateFin2Mois;
+                            const depasse = today > dateFin2Mois;
+                            const couleur = pasEncore ? 'bleu' : dansDelai ? 'vert' : 'rouge';
+                            const borderBg = couleur === 'bleu' ? 'border-blue-200 bg-blue-50' : couleur === 'vert' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50';
+                            const textC = couleur === 'bleu' ? 'text-blue-800' : couleur === 'vert' ? 'text-green-800' : 'text-red-800';
+                            const msg = pasEncore
+                              ? `Le délai ne court qu’à compter du ${formatDateCourte(dateNotif)}.`
+                              : dansDelai
+                                ? `Vous disposez d’un délai de 2 mois à compter de la notification du refus pour introduire le recours en annulation et, le cas échéant, le référé suspension (avant le ${formatDateCourte(dateFin2Mois)}).`
+                                : 'Le délai de 2 mois est dépassé. Une analyse personnalisée peut permettre d’identifier des voies de droit ; faites-vous accompagner.';
+                            return (
+                              <>
+                                <div className={`rounded-xl border p-4 ${borderBg}`}>
+                                  <h4 className="font-semibold text-slate-900 mb-2">Référé suspension et recours en annulation (recours au fond)</h4>
+                                  <p className="text-sm text-slate-700 mb-2">
+                                    Le point de départ est la date de notification du refus. Le délai pour introduire le recours en annulation et le référé suspension est de 2 mois à compter de cette date.
+                                  </p>
+                                  <p className={`text-sm font-medium ${textC}`}>{msg}</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                                  En cas de refus explicite (titre de séjour ou enregistrement), il n’est pas possible de faire ni le référé mesures utiles ni la demande de communication des motifs : seuls le recours en annulation et le référé suspension sont concernés, à partir de la date de notification du refus.
+                                </div>
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                  Nous vous invitons à vous faire accompagner par la plateforme pour préparer votre recours, en lien avec un avocat lorsque cela est nécessaire.
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
+                      )}
 
-                        <div className="space-y-2">
-                          <Label htmlFor="dateReceptionMotifs">Date de réception des motifs (optionnel)</Label>
-                          <Input
-                            id="dateReceptionMotifs"
-                            type="date"
-                            value={formData.dateReceptionMotifs}
-                            onChange={(e) => setFormData({ ...formData, dateReceptionMotifs: e.target.value })}
-                          />
-                          <p className="text-xs text-muted-foreground">Si vous avez reçu les motifs</p>
+                    {/* OQTF (doc §222-223) */}
+                    {formData.natureDecisionDemande === 'oqtf' && (
+                      <div className="space-y-3 pt-4 border-t">
+                        <div className="rounded-xl border border-red-300 bg-red-50 p-4">
+                          <div className="flex gap-3 items-start">
+                            <span className="text-2xl">⚠️</span>
+                            <div className="space-y-2 text-sm">
+                              <h4 className="font-semibold text-red-900">OQTF (obligation de quitter le territoire français)</h4>
+                              <p className="text-red-800">
+                                Nous vous invitons à vous faire accompagner sans attendre par la plateforme pour analyser votre situation et vos délais de recours.
+                              </p>
+                              <p className="text-red-800 font-medium">
+                                L’accompagnement par un avocat peut être nécessaire pour contester une OQTF ou régulariser votre situation.
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Champs pour Recours concernant le titre de séjour */}
-                {formData.situation === 'contentieux_titre' && (
+                {/* Recours contre refus de visa - en cours de conception */}
+                {formData.situation === 'contentieux_visa' && (
                   <div className="space-y-3 pt-3 border-t">
-                    <div className="space-y-2">
-                      <Label htmlFor="natureDecision_titre">Nature de la décision *</Label>
-                      <Select
-                        id="natureDecision_titre"
-                        value={formData.natureDecision}
-                        onChange={(e) => setFormData({ ...formData, natureDecision: e.target.value })}
-                        required
-                      >
-                        <option value="">-- Sélectionner --</option>
-                        {typesDecisions.filter(d => d.value !== 'refus_visa').map((decision) => (
-                          <option key={decision.value} value={decision.value}>{decision.label}</option>
-                        ))}
-                      </Select>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-6 text-center">
+                      <p className="text-amber-800 font-semibold mb-2">✈️ Recours contre un refus de visa</p>
+                      <p className="text-sm text-amber-700">
+                        Cette page est en cours de conception et sera disponible prochainement.
+                      </p>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="dateDecision_titre">Date de la décision *</Label>
-                      <Input
-                        id="dateDecision_titre"
-                        type="date"
-                        value={formData.dateDecision}
-                        onChange={(e) => setFormData({ ...formData, dateDecision: e.target.value })}
-                        required
-                      />
-                    </div>
-
                   </div>
                 )}
+
               </form>
 
-              {/* Affichage des résultats du calcul */}
+              {/* Affichage des résultats du calcul (visible avec ou sans connexion) */}
               {calculs && (
                 <div className="mt-6 pt-6 border-t border-gray-200">
+                  {/* Résultats pour Demande (période R.431-5) */}
+                  {calculs.type === 'demande_periode' && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                        <span className="h-px flex-1 bg-gray-200" />
+                        <span>Période d'introduction de la demande (art. R.431-5 CESEDA)</span>
+                        <span className="h-px flex-1 bg-gray-200" />
+                      </div>
+                      {calculs.avantPeriode && (
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 flex gap-3 items-start">
+                          <span className="text-lg">ℹ️</span>
+                          <div className="space-y-1 text-sm">
+                            <p className="font-semibold text-blue-900">La période de renouvellement n'est pas encore ouverte.</p>
+                            <p className="text-blue-800">
+                              Période d'ouverture : du <strong>{formatDateCourte(calculs.debutPeriode)}</strong> au <strong>{formatDateCourte(calculs.finPeriode)}</strong> (entre quatre mois et deux mois avant la date de fin de validité du titre ou du visa).
+                            </p>
+                            <p className="text-xs text-blue-700">Référence : article R.431-5 du CESEDA.</p>
+                          </div>
+                        </div>
+                      )}
+                      {calculs.dansPeriode && (
+                        <div className="rounded-lg border border-green-200 bg-green-50 p-4 flex gap-3 items-start">
+                          <span className="text-lg">✅</span>
+                          <div className="space-y-1 text-sm">
+                            <p className="font-semibold text-green-900">La période de renouvellement est ouverte.</p>
+                            <p className="text-green-800">
+                              Le renouvellement (ou la première demande) doit être effectué entre quatre mois et deux mois avant la date de fin de validité, soit du{' '}
+                              <strong>{formatDateCourte(calculs.debutPeriode)}</strong> au <strong>{formatDateCourte(calculs.finPeriode)}</strong>.
+                            </p>
+                            <p className="text-green-800">
+                              Il reste <strong>{calculs.joursRestantsAvantZone2Mois} jour{calculs.joursRestantsAvantZone2Mois > 1 ? 's' : ''}</strong> avant d'entrer dans la zone des 2 mois (fin de la période légale de dépôt).
+                            </p>
+                            <p className="text-xs text-green-700">Référence : article R.431-5 du CESEDA.</p>
+                          </div>
+                        </div>
+                      )}
+                      {calculs.apresPeriode && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-4 flex gap-3 items-start">
+                          <span className="text-lg">⚠️</span>
+                          <div className="space-y-1 text-sm">
+                            <p className="font-semibold text-red-900">La période légale de dépôt est dépassée.</p>
+                            <p className="text-red-800">
+                              L'étranger devra payer un visa de régularisation de 180 euros qui doit être acquitté, sauf cas de force majeure ou présentation d'un visa en cours de validité.
+                            </p>
+                            <p className="text-xs text-red-700">Référence : article R.431-5 du CESEDA.</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Résultats pour recours contre refus de visa */}
                   {calculs.type === 'contentieux_visa' && (
                     <div className="space-y-4">
@@ -3026,32 +3118,6 @@ export default function CalculateurPage() {
                           </ul>
                         </div>
                       )}
-                    </div>
-                  )}
-
-                  {calculs.type === 'contentieux' && calculs.messagePersonnalise && (
-                    <div className={`rounded-lg p-4 border-2 ${
-                      calculs.urgence 
-                        ? 'bg-red-50 border-red-300' 
-                        : calculs.recoursDansDelais 
-                        ? 'bg-orange-50 border-orange-300' 
-                        : 'bg-green-50 border-green-300'
-                    }`}>
-                      <div className="flex items-start gap-3">
-                        <span className="text-2xl">{calculs.urgence ? '⚠️' : calculs.recoursDansDelais ? '⏰' : '✅'}</span>
-                        <div className="flex-1">
-                          <h3 className="font-bold text-lg mb-2">
-                            {calculs.urgence ? 'URGENT' : 'Délai de recours'}
-                          </h3>
-                          <p className="text-sm mb-2">{calculs.messagePersonnalise}</p>
-                          <div className="text-xs space-y-1">
-                            <p><strong>Date de décision :</strong> {formatDateCourte(calculs.dateDecision)}</p>
-                            <p><strong>Date limite de recours :</strong> {formatDateCourte(calculs.dateLimite)}</p>
-                            <p><strong>Jours restants :</strong> <span className={getAlertColor(calculs.joursRestants).split(' ')[0]}>{calculs.joursRestants} jour(s)</span></p>
-                            <p><strong>Type de recours :</strong> {calculs.typeRecours}</p>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   )}
 
@@ -3645,7 +3711,7 @@ export default function CalculateurPage() {
                 <h2 className="text-xl font-bold text-foreground">Explications</h2>
               </div>
 
-              {!formData.typeTitre && formData.situation === 'demande' && (
+              {formData.situation === 'demande' && !formData.typeTitreDemande && (
                 <div className="text-center py-12">
                   <div className="text-6xl mb-4">📚</div>
                   <p className="text-muted-foreground">
@@ -3653,6 +3719,61 @@ export default function CalculateurPage() {
                   </p>
                 </div>
               )}
+
+              {formData.situation === 'demande' && formData.typeTitreDemande && (() => {
+                const config = titresSejourDemande.find((t) => t.value === formData.typeTitreDemande);
+                if (!config) return null;
+                const delaiTexte = config.delaiDirJours === 120 ? '4 mois' : config.delaiDirJours === 90 ? '90 jours (3 mois)' : '60 jours (2 mois)';
+                return (
+                  <div className="space-y-4">
+                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                      <h3 className="font-semibold mb-2 text-slate-900">Titre sélectionné</h3>
+                      <p className="text-sm font-medium text-slate-800">{config.label}</p>
+                      <p className="text-xs text-slate-600 mt-1">Article CESEDA : {config.article}</p>
+                    </div>
+                    <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                      <h3 className="font-semibold mb-2 text-amber-900">Décision implicite de rejet (DIR)</h3>
+                      <p className="text-sm text-amber-800 mb-2">
+                        En l’absence de réponse de la préfecture, le silence vaut refus implicite après <strong>{delaiTexte}</strong> à compter de la date de notification de la confirmation de dépôt (art. R.432-1 et R.432-2 CESEDA).
+                      </p>
+                      <p className="text-xs text-amber-700">
+                        La DIR ouvre les voies de recours ; elle ne signifie pas que la préfecture a refusé au fond.
+                      </p>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <h3 className="font-semibold mb-2 text-blue-800">Recours possibles</h3>
+                      <ul className="space-y-2 text-sm text-blue-800">
+                        <li className="flex items-start gap-2">
+                          <span>•</span>
+                          <span><strong>Référé mesures utiles</strong> : avant la naissance de la DIR (idéalement au plus tard 15 jours avant).</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span>•</span>
+                          <span><strong>Demande de communication des motifs</strong> : dans les 30 jours suivant la DIR ; l’administration a 1 mois pour répondre.</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span>•</span>
+                          <span><strong>Référé suspension et recours en annulation</strong> : à partir de la DIR jusqu’à 2 mois après (art. L.521-1 CJA).</span>
+                        </li>
+                      </ul>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                      <h3 className="font-semibold mb-2 text-green-800">Délais clés</h3>
+                      <ul className="space-y-1 text-sm text-green-800">
+                        <li>• Période de dépôt : 4 à 2 mois avant la fin de validité du titre (R.431-5)</li>
+                        <li>• Naissance de la DIR : {config.delaiDirJours} jours après confirmation de dépôt</li>
+                        <li>• Demande de motifs : 30 jours après la DIR</li>
+                        <li>• Référé suspension / recours au fond : 2 mois après la DIR</li>
+                      </ul>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <p className="text-xs text-gray-700">
+                        Faites-vous accompagner par la plateforme pour préparer vos démarches et, le cas échéant, un recours.
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {formData.situation === 'contentieux_visa' && (
                 <div className="space-y-4">
@@ -3680,53 +3801,6 @@ export default function CalculateurPage() {
                       <li>• Conservez tous les justificatifs de votre demande</li>
                       <li>• Consultez un avocat spécialisé si le délai est court</li>
                       <li>• Le recours gracieux peut être une première étape avant le recours contentieux</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-
-              {formData.situation === 'contentieux_titre' && (
-                <div className="space-y-4">
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                    <h3 className="font-semibold mb-2 text-blue-800">Délais de recours</h3>
-                    <p className="text-sm text-blue-700 mb-3">
-                      Les délais de recours varient selon le type de décision :
-                    </p>
-                    <ul className="space-y-2 text-sm text-blue-700">
-                      <li className="flex items-start gap-2">
-                        <span>•</span>
-                        <span><strong>Rejet CNDA :</strong> 1 mois</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span>•</span>
-                        <span><strong>Refus d'enregistrement :</strong> 15 jours</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span>•</span>
-                        <span><strong>Autres décisions :</strong> 30 jours</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                    <h3 className="font-semibold mb-2 text-purple-800">Procédures d'urgence</h3>
-                    <p className="text-sm text-purple-700 mb-2">
-                      En cas d'urgence, vous pouvez engager :
-                    </p>
-                    <ul className="space-y-1 text-sm text-purple-700">
-                      <li>• Référé suspension</li>
-                      <li>• Référé liberté</li>
-                      <li>• Référé mesures utiles</li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                    <h3 className="font-semibold mb-2 text-green-800">Conseils pratiques</h3>
-                    <ul className="space-y-2 text-sm text-green-700">
-                      <li>• Déposez votre recours le plus tôt possible</li>
-                      <li>• Conservez tous les justificatifs</li>
-                      <li>• Consultez un avocat spécialisé si le délai est court</li>
-                      <li>• En cas de délai dépassé, un recours en annulation peut encore être possible</li>
                     </ul>
                   </div>
                 </div>

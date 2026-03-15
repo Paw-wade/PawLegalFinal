@@ -52,6 +52,12 @@ function ClientDashboardContent() {
   const [documentRequestNotification, setDocumentRequestNotification] = useState<any>(null);
   const [bookmarkedThreads, setBookmarkedThreads] = useState<any[]>([]);
   const [showBookmarksBar, setShowBookmarksBar] = useState(true);
+  const [isPersonalInfoOpen, setIsPersonalInfoOpen] = useState(true);
+  const [isAdminInfoOpen, setIsAdminInfoOpen] = useState(true);
+  const [joursRestantsSidebar, setJoursRestantsSidebar] = useState<number | null>(null);
+  const [heuresRestantes, setHeuresRestantes] = useState(0);
+  const [minutesRestantes, setMinutesRestantes] = useState(0);
+  const [secondesRestantes, setSecondesRestantes] = useState(0);
 
   // Textes CMS pour le header du dashboard client
   const dashboardTitleClient = useCmsText(
@@ -441,6 +447,37 @@ function ClientDashboardContent() {
     return diffDays;
   };
 
+  const formatDateCourte = (d: Date) => {
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  // Minuteur dynamique pour la sidebar (temps restant avant expiration)
+  useEffect(() => {
+    if (!userProfile?.dateExpiration) {
+      setJoursRestantsSidebar(null);
+      return;
+    }
+    const updateTimer = () => {
+      const expiration = new Date(userProfile.dateExpiration);
+      const maintenant = new Date();
+      const difference = expiration.getTime() - maintenant.getTime();
+      if (difference <= 0) {
+        setJoursRestantsSidebar(0);
+        setHeuresRestantes(0);
+        setMinutesRestantes(0);
+        setSecondesRestantes(0);
+        return;
+      }
+      setJoursRestantsSidebar(Math.floor(difference / (1000 * 60 * 60 * 24)));
+      setHeuresRestantes(Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)));
+      setMinutesRestantes(Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)));
+      setSecondesRestantes(Math.floor((difference % (1000 * 60)) / 1000));
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [userProfile?.dateExpiration]);
+
   const loadStats = async () => {
     setIsLoading(true);
     try {
@@ -604,7 +641,9 @@ function ClientDashboardContent() {
           100% { transform: translateX(-100%); }
         }
       `}} />
-      <main className="w-full max-w-6xl mx-auto px-4 py-8">
+      <main className="w-full max-w-7xl mx-auto px-4 py-8">
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+          <div className="flex-1 min-w-0">
         <div id="dashboard-top" className="scroll-mt-20" />
 
         <div className="mb-6">
@@ -899,6 +938,162 @@ function ClientDashboardContent() {
 
         </div>
 
+          </div>
+
+          {/* Barre Mon Profil à droite - comptes client */}
+          <div className="w-full lg:w-72 lg:flex-shrink-0 lg:self-start">
+            <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all lg:sticky lg:top-24 lg:w-72">
+              <div className="mb-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+                    <span className="text-white font-bold text-lg">
+                      {userProfile?.firstName?.[0]?.toUpperCase() || session?.user?.name?.[0]?.toUpperCase() || 'U'}
+                      {userProfile?.lastName?.[0]?.toUpperCase() || ''}
+                    </span>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-bold text-foreground">Mon Profil</h2>
+                    <span className="inline-block px-2 py-0.5 text-[10px] font-semibold rounded-full bg-primary/20 text-primary mt-1">Client</span>
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 mb-4">
+                  <p className="text-sm font-bold text-foreground mb-1">
+                    {userProfile?.firstName && userProfile?.lastName
+                      ? `${userProfile.firstName} ${userProfile.lastName}`
+                      : session?.user?.name || 'Utilisateur'}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {userProfile?.email || session?.user?.email || ''}
+                  </p>
+                </div>
+              </div>
+
+              {!userProfile ? (
+                <div className="text-center py-6">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
+                  <p className="text-muted-foreground text-sm">Chargement du profil...</p>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  <div className="space-y-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsPersonalInfoOpen(!isPersonalInfoOpen)}
+                      className="flex items-center justify-between w-full gap-2 mb-3 hover:opacity-80 transition-opacity cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-5 bg-blue-500 rounded-full"></div>
+                        <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 transition-colors">Informations personnelles</h3>
+                      </div>
+                      <span className={`text-blue-600 transition-transform duration-300 text-xs ${isPersonalInfoOpen ? 'rotate-180' : 'rotate-0'}`}>▼</span>
+                    </button>
+                    {isPersonalInfoOpen && (
+                      <div className="space-y-2.5">
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Nom complet</p>
+                          <p className="text-xs font-medium text-foreground break-words">
+                            {userProfile.firstName && userProfile.lastName ? `${userProfile.firstName} ${userProfile.lastName}` : <span className="text-muted-foreground italic">Non renseigné</span>}
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Email</p>
+                          <p className="text-xs font-medium text-foreground break-all">{userProfile.email || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Téléphone</p>
+                          <p className="text-xs font-medium text-foreground">{userProfile.phone || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Adresse</p>
+                          <p className="text-xs font-medium text-foreground break-words">
+                            {(userProfile.adressePostale || userProfile.ville || userProfile.codePostal) ? (
+                              <>{userProfile.adressePostale || ''}{userProfile.adressePostale && (userProfile.ville || userProfile.codePostal) ? ', ' : ''}{userProfile.codePostal || ''}{userProfile.codePostal && userProfile.ville ? ' ' : ''}{userProfile.ville || ''}{userProfile.pays && (userProfile.ville || userProfile.codePostal || userProfile.adressePostale) ? `, ${userProfile.pays}` : ''}</>
+                            ) : (
+                              <span className="text-muted-foreground italic">Non renseigné</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2.5 pt-4 border-t border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setIsAdminInfoOpen(!isAdminInfoOpen)}
+                      className="flex items-center justify-between w-full gap-2 mb-3 hover:opacity-80 transition-opacity cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-5 bg-green-500 rounded-full"></div>
+                        <h3 className="text-sm font-bold text-foreground group-hover:text-green-600 transition-colors">Informations administratives</h3>
+                      </div>
+                      <span className={`text-green-600 transition-transform duration-300 text-xs ${isAdminInfoOpen ? 'rotate-180' : 'rotate-0'}`}>▼</span>
+                    </button>
+                    {isAdminInfoOpen && (
+                      <div className="space-y-2.5">
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Type de titre</p>
+                          <p className="text-xs font-medium text-foreground break-words">{userProfile.typeTitre || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                            <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Délivrance</p>
+                            <p className="text-xs font-medium text-foreground">{userProfile.dateDelivrance ? formatDateCourte(new Date(userProfile.dateDelivrance)) : <span className="text-muted-foreground italic">-</span>}</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                            <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Expiration</p>
+                            <p className="text-xs font-medium text-foreground">{userProfile.dateExpiration ? formatDateCourte(new Date(userProfile.dateExpiration)) : <span className="text-muted-foreground italic">-</span>}</p>
+                          </div>
+                        </div>
+                        {userProfile.dateExpiration && joursRestantsSidebar !== null && (
+                          <div className={`rounded-lg p-4 border ${joursRestantsSidebar <= 0 ? 'bg-red-50 border-red-200' : joursRestantsSidebar < 30 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
+                            <p className={`text-xs font-bold mb-2 uppercase tracking-wide ${joursRestantsSidebar <= 0 ? 'text-red-900' : joursRestantsSidebar < 30 ? 'text-orange-900' : 'text-green-900'}`}>
+                              {joursRestantsSidebar <= 0 ? 'Titre expiré' : 'Temps restant'}
+                            </p>
+                            {joursRestantsSidebar <= 0 ? (
+                              <p className="text-[11px] font-semibold text-red-800">Votre titre a expiré. Pensez au renouvellement.</p>
+                            ) : (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <div className="bg-white/80 rounded-lg px-2 py-1.5 border-2 border-green-400 text-green-900">
+                                  <p className="text-[9px] font-semibold uppercase opacity-70">Jours</p>
+                                  <p className="text-base font-bold">{joursRestantsSidebar}</p>
+                                </div>
+                                <div className="bg-white/80 rounded-lg px-2 py-1.5 border-2 border-green-400 text-green-900">
+                                  <p className="text-[9px] font-semibold uppercase opacity-70">H</p>
+                                  <p className="text-base font-bold">{String(heuresRestantes).padStart(2, '0')}</p>
+                                </div>
+                                <div className="bg-white/80 rounded-lg px-2 py-1.5 border-2 border-green-400 text-green-900">
+                                  <p className="text-[9px] font-semibold uppercase opacity-70">Min</p>
+                                  <p className="text-base font-bold">{String(minutesRestantes).padStart(2, '0')}</p>
+                                </div>
+                                <div className="bg-white/80 rounded-lg px-2 py-1.5 border-2 border-green-400 text-green-900">
+                                  <p className="text-[9px] font-semibold uppercase opacity-70">Sec</p>
+                                  <p className="text-base font-bold">{String(secondesRestantes).padStart(2, '0')}</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Numéro de titre</p>
+                          <p className="text-xs font-medium text-foreground break-all">{userProfile.numeroTitre || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200">
+                    <Link href="/client/compte">
+                      <Button variant="outline" className="w-full text-xs h-9 font-semibold border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all">
+                        ✏️ Modifier mon profil
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </main>
       
       {/* Modal de réservation */}

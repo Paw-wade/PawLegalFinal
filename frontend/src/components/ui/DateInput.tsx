@@ -167,6 +167,8 @@ export function DateInput({
             fontSize: '16px'
           }}
           disabled={props.disabled}
+          max={props.max}
+          min={props.min}
           aria-label="Ouvrir le calendrier"
         />
         {/* Icône de calendrier visible (en arrière-plan, non cliquable car l'input est au-dessus) */}

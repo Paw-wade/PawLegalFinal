@@ -82,7 +82,7 @@ export default function ServicesPage() {
           {servicesConfig.map((service, index) => {
             const Icon = service.icon;
             const colors = getColorClasses(service.color);
-            const isCalculator = index === 2; // Portail titre de séjour -> calculateur
+            const isCalculator = service.isPortal === true; // Portail -> calculateur
             return (
               <div
                 key={index}
@@ -99,6 +99,31 @@ export default function ServicesPage() {
                     {service.description}
                   </p>
                 </div>
+
+                {/* Informations clés */}
+                <div className="mb-6 pb-4 border-b border-border/60 space-y-2">
+                  {service.duree && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">Durée&nbsp;:</span> {service.duree}
+                    </p>
+                  )}
+                  {service.prix && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">Tarif&nbsp;:</span> {service.prix}
+                    </p>
+                  )}
+                </div>
+
+                {/* Liste des fonctionnalités */}
+                {service.points?.length ? (
+                  <ul className="mb-6 flex-1 space-y-1.5 text-sm text-muted-foreground list-disc pl-4">
+                    {service.points.map((point, i) => (
+                      <li key={i} className="leading-relaxed">
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
 
                 <div className="pt-4 border-t border-border/60 mt-auto">
                   {isCalculator ? (

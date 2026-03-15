@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { forumAPI } from '@/lib/api';
+import { forumAPI, documentRequestsAPI } from '@/lib/api';
 import {
   LayoutDashboard,
   FolderOpen,
@@ -42,6 +42,7 @@ const clientMenuItems: MenuItem[] = [
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
+  const [documentsPendingCount, setDocumentsPendingCount] = useState<number>(0);
 
   const isActive = (href: string) => {
     if (href === '/client' || href === '/admin') {
@@ -51,7 +52,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   };
 
   useEffect(() => {
-    // Charger une seule fois le nombre approximatif de nouvelles discussions forum
     const loadForumCount = async () => {
       try {
         const res = await forumAPI.getUnreadThreadsCount();
@@ -63,6 +63,22 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       }
     };
     loadForumCount();
+  }, []);
+
+  useEffect(() => {
+    const loadDocumentsPendingCount = async () => {
+      try {
+        const res = await documentRequestsAPI.getRequests({ status: 'pending' });
+        if (res.data?.success && Array.isArray(res.data.documentRequests)) {
+          setDocumentsPendingCount(res.data.documentRequests.length);
+        } else if (res.data?.success && typeof res.data.count === 'number') {
+          setDocumentsPendingCount(res.data.count);
+        }
+      } catch (err) {
+        console.error('Erreur lors du chargement du nombre de documents demandés non fournis:', err);
+      }
+    };
+    loadDocumentsPendingCount();
   }, []);
 
   return (
@@ -77,7 +93,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       <aside
         className={`
           w-64 bg-white border-r border-gray-200 h-screen flex flex-col
-          fixed top-0 left-0 z-30
+          fixed top-0 left-0 z-50
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
@@ -123,6 +139,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <Icon className="w-5 h-5" />
                 <span className="flex items-center gap-1">
                   {item.label}
+                  {item.href === '/client/documents' && documentsPendingCount > 0 && (
+                    <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
+                      {documentsPendingCount > 99 ? '99+' : documentsPendingCount}
+                    </span>
+                  )}
                   {item.href === '/forum' && forumUnreadCount > 0 && (
                     <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
                       {forumUnreadCount > 99 ? '99+' : forumUnreadCount}

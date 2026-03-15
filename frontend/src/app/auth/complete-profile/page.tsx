@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { userAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import { Toast } from '@/components/ui/Toast';
 import { useAutoFillDetection, getRealInputValues } from '@/hooks/useAutoFillDetection';
 
 // Composants simplifiés
@@ -21,7 +22,7 @@ function Button({ children, variant = 'default', className = '', disabled = fals
   );
 }
 
-const Input = React.forwardRef<HTMLInputElement, any>(({ className = '', type, value, onChange, ...props }, ref) => {
+const Input = React.forwardRef<HTMLInputElement, any>(({ className = '', type, value, onChange, name, ...props }, ref) => {
   // Pour les champs de date, utiliser le composant DateInput qui garantit le format jour/mois/année
   if (type === 'date') {
     return (
@@ -30,13 +31,14 @@ const Input = React.forwardRef<HTMLInputElement, any>(({ className = '', type, v
         onChange={(newValue) => {
           if (onChange) {
             const syntheticEvent = {
-              target: { value: newValue },
-              currentTarget: { value: newValue }
+              target: { value: newValue, name: name || '' },
+              currentTarget: { value: newValue, name: name || '' }
             } as React.ChangeEvent<HTMLInputElement>;
             onChange(syntheticEvent);
           }
         }}
         className={`flex h-11 w-full rounded-md border-2 border-input bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus:border-primary transition-colors ${className}`}
+        name={name}
         {...props}
       />
     );
@@ -86,6 +88,10 @@ export default function CompleteProfilePage() {
     ville: '',
     codePostal: '',
     pays: 'France',
+    // Informations de séjour (clients)
+    typeTitre: '',
+    dateDelivrance: '',
+    dateExpiration: '',
   });
 
   // Refs pour détecter l'auto-remplissage
@@ -201,11 +207,11 @@ export default function CompleteProfilePage() {
 
   // Fonction pour charger les données existantes du profil
   const loadExistingProfile = async (userData: any) => {
+    const formatDate = (d: any) => (d ? new Date(d).toISOString().split('T')[0] : '');
     setFormData(prev => ({
       ...prev,
-      // Informations personnelles
       numeroEtranger: userData.numeroEtranger || '',
-      dateNaissance: userData.dateNaissance ? new Date(userData.dateNaissance).toISOString().split('T')[0] : '',
+      dateNaissance: formatDate(userData.dateNaissance),
       lieuNaissance: userData.lieuNaissance || '',
       nationalite: userData.nationalite || '',
       sexe: userData.sexe || '',
@@ -213,6 +219,9 @@ export default function CompleteProfilePage() {
       ville: userData.ville || '',
       codePostal: userData.codePostal || '',
       pays: userData.pays || 'France',
+      typeTitre: userData.typeTitre || '',
+      dateDelivrance: formatDate(userData.dateDelivrance),
+      dateExpiration: formatDate(userData.dateExpiration),
     }));
   };
 
@@ -272,12 +281,30 @@ export default function CompleteProfilePage() {
       }
     }
 
-    // Mettre à jour l'état avec les valeurs réelles
-    setFormData(realValues);
+    // Mettre à jour l'état avec les valeurs réelles (fusion pour ne pas perdre les champs sans ref)
+    setFormData(prev => ({ ...prev, ...realValues }));
+
+    // Données à envoyer : fusion realValues + formData (formData a les champs à jour, dont dates)
+    const dataToSend = { ...formData, ...realValues };
+
+    // Pour les clients, les informations de séjour sont obligatoires
+    if (userRole === 'client') {
+      const { typeTitre, dateDelivrance, dateExpiration } = dataToSend;
+      if (!typeTitre?.trim() || !dateDelivrance?.trim() || !dateExpiration?.trim()) {
+        setError('Pour finaliser votre profil client, veuillez renseigner les informations de séjour : type de titre, date de délivrance et date d\'expiration.');
+        setIsLoading(false);
+        return;
+      }
+    }
 
     // Préparer les données
     const profileData: any = {
-      ...realValues,
+      ...dataToSend,
+      ...(userRole === 'client' ? {
+        typeTitre: dataToSend.typeTitre?.trim() || '',
+        dateDelivrance: dataToSend.dateDelivrance || undefined,
+        dateExpiration: dataToSend.dateExpiration || undefined,
+      } : {}),
       profilComplete: true,
     };
 
@@ -350,6 +377,7 @@ export default function CompleteProfilePage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 px-4 py-12">
+      <Toast message="Profil complété avec succès ! Redirection en cours..." visible={success} duration={2000} />
       <div className="w-full max-w-3xl">
         <div className="bg-white rounded-xl shadow-xl border border-border overflow-hidden">
           {/* En-tête amélioré */}
@@ -362,6 +390,11 @@ export default function CompleteProfilePage() {
               <p className="text-muted-foreground">
                 Veuillez compléter les informations suivantes pour finaliser votre inscription
               </p>
+              {userRole === 'client' && (
+                <p className="text-xs text-muted-foreground/90 mt-2">
+                  Sans profil complété, l&apos;accès au calculateur de délais n&apos;est pas possible.
+                </p>
+              )}
             </div>
           </div>
 
@@ -548,6 +581,48 @@ export default function CompleteProfilePage() {
                         <option value="F">Femme</option>
                         <option value="Autre">Autre</option>
                       </select>
+                    </div>
+                  </div>
+
+                  {/* Section Informations de séjour (clients) */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <span className="text-xl">🛂</span>
+                      </div>
+                      <h3 className="text-lg font-semibold text-foreground">Informations de séjour</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="typeTitre">Type de titre <span className="text-destructive">*</span></Label>
+                        <Input
+                          id="typeTitre"
+                          name="typeTitre"
+                          value={formData.typeTitre}
+                          onChange={handleChange}
+                          placeholder="Ex: Carte de séjour, Visa, etc."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="dateDelivrance">Date de délivrance <span className="text-destructive">*</span></Label>
+                        <Input
+                          id="dateDelivrance"
+                          name="dateDelivrance"
+                          type="date"
+                          value={formData.dateDelivrance}
+                          onChange={handleChange}
+                        />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="dateExpiration">Date d'expiration <span className="text-destructive">*</span></Label>
+                        <Input
+                          id="dateExpiration"
+                          name="dateExpiration"
+                          type="date"
+                          value={formData.dateExpiration}
+                          onChange={handleChange}
+                        />
+                      </div>
                     </div>
                   </div>
 

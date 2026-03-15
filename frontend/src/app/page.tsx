@@ -494,34 +494,66 @@ export default function HomePage() {
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 md:p-8">
                 {(() => {
                   const current = solutions[selectedSolutionIndex] || solutions[0];
-                  const Icon = current.icon;
                   return (
                     <div className="space-y-4">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                          <Icon className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h3 className="text-2xl font-semibold text-gray-900 mb-1">
-                            {current.title}
-                          </h3>
-                          <p className="text-sm text-gray-600 leading-relaxed">
-                            {current.description}
-                          </p>
-                        </div>
+                      <div>
+                        <h3 className="text-2xl font-semibold text-gray-900 mb-1">
+                          {current.title}
+                        </h3>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                          {current.description}
+                        </p>
                       </div>
 
+                      <div className="grid gap-3 sm:grid-cols-2 text-sm text-gray-700">
+                        {current.duree && (
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+                              Durée
+                            </p>
+                            <p className="font-medium text-gray-900">
+                              {current.duree}
+                            </p>
+                          </div>
+                        )}
+                        {current.prix && (
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+                              Tarif
+                            </p>
+                            <p className="font-medium text-gray-900">
+                              {current.prix}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {current.points?.length ? (
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">
+                            En pratique
+                          </p>
+                          <ul className="list-disc pl-5 space-y-1.5 text-sm text-gray-700">
+                            {current.points.map((point) => (
+                              <li key={point} className="leading-relaxed">
+                                {point}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
                       <div className="pt-4 border-t border-gray-200 flex flex-wrap gap-3">
-                        {selectedSolutionIndex === 0 || selectedSolutionIndex === 2 ? (
-                          <Link href="/auth/signup">
-                            <Button size="lg" className="min-w-[180px]">
-                              Créer mon compte
-                            </Button>
-                          </Link>
-                        ) : selectedSolutionIndex === 3 ? (
+                        {current.isPortal ? (
                           <Link href="/calculateur">
                             <Button size="lg" className="min-w-[200px]">
                               Accéder au calculateur
+                            </Button>
+                          </Link>
+                        ) : selectedSolutionIndex === 0 ? (
+                          <Link href="/auth/signup">
+                            <Button size="lg" className="min-w-[180px]">
+                              Créer mon compte
                             </Button>
                           </Link>
                         ) : (
