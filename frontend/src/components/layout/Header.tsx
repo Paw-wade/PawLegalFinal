@@ -616,7 +616,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 <>
                   <button
                     type="button"
-                    onClick={() => { handleDashboardClick(); setMobileNavOpen(false); }}
+                    onClick={(e) => { handleDashboardClick(e); setMobileNavOpen(false); }}
                     className="w-full text-left px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
                   >
                     Dashboard
