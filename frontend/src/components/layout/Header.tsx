@@ -78,6 +78,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
   } | null>(null);
   const [mounted, setMounted] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Textes CMS pour le sous-titre du header
   const subtitleHome = useCmsText(
@@ -332,13 +333,27 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
     <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-50 shadow-sm">
       <div className="container mx-auto px-4 py-2.5">
         <div className="flex items-center justify-between">
-          {/* Logo ; bouton menu (mobile) pour client, admin, partenaire */}
+          {/* Logo ; bouton menu (mobile) : sidebar dashboard ou menu nav selon la page */}
           <div className="flex items-center gap-2 min-w-0">
+            {/* Hamburger pour ouvrir le menu latéral (dashboard client/admin/partenaire) */}
             {onMenuClick && (
               <button
                 onClick={onMenuClick}
                 className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0"
                 aria-label="Ouvrir le menu"
+              >
+                <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
+            {/* Hamburger pour ouvrir le menu de navigation (page d'accueil, calculateur, etc.) */}
+            {variant === 'home' && !onMenuClick && (
+              <button
+                onClick={() => setMobileNavOpen(!mobileNavOpen)}
+                className="md:hidden p-2 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0"
+                aria-label="Ouvrir le menu"
+                aria-expanded={mobileNavOpen}
               >
                 <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -551,6 +566,76 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
             </div>
         </div>
       </div>
+
+      {/* Menu de navigation mobile (page d'accueil, calculateur, etc.) */}
+      {variant === 'home' && mobileNavOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setMobileNavOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="fixed top-14 left-0 right-0 z-50 md:hidden bg-white border-b border-gray-200 shadow-lg max-h-[calc(100vh-3.5rem)] overflow-y-auto">
+            <nav className="p-4 flex flex-col gap-1">
+              <Link
+                href="/services"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+              >
+                Services
+              </Link>
+              <Link
+                href="/faq"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+              >
+                FAQ
+              </Link>
+              <Link
+                href="/forum"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+              >
+                Forum
+              </Link>
+              <Link
+                href="/contact"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+              >
+                Contact
+              </Link>
+              <Link
+                href="/calculateur"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3 rounded-lg text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+              >
+                Calculateur
+              </Link>
+              {isAuthenticated ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => { handleDashboardClick(); setMobileNavOpen(false); }}
+                    className="w-full text-left px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                  >
+                    Dashboard
+                  </button>
+                  {(userRole === 'admin' || userRole === 'superadmin') && (
+                    <Link
+                      href="/admin/logs"
+                      onClick={() => setMobileNavOpen(false)}
+                      className="px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                    >
+                      Logs
+                    </Link>
+                  )}
+                </>
+              ) : null}
+            </nav>
+          </div>
+        </>
+      )}
 
       {/* Modal de connexion/inscription */}
       {showAuthModal && (

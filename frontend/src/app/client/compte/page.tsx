@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { userAPI, smsPreferencesAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import { Toast } from '@/components/ui/Toast';
 
 function Button({ children, variant = 'default', className = '', disabled = false, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
@@ -76,7 +77,6 @@ export default function ComptePage() {
     nationalite: '',
     sexe: '',
     numeroEtranger: '',
-    numeroTitre: '',
     typeTitre: '',
     dateDelivrance: '',
     dateExpiration: '',
@@ -182,7 +182,6 @@ export default function ComptePage() {
           nationalite: String(user.nationalite || '').trim(),
           sexe: String(user.sexe || '').trim(),
           numeroEtranger: String(user.numeroEtranger || '').trim(),
-          numeroTitre: String(user.numeroTitre || '').trim(),
           typeTitre: String(user.typeTitre || '').trim(),
           dateDelivrance: formatDate(user.dateDelivrance),
           dateExpiration: formatDate(user.dateExpiration),
@@ -268,19 +267,84 @@ export default function ComptePage() {
     setError(null);
     setSuccess(null);
 
+    const userRoleSubmit = (session?.user as any)?.role ?? 'client';
+    const isClientSubmit = userRoleSubmit === 'client';
+    if (isClientSubmit) {
+      const { typeTitre, dateDelivrance, dateExpiration } = profileData;
+      if (!typeTitre?.trim() || !dateDelivrance?.trim() || !dateExpiration?.trim()) {
+        setError('Pour les comptes client, les informations de séjour sont obligatoires : type de titre, date de délivrance et date d\'expiration.');
+        setIsSaving(false);
+        return;
+      }
+    }
+
+    const payload = {
+      firstName: profileData.firstName ?? '',
+      lastName: profileData.lastName ?? '',
+      phone: profileData.phone ?? '',
+      email: profileData.email ?? '',
+      dateNaissance: profileData.dateNaissance || undefined,
+      lieuNaissance: profileData.lieuNaissance ?? '',
+      nationalite: profileData.nationalite ?? '',
+      sexe: profileData.sexe ?? '',
+      numeroEtranger: profileData.numeroEtranger ?? '',
+      typeTitre: profileData.typeTitre ?? '',
+      dateDelivrance: profileData.dateDelivrance || undefined,
+      dateExpiration: profileData.dateExpiration || undefined,
+      adressePostale: profileData.adressePostale ?? '',
+      ville: profileData.ville ?? '',
+      codePostal: profileData.codePostal ?? '',
+      pays: profileData.pays ?? 'France',
+    };
+
+    const doUpdate = () => userAPI.updateProfile(payload);
+    let response: any;
+
     try {
-      const response = await userAPI.updateProfile(profileData);
-      if (response.data.success) {
+      response = await doUpdate();
+      const data = response?.data;
+      if (data && data.success) {
         setSuccess('Profil mis à jour avec succès');
         setTimeout(() => setSuccess(null), 3000);
-        // Recharger le profil pour avoir les données à jour (au cas où le backend modifie certaines valeurs)
         await loadProfile();
       } else {
-        setError(response.data.message || 'Erreur lors de la mise à jour du profil');
+        setError((data && data.message) || 'Erreur lors de la mise à jour du profil');
       }
     } catch (error: any) {
+      const status = error.response?.status;
+      const data = error.response?.data;
+
+      if (status === 401) {
+        try {
+          const { getSession } = await import('next-auth/react');
+          const newSession = await getSession();
+          const newToken = (newSession?.user as any)?.accessToken;
+          if (newToken && typeof window !== 'undefined') {
+            localStorage.setItem('token', newToken);
+            response = await doUpdate();
+            const resData = response?.data;
+            if (resData && resData.success) {
+              setSuccess('Profil mis à jour avec succès');
+              setTimeout(() => setSuccess(null), 3000);
+              await loadProfile();
+            } else {
+              setError((resData && resData.message) || 'Erreur lors de la mise à jour du profil');
+            }
+            return;
+          }
+        } catch (retryErr) {
+          console.error('Retry après 401 échoué:', retryErr);
+        }
+        setError('Session expirée. Veuillez vous reconnecter, puis réessayer.');
+      } else {
+        const message = data?.message || error.message || 'Erreur lors de la mise à jour du profil';
+        const details = data?.errors;
+        const fullMessage = Array.isArray(details) && details.length > 0
+          ? `${message} (${details.join(', ')})`
+          : message;
+        setError(fullMessage);
+      }
       console.error('Erreur lors de la mise à jour du profil:', error);
-      setError(error.response?.data?.message || 'Erreur lors de la mise à jour du profil');
     } finally {
       setIsSaving(false);
     }
@@ -340,8 +404,12 @@ export default function ComptePage() {
     return null;
   }
 
+  const userRole = (session.user as any)?.role ?? 'client';
+  const isClient = userRole === 'client';
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
+      <Toast message={success || ''} visible={!!success} />
       <main className="w-full px-4 py-8">
         {/* En-tête amélioré */}
         <div className="mb-8">
@@ -557,13 +625,15 @@ export default function ComptePage() {
               {/* Séparateur */}
               <div className="border-t border-border"></div>
 
-              {/* Informations de séjour */}
+              {/* Informations de séjour — obligatoire pour les comptes client uniquement */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                     <span className="text-xl">🛂</span>
                   </div>
-                  <h3 className="text-lg font-semibold text-foreground">Informations de séjour</h3>
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground">Informations de séjour</h3>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="numeroEtranger" className="text-sm font-semibold">Numéro d'étranger</Label>
@@ -571,28 +641,16 @@ export default function ComptePage() {
                     id="numeroEtranger"
                     type="text"
                     value={profileData.numeroEtranger}
-                    readOnly
-                    className="mt-1 h-11 border-2 bg-gray-50 text-gray-700 cursor-not-allowed"
+                    onChange={(e) => setProfileData({ ...profileData, numeroEtranger: e.target.value })}
+                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
                     placeholder="Ex: 12AB34567"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Ce numéro est défini lors de la constitution du dossier et ne peut pas être modifié depuis cet écran.
-                  </p>
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="numeroTitre" className="text-sm font-semibold">Numéro de titre</Label>
-                    <Input
-                      id="numeroTitre"
-                      type="text"
-                      value={profileData.numeroTitre}
-                      onChange={(e) => setProfileData({ ...profileData, numeroTitre: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="Numéro du titre de séjour"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="typeTitre" className="text-sm font-semibold">Type de titre</Label>
+                    <Label htmlFor="typeTitre" className="text-sm font-semibold">
+                      Type de titre {isClient && <span className="text-destructive">*</span>}
+                    </Label>
                     <Input
                       id="typeTitre"
                       type="text"
@@ -605,7 +663,9 @@ export default function ComptePage() {
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="dateDelivrance" className="text-sm font-semibold">Date de délivrance</Label>
+                    <Label htmlFor="dateDelivrance" className="text-sm font-semibold">
+                      Date de délivrance {isClient && <span className="text-destructive">*</span>}
+                    </Label>
                     <Input
                       id="dateDelivrance"
                       type="date"
@@ -615,7 +675,9 @@ export default function ComptePage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="dateExpiration" className="text-sm font-semibold">Date d'expiration</Label>
+                    <Label htmlFor="dateExpiration" className="text-sm font-semibold">
+                      Date d'expiration {isClient && <span className="text-destructive">*</span>}
+                    </Label>
                     <Input
                       id="dateExpiration"
                       type="date"

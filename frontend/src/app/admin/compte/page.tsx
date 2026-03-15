@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { userAPI, smsPreferencesAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import { Toast } from '@/components/ui/Toast';
 
 function Button({ children, variant = 'default', className = '', disabled = false, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
@@ -244,18 +245,43 @@ export default function AdminComptePage() {
     setSuccess(null);
 
     try {
-      const response = await userAPI.updateProfile(profileData);
-      if (response.data.success) {
+      const payload = {
+        firstName: profileData.firstName ?? '',
+        lastName: profileData.lastName ?? '',
+        phone: profileData.phone ?? '',
+        email: profileData.email ?? '',
+        dateNaissance: profileData.dateNaissance || undefined,
+        lieuNaissance: profileData.lieuNaissance ?? '',
+        nationalite: profileData.nationalite ?? '',
+        sexe: profileData.sexe ?? '',
+        numeroEtranger: profileData.numeroEtranger ?? '',
+        numeroTitre: profileData.numeroTitre ?? '',
+        typeTitre: profileData.typeTitre ?? '',
+        dateDelivrance: profileData.dateDelivrance || undefined,
+        dateExpiration: profileData.dateExpiration || undefined,
+        adressePostale: profileData.adressePostale ?? '',
+        ville: profileData.ville ?? '',
+        codePostal: profileData.codePostal ?? '',
+        pays: profileData.pays ?? 'France',
+      };
+      const response = await userAPI.updateProfile(payload);
+      const data = response?.data;
+      if (data && data.success) {
         setSuccess('Profil mis à jour avec succès');
         setTimeout(() => setSuccess(null), 3000);
-        // Recharger le profil pour avoir les données à jour (au cas où le backend modifie certaines valeurs)
         await loadProfile();
       } else {
-        setError(response.data.message || 'Erreur lors de la mise à jour du profil');
+        setError((data && data.message) || 'Erreur lors de la mise à jour du profil');
       }
     } catch (error: any) {
       console.error('Erreur lors de la mise à jour du profil:', error);
-      setError(error.response?.data?.message || 'Erreur lors de la mise à jour du profil');
+      const status = error.response?.status;
+      const message = error.response?.data?.message || error.message || 'Erreur lors de la mise à jour du profil';
+      if (status === 401) {
+        setError('Session expirée. Veuillez vous reconnecter, puis réessayer.');
+      } else {
+        setError(message);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -317,6 +343,7 @@ export default function AdminComptePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background">
+      <Toast message={success || ''} visible={!!success} />
       <main className="w-full px-4 py-8">
         {/* En-tête amélioré */}
         <div className="mb-8">

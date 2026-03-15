@@ -5,6 +5,14 @@ const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Convertit une chaîne date (YYYY-MM-DD) ou Date en Date, sinon null
+function parseDateOrNull(value) {
+  if (value == null || value === '') return null;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // Middleware de débogage pour toutes les routes
 router.use((req, res, next) => {
   console.log('🔍 Route interceptée:', req.method, req.path, req.originalUrl); // Debug log
@@ -120,24 +128,34 @@ router.put(
         });
       }
 
-      if (firstName) user.firstName = firstName;
-      if (lastName) user.lastName = lastName;
-      if (phone !== undefined) user.phone = phone;
-      if (dateNaissance) user.dateNaissance = dateNaissance;
-      if (lieuNaissance) user.lieuNaissance = lieuNaissance;
-      if (nationalite) user.nationalite = nationalite;
-      if (sexe) user.sexe = sexe;
-      if (numeroEtranger) user.numeroEtranger = numeroEtranger;
-      if (numeroTitre) user.numeroTitre = numeroTitre;
-      if (typeTitre) user.typeTitre = typeTitre;
-      if (dateDelivrance) user.dateDelivrance = dateDelivrance;
-      if (dateExpiration) user.dateExpiration = dateExpiration;
-      if (adressePostale !== undefined) user.adressePostale = adressePostale;
-      if (ville !== undefined) user.ville = ville;
-      if (codePostal !== undefined) user.codePostal = codePostal;
-      if (pays !== undefined) user.pays = pays;
-      if (profilComplete !== undefined) user.profilComplete = profilComplete;
-      
+      // Champs requis : ne pas écraser par une chaîne vide
+      if (firstName !== undefined && firstName !== null) user.firstName = String(firstName).trim() || user.firstName;
+      if (lastName !== undefined && lastName !== null) user.lastName = String(lastName).trim() || user.lastName;
+      if (phone !== undefined) user.phone = (phone != null && String(phone).trim()) ? String(phone).trim() : user.phone;
+
+      // Champs optionnels texte : autoriser la mise à jour et la suppression (chaîne vide)
+      if (dateNaissance !== undefined) user.dateNaissance = parseDateOrNull(dateNaissance);
+      if (lieuNaissance !== undefined) user.lieuNaissance = lieuNaissance != null ? String(lieuNaissance).trim() : '';
+      if (nationalite !== undefined) user.nationalite = nationalite != null ? String(nationalite).trim() : '';
+      if (sexe !== undefined) {
+        const s = sexe != null ? String(sexe).trim() : '';
+        if (['M', 'F', 'Autre'].includes(s)) user.sexe = s;
+        // si vide ou invalide, ne pas modifier (garder l'ancienne valeur)
+      }
+      if (numeroEtranger !== undefined) user.numeroEtranger = numeroEtranger != null ? String(numeroEtranger).trim() : '';
+      if (numeroTitre !== undefined) user.numeroTitre = numeroTitre != null ? String(numeroTitre).trim() : '';
+      if (typeTitre !== undefined) user.typeTitre = typeTitre != null ? String(typeTitre).trim() : '';
+      if (dateDelivrance !== undefined) user.dateDelivrance = parseDateOrNull(dateDelivrance);
+      if (dateExpiration !== undefined) user.dateExpiration = parseDateOrNull(dateExpiration);
+      if (adressePostale !== undefined) user.adressePostale = adressePostale != null ? String(adressePostale).trim() : '';
+      if (ville !== undefined) user.ville = ville != null ? String(ville).trim() : '';
+      if (codePostal !== undefined) user.codePostal = codePostal != null ? String(codePostal).trim() : '';
+      if (pays !== undefined) user.pays = pays != null ? String(pays).trim() : 'France';
+      if (profilComplete !== undefined) user.profilComplete = Boolean(profilComplete);
+      // smsPreferences géré séparément si besoin
+      if (smsPreferences !== undefined && smsPreferences && typeof smsPreferences === 'object') {
+        user.smsPreferences = { ...(user.smsPreferences || {}), ...smsPreferences };
+      }
 
       await user.save();
 
@@ -157,10 +175,19 @@ router.put(
       });
     } catch (error) {
       console.error('Erreur lors de la mise à jour du profil:', error);
-      res.status(500).json({
+      const isValidationError = error.name === 'ValidationError' && error.errors;
+      const status = isValidationError ? 400 : 500;
+      const message = isValidationError
+        ? (error.message || 'Données invalides')
+        : 'Erreur serveur';
+      const details = isValidationError && error.errors
+        ? Object.values(error.errors).map((e) => e.message).filter(Boolean)
+        : undefined;
+      res.status(status).json({
         success: false,
-        message: 'Erreur serveur',
-        error: error.message
+        message,
+        error: error.message,
+        ...(details && details.length ? { errors: details } : {})
       });
     }
   }

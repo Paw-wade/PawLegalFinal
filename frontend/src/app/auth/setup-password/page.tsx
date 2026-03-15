@@ -204,11 +204,11 @@ export default function SetupPasswordPage() {
         });
 
         if (result?.ok) {
-          // Rediriger vers le tableau de bord
-          router.push('/client');
+          // Proposer de compléter le profil (nouveaux comptes)
+          router.push('/auth/complete-profile');
         } else {
-          // Si la connexion automatique échoue, rediriger quand même
-          router.push('/client');
+          // Si la connexion automatique échoue, proposer quand même la complétion du profil
+          router.push('/auth/complete-profile');
         }
       }
     } catch (err: any) {
