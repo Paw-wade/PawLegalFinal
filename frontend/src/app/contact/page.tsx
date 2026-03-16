@@ -64,6 +64,7 @@ export default function ContactPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [fileErrors, setFileErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement | null>(null);
   
   // Refs pour détecter l'auto-remplissage
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -156,6 +157,48 @@ export default function ContactPage() {
     // Mettre à jour l'état avec les valeurs réelles
     setFormData(realValues);
 
+    // Validation explicite des champs obligatoires pour afficher un message centralisé
+    if (!realValues.name?.trim()) {
+      setError('Le champ "Nom complet" est obligatoire.');
+      setIsLoading(false);
+      setTimeout(() => {
+        if (errorRef.current) {
+          errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 0);
+      return;
+    }
+    if (!realValues.email?.trim()) {
+      setError('Le champ "Email" est obligatoire.');
+      setIsLoading(false);
+      setTimeout(() => {
+        if (errorRef.current) {
+          errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 0);
+      return;
+    }
+    if (!realValues.subject?.trim()) {
+      setError('Le champ "Sujet" est obligatoire.');
+      setIsLoading(false);
+      setTimeout(() => {
+        if (errorRef.current) {
+          errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 0);
+      return;
+    }
+    if (!realValues.message?.trim()) {
+      setError('Le champ "Message" est obligatoire.');
+      setIsLoading(false);
+      setTimeout(() => {
+        if (errorRef.current) {
+          errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 0);
+      return;
+    }
+
     try {
       const formDataToSend = new FormData();
       formDataToSend.append('name', realValues.name);
@@ -202,26 +245,26 @@ export default function ContactPage() {
       <Header variant="home" />
 
       {/* Hero Section */}
-      <section className="relative py-16 bg-gradient-to-br from-primary/10 via-primary/5 to-background overflow-hidden">
+      <section className="relative py-12 bg-gradient-to-br from-primary/10 via-primary/5 to-background overflow-hidden">
         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
         <div className="container mx-auto px-4 relative z-10">
-          <div className="text-center max-w-4xl mx-auto">
-            <div className="inline-block mb-4 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
+          <div className="text-center max-w-3xl mx-auto">
+            <div className="inline-block mb-3 px-4 py-1.5 bg-primary/10 rounded-full border border-primary/20">
               <span className="text-sm font-medium text-primary">Contactez-nous</span>
             </div>
-            <h1 className="text-5xl font-bold mb-6 text-foreground leading-tight">
+            <h1 className="text-4xl sm:text-5xl font-bold mb-4 text-foreground leading-tight">
               Nous sommes à votre <span className="text-primary">écoute</span>
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Une question ? Un projet ? Contactez notre équipe d'experts juridiques pour un accompagnement personnalisé
             </p>
           </div>
         </div>
       </section>
 
-      <main className="container mx-auto px-4 py-16">
-        <div className="max-w-5xl mx-auto">
-          <div className="grid gap-6 md:grid-cols-2 items-start max-w-3xl mx-auto">
+      <main className="container mx-auto px-4 py-12">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid gap-8 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-start">
             {/* Informations de contact - colonne gauche */}
             <div>
               <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-3xl shadow-xl p-8 border-2 border-primary/20">
@@ -290,7 +333,10 @@ export default function ContactPage() {
                 )}
 
                 {error && (
-                  <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-lg">
+                  <div
+                    ref={errorRef}
+                    className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-lg"
+                  >
                     <p className="text-sm font-medium text-red-800">{error}</p>
                   </div>
                 )}

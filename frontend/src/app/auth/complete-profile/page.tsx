@@ -48,6 +48,7 @@ const Input = React.forwardRef<HTMLInputElement, any>(({ className = '', type, v
     <input
       ref={ref}
       type={type}
+      name={name}
       value={value}
       onChange={onChange}
       className={`flex h-11 w-full rounded-md border-2 border-input bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus:border-primary transition-colors ${className}`}
@@ -102,6 +103,7 @@ export default function CompleteProfilePage() {
   const villeInputRef = useRef<HTMLInputElement>(null);
   const codePostalInputRef = useRef<HTMLInputElement>(null);
   const paysInputRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement | null>(null);
 
   // Détecter l'auto-remplissage du navigateur
   useAutoFillDetection({
@@ -291,8 +293,16 @@ export default function CompleteProfilePage() {
     if (userRole === 'client') {
       const { typeTitre, dateDelivrance, dateExpiration } = dataToSend;
       if (!typeTitre?.trim() || !dateDelivrance?.trim() || !dateExpiration?.trim()) {
-        setError('Pour finaliser votre profil client, veuillez renseigner les informations de séjour : type de titre, date de délivrance et date d\'expiration.');
+        setError(
+          'Pour finaliser votre profil client, veuillez renseigner les informations de séjour : type de titre, date de délivrance et date d\'expiration.'
+        );
         setIsLoading(false);
+        // Scroll vers le message d'erreur au centre de la page
+        setTimeout(() => {
+          if (errorRef.current) {
+            errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 0);
         return;
       }
     }
@@ -401,7 +411,10 @@ export default function CompleteProfilePage() {
           <div className="p-8">
             {/* Messages améliorés */}
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm">
+              <div
+                ref={errorRef}
+                className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm"
+              >
                 <div className="flex items-center gap-2">
                   <span className="text-xl">⚠️</span>
                   <p className="text-sm font-medium text-red-800">{error}</p>

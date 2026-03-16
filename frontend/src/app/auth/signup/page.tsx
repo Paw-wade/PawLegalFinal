@@ -156,14 +156,8 @@ export default function SignupPage() {
 
       if (response.data.success) {
         setError(null);
-        setSuccess('Votre compte a été créé avec succès. Un mot de passe temporaire vous a été envoyé par SMS.');
-        // Réinitialiser le formulaire pour éviter une double soumission
-        setFormData({
-          firstName: '',
-          lastName: '',
-          email: '',
-          phone: '',
-        });
+        // Rediriger directement vers l'accueil après création du compte
+        router.push('/');
       }
     } catch (err: any) {
       console.error('Erreur lors de la création du compte:', err);
@@ -262,39 +256,7 @@ export default function SignupPage() {
                 </div>
               )}
 
-              {success && (
-                <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 rounded-lg shadow-sm">
-                  <div className="flex items-start gap-3 justify-between">
-                    <div className="flex items-start gap-2">
-                      <span className="text-xl">✅</span>
-                      <div>
-                        <p className="text-sm font-medium text-green-800">{success}</p>
-                        <p className="text-xs text-green-800 mt-1">
-                          Vous pouvez maintenant vous connecter avec l&apos;email renseigné et le mot de passe reçu par SMS.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0">
-                      <Button
-                        type="button"
-                        variant="default"
-                        className="text-xs px-3 py-2 h-9"
-                        onClick={() => router.push('/auth/signin')}
-                      >
-                        Aller à la connexion
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="text-xs px-3 py-2 h-9"
-                        onClick={() => router.push('/')}
-                      >
-                        Retour à l&apos;accueil
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Message de succès supprimé : on redirige directement vers l'accueil */}
 
               <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="space-y-5">

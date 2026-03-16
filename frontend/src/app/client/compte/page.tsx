@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
+import { useRef } from 'react';
 import Link from 'next/link';
 import { userAPI, smsPreferencesAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
@@ -59,6 +60,7 @@ function Label({ className = '', children, ...props }: any) {
 export default function ComptePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
+  const errorRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<'profil' | 'password' | 'sms'>('profil');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -274,6 +276,12 @@ export default function ComptePage() {
       if (!typeTitre?.trim() || !dateDelivrance?.trim() || !dateExpiration?.trim()) {
         setError('Pour les comptes client, les informations de séjour sont obligatoires : type de titre, date de délivrance et date d\'expiration.');
         setIsSaving(false);
+        // Mettre en avant le message d'erreur au centre de la page
+        setTimeout(() => {
+          if (errorRef.current) {
+            errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 0);
         return;
       }
     }
@@ -473,7 +481,10 @@ export default function ComptePage() {
 
         {/* Messages d'erreur et de succès améliorés */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm animate-in slide-in-from-top-2">
+          <div
+            ref={errorRef}
+            className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm animate-in slide-in-from-top-2"
+          >
             <div className="flex items-center gap-2">
               <span className="text-xl">⚠️</span>
               <p className="text-sm font-medium text-red-800">{error}</p>

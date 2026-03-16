@@ -335,7 +335,7 @@ export default function DossiersPage() {
         }
       `}} />
       <main className="w-full px-4 py-16">
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-4xl font-bold mb-2">Mes Dossiers</h1>
             <p className="text-muted-foreground">Gérez tous vos dossiers en un seul endroit</p>
@@ -503,7 +503,7 @@ export default function DossiersPage() {
                     const progress = getDossierProgress(dossier.statut);
                     return (
                       <div className="mb-4">
-                        <div className="flex items-center justify-between text-xs mb-1.5">
+                        <div className="flex items-center justify-between text-xs mb-1.5 gap-2">
                           <span className="text-muted-foreground font-medium">Avancement du dossier</span>
                           <span className="font-semibold text-foreground">{progress} %</span>
                         </div>
@@ -652,8 +652,8 @@ export default function DossiersPage() {
                     
                     return (
                       <div className="pt-3 border-t border-gray-200 mb-3">
-                        <div 
-                          className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-md p-2 -m-2 transition-colors"
+                        <div
+                          className="flex items-center justify-between gap-2 cursor-pointer hover:bg-gray-50 rounded-md p-2 -m-2 transition-colors"
                           onClick={() => {
                             const dossierId = dossier._id || dossier.id;
                             const newExpanded = new Set(expandedDocumentSections);
@@ -795,7 +795,7 @@ export default function DossiersPage() {
 
                   {/* Actions */}
                   <div className="pt-3 border-t border-gray-200">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex-1 min-w-0">
                         {(() => {
                           // Afficher la dernière notification défilante si pas de demandes de documents
@@ -837,7 +837,7 @@ export default function DossiersPage() {
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                           <div className="p-2">
-                                            <div className="flex items-center justify-between mb-2 px-2 py-1 bg-gray-50 rounded">
+                                            <div className="flex items-center justify-between gap-2 mb-2 px-2 py-1 bg-gray-50 rounded">
                                               <span className="text-xs font-semibold text-gray-700">Documents du dossier</span>
                                               <span className="text-xs text-gray-500">{dossierDocs.length} total</span>
                                             </div>
@@ -954,7 +954,7 @@ export default function DossiersPage() {
             </div>
 
             {dossiers.length > 0 && (
-              <div className="mt-6 pt-4 border-t flex items-center justify-between">
+              <div className="mt-6 pt-4 border-t flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-muted-foreground">
                   Total: <span className="font-semibold text-foreground">{dossiers.length}</span> dossier{dossiers.length > 1 ? 's' : ''}
                 </p>
