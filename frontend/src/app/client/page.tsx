@@ -634,15 +634,15 @@ function ClientDashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background max-w-[100vw]">
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes scroll-text {
           0% { transform: translateX(100%); }
           100% { transform: translateX(-100%); }
         }
       `}} />
-      <main className="w-full max-w-7xl mx-auto px-4 py-4 lg:py-6">
-        <div className="flex flex-col lg:flex-row gap-4 items-start">
+      <main className="w-full max-w-7xl mx-auto px-0 sm:px-2 py-3 sm:py-4 lg:py-6">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start">
           <div className="flex-1 min-w-0">
         <div id="dashboard-top" className="scroll-mt-20" />
 
@@ -660,7 +660,7 @@ function ClientDashboardContent() {
             
             {/* Badge de renouvellement du titre de séjour */}
             {hasTitreInfoValue && daysRemainingValue !== null && (
-              <div className={`rounded-xl shadow-lg p-4 border-2 min-w-[280px] max-w-[320px] ${
+              <div className={`rounded-xl shadow-lg p-4 border-2 w-full max-w-[320px] ${
                 daysRemainingValue < 0 
                   ? 'bg-red-50 border-red-300' 
                   : daysRemainingValue <= 30 
@@ -775,9 +775,9 @@ function ClientDashboardContent() {
         </div>
 
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
-        <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 scroll-mt-20">
-          <Link href="/client/dossiers" className="group">
-            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
+        <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4 scroll-mt-20">
+          <Link href="/client/dossiers" className="group block min-w-0">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <span className="text-2xl">📁</span>
@@ -798,9 +798,9 @@ function ClientDashboardContent() {
           </Link>
 
           {/* Badge Documents avec lien direct */}
-          <div id="documents-section" className="scroll-mt-20">
-          <Link href="/client/documents" className="group">
-            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
+          <div id="documents-section" className="scroll-mt-20 min-w-0">
+          <Link href="/client/documents" className="group block min-w-0">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
                   <span className="text-2xl">📄</span>
@@ -821,9 +821,9 @@ function ClientDashboardContent() {
         </div>
 
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Rendez-vous et accès</p>
-        <div id="rendez-vous-section" className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 scroll-mt-20">
-          <div className="group">
-            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all">
+        <div id="rendez-vous-section" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 scroll-mt-20">
+          <div className="group min-w-0">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all">
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
                   <span className="text-2xl">📅</span>
@@ -904,9 +904,9 @@ function ClientDashboardContent() {
             </div>
           </div>
 
-          <div id="temoignages-section" className="scroll-mt-20">
-          <Link href="/client/temoignages" className="group">
-            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all">
+          <div id="temoignages-section" className="scroll-mt-20 min-w-0">
+          <Link href="/client/temoignages" className="group block min-w-0">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all">
               <div className="flex items-center gap-4 mb-2">
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
                   <span className="text-2xl">⭐</span>
@@ -921,8 +921,8 @@ function ClientDashboardContent() {
           </Link>
           </div>
 
-          <Link href="/client/compte" className="group">
-            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all">
+          <Link href="/client/compte" className="group block min-w-0">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all">
               <div className="flex items-center gap-4 mb-2">
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
                   <span className="text-2xl">👤</span>
@@ -940,9 +940,9 @@ function ClientDashboardContent() {
 
           </div>
 
-          {/* Barre Mon Profil à droite - comptes client */}
-          <div className="w-full lg:w-72 lg:flex-shrink-0 lg:self-start">
-            <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all lg:sticky lg:top-24 lg:w-72">
+          {/* Barre Mon Profil à droite (ou en bas sur mobile) */}
+          <div className="w-full min-w-0 lg:w-72 lg:flex-shrink-0 lg:self-start">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all lg:sticky lg:top-24 lg:w-72">
               <div className="mb-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">

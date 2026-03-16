@@ -334,18 +334,18 @@ export default function DossiersPage() {
           animation-play-state: paused;
         }
       `}} />
-      <main className="w-full px-4 py-16">
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-4xl font-bold mb-2">Mes Dossiers</h1>
-            <p className="text-muted-foreground">Gérez tous vos dossiers en un seul endroit</p>
+      <main className="w-full max-w-[100vw] px-0 py-4 sm:py-6 lg:py-8">
+        <div className="mb-6 sm:mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-1 sm:mb-2 truncate">Mes Dossiers</h1>
+            <p className="text-sm text-muted-foreground">Gérez tous vos dossiers en un seul endroit</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={loadDossiers} disabled={isLoading}>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={loadDossiers} disabled={isLoading} className="min-h-[44px] sm:min-h-0">
               Actualiser
             </Button>
-            <Link href="/dossiers/create">
-              <Button>Nouveau dossier</Button>
+            <Link href="/dossiers/create" className="min-h-[44px] sm:min-h-0 flex items-center">
+              <Button className="w-full sm:w-auto min-h-[44px] sm:min-h-0">Nouveau dossier</Button>
             </Link>
           </div>
         </div>
@@ -376,7 +376,7 @@ export default function DossiersPage() {
               {dossiers.map((dossier) => (
                 <div
                   key={dossier._id || dossier.id}
-                  className={`border rounded-xl p-5 hover:shadow-xl transition-all duration-200 bg-white w-full ${
+                  className={`border rounded-xl p-4 sm:p-5 hover:shadow-xl transition-all duration-200 bg-white w-full min-w-0 ${
                     dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
                       ? 'border-l-4 border-l-yellow-500 border-t border-r border-b border-gray-200'
                       : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
@@ -386,9 +386,9 @@ export default function DossiersPage() {
                       : 'border-l-4 border-l-blue-500 border-t border-r border-b border-gray-200'
                   }`}
                 >
-                  {/* En-tête de la carte avec bouton de pliage/dépliage */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1 min-w-0 pr-2">
+                  {/* En-tête de la carte : sur mobile en colonne (titre puis badges + lien) */}
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                    <div className="flex-1 min-w-0 pr-0 sm:pr-2">
                       <div className="flex items-center gap-2 mb-1">
                         <button
                           onClick={() => {
@@ -401,8 +401,9 @@ export default function DossiersPage() {
                             }
                             setExpandedDossiers(newExpanded);
                           }}
-                          className="p-1 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary flex-shrink-0"
+                          className="p-2 -m-1 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary flex-shrink-0"
                           title={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
+                          aria-label={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d={expandedDossiers.has(dossier._id || dossier.id) ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
@@ -475,315 +476,215 @@ export default function DossiersPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end gap-2 flex-shrink-0 max-w-[40%] sm:max-w-none">
-                      <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold text-right break-words ${getStatutColor(dossier.statut)}`}>
-                        {getStatutLabel(dossier.statut)}
-                      </span>
-                      {dossier.priorite && (
-                        <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold text-right break-words ${getPrioriteColor(dossier.priorite)}`}>
-                          {dossier.priorite}
+                    <div className="flex flex-col sm:items-end gap-2 flex-shrink-0 w-full sm:max-w-none">
+                      <div className="flex flex-wrap items-center gap-2 justify-end sm:justify-end">
+                        <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getStatutColor(dossier.statut)}`}>
+                          {getStatutLabel(dossier.statut)}
                         </span>
-                      )}
+                        {dossier.priorite && (
+                          <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getPrioriteColor(dossier.priorite)}`}>
+                            {dossier.priorite}
+                          </span>
+                        )}
+                      </div>
                       <Link
                         href={`/client/dossiers/${dossier._id || dossier.id}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-primary text-white text-[11px] font-medium hover:bg-primary/90 transition-colors text-center break-words max-w-full"
+                        className="inline-flex items-center justify-center px-3 py-2.5 min-h-[44px] rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors text-center w-full sm:w-auto"
                       >
                         Voir les détails
                       </Link>
                     </div>
                   </div>
 
-                  {/* Contenu détaillé (affiché uniquement si le dossier est déplié) */}
+                  {/* Contenu détaillé (affiché uniquement si le dossier est déplié) — affichage compact */}
                   {expandedDossiers.has(dossier._id || dossier.id) && (
-                    <>
+                    <div className="pt-2 mt-1 border-t border-gray-100">
 
-                  {/* Avancement du dossier */}
-                  {(() => {
-                    const progress = getDossierProgress(dossier.statut);
-                    return (
-                      <div className="mb-4">
-                        <div className="flex items-center justify-between text-xs mb-1.5 gap-2">
-                          <span className="text-muted-foreground font-medium">Avancement du dossier</span>
-                          <span className="font-semibold text-foreground">{progress} %</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full transition-all duration-300 ${
-                              progress >= 80 ? 'bg-green-500' : 
-                              progress >= 50 ? 'bg-blue-500' : 
-                              progress >= 25 ? 'bg-yellow-500' : 
-                              'bg-gray-400'
-                            }`}
-                            style={{width: `${progress}%`}}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Dossier transmis */}
-                  {dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
-                    <div className="mb-4 pb-4 border-b border-gray-200">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Dossier transmis</p>
-                      <div className="bg-purple-50 border-l-4 border-purple-500 p-3 rounded-r">
-                        <div className="space-y-1.5">
-                          {dossier.transmittedTo.map((trans: any, idx: number) => (
-                            <div key={idx} className="flex items-center gap-2 flex-wrap text-xs">
-                              <span className="font-medium text-purple-800">
-                                {trans.quality || (trans.user?.role === 'consulat' ? 'Consulat' : 'Avocat')}:
-                              </span>
-                              <span className="text-purple-700 font-semibold">
-                                {trans.user?.firstName} {trans.user?.lastName}
-                                {trans.user?.organisationName && ` (${trans.user.organisationName})`}
-                              </span>
-                              <span className="text-purple-600">
-                                — {new Date(trans.transmittedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Alerte d'échéance */}
-                  {isDeadlineApproaching(dossier.dateEcheance) && (
-                    <div className="bg-red-50 border-l-4 border-red-500 p-3 mb-4 rounded-r">
-                      <p className="text-xs font-semibold text-red-900">
-                        Échéance dans {calculateDaysUntil(dossier.dateEcheance)} jour{calculateDaysUntil(dossier.dateEcheance) > 1 ? 's' : ''}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Prochaine action */}
-                  {(() => {
-                    const nextAction = getNextAction(dossier.statut);
-                    if (nextAction) {
+                  {/* Ligne compacte : avancement + échéance + prochaine action */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2 pb-2 border-b border-gray-100">
+                    {(() => {
+                      const progress = getDossierProgress(dossier.statut);
                       return (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                          <p className="text-xs font-semibold text-blue-900 mb-0.5">Prochaine action</p>
-                          <p className="text-xs text-blue-800">{nextAction}</p>
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span className="text-[11px] text-muted-foreground shrink-0">Avancement</span>
+                          <div className="w-20 sm:w-28 bg-gray-200 rounded-full h-1.5 flex-1 max-w-28">
+                            <div
+                              className={`h-1.5 rounded-full transition-all ${
+                                progress >= 80 ? 'bg-green-500' : progress >= 50 ? 'bg-blue-500' : progress >= 25 ? 'bg-yellow-500' : 'bg-gray-400'
+                              }`}
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] font-semibold text-foreground shrink-0">{progress} %</span>
                         </div>
                       );
-                    }
-                    return null;
-                  })()}
+                    })()}
+                    {isDeadlineApproaching(dossier.dateEcheance) && (
+                      <span className="text-[11px] font-semibold text-red-600 shrink-0">
+                        Échéance {calculateDaysUntil(dossier.dateEcheance)} j
+                      </span>
+                    )}
+                    {(() => {
+                      const nextAction = getNextAction(dossier.statut);
+                      return nextAction ? (
+                        <span className="text-[11px] text-blue-800 truncate max-w-[200px]" title={nextAction}>{nextAction}</span>
+                      ) : null;
+                    })()}
+                  </div>
 
-                  {/* Informations du dossier */}
-                  <div className="mb-4 pb-4 border-b border-gray-200">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Informations du dossier</p>
-                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                  {/* Dossier transmis — une ligne par transmission */}
+                  {dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
+                    <div className="mb-2 pb-2 border-b border-gray-100">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Transmis</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {dossier.transmittedTo.map((trans: any, idx: number) => (
+                          <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 border border-purple-200 rounded text-[11px] text-purple-800">
+                            {trans.quality || (trans.user?.role === 'consulat' ? 'Consulat' : 'Avocat')}: {trans.user?.firstName} {trans.user?.lastName}
+                            {trans.user?.organisationName && ` (${trans.user.organisationName})`}
+                            <span className="text-purple-600">· {new Date(trans.transmittedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' })}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Informations du dossier — grille compacte */}
+                  <div className="mb-2 pb-2 border-b border-gray-100">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Infos</p>
+                    <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-0.5 text-[11px]">
                       {(dossier.numero || dossier.numeroDossier) && (
                         <>
-                          <dt className="text-muted-foreground">Référence</dt>
-                          <dd className="font-mono font-medium text-foreground">{dossier.numero || dossier.numeroDossier}</dd>
+                          <dt className="text-muted-foreground">Réf.</dt>
+                          <dd className="font-mono text-foreground truncate">{dossier.numero || dossier.numeroDossier}</dd>
                         </>
                       )}
                       <dt className="text-muted-foreground">Catégorie</dt>
-                      <dd className="font-medium text-foreground">{getCategorieLabel(dossier.categorie || 'autre')}</dd>
+                      <dd className="text-foreground">{getCategorieLabel(dossier.categorie || 'autre')}</dd>
                       {dossier.type && (
                         <>
                           <dt className="text-muted-foreground">Type</dt>
                           <dd className="text-foreground">{getTypeLabel(dossier.categorie || 'autre', dossier.type)}</dd>
                         </>
                       )}
-                      <dt className="text-muted-foreground">Créé le</dt>
+                      <dt className="text-muted-foreground">Créé</dt>
                       <dd className="text-foreground">
-                        {dossier.createdAt ? new Date(dossier.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                        {dossier.createdAt ? new Date(dossier.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
                       </dd>
-                      {dossier.createdAt && (
-                        <>
-                          <dt className="text-muted-foreground">Ouvert il y a</dt>
-                          <dd className="text-foreground">{calculateDaysSince(dossier.createdAt)} jour{calculateDaysSince(dossier.createdAt) > 1 ? 's' : ''}</dd>
-                        </>
-                      )}
                       {dossier.updatedAt && (
                         <>
-                          <dt className="text-muted-foreground">Dernière activité</dt>
+                          <dt className="text-muted-foreground">Activité</dt>
                           <dd className="text-foreground">{formatRelativeTime(dossier.updatedAt)}</dd>
                         </>
                       )}
                       {dossier.dateEcheance && (
                         <>
                           <dt className="text-muted-foreground">Échéance</dt>
-                          <dd className="font-medium text-foreground">{new Date(dossier.dateEcheance).toLocaleDateString('fr-FR')}</dd>
+                          <dd className="text-foreground">{new Date(dossier.dateEcheance).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</dd>
                         </>
                       )}
                       {dossier.description && (
                         <>
-                          <dt className="text-muted-foreground">Description / Lien</dt>
-                          <dd className="text-foreground break-all">{dossier.description}</dd>
+                          <dt className="text-muted-foreground col-span-1">Description</dt>
+                          <dd className="text-foreground break-all line-clamp-2 col-span-2 sm:col-span-3">{dossier.description}</dd>
                         </>
                       )}
                     </dl>
                   </div>
 
-                  {/* Synthèse */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4 pb-4 border-b border-gray-200">
-                    <div className="bg-gray-50 rounded-lg p-3 text-center">
-                      <p className="text-xs text-muted-foreground mb-0.5">Documents</p>
-                      <p className="text-lg font-semibold text-foreground">
-                        {dossierDocuments[dossier._id || dossier.id]?.length || dossier.documents?.length || 0}
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3 text-center">
-                      <p className="text-xs text-muted-foreground mb-0.5">Messages</p>
-                      <p className="text-lg font-semibold text-foreground">{dossier.messages?.length || 0}</p>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3 text-center">
-                      <p className="text-xs text-muted-foreground mb-0.5">Demandes</p>
-                      <p className="text-lg font-semibold text-foreground">
-                        {documentRequests[dossier._id || dossier.id]?.length || 0}
-                      </p>
-                    </div>
+                  {/* Synthèse — une ligne : Documents · Messages · Demandes */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2 pb-2 border-b border-gray-100 text-[11px] text-muted-foreground">
+                    <span><span className="font-semibold text-foreground">{dossierDocuments[dossier._id || dossier.id]?.length || dossier.documents?.length || 0}</span> doc.</span>
+                    <span><span className="font-semibold text-foreground">{dossier.messages?.length || 0}</span> msg.</span>
+                    <span><span className="font-semibold text-foreground">{documentRequests[dossier._id || dossier.id]?.length || 0}</span> demandes</span>
                   </div>
 
-                  {/* Section Documents demandés */}
+                  {/* Section Documents demandés — compacte */}
                   {(() => {
                     const dossierRequests = documentRequests[dossier._id || dossier.id] || [];
                     const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
                     const receivedRequests = dossierRequests.filter((r: any) => r.status === 'received' || r.status === 'sent');
                     const isExpanded = expandedDocumentSections.has(dossier._id || dossier.id);
                     
-                    if (dossierRequests.length === 0) {
-                      return null; // Ne rien afficher s'il n'y a pas de demandes
-                    }
+                    if (dossierRequests.length === 0) return null;
                     
                     return (
-                      <div className="pt-3 border-t border-gray-200 mb-3">
-                        <div
-                          className="flex items-center justify-between gap-2 cursor-pointer hover:bg-gray-50 rounded-md p-2 -m-2 transition-colors"
+                      <div className="pt-2 border-t border-gray-100 mb-2">
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between gap-2 py-1.5 px-1 rounded hover:bg-gray-50 transition-colors text-left"
                           onClick={() => {
                             const dossierId = dossier._id || dossier.id;
                             const newExpanded = new Set(expandedDocumentSections);
-                            if (isExpanded) {
-                              newExpanded.delete(dossierId);
-                            } else {
-                              newExpanded.add(dossierId);
-                            }
+                            if (isExpanded) newExpanded.delete(dossierId);
+                            else newExpanded.add(dossierId);
                             setExpandedDocumentSections(newExpanded);
                           }}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">📄</span>
-                            <div>
-                              <h4 className="text-sm font-semibold text-foreground">Documents demandés</h4>
-                              <p className="text-xs text-muted-foreground">
-                                {pendingRequests.length > 0 && (
-                                  <span className="text-orange-600 font-medium">
-                                    {pendingRequests.length} en attente
-                                  </span>
-                                )}
-                                {pendingRequests.length > 0 && receivedRequests.length > 0 && ' • '}
-                                {receivedRequests.length > 0 && (
-                                  <span className="text-green-600 font-medium">
-                                    {receivedRequests.length} reçu{receivedRequests.length > 1 ? 's' : ''}
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-muted-foreground text-sm">{isExpanded ? '▲' : '▼'}</span>
-                        </div>
+                          <span className="text-[11px] font-semibold text-foreground">📄 Documents demandés</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {pendingRequests.length > 0 && <span className="text-orange-600">{pendingRequests.length} attente</span>}
+                            {pendingRequests.length > 0 && receivedRequests.length > 0 && ' · '}
+                            {receivedRequests.length > 0 && <span className="text-green-600">{receivedRequests.length} reçu(s)</span>}
+                          </span>
+                          <span className="text-muted-foreground text-xs">{isExpanded ? '▲' : '▼'}</span>
+                        </button>
                         
                         {isExpanded && (
-                          <div className="mt-3 space-y-3">
+                          <div className="mt-1.5 space-y-1.5">
                             {dossierRequests.map((request: any) => {
                               const isPending = request.status === 'pending';
                               const isUrgent = request.isUrgent;
-                              
                               return (
                                 <div
                                   key={request._id || request.id}
-                                  className={`border rounded-lg p-3 ${
+                                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 border text-[11px] ${
                                     isPending
-                                      ? isUrgent
-                                        ? 'bg-red-50/50 border-red-200'
-                                        : 'bg-orange-50/50 border-orange-200'
+                                      ? isUrgent ? 'bg-red-50/50 border-red-200' : 'bg-orange-50/50 border-orange-200'
                                       : 'bg-green-50/50 border-green-200'
                                   }`}
                                 >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-lg flex-shrink-0">
-                                          {isPending ? (isUrgent ? '🔴' : '📄') : '✅'}
-                                        </span>
-                                        <div className="flex-1 min-w-0">
-                                          <h5 className={`font-semibold text-sm truncate ${
-                                            isUrgent ? 'text-red-600' : 'text-foreground'
-                                          }`}>
-                                            {request.documentTypeLabel || request.documentType || 'Document'}
-                                          </h5>
-                                        </div>
-                                        {isUrgent && (
-                                          <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded text-xs font-bold flex-shrink-0">
-                                            URGENT
-                                          </span>
-                                        )}
-                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 ${
-                                          isPending
-                                            ? 'bg-yellow-100 text-yellow-800'
-                                            : 'bg-green-100 text-green-800'
-                                        }`}>
-                                          {isPending ? 'En attente' : 'Reçu'}
-                                        </span>
-                                      </div>
-                                      
-                                      {request.message && (
-                                        <p className="text-xs text-muted-foreground mb-2 ml-7">
-                                          {request.message}
-                                        </p>
-                                      )}
-                                      
-                                      <div className="flex items-center gap-3 text-xs text-muted-foreground ml-7">
-                                        <span>
-                                          📅 Demandé le {new Date(request.createdAt).toLocaleDateString('fr-FR')}
-                                        </span>
-                                        {request.receivedAt && (
-                                          <span>
-                                            ✅ Reçu le {new Date(request.receivedAt).toLocaleDateString('fr-FR')}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    
-                                    {isPending && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          const notification = {
-                                            _id: request._id,
-                                            id: request.id,
-                                            type: 'document_request',
-                                            titre: isUrgent
-                                              ? `🔴 Demande urgente de document - Dossier ${dossier.numero || dossier._id}`
-                                              : `📄 Demande de document - Dossier ${dossier.numero || dossier._id}`,
-                                            message: `Un document de type "${request.documentTypeLabel}" est requis pour votre dossier.`,
-                                            data: {
-                                              documentRequestId: request._id || request.id,
-                                              dossierId: dossier._id || dossier.id,
-                                              dossierNumero: dossier.numero,
-                                              documentType: request.documentType,
-                                              documentTypeLabel: request.documentTypeLabel,
-                                              isUrgent: request.isUrgent || false,
-                                              message: request.message
-                                            }
-                                          };
-                                          setSelectedDocumentRequest(notification);
-                                          setShowDocumentRequestModal(true);
-                                        }}
-                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex-shrink-0 ${
-                                          isUrgent
-                                            ? 'bg-red-500 text-white hover:bg-red-600'
-                                            : 'bg-orange-500 text-white hover:bg-orange-600'
-                                        }`}
-                                      >
-                                        📤 Envoyer
-                                      </button>
-                                    )}
+                                  <span className="shrink-0">{isPending ? (isUrgent ? '🔴' : '📄') : '✅'}</span>
+                                  <div className="flex-1 min-w-0 truncate font-medium">
+                                    {request.documentTypeLabel || request.documentType || 'Document'}
+                                    {request.message && <span className="text-muted-foreground font-normal"> — {request.message}</span>}
                                   </div>
+                                  <span className="text-[10px] text-muted-foreground shrink-0">
+                                    {request.receivedAt
+                                      ? `Reçu ${new Date(request.receivedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`
+                                      : `Demandé ${new Date(request.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`}
+                                  </span>
+                                  {isUrgent && <span className="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-bold shrink-0">URGENT</span>}
+                                  {isPending && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedDocumentRequest({
+                                          _id: request._id,
+                                          id: request.id,
+                                          type: 'document_request',
+                                          titre: isUrgent ? `🔴 Demande urgente - Dossier ${dossier.numero || dossier._id}` : `📄 Demande - Dossier ${dossier.numero || dossier._id}`,
+                                          message: `Document "${request.documentTypeLabel}" requis.`,
+                                          data: {
+                                            documentRequestId: request._id || request.id,
+                                            dossierId: dossier._id || dossier.id,
+                                            dossierNumero: dossier.numero,
+                                            documentType: request.documentType,
+                                            documentTypeLabel: request.documentTypeLabel,
+                                            isUrgent: request.isUrgent || false,
+                                            message: request.message
+                                          }
+                                        });
+                                        setShowDocumentRequestModal(true);
+                                      }}
+                                      className={`shrink-0 px-2 py-1 rounded text-[10px] font-medium ${
+                                        isUrgent ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-orange-500 text-white hover:bg-orange-600'
+                                      }`}
+                                    >
+                                      Envoyer
+                                    </button>
+                                  )}
                                 </div>
                               );
                             })}
@@ -794,8 +695,8 @@ export default function DossiersPage() {
                   })()}
 
                   {/* Actions */}
-                  <div className="pt-3 border-t border-gray-200">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="pt-2 border-t border-gray-100">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex-1 min-w-0">
                         {(() => {
                           // Afficher la dernière notification défilante si pas de demandes de documents
@@ -806,12 +707,12 @@ export default function DossiersPage() {
                             const lastNotification = getLastNotificationForDossier(dossier._id || dossier.id);
                             if (lastNotification) {
                               return (
-                                <div className="relative overflow-hidden bg-blue-50/50 rounded-md px-3 py-2 border border-blue-200/50">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs">🔔</span>
+                                <div className="relative overflow-hidden bg-blue-50/50 rounded px-2 py-1 border border-blue-200/50">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px]">🔔</span>
                                     <div className="flex-1 min-w-0 overflow-hidden">
                                       <div className="animate-scroll-text whitespace-nowrap">
-                                        <span className="text-xs text-blue-900 font-medium">
+                                        <span className="text-[11px] text-blue-900 font-medium">
                                           {lastNotification.title || lastNotification.message || 'Nouvelle notification'}
                                         </span>
                                       </div>
@@ -921,12 +822,12 @@ export default function DossiersPage() {
                               <Button 
                                 variant="outline" 
                                 size="sm" 
-                                className={`text-xs h-8 relative ${unreadCount > 0 ? 'bg-orange-50 border-orange-300 hover:bg-orange-100' : ''}`}
+                                className={`text-[11px] h-7 relative px-2 ${unreadCount > 0 ? 'bg-orange-50 border-orange-300 hover:bg-orange-100' : ''}`}
                                 title="Voir les notifications non lues"
                               >
-                                🔔 Notifications
+                                🔔
                                 {unreadCount > 0 && (
-                                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                  <span className="ml-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[14px] h-3.5 px-1 flex items-center justify-center">
                                     {unreadCount > 9 ? '9+' : unreadCount}
                                   </span>
                                 )}
@@ -935,19 +836,19 @@ export default function DossiersPage() {
                           );
                         })()}
                         <Link href={`/client/messages?dossierId=${dossier._id || dossier.id}&action=view`}>
-                          <Button variant="outline" size="sm" className="text-xs h-8" title="Voir les discussions">
-                            💬 Discussions
+                          <Button variant="outline" size="sm" className="text-[11px] h-7 px-2" title="Voir les discussions">
+                            💬
                           </Button>
                         </Link>
                         <Link href={`/client/messages?dossierId=${dossier._id || dossier.id}&action=send`}>
-                          <Button size="sm" className="text-xs h-8" title="Envoyer un message">
-                            ✉️ Message
+                          <Button size="sm" className="text-[11px] h-7 px-2" title="Envoyer un message">
+                            ✉️
                           </Button>
                         </Link>
                       </div>
                     </div>
                   </div>
-                    </>
+                    </div>
                   )}
                 </div>
               ))}

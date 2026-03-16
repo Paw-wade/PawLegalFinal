@@ -96,18 +96,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}
       <aside
         className={`
-          w-64 bg-white border-r border-gray-200 h-screen flex flex-col
-          fixed top-0 left-0 z-50
+          w-[min(16rem,85vw)] max-w-64 bg-white border-r border-gray-200 min-h-screen min-h-[100dvh] flex flex-col
+          fixed top-0 left-0 z-50 pt-[env(safe-area-inset-top,0)]
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:translate-x-0
+          lg:translate-x-0 lg:pt-0
         `}
       >
-        <div className="h-16 shrink-0 flex items-center justify-between px-4 border-b border-gray-200">
+        <div className="h-14 lg:h-16 shrink-0 flex items-center justify-between px-4 border-b border-gray-200">
           <div className="flex items-center min-w-0">
             <Link
               href="/"
-              className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg tracking-tight"
+              className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base lg:text-lg tracking-tight"
             >
               Ada Papers
             </Link>
@@ -116,16 +116,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           {onClose && (
             <button
               onClick={onClose}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors shrink-0"
+              className="lg:hidden p-2 -m-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gray-100 rounded-md transition-colors shrink-0"
               aria-label="Fermer le menu"
             >
-              <span className="text-2xl">×</span>
+              <span className="text-2xl leading-none">×</span>
             </button>
           )}
         </div>
 
-        {/* Navigation */}
-        <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
+        {/* Navigation — cibles tactiles 48px sur mobile */}
+        <nav className="p-3 sm:p-4 space-y-1 flex-1 overflow-y-auto overflow-x-hidden pb-[env(safe-area-inset-bottom,0)]">
           {clientMenuItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -136,8 +136,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 onClick={() => {
                   if (typeof window !== 'undefined' && window.innerWidth < 1024 && onClose) onClose();
                 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  active ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
+                className={`flex items-center gap-3 px-4 py-3 min-h-[48px] rounded-xl transition-colors ${
+                  active ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100 active:bg-gray-200'
                 }`}
               >
                 <Icon className="w-5 h-5" />

@@ -165,27 +165,8 @@ export default function HomePage() {
         }
       } catch (error) {
         console.error('Erreur lors du chargement des témoignages:', error);
-        // En cas d'erreur, utiliser des témoignages par défaut
-        setTemoignages([
-          {
-            nom: 'Marie Dubois',
-            role: 'Cliente',
-            texte: 'Excellent accompagnement pour mon dossier de naturalisation. L\'équipe est très professionnelle et réactive. Je recommande vivement !',
-            note: 5,
-          },
-          {
-            nom: 'Ahmed Benali',
-            role: 'Client',
-            texte: 'Grâce à Ada Papers, j\'ai pu obtenir mon titre de séjour sans difficulté. Un suivi personnalisé et des conseils précieux à chaque étape.',
-            note: 5,
-          },
-          {
-            nom: 'Sophie Martin',
-            role: 'Cliente',
-            texte: 'Service exceptionnel pour mon dossier de regroupement familial. Tout s\'est déroulé parfaitement grâce à leur expertise.',
-            note: 5,
-          },
-        ]);
+        // Ne pas afficher de témoignages fictifs : garder la liste vide pour un affichage cohérent (mobile = ordinateur)
+        setTemoignages([]);
       } finally {
         setLoadingTemoignages(false);
       }
@@ -283,12 +264,12 @@ export default function HomePage() {
   const [selectedSolutionIndex, setSelectedSolutionIndex] = useState(0);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col scroll-smooth">
+    <div className="min-h-screen bg-background flex flex-col scroll-smooth overflow-x-hidden max-w-[100vw]">
       {/* Header Professionnel */}
       <Header variant="home" />
 
-      {/* Hero Section — design renforcé */}
-      <section className="relative min-h-[85vh] flex items-center py-20 lg:py-28 overflow-hidden">
+      {/* Hero Section — design renforcé, padding mobile */}
+      <section className="relative min-h-[80vh] sm:min-h-[85vh] flex items-center py-12 sm:py-20 lg:py-28 overflow-hidden">
         {/* Fond : dégradé doux + formes organiques */}
         <div className="absolute inset-0 bg-gradient-to-br from-amber-50/90 via-white to-orange-50/60" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_70%_20%,rgba(249,115,22,0.12),transparent)]" />
@@ -296,11 +277,11 @@ export default function HomePage() {
         <div className="absolute top-1/4 right-0 w-[500px] h-[500px] rounded-full bg-orange-200/20 blur-[100px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-amber-100/30 blur-[80px] pointer-events-none" />
         
-        <div className="container mx-auto px-4 relative z-10">
-          <div className="grid lg:grid-cols-2 gap-10 items-center">
-            <div className="relative max-w-2xl">
+        <div className="w-full max-w-[100vw] container mx-auto px-3 sm:px-4 relative z-10">
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-10 items-center">
+            <div className="relative max-w-2xl min-w-0">
               {/* Titre */}
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.1] tracking-tight mb-6">
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.15] tracking-tight mb-4 sm:mb-6">
                 {heroTitle.replace(heroTitleHighlight, '').trim() || heroTitle}{' '}
                 <span className="text-orange-500">
                   {heroTitleHighlight}

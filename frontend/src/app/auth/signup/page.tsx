@@ -341,7 +341,7 @@ export default function SignupPage() {
                           </p>
                         )}
                         <p className="text-xs text-muted-foreground">
-                          Un mot de passe temporaire vous sera envoyé par SMS
+                          Une fois votre inscription validée, un SMS contenant votre mot de passe temporaire vous sera envoyé.
                         </p>
                       </div>
 
