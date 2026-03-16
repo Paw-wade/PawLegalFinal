@@ -6,6 +6,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: 'cover',
 };
 
 export const metadata: Metadata = {
@@ -23,7 +24,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr">
-      <body className="antialiased overflow-x-hidden min-w-0">
+      <body className="antialiased overflow-x-hidden min-w-0 max-w-[100vw]">
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>

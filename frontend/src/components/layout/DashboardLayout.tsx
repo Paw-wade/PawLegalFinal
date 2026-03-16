@@ -86,8 +86,8 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
           </>
         )}
 
-        {/* Contenu */}
-        <main className="flex-1 overflow-x-hidden w-full">
+        {/* Contenu — padding mobile et pas de débordement */}
+        <main className="flex-1 overflow-x-hidden w-full max-w-[100vw] px-3 sm:px-4 lg:px-6 pb-6 safe-bottom">
           {children}
         </main>
       </div>

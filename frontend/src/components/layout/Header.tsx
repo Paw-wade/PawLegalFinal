@@ -330,16 +330,16 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
   };
 
   return (
-    <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-      <div className="container mx-auto px-4 py-2.5">
-        <div className="flex items-center justify-between">
+    <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-50 shadow-sm safe-top">
+      <div className="w-full max-w-[100vw] mx-auto px-3 sm:px-4 py-2 sm:py-2.5">
+        <div className="flex items-center justify-between gap-2">
           {/* Logo ; bouton menu (mobile) : sidebar dashboard ou menu nav selon la page */}
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
             {/* Hamburger pour ouvrir le menu latéral (dashboard client/admin/partenaire) */}
             {onMenuClick && (
               <button
                 onClick={onMenuClick}
-                className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0"
+                className="lg:hidden touch-target p-2 -m-1 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0 flex items-center justify-center"
                 aria-label="Ouvrir le menu"
               >
                 <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -351,7 +351,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
             {variant === 'home' && !onMenuClick && (
               <button
                 onClick={() => setMobileNavOpen(!mobileNavOpen)}
-                className="md:hidden p-2 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0"
+                className="md:hidden touch-target p-2 -m-1 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0 flex items-center justify-center"
                 aria-label="Ouvrir le menu"
                 aria-expanded={mobileNavOpen}
               >
@@ -364,7 +364,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               <>
                 <Link
                   href="/"
-                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg sm:text-xl max-w-[60vw] sm:max-w-none truncate"
+                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base sm:text-xl max-w-[55vw] sm:max-w-none truncate"
                 >
                   Ada Papers
                 </Link>
@@ -377,7 +377,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
             {(variant === 'admin' || variant === 'partenaire' || variant === 'client') && (
               <Link
                 href={variant === 'admin' ? '/admin' : variant === 'partenaire' ? '/partenaire' : '/client'}
-                className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg max-w-[60vw] truncate"
+                className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base sm:text-lg min-w-0 max-w-[55vw] sm:max-w-none truncate"
               >
                 Ada Papers
               </Link>
@@ -524,13 +524,13 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
           )}
 
 
-          {/* Informations utilisateur et actions */}
+          {/* Informations utilisateur et actions — cibles tactiles sur mobile */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {isAuthenticated ? (
                 <>
-                  <NotificationBadge variant="header" className="mr-1 sm:mr-2" />
-                  {/* Nom + rôle : masquer le sous-titre (rôle) sur mobile */}
-                  <div className="text-right border-r border-gray-200 pr-2 sm:pr-2.5 mr-1 sm:mr-2">
+                  <NotificationBadge variant="header" className="mr-0 sm:mr-2" />
+                  {/* Nom + rôle : masquer le sous-titre sur mobile */}
+                  <div className="text-right border-r border-gray-200 pr-2 sm:pr-2.5 mr-1 sm:mr-2 min-w-0 max-w-[100px] sm:max-w-none">
                     <Link 
                       href={
                         variant === 'admin'
@@ -539,7 +539,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                           ? '/partenaire/compte'
                           : '/client/compte'
                       }
-                      className="text-xs font-semibold text-gray-900 hover:text-orange-500 transition-colors cursor-pointer block leading-tight truncate max-w-[120px] sm:max-w-none"
+                      className="text-xs font-semibold text-gray-900 hover:text-orange-500 transition-colors cursor-pointer block leading-tight truncate"
                     >
                       {userName || 'Utilisateur'}
                     </Link>
@@ -547,19 +547,20 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   </div>
                   <Button 
                     variant="ghost" 
-                    className="text-xs px-2.5 py-1.5 h-auto text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+                    className="text-xs px-2.5 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 text-gray-700 hover:text-gray-900 hover:bg-gray-100 touch-target"
                     onClick={handleSignOut}
                   >
-                    Déconnexion
+                    <span className="hidden sm:inline">Déconnexion</span>
+                    <span className="sm:hidden">Déco.</span>
                   </Button>
                 </>
               ) : (
                 <>
-                  <Link href="/auth/signin">
-                    <Button variant="ghost" className="text-xs px-2.5 py-1.5 h-auto text-gray-700 hover:text-gray-900">Connexion</Button>
+                  <Link href="/auth/signin" className="min-h-[44px] sm:min-h-0 flex items-center">
+                    <Button variant="ghost" className="text-xs px-2.5 py-2 sm:py-1.5 h-auto text-gray-700 hover:text-gray-900 touch-target">Connexion</Button>
                   </Link>
-                  <Link href="/auth/signup">
-                    <Button className="text-xs px-3 py-1.5 h-auto">Créer un compte</Button>
+                  <Link href="/auth/signup" className="min-h-[44px] sm:min-h-0 flex items-center">
+                    <Button className="text-xs px-3 py-2 sm:py-1.5 h-auto touch-target">Créer un compte</Button>
                   </Link>
                 </>
               )}
@@ -567,7 +568,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
         </div>
       </div>
 
-      {/* Menu de navigation mobile (page d'accueil, calculateur, etc.) */}
+      {/* Menu de navigation mobile (page d'accueil, calculateur, etc.) — plein écran lisible */}
       {variant === 'home' && mobileNavOpen && (
         <>
           <div
@@ -575,40 +576,40 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
             onClick={() => setMobileNavOpen(false)}
             aria-hidden="true"
           />
-          <div className="fixed top-14 left-0 right-0 z-50 md:hidden bg-white border-b border-gray-200 shadow-lg max-h-[calc(100vh-3.5rem)] overflow-y-auto">
-            <nav className="p-4 flex flex-col gap-1">
+          <div className="fixed top-14 left-0 right-0 bottom-0 z-50 md:hidden bg-white border-b border-gray-200 shadow-lg overflow-y-auto safe-bottom">
+            <nav className="p-4 flex flex-col gap-0.5">
               <Link
                 href="/services"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
               >
                 Services
               </Link>
               <Link
                 href="/faq"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
               >
                 FAQ
               </Link>
               <Link
                 href="/forum"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
               >
                 Forum
               </Link>
               <Link
                 href="/contact"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
               >
                 Contact
               </Link>
               <Link
                 href="/calculateur"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3 rounded-lg text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+                className="px-4 py-3.5 rounded-xl text-base font-medium bg-orange-500 text-white hover:bg-orange-600 active:bg-orange-700 transition-colors min-h-[48px] flex items-center"
               >
                 Calculateur
               </Link>
@@ -617,7 +618,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   <button
                     type="button"
                     onClick={(e) => { handleDashboardClick(e); setMobileNavOpen(false); }}
-                    className="w-full text-left px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                    className="w-full text-left px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
                   >
                     Dashboard
                   </button>
@@ -625,7 +626,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                     <Link
                       href="/admin/logs"
                       onClick={() => setMobileNavOpen(false)}
-                      className="px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                      className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
                     >
                       Logs
                     </Link>

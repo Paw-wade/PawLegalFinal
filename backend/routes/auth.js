@@ -81,7 +81,13 @@ router.post(
       // Envoyer le mot de passe temporaire par SMS
       let smsSent = false;
       try {
-        const message = `Bonjour ${user.firstName}, votre compte Ada Papers a été créé.\n\nVotre mot de passe temporaire est : ${DEFAULT_TEMP_PASSWORD}\n\nPour votre sécurité, changez-le lors de votre première connexion.`;
+        const message = `Bonjour ${user.firstName},
+
+Bienvenue sur Ada Papers.
+
+Votre mot de passe temporaire est : ${DEFAULT_TEMP_PASSWORD}
+
+Vous serez invité(e) à le personnaliser dès votre première connexion.`;
         await sendNotificationSMS(user.phone, 'account_security', { message }, {
           userId: user._id,
           context: 'account',

@@ -179,11 +179,11 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-primary/5 via-background to-primary/10 relative">
-      {/* Bouton retour à l'accueil - Position fixe en haut à gauche */}
-      <Link href="/" className="absolute top-4 left-4 z-50">
-        <Button variant="ghost" className="text-foreground hover:bg-primary/10 backdrop-blur-sm">
-          ← Retour à l'accueil
+    <div className="min-h-screen min-h-[100dvh] flex bg-gradient-to-br from-primary/5 via-background to-primary/10 relative overflow-x-hidden max-w-[100vw] pt-[env(safe-area-inset-top,0)]">
+      {/* Bouton retour — zone tactile 44px sur mobile */}
+      <Link href="/" className="absolute top-4 left-3 sm:left-4 z-50 min-h-[44px] min-w-[44px] flex items-center">
+        <Button variant="ghost" className="text-foreground hover:bg-primary/10 backdrop-blur-sm py-2.5 px-3 text-sm sm:text-base">
+          ← Retour
         </Button>
       </Link>
 
@@ -223,8 +223,8 @@ export default function SignInPage() {
       </div>
 
       {/* Section droite - Formulaire de connexion */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
+      <div className="w-full lg:w-1/2 flex items-center justify-center px-3 sm:px-4 py-8 sm:py-12 safe-bottom">
+        <div className="w-full max-w-md min-w-0">
           {/* Logo */}
           <div className="text-center mb-6">
             <Link href="/" className="inline-block">
@@ -241,7 +241,7 @@ export default function SignInPage() {
             
           <div className="bg-white rounded-xl shadow-xl border border-border overflow-hidden">
             {/* En-tête amélioré */}
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-foreground mb-2">Connexion</h1>
                 <p className="text-muted-foreground">
@@ -250,7 +250,7 @@ export default function SignInPage() {
               </div>
             </div>
 
-          <div className="p-8">
+          <div className="p-4 sm:p-8">
             {/* Message d'erreur amélioré */}
             {error && (
               <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm">
