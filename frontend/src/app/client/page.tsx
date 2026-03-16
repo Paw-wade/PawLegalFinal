@@ -641,12 +641,12 @@ function ClientDashboardContent() {
           100% { transform: translateX(-100%); }
         }
       `}} />
-      <main className="w-full max-w-7xl mx-auto px-4 py-8">
-        <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <main className="w-full max-w-7xl mx-auto px-4 py-4 lg:py-6">
+        <div className="flex flex-col lg:flex-row gap-4 items-start">
           <div className="flex-1 min-w-0">
         <div id="dashboard-top" className="scroll-mt-20" />
 
-        <div className="mb-6">
+        <div className="mb-4">
           <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Tableau de bord</p>
           <h1 className="text-2xl font-bold text-foreground mb-1">
             {dashboardTitleClient}{userName ? `, ${userName.split(' ')[0]}` : ''}
@@ -655,7 +655,7 @@ function ClientDashboardContent() {
             {dashboardSubtitleClient}
           </p>
         </div>
-        <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
+        <div className="flex items-start justify-between mb-3 flex-wrap gap-3">
             <div className="flex-1 min-w-0">
             
             {/* Badge de renouvellement du titre de séjour */}
@@ -775,7 +775,7 @@ function ClientDashboardContent() {
         </div>
 
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
-        <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 scroll-mt-20">
+        <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 scroll-mt-20">
           <Link href="/client/dossiers" className="group">
             <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
               <div className="flex items-center justify-between mb-3">
@@ -821,7 +821,7 @@ function ClientDashboardContent() {
         </div>
 
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Rendez-vous et accès</p>
-        <div id="rendez-vous-section" className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 scroll-mt-20">
+        <div id="rendez-vous-section" className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 scroll-mt-20">
           <div className="group">
             <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all">
               <div className="flex items-center gap-4 mb-4">

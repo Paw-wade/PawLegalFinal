@@ -283,7 +283,7 @@ export default function HomePage() {
   const [selectedSolutionIndex, setSelectedSolutionIndex] = useState(0);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col scroll-smooth">
       {/* Header Professionnel */}
       <Header variant="home" />
 
@@ -446,8 +446,13 @@ export default function HomePage() {
       <section 
         id="services-section"
         data-animate
-        className={`py-24 bg-white transition-all duration-1000 ${
-          isVisible['services-section'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        onMouseEnter={() =>
+          setIsVisible((prev) => ({ ...prev, ['services-section']: true }))
+        }
+        className={`py-20 transition-all duration-1000 transform ${
+          isVisible['services-section']
+            ? 'opacity-100 translate-y-0 scale-100'
+            : 'opacity-0 translate-y-6 scale-95'
         }`}
       >
         <div className="container mx-auto px-4">
@@ -456,7 +461,7 @@ export default function HomePage() {
             data-animate-item
             data-animate-id="services-section-title"
           >
-            <div className={`mb-12 transition-all duration-700 ${
+            <div className={`mb-8 transition-all duration-700 ${
               isVisible['services-section-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-3">
@@ -479,6 +484,7 @@ export default function HomePage() {
                     key={solution.title}
                     type="button"
                     onClick={() => setSelectedSolutionIndex(index)}
+                    onMouseEnter={() => setSelectedSolutionIndex(index)}
                     className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                       selectedSolutionIndex === index
                         ? 'bg-white border border-orange-400 text-orange-700 font-semibold shadow-sm'
@@ -581,17 +587,22 @@ export default function HomePage() {
       <section 
         id="limites"
         data-animate
-        className={`py-16 bg-gray-50/80 transition-all duration-1000 ${
-          isVisible['limites'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        onMouseEnter={() =>
+          setIsVisible((prev) => ({ ...prev, limites: true }))
+        }
+        className={`py-20 transition-all duration-1000 transform ${
+          isVisible['limites']
+            ? 'opacity-100 translate-y-0 scale-100'
+            : 'opacity-0 translate-y-6 scale-95'
         }`}
       >
         <div className="container mx-auto px-4">
           <div 
-            className="max-w-5xl mx-auto"
+            className="max-w-6xl mx-auto"
             data-animate-item
             data-animate-id="limites-title"
           >
-            <div className={`mb-8 text-center transition-all duration-700 ${
+            <div className={`mb-6 text-center transition-all duration-700 ${
               isVisible['limites-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               <span className="inline-block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-4">
@@ -606,7 +617,7 @@ export default function HomePage() {
             </div>
 
             {/* Modèle interactif : thèmes à gauche / détail au survol à droite (deux colonnes égales) */}
-            <div className="grid gap-6 md:grid-cols-2 items-start max-w-3xl mx-auto">
+            <div className="grid gap-6 md:grid-cols-2 items-start">
               {/* Thèmes (gauche) */}
               <div className="space-y-2.5">
                 {[
@@ -702,17 +713,22 @@ export default function HomePage() {
       <section 
         id="plateforme"
         data-animate
-        className={`py-16 bg-white transition-all duration-1000 ${
-          isVisible['plateforme'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        onMouseEnter={() =>
+          setIsVisible((prev) => ({ ...prev, plateforme: true }))
+        }
+        className={`py-20 transition-all duration-1000 transform ${
+          isVisible['plateforme']
+            ? 'opacity-100 translate-y-0 scale-100'
+            : 'opacity-0 translate-y-6 scale-95'
         }`}
       >
         <div className="container mx-auto px-4">
           <div 
-            className="max-w-5xl mx-auto"
+            className="max-w-6xl mx-auto"
             data-animate-item
             data-animate-id="plateforme-title"
           >
-            <div className={`mb-8 text-center transition-all duration-700 ${
+            <div className={`mb-6 text-center transition-all duration-700 ${
               isVisible['plateforme-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
@@ -727,7 +743,7 @@ export default function HomePage() {
             </div>
 
             {/* Modèle interactif : types d'utilisateurs à gauche / détail au survol à droite (deux colonnes égales) */}
-            <div className="grid gap-6 md:grid-cols-2 items-start max-w-3xl mx-auto">
+            <div className="grid gap-6 md:grid-cols-2 items-start">
               {/* Thèmes (gauche) */}
               <div className="space-y-2.5">
                 {[
@@ -827,13 +843,18 @@ export default function HomePage() {
       <section 
         id="temoignages"
         data-animate
-        className={`py-24 bg-gray-50/80 relative overflow-hidden transition-all duration-1000 ${
-          isVisible['temoignages'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        onMouseEnter={() =>
+          setIsVisible((prev) => ({ ...prev, temoignages: true }))
+        }
+        className={`py-20 relative overflow-hidden transition-all duration-1000 transform ${
+          isVisible['temoignages']
+            ? 'opacity-100 translate-y-0 scale-100'
+            : 'opacity-0 translate-y-6 scale-95'
         }`}
       >
         <div className="container mx-auto px-4">
           <div 
-            className="text-center mb-16"
+            className="text-center mb-10"
             data-animate-item
             data-animate-id="temoignages-title"
           >

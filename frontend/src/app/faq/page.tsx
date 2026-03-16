@@ -525,30 +525,30 @@ Pourquoi ce mécanisme existe ? Sans cette règle, une personne pourrait rester 
       <Header variant="home" />
 
       {/* Hero Section */}
-      <section className="relative py-16 bg-gradient-to-br from-primary/10 via-primary/5 to-background overflow-hidden">
+      <section className="relative py-12 bg-gradient-to-br from-primary/10 via-primary/5 to-background overflow-hidden">
         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
         <div className="container mx-auto px-4 relative z-10">
-          <div className="text-center max-w-4xl mx-auto">
-            <div className="inline-block mb-4 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
+          <div className="text-center max-w-3xl mx-auto">
+            <div className="inline-block mb-3 px-4 py-1.5 bg-primary/10 rounded-full border border-primary/20">
               <span className="text-sm font-medium text-primary">Foire aux questions - Droit des étrangers</span>
             </div>
-            <h1 className="text-5xl font-bold mb-6 text-foreground leading-tight">
+            <h1 className="text-4xl sm:text-5xl font-bold mb-4 text-foreground leading-tight">
               Foire aux questions
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Droit des étrangers en France - Règles et procédures
             </p>
-            <p className="text-lg text-muted-foreground mt-4 max-w-3xl mx-auto">
+            <p className="text-base text-muted-foreground mt-3 max-w-3xl mx-auto">
               Trouvez des réponses claires et complètes à vos questions sur les titres de séjour, les renouvellements, les changements de statut et les procédures administratives.
             </p>
           </div>
         </div>
       </section>
 
-      <main className="container mx-auto px-4 py-16">
-          <div className="max-w-5xl mx-auto">
+      <main className="container mx-auto px-4 py-12">
+          <div className="max-w-6xl mx-auto">
           {/* Barre de recherche */}
-          <div className="max-w-3xl mx-auto mb-8">
+          <div className="max-w-3xl mx-auto mb-6">
             <label htmlFor="faq-search" className="sr-only">
               Rechercher par mot-clé dans la FAQ
             </label>
@@ -576,7 +576,7 @@ Pourquoi ce mécanisme existe ? Sans cette règle, une personne pourrait rester 
             )}
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 items-start max-w-3xl mx-auto">
+          <div className="grid gap-6 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-start">
             {/* Liste des thèmes de FAQ (gauche) */}
             <div className="space-y-2.5">
               {filteredSections.map((section, index) => (
@@ -624,9 +624,21 @@ Pourquoi ce mécanisme existe ? Sans cette règle, une personne pourrait rester 
                         <div
                           key={itemIndex}
                           className="bg-white rounded-lg border border-border shadow-sm"
+                          onMouseLeave={() => {
+                            const newOpenItems = new Set(openItems);
+                            if (newOpenItems.has(itemId)) {
+                              newOpenItems.delete(itemId);
+                              setOpenItems(newOpenItems);
+                            }
+                          }}
                         >
                           <button
                             onClick={() => toggleItem(itemId)}
+                            onMouseEnter={() => {
+                              const newOpenItems = new Set(openItems);
+                              newOpenItems.add(itemId);
+                              setOpenItems(newOpenItems);
+                            }}
                             className="w-full flex items-start justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors rounded-lg"
                           >
                             <span className="font-semibold text-foreground pr-4 flex-1 text-sm">

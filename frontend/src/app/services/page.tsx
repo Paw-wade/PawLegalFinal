@@ -56,16 +56,17 @@ export default function ServicesPage() {
       <Header variant="home" />
 
       {/* Hero Section */}
-      <section className="relative py-10 md:py-14 bg-gradient-to-br from-primary/5 via-primary/3 to-background">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-4xl mx-auto">
+      <section className="relative py-12 md:py-16 bg-gradient-to-br from-primary/5 via-primary/10 to-background overflow-hidden">
+        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+        <div className="container mx-auto px-4 relative z-10">
+          <div className="text-center max-w-3xl mx-auto">
             <div className="inline-block mb-3 px-4 py-1 bg-primary/10 rounded-full border border-primary/20">
               <span className="text-xs md:text-sm font-medium text-primary tracking-wide uppercase">
                 Nos principaux services
               </span>
             </div>
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 text-foreground leading-tight px-4">
-              Des solutions juridiques claires et structurées
+              Des solutions juridiques claires, structurées et opérationnelles
             </h1>
             <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed px-4">
               Nous vous accompagnons à chaque étape&nbsp;: première analyse, suivi de dossier
@@ -75,10 +76,21 @@ export default function ServicesPage() {
         </div>
       </section>
 
-      <main className="container mx-auto px-4 py-20">
+      <main className="container mx-auto px-4 py-16">
 
         {/* Cartes de services */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16">
+        <div className="max-w-6xl mx-auto mb-12">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+              Vue d&apos;ensemble de nos accompagnements
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              Survolez un service pour mettre en avant ses points clés
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto mb-12">
           {servicesConfig.map((service, index) => {
             const Icon = service.icon;
             const colors = getColorClasses(service.color);
@@ -86,10 +98,10 @@ export default function ServicesPage() {
             return (
               <div
                 key={index}
-                className={`group relative bg-white rounded-2xl shadow-sm p-6 border ${colors.border} transition-all duration-200 hover:shadow-md hover:-translate-y-1 hover:border-primary/70 flex flex-col`}
+                className={`group relative bg-white rounded-2xl shadow-sm p-6 border ${colors.border} transition-all duration-300 hover:shadow-xl hover:-translate-y-2 hover:border-primary/70 flex flex-col`}
               >
-                <div className={`mb-4 w-14 h-14 rounded-xl ${colors.bg} ${colors.text} flex items-center justify-center border ${colors.border}`}>
-                  <Icon className="w-8 h-8" />
+                <div className={`mb-4 w-14 h-14 rounded-xl ${colors.bg} ${colors.text} flex items-center justify-center border ${colors.border} transition-colors duration-300 group-hover:bg-primary/10 group-hover:border-primary/40`}>
+                  <Icon className="w-8 h-8 group-hover:scale-105 transition-transform duration-300" />
                 </div>
                 <div className="mb-4">
                   <h3 className="text-lg md:text-xl font-semibold text-foreground mb-1 break-words hyphens-auto">
