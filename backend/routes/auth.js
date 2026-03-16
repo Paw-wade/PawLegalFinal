@@ -8,9 +8,6 @@ const { protect } = require('../middleware/auth');
 const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 
 const router = express.Router();
-
-const { sendNotificationSMS } = require('../sendSMS');
-const { formatPhoneNumber } = require('../sendSMS');
 // Générer un token JWT
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'your-secret-key-here', {
