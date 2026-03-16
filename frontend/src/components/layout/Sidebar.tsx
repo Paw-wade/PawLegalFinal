@@ -42,6 +42,7 @@ const clientMenuItems: MenuItem[] = [
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
+  const [forumRepliesCount, setForumRepliesCount] = useState<number>(0);
   const [documentsPendingCount, setDocumentsPendingCount] = useState<number>(0);
 
   const isActive = (href: string) => {
@@ -57,6 +58,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         const res = await forumAPI.getUnreadThreadsCount();
         if (res.data?.success && typeof res.data.count === 'number') {
           setForumUnreadCount(res.data.count);
+        }
+        if (typeof res.data?.newRepliesCount === 'number') {
+          setForumRepliesCount(res.data.newRepliesCount);
         }
       } catch (err) {
         console.error('Erreur lors du chargement du nombre de nouvelles discussions forum:', err);
@@ -147,6 +151,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   {item.href === '/forum' && forumUnreadCount > 0 && (
                     <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
                       {forumUnreadCount > 99 ? '99+' : forumUnreadCount}
+                    </span>
+                  )}
+                  {item.href === '/forum' && forumRepliesCount > 0 && (
+                    <span className="ml-1 text-[11px] font-semibold bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
+                      {forumRepliesCount > 99 ? '99+' : forumRepliesCount}
                     </span>
                   )}
                 </span>

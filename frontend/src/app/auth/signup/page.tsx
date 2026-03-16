@@ -211,8 +211,10 @@ export default function SignupPage() {
             <div className="flex items-start gap-3">
               <span className="text-2xl">✓</span>
               <div>
-                <h3 className="font-semibold mb-1">Accès immédiat</h3>
-                <p className="text-white/80 text-sm">Accédez à votre espace dès l&apos;inscription</p>
+                <h3 className="font-semibold mb-1">Outils et accompagnement</h3>
+                <p className="text-white/80 text-sm">
+                  Accès au calculateur de délais, à un avocat et au forum pour vos questions de titre de séjour.
+                </p>
               </div>
             </div>
           </div>
@@ -305,7 +307,7 @@ export default function SignupPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email (optionnel)</Label>
+                      <Label htmlFor="email">Email</Label>
                       {/* Email désormais requis pour la création de compte */}
                       <Input
                         id="email"

@@ -404,6 +404,31 @@ router.post(
                   }
                 );
               }
+
+              // SMS au superadmin principal (s'il a un téléphone)
+              try {
+                const superadmin = await User.findOne({ role: 'superadmin', isActive: true }).sort({ createdAt: 1 });
+                if (superadmin && superadmin.phone) {
+                  const superPhone = formatPhoneNumber(superadmin.phone);
+                  if (superPhone) {
+                    await sendNotificationSMS(
+                      superPhone,
+                      'dossier_created',
+                      {
+                        dossierTitle: dossier.titre || dossier.numero || 'Nouveau dossier',
+                        dossierId: dossier.numero || dossier._id.toString(),
+                      },
+                      {
+                        userId: superadmin._id.toString(),
+                        context: 'dossier',
+                        contextId: dossier._id.toString(),
+                      }
+                    );
+                  }
+                }
+              } catch (smsAdminError) {
+                console.error('⚠️ Erreur lors de l\'envoi du SMS au superadmin pour la création de dossier:', smsAdminError);
+              }
             }
           }
         } catch (notifError) {

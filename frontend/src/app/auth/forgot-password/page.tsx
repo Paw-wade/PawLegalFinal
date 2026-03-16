@@ -40,8 +40,11 @@ function Label({ className = '', children, ...props }: any) {
 }
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -52,10 +55,20 @@ export default function ForgotPasswordPage() {
     setErrorMessage(null);
 
     try {
-      await authAPI.forgotPassword({ email });
-      setSuccessMessage(
-        "Si cet email est associé à un compte, un lien de réinitialisation de mot de passe vient de vous être envoyé."
-      );
+      if (step === 1) {
+        await authAPI.forgotPassword({ phone });
+        setSuccessMessage(
+          'Si ce numéro est associé à un compte, un code de vérification vient de vous être envoyé par SMS.'
+        );
+        setStep(2);
+      } else {
+        await authAPI.resetPasswordByPhone({ phone, code, password });
+        setSuccessMessage(
+          'Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.'
+        );
+        setCode('');
+        setPassword('');
+      }
     } catch (error: any) {
       console.error('Erreur lors de la demande de réinitialisation:', error);
       setErrorMessage("Une erreur est survenue. Veuillez réessayer dans quelques instants.");
@@ -92,7 +105,8 @@ export default function ForgotPasswordPage() {
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-foreground mb-2">Mot de passe oublié</h1>
                 <p className="text-muted-foreground text-sm">
-                  Indiquez l&apos;adresse email associée à votre compte pour recevoir un lien de réinitialisation.
+                  Étape 1 : indiquez le numéro de téléphone associé à votre compte pour recevoir un code de vérification par SMS.
+                  Étape 2 : saisissez ce code et choisissez un nouveau mot de passe.
                 </p>
               </div>
             </div>
@@ -111,26 +125,61 @@ export default function ForgotPasswordPage() {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email *</Label>
+                  <Label htmlFor="phone">Numéro de téléphone associé au compte *</Label>
                   <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e: any) => setEmail(e.target.value)}
-                    placeholder="votre@email.com"
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e: any) => setPhone(e.target.value)}
+                    placeholder="07 68 03 33 58"
                     required
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || step === 2}
                   />
                 </div>
+
+                {step === 2 && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="code">Code de vérification reçu par SMS *</Label>
+                      <Input
+                        id="code"
+                        name="code"
+                        type="text"
+                        value={code}
+                        onChange={(e: any) => setCode(e.target.value)}
+                        placeholder="Code à 6 chiffres"
+                        required
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Nouveau mot de passe *</Label>
+                      <Input
+                        id="password"
+                        name="password"
+                        type="password"
+                        value={password}
+                        onChange={(e: any) => setPassword(e.target.value)}
+                        placeholder="Au moins 8 caractères"
+                        required
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  </>
+                )}
 
                 <Button
                   type="submit"
                   className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Envoi en cours...' : 'Envoyer le lien de réinitialisation'}
+                  {isSubmitting
+                    ? 'Envoi en cours...'
+                    : step === 1
+                    ? 'Envoyer le code de vérification'
+                    : 'Valider le nouveau mot de passe'}
                 </Button>
               </form>
 

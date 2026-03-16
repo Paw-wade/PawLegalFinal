@@ -229,29 +229,29 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
     } else {
       // Fallback sur les messages par défaut si aucun template trouvé
       const defaultMessages = {
-        appointment_confirmed: `Bonjour {{name}}, votre rendez-vous est confirmé le {{date}} à {{time}}. Paw Legal.`,
-        appointment_reminder: `Rappel: Vous avez un rendez-vous demain le {{date}} à {{time}}. Paw Legal.`,
-        appointment_cancelled: `Votre rendez-vous du {{date}} à {{time}} a été annulé. Paw Legal.`,
-        appointment_updated: `Votre rendez-vous du {{date}} à {{time}} a été modifié. Paw Legal.`,
-        dossier_created: `Votre dossier "{{dossierTitle}}" a été créé. Référence: {{dossierId}}. Paw Legal.`,
-        dossier_updated: `Votre dossier "{{dossierTitle}}" a été mis à jour. Statut: {{statut}}. Paw Legal.`,
-        dossier_status_changed: `Votre dossier "{{dossierTitle}}" a changé de statut: {{statut}}. Paw Legal.`,
-        document_uploaded: `Un nouveau document a été ajouté à votre dossier "{{dossierTitle}}". Paw Legal.`,
-        document_request: `{{isUrgentText}}Document requis pour votre dossier {{dossierNumero}}. Type: {{documentType}}. Connectez-vous pour envoyer. Paw Legal.`,
-        document_received: `Document "{{documentName}}" reçu pour le dossier {{dossierNumero}}. Paw Legal.`,
-        message_received: `Vous avez reçu un nouveau message de {{senderName}}. Connectez-vous pour le consulter. Paw Legal.`,
-        task_assigned: `Une nouvelle tâche vous a été assignée: {{taskTitle}}. Paw Legal.`,
-        task_reminder: `Rappel: La tâche "{{taskTitle}}" est due le {{dateEcheance}}. Paw Legal.`,
-        task_overdue: `⚠️ ALERTE: La tâche "{{taskTitle}}" assignée à {{assignedTo}} est en retard de {{daysOverdue}} jour(s). Échéance: {{deadlineDate}}. Paw Legal.`,
+        appointment_confirmed: `Bonjour {{name}}, votre rendez-vous est confirmé le {{date}} à {{time}}. Ada Papers.`,
+        appointment_reminder: `Rappel: Vous avez un rendez-vous demain le {{date}} à {{time}}. Ada Papers.`,
+        appointment_cancelled: `Votre rendez-vous du {{date}} à {{time}} a été annulé. Ada Papers.`,
+        appointment_updated: `Votre rendez-vous du {{date}} à {{time}} a été modifié. Ada Papers.`,
+        dossier_created: `Votre dossier "{{dossierTitle}}" a été créé. Référence: {{dossierId}}. Ada Papers.`,
+        dossier_updated: `Votre dossier "{{dossierTitle}}" a été mis à jour. Statut: {{statut}}. Ada Papers.`,
+        dossier_status_changed: `Votre dossier "{{dossierTitle}}" a changé de statut: {{statut}}. Ada Papers.`,
+        document_uploaded: `Un nouveau document a été ajouté à votre dossier "{{dossierTitle}}". Ada Papers.`,
+        document_request: `{{isUrgentText}}Document requis pour votre dossier {{dossierNumero}}. Type: {{documentType}}. Connectez-vous pour envoyer. Ada Papers.`,
+        document_received: `Document "{{documentName}}" reçu pour le dossier {{dossierNumero}}. Ada Papers.`,
+        message_received: `Vous avez reçu un nouveau message de {{senderName}}. Connectez-vous pour le consulter. Ada Papers.`,
+        task_assigned: `Une nouvelle tâche vous a été assignée: {{taskTitle}}. Ada Papers.`,
+        task_reminder: `Rappel: La tâche "{{taskTitle}}" est due le {{dateEcheance}}. Ada Papers.`,
+        task_overdue: `⚠️ ALERTE: La tâche "{{taskTitle}}" assignée à {{assignedTo}} est en retard de {{daysOverdue}} jour(s). Échéance: {{deadlineDate}}. Ada Papers.`,
       };
       
-      const defaultTemplate = defaultMessages[type] || data.message || 'Vous avez reçu une notification de Paw Legal.';
+      const defaultTemplate = defaultMessages[type] || data.message || 'Vous avez reçu une notification de Ada Papers.';
       message = fillTemplate(defaultTemplate, data);
     }
   } catch (error) {
     console.error('Erreur lors du chargement du template:', error);
     // Fallback sur un message simple
-    message = data.message || 'Vous avez reçu une notification de Paw Legal.';
+    message = data.message || 'Vous avez reçu une notification de Ada Papers.';
   }
   
   // Envoyer le SMS

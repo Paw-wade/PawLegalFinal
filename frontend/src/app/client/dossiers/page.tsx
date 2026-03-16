@@ -475,21 +475,21 @@ export default function DossiersPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(dossier.statut)}`}>
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0 max-w-[40%] sm:max-w-none">
+                      <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold text-right break-words ${getStatutColor(dossier.statut)}`}>
                         {getStatutLabel(dossier.statut)}
                       </span>
                       {dossier.priorite && (
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getPrioriteColor(dossier.priorite)}`}>
+                        <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold text-right break-words ${getPrioriteColor(dossier.priorite)}`}>
                           {dossier.priorite}
                         </span>
                       )}
                       <Link
                         href={`/client/dossiers/${dossier._id || dossier.id}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
+                        className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-primary text-white text-[11px] font-medium hover:bg-primary/90 transition-colors text-center break-words max-w-full"
                       >
-                        Voir les détails du dossier
+                        Voir les détails
                       </Link>
                     </div>
                   </div>
