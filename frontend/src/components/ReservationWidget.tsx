@@ -100,9 +100,8 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
   // Date du jour au format YYYY-MM-DD
   const getTodayDate = () => new Date().toISOString().split('T')[0];
 
-  // Liste des motifs basée sur les types de demandes de dossier
+  // Liste des motifs de rendez-vous
   const motifsOptions = [
-    { value: 'Consultation', label: 'Consultation' },
     { value: 'premiere_demande_titre', label: 'Je fais une première demande de titre de séjour' },
     { value: 'renouvellement_titre', label: 'Je demande le renouvellement de mon titre de séjour' },
     { value: 'changement_statut', label: 'Je demande un changement de statut' },
@@ -110,16 +109,11 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
     { value: 'nationalite_francaise', label: 'Je demande la nationalité française' },
     { value: 'demande_visa', label: 'Je demande un visa' },
     { value: 'demande_carte_resident', label: 'Je demande une carte de résident' },
-    { value: 'autre_demande', label: 'Autre Demande' },
-    { value: 'pas_reponse_titre', label: 'Je n\'ai pas eu de réponse à ma demande de titre de séjour' },
-    { value: 'pas_reponse_visa', label: 'Je n\'ai pas eu de réponse à ma demande de visa' },
+    { value: 'pas_reponse_titre', label: 'Je n’ai pas eu de réponse à ma demande de titre de séjour' },
+    { value: 'pas_reponse_visa', label: 'Je n’ai pas eu de réponse à ma demande de visa' },
     { value: 'conteste_refus_titre', label: 'Je conteste un refus de titre de séjour' },
-    { value: 'conteste_oqtf', label: 'J\'ai reçu une OQTF (obligation de quitter le territoire)' },
-    { value: 'conteste_refus_asile_cnda', label: 'Je conteste un refus d\'asile auprès de la CNDA' },
-    { value: 'conteste_refus_visa', label: 'Je conteste un refus de visa' },
-    { value: 'Dossier administratif', label: 'Dossier administratif' },
-    { value: 'Suivi de dossier', label: 'Suivi de dossier' },
-    { value: 'Autre', label: 'Autre' },
+    { value: 'conteste_oqtf', label: 'J’ai reçu une OQTF (obligation de quitter le territoire)' },
+    { value: 'autre', label: 'Autre' },
   ];
 
   const [formData, setFormData] = useState({
@@ -129,7 +123,7 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
     telephone: '',
     date: getTodayDate(),
     heure: '',
-    motif: 'Consultation',
+    motif: 'premiere_demande_titre',
     description: '',
   });
   const [userProfileLoaded, setUserProfileLoaded] = useState(false);
@@ -413,7 +407,7 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-xl p-3 border border-border max-w-sm relative">
+    <div className="bg-white rounded-xl shadow-2xl p-4 border border-border max-w-md w-[380px] relative">
       <button
         type="button"
         onClick={(e) => {

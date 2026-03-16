@@ -150,6 +150,32 @@ router.post(
         // Ne pas bloquer l'envoi du message si les notifications échouent
       }
 
+      // Notifier le superadmin principal par SMS quand un message de contact est reçu
+      try {
+        const superadmin = await User.findOne({ role: 'superadmin', isActive: true }).sort({ createdAt: 1 });
+        if (superadmin && superadmin.phone) {
+          const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+          const superPhone = formatPhoneNumber(superadmin.phone);
+          if (superPhone) {
+            await sendNotificationSMS(
+              superPhone,
+              'message_received',
+              {
+                senderName: name,
+                subject,
+              },
+              {
+                userId: superadmin._id.toString(),
+                context: 'contact',
+                contextId: newMessage._id.toString(),
+              }
+            );
+          }
+        }
+      } catch (smsError) {
+        console.error('⚠️ Erreur lors de l\'envoi du SMS au superadmin pour un message de contact:', smsError);
+      }
+
       res.json({
         success: true,
         message: 'Votre message a été envoyé avec succès. Nous vous répondrons dans les plus brefs délais.',

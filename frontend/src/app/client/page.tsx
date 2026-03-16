@@ -52,8 +52,8 @@ function ClientDashboardContent() {
   const [documentRequestNotification, setDocumentRequestNotification] = useState<any>(null);
   const [bookmarkedThreads, setBookmarkedThreads] = useState<any[]>([]);
   const [showBookmarksBar, setShowBookmarksBar] = useState(true);
-  const [isPersonalInfoOpen, setIsPersonalInfoOpen] = useState(true);
-  const [isAdminInfoOpen, setIsAdminInfoOpen] = useState(true);
+  const [isPersonalInfoOpen, setIsPersonalInfoOpen] = useState(false);
+  const [isAdminInfoOpen, setIsAdminInfoOpen] = useState(false);
   const [joursRestantsSidebar, setJoursRestantsSidebar] = useState<number | null>(null);
   const [heuresRestantes, setHeuresRestantes] = useState(0);
   const [minutesRestantes, setMinutesRestantes] = useState(0);

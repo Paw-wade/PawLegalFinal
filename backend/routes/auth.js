@@ -9,6 +9,8 @@ const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 
 const router = express.Router();
 
+const { sendNotificationSMS } = require('../sendSMS');
+const { formatPhoneNumber } = require('../sendSMS');
 // Générer un token JWT
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'your-secret-key-here', {
@@ -348,6 +350,161 @@ Ada Papers`;
       });
     } catch (error) {
       console.error('Erreur lors de la demande de réinitialisation:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: error.message
+      });
+    }
+  }
+);
+
+// @route   POST /api/auth/forgot-password-phone
+// @desc    Demander l'envoi d'un code de vérification par SMS pour réinitialiser le mot de passe
+// @access  Public
+router.post(
+  '/forgot-password-phone',
+  [
+    body('phone').trim().notEmpty().withMessage('Le numéro de téléphone est requis')
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Erreurs de validation',
+          errors: errors.array()
+        });
+      }
+
+      const { phone } = req.body;
+      const formattedPhone = formatPhoneNumber(phone);
+
+      if (!formattedPhone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Numéro de téléphone invalide'
+        });
+      }
+
+      const user = await User.findOne({ phone: formattedPhone }).select('+resetPasswordToken +resetPasswordExpires');
+
+      if (!user) {
+        // Toujours répondre succès pour ne pas révéler l'existence des comptes
+        return res.json({
+          success: true,
+          message: 'Si ce numéro est associé à un compte, un SMS vient de vous être envoyé.'
+        });
+      }
+
+      // Générer un code de vérification à 6 chiffres
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Stocker une version hachée du code dans le compte utilisateur avec une expiration courte (10 minutes)
+      const hashedToken = crypto.createHash('sha256').update(verificationCode).digest('hex');
+      user.resetPasswordToken = hashedToken;
+      user.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      await user.save();
+
+      // Envoyer le code de vérification par SMS
+      try {
+        await sendNotificationSMS(
+          formattedPhone,
+          'password_reset_temp',
+          {
+            firstName: user.firstName || '',
+            lastName: user.lastName || '',
+            tempPassword: verificationCode, // utilisé comme code de vérification
+          },
+          {
+            userId: user._id,
+            context: 'auth',
+            contextId: user._id.toString(),
+            // SMS critique pour l'accès : on ignore les préférences générales
+            skipPreferences: true,
+          }
+        );
+      } catch (smsError) {
+        console.error('Erreur lors de l\'envoi du SMS de réinitialisation:', smsError);
+        // Même si le SMS échoue, ne pas révéler l’erreur précise au client
+      }
+
+      return res.json({
+        success: true,
+        message: 'Si ce numéro est associé à un compte, un SMS vient de vous être envoyé avec un code de vérification.'
+      });
+    } catch (error) {
+      console.error('Erreur lors de la demande de réinitialisation par téléphone:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: error.message
+      });
+    }
+  }
+);
+
+// @route   POST /api/auth/reset-password-phone
+// @desc    Réinitialiser le mot de passe à partir du téléphone + code de vérification
+// @access  Public
+router.post(
+  '/reset-password-phone',
+  [
+    body('phone').trim().notEmpty().withMessage('Le numéro de téléphone est requis'),
+    body('code').trim().notEmpty().withMessage('Le code de vérification est requis'),
+    body('password').isLength({ min: 8 }).withMessage('Le nouveau mot de passe doit contenir au moins 8 caractères')
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Erreurs de validation',
+          errors: errors.array()
+        });
+      }
+
+      const { phone, code, password } = req.body;
+      const formattedPhone = formatPhoneNumber(phone);
+
+      if (!formattedPhone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Numéro de téléphone invalide'
+        });
+      }
+
+      const hashedToken = crypto.createHash('sha256').update(code).digest('hex');
+
+      const user = await User.findOne({
+        phone: formattedPhone,
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { $gt: Date.now() }
+      }).select('+password +resetPasswordToken +resetPasswordExpires');
+
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: 'Code de vérification invalide ou expiré pour ce numéro de téléphone'
+        });
+      }
+
+      // Mettre à jour le mot de passe et nettoyer les champs de reset
+      user.password = password;
+      user.needsPasswordSetup = false;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      user.phoneVerified = true;
+      await user.save();
+
+      return res.json({
+        success: true,
+        message: 'Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.'
+      });
+    } catch (error) {
+      console.error('Erreur lors de la réinitialisation du mot de passe par téléphone:', error);
       res.status(500).json({
         success: false,
         message: 'Erreur serveur',

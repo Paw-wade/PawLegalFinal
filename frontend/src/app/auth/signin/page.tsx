@@ -201,21 +201,21 @@ export default function SignInPage() {
               <span className="text-2xl">✓</span>
               <div>
                 <h3 className="font-semibold mb-1">Accompagnement personnalisé</h3>
-                <p className="text-white/80 text-sm">Un avocat dédié pour suivre votre dossier</p>
+                <p className="text-white/80 text-sm">On vous accompagne dans vos démarches de titre de séjour et de visa</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <span className="text-2xl">✓</span>
               <div>
                 <h3 className="font-semibold mb-1">Suivi en temps réel</h3>
-                <p className="text-white/80 text-sm">Accès à vos documents 24/7</p>
+                <p className="text-white/80 text-sm">Suivez l&apos;évolution de votre dossier en temps réel</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <span className="text-2xl">✓</span>
               <div>
                 <h3 className="font-semibold mb-1">Expertise reconnue</h3>
-                <p className="text-white/80 text-sm">Plus de 10 ans d'expérience</p>
+                <p className="text-white/80 text-sm">Des professionnels et avocats à votre disposition</p>
               </div>
             </div>
           </div>

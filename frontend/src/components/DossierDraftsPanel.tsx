@@ -251,6 +251,8 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
   ];
   const partnerOptions = Array.from(new Map(partnerEntries).values());
 
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   const getPartnerLabel = (partnerId: string) => {
     const fromAccess = selectedDraft?.partnerAccess?.find((pa) => {
       const id = typeof pa.partner === 'object' && pa.partner && '_id' in pa.partner ? pa.partner._id : String(pa.partner);
@@ -275,6 +277,13 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsCollapsed((prev) => !prev)}
+            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+          >
+            {isCollapsed ? 'Afficher les documents' : 'Masquer les documents'}
+          </button>
           {linkToDedicatedPageHref && (
             <Link
               href={linkToDedicatedPageHref}
@@ -299,7 +308,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
         </div>
       )}
 
-      {isLoading ? (
+      {isCollapsed ? null : isLoading ? (
         <div className="py-8 text-center text-sm text-gray-500">Chargement des documents en préparation...</div>
       ) : drafts.length === 0 ? (
         <div className="py-6 text-center text-sm text-gray-500">

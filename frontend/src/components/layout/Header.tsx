@@ -364,7 +364,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               <>
                 <Link
                   href="/"
-                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg sm:text-xl truncate"
+                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg sm:text-xl max-w-[60vw] sm:max-w-none truncate"
                 >
                   Ada Papers
                 </Link>
@@ -377,7 +377,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
             {(variant === 'admin' || variant === 'partenaire' || variant === 'client') && (
               <Link
                 href={variant === 'admin' ? '/admin' : variant === 'partenaire' ? '/partenaire' : '/client'}
-                className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg truncate"
+                className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg max-w-[60vw] truncate"
               >
                 Ada Papers
               </Link>

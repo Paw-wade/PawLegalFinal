@@ -51,12 +51,24 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
         console.log('📄 URL de prévisualisation:', url);
         console.log('📄 Token présent:', token ? 'Oui' : 'Non');
         
+        // Détection simplifiée du mobile
+        const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+
         // Pour les PDF dans iframe, on peut utiliser l'URL directement
         // L'authentification sera gérée par le backend via les cookies ou headers
         if (isPDF) {
-          // Créer une URL avec token pour l'iframe (le backend doit accepter le token en query param ou via cookie)
+          // Créer une URL avec token pour l'iframe / nouvel onglet (le backend doit accepter le token en query param ou via cookie)
           const previewUrlWithToken = `${url}?token=${encodeURIComponent(token)}`;
           console.log('📄 URL PDF avec token:', previewUrlWithToken.substring(0, 100) + '...');
+
+          // Sur mobile, ouvrir directement dans un nouvel onglet / viewer natif (meilleure compatibilité)
+          if (isMobile) {
+            window.open(previewUrlWithToken, '_blank');
+            setIsLoading(false);
+            onClose();
+            return;
+          }
+
           setPreviewUrl(previewUrlWithToken);
           setIsLoading(false);
         } else if (isImage) {

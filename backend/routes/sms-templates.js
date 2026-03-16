@@ -57,7 +57,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'appointment_confirmed',
         name: 'Confirmation de rendez-vous',
         description: 'Message envoyé lors de la confirmation d\'un rendez-vous',
-        message: 'Bonjour {{name}}, votre rendez-vous est confirmé le {{date}} à {{time}}. Paw Legal.',
+        message: 'Bonjour {{name}}, votre rendez-vous est confirmé le {{date}} à {{time}}. Ada Papers.',
         variables: [
           { name: 'name', description: 'Nom complet du client', example: 'Jean Dupont' },
           { name: 'date', description: 'Date du rendez-vous', example: '15 janvier 2024' },
@@ -71,7 +71,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'appointment_cancelled',
         name: 'Annulation de rendez-vous',
         description: 'Message envoyé lors de l\'annulation d\'un rendez-vous',
-        message: 'Votre rendez-vous du {{date}} à {{time}} a été annulé. Paw Legal.',
+        message: 'Votre rendez-vous du {{date}} à {{time}} a été annulé. Ada Papers.',
         variables: [
           { name: 'date', description: 'Date du rendez-vous', example: '15 janvier 2024' },
           { name: 'time', description: 'Heure du rendez-vous', example: '14:30' }
@@ -84,7 +84,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'appointment_updated',
         name: 'Modification de rendez-vous',
         description: 'Message envoyé lors de la modification d\'un rendez-vous',
-        message: 'Votre rendez-vous du {{date}} à {{time}} a été modifié. Paw Legal.',
+        message: 'Votre rendez-vous du {{date}} à {{time}} a été modifié. Ada Papers.',
         variables: [
           { name: 'date', description: 'Date du rendez-vous', example: '15 janvier 2024' },
           { name: 'time', description: 'Heure du rendez-vous', example: '14:30' }
@@ -97,7 +97,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'appointment_reminder',
         name: 'Rappel de rendez-vous',
         description: 'Message de rappel envoyé avant un rendez-vous',
-        message: 'Rappel: Vous avez un rendez-vous demain le {{date}} à {{time}}. Paw Legal.',
+        message: 'Rappel: Vous avez un rendez-vous demain le {{date}} à {{time}}. Ada Papers.',
         variables: [
           { name: 'date', description: 'Date du rendez-vous', example: '15 janvier 2024' },
           { name: 'time', description: 'Heure du rendez-vous', example: '14:30' }
@@ -110,7 +110,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'dossier_created',
         name: 'Création de dossier',
         description: 'Message envoyé lors de la création d\'un dossier',
-        message: 'Bonjour, votre dossier "{{dossierTitle}}" a été créé suite à votre rendez-vous du {{appointmentDate}} à {{appointmentTime}}. Référence: {{dossierId}}. Paw Legal.',
+        message: 'Bonjour, votre dossier "{{dossierTitle}}" a été créé suite à votre rendez-vous du {{appointmentDate}} à {{appointmentTime}}. Référence: {{dossierId}}. Ada Papers.',
         variables: [
           { name: 'dossierTitle', description: 'Titre du dossier', example: 'Demande de titre de séjour' },
           { name: 'dossierId', description: 'Identifiant du dossier', example: 'DOS-2024-001' },
@@ -125,7 +125,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'dossier_updated',
         name: 'Mise à jour de dossier',
         description: 'Message envoyé lors de la mise à jour d\'un dossier',
-        message: 'Votre dossier "{{dossierTitle}}" a été mis à jour. Statut: {{statut}}. Paw Legal.',
+        message: 'Votre dossier "{{dossierTitle}}" a été mis à jour. Statut: {{statut}}. Ada Papers.',
         variables: [
           { name: 'dossierTitle', description: 'Titre du dossier', example: 'Demande de titre de séjour' },
           { name: 'statut', description: 'Nouveau statut du dossier', example: 'En cours' }
@@ -138,7 +138,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'dossier_status_changed',
         name: 'Changement de statut de dossier',
         description: 'Message envoyé lors du changement de statut d\'un dossier',
-        message: 'Votre dossier "{{dossierTitle}}" a changé de statut: {{statut}}. Paw Legal.',
+        message: 'Votre dossier "{{dossierTitle}}" a changé de statut: {{statut}}. Ada Papers.',
         variables: [
           { name: 'dossierTitle', description: 'Titre du dossier', example: 'Demande de titre de séjour' },
           { name: 'statut', description: 'Nouveau statut', example: 'Accepté' }
@@ -151,7 +151,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'document_uploaded',
         name: 'Document ajouté',
         description: 'Message envoyé lorsqu\'un document est ajouté à un dossier',
-        message: 'Un nouveau document a été ajouté à votre dossier "{{dossierTitle}}". Paw Legal.',
+        message: 'Un nouveau document a été ajouté à votre dossier "{{dossierTitle}}". Ada Papers.',
         variables: [
           { name: 'dossierTitle', description: 'Titre du dossier', example: 'Demande de titre de séjour' }
         ],
@@ -163,7 +163,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'document_request',
         name: 'Demande de document',
         description: 'Message envoyé lorsqu\'un document est demandé au client',
-        message: '{{isUrgentText}}Document requis pour votre dossier {{dossierNumero}}. Type: {{documentType}}. Connectez-vous pour envoyer. Paw Legal.',
+        message: '{{isUrgentText}}Document requis pour votre dossier {{dossierNumero}}. Type: {{documentType}}. Connectez-vous pour envoyer. Ada Papers.',
         variables: [
           { name: 'dossierNumero', description: 'Numéro du dossier', example: 'DOS-2024-001' },
           { name: 'documentType', description: 'Type de document demandé', example: 'Passeport' },
@@ -178,7 +178,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'document_received',
         name: 'Document reçu',
         description: 'Message envoyé à l\'admin lorsqu\'un document est reçu',
-        message: 'Document "{{documentName}}" reçu pour le dossier {{dossierNumero}}. Paw Legal.',
+        message: 'Document "{{documentName}}" reçu pour le dossier {{dossierNumero}}. Ada Papers.',
         variables: [
           { name: 'documentName', description: 'Nom du document', example: 'Passeport' },
           { name: 'dossierNumero', description: 'Numéro du dossier', example: 'DOS-2024-001' }
@@ -191,7 +191,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'message_received',
         name: 'Nouveau message',
         description: 'Message envoyé lorsqu\'un utilisateur reçoit un nouveau message',
-        message: 'Vous avez reçu un nouveau message de {{senderName}}. Connectez-vous pour le consulter. Paw Legal.',
+        message: 'Vous avez reçu un nouveau message de {{senderName}}. Connectez-vous pour le consulter. Ada Papers.',
         variables: [
           { name: 'senderName', description: 'Nom de l\'expéditeur', example: 'Cabinet Paw Legal' }
         ],
@@ -203,7 +203,7 @@ router.post('/init-defaults', async (req, res) => {
         code: 'task_assigned',
         name: 'Tâche assignée',
         description: 'Message envoyé lorsqu\'une tâche est assignée',
-        message: 'Une nouvelle tâche vous a été assignée: {{taskTitle}}. Paw Legal.',
+        message: 'Une nouvelle tâche vous a été assignée: {{taskTitle}}. Ada Papers.',
         variables: [
           { name: 'taskTitle', description: 'Titre de la tâche', example: 'Réviser le dossier DOS-2024-001' }
         ],
@@ -215,12 +215,66 @@ router.post('/init-defaults', async (req, res) => {
         code: 'task_reminder',
         name: 'Rappel de tâche',
         description: 'Message de rappel pour une tâche avec échéance',
-        message: 'Rappel: La tâche "{{taskTitle}}" est due le {{dateEcheance}}. Paw Legal.',
+        message: 'Rappel: La tâche "{{taskTitle}}" est due le {{dateEcheance}}. Ada Papers.',
         variables: [
           { name: 'taskTitle', description: 'Titre de la tâche', example: 'Réviser le dossier DOS-2024-001' },
           { name: 'dateEcheance', description: 'Date d\'échéance', example: '20 janvier 2024' }
         ],
         category: 'task',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'task_overdue',
+        name: 'Tâche en retard',
+        description: 'Alerte envoyée lorsqu\'une tâche est en retard',
+        message: '⚠️ ALERTE: La tâche "{{taskTitle}}" assignée à {{assignedTo}} est en retard de {{daysOverdue}} jour(s). Échéance: {{deadlineDate}}. Ada Papers.',
+        variables: [
+          { name: 'taskTitle', description: 'Titre de la tâche', example: 'Réviser le dossier DOS-2024-001' },
+          { name: 'assignedTo', description: 'Personne assignée', example: 'Jean Dupont' },
+          { name: 'daysOverdue', description: 'Nombre de jours de retard', example: '3' },
+          { name: 'deadlineDate', description: 'Date d\'échéance', example: '20 janvier 2024' }
+        ],
+        category: 'task',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'account_security',
+        name: 'Sécurité du compte',
+        description: 'Messages liés à la sécurité du compte (création, alerte, etc.)',
+        message: '{{message}}',
+        variables: [
+          { name: 'message', description: 'Contenu détaillé du message de sécurité', example: 'Votre compte a été créé. Mot de passe temporaire: Adap2026+.' }
+        ],
+        category: 'account',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'password_reset_temp',
+        name: 'Réinitialisation de mot de passe par téléphone',
+        description: 'Code de vérification envoyé pour réinitialiser le mot de passe via le téléphone',
+        message: 'Bonjour {{firstName}} {{lastName}}, votre code de vérification pour réinitialiser votre mot de passe est : {{tempPassword}}. Ce code est valable 10 minutes. Ada Papers.',
+        variables: [
+          { name: 'firstName', description: 'Prénom de l\'utilisateur', example: 'Jean' },
+          { name: 'lastName', description: 'Nom de l\'utilisateur', example: 'Dupont' },
+          { name: 'tempPassword', description: 'Code de vérification à 6 chiffres', example: '123456' }
+        ],
+        category: 'account',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'dossier_transmitted',
+        name: 'Dossier transmis à un partenaire',
+        description: 'Notification envoyée à un partenaire lorsqu\'un dossier lui est transmis',
+        message: 'Un dossier "{{dossierTitle}}" vient de vous être transmis via Ada Papers pour suivi. Organisme: {{partenaireName}}. Connectez-vous pour consulter les détails. Ada Papers.',
+        variables: [
+          { name: 'dossierTitle', description: 'Titre du dossier', example: 'Demande de titre de séjour' },
+          { name: 'partenaireName', description: 'Nom du partenaire ou de l\'organisme', example: 'Association Solidarité' }
+        ],
+        category: 'dossier',
         isActive: true,
         isSystem: true
       }

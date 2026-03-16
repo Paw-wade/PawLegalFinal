@@ -520,6 +520,7 @@ export default function CalculateurPage() {
   const [heuresRestantes, setHeuresRestantes] = useState<number>(0);
   const [minutesRestantes, setMinutesRestantes] = useState<number>(0);
   const [secondesRestantes, setSecondesRestantes] = useState<number>(0);
+  const isAuthenticated = status === 'authenticated' && !!session;
   
   // États pour gérer l'ouverture/fermeture des sections (accordéon)
   const [isPersonalInfoOpen, setIsPersonalInfoOpen] = useState<boolean>(true);
@@ -531,15 +532,8 @@ export default function CalculateurPage() {
   const isPartenaire = userRole === 'partenaire';
   const isClient = userRole === 'client';
 
-  // Pour les comptes client : bloquer l'accès au calculateur si le profil n'est pas complété
-  useEffect(() => {
-    if (status !== 'authenticated' || !session) return;
-    const role = (session.user as any)?.role ?? 'client';
-    const profilComplete = (session.user as any)?.profilComplete;
-    if (role === 'client' && !profilComplete) {
-      router.push('/auth/complete-profile');
-    }
-  }, [status, session, router]);
+  // Pour les comptes client : on ne redirige plus automatiquement si le profil n'est pas complété,
+  // pour laisser la page du calculateur visible même sans connexion ou profil complet.
 
   // Fonction de déconnexion
   const handleSignOut = async () => {
@@ -2257,7 +2251,7 @@ export default function CalculateurPage() {
 
           {/* Colonne 2 : Informations sur le titre de séjour (centré, largeur augmentée) */}
           <div className="flex-1 w-full lg:max-w-4xl mx-auto lg:self-start">
-            <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all lg:sticky lg:top-24">
+            <div className="relative bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all lg:sticky lg:top-24">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
                   <span className="text-xl">📋</span>
@@ -2265,7 +2259,26 @@ export default function CalculateurPage() {
                 <h2 className="text-xl font-bold text-foreground">Nature du calcul</h2>
               </div>
 
-              <form className="space-y-4">
+              {!isAuthenticated && (
+                <div className="mb-4 rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
+                  <p className="font-semibold mb-1">Connexion requise pour utiliser le calculateur</p>
+                  <p className="mb-2">
+                    Vous pouvez consulter les explications ci-dessous, mais il est nécessaire de vous connecter pour saisir vos informations et générer les délais.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => router.push('/auth/signin')}
+                    className="inline-flex items-center justify-center rounded-md border border-yellow-400 bg-yellow-100 px-3 py-1.5 text-xs font-semibold text-yellow-900 hover:bg-yellow-200 transition-colors"
+                  >
+                    Se connecter pour utiliser le calculateur
+                  </button>
+                </div>
+              )}
+
+              <form
+                className={`space-y-4 ${!isAuthenticated ? 'pointer-events-none opacity-60 select-none' : ''}`}
+                aria-disabled={!isAuthenticated}
+              >
                 {/* Badges de choix */}
                 <div className="space-y-2">
                   <Label className="text-base font-bold">Sélectionnez le type de calcul :</Label>
@@ -3413,10 +3426,10 @@ export default function CalculateurPage() {
                       <div className="mt-6 flex justify-center">
                         <Button
                           variant="default"
-                          onClick={genererPDFRenouvellement}
+                          onClick={isAuthenticated ? genererPDFRenouvellement : () => router.push('/auth/signin')}
                           className="bg-orange-500 hover:bg-orange-600 text-white"
                         >
-                          📄 Télécharger le rapport PDF
+                          {isAuthenticated ? '📄 Télécharger le rapport PDF' : 'Se connecter pour télécharger le rapport PDF'}
                         </Button>
                       </div>
                     </div>
