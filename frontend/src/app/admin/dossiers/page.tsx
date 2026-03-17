@@ -2467,7 +2467,7 @@ export default function AdminDossiersPage() {
                             );
                           })()}
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
                           {(() => {
                             const unreadCount = getUnreadNotificationsCountForDossier(dossier._id || dossier.id);
                             return (
