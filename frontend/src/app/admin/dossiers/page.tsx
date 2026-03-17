@@ -285,7 +285,7 @@ export default function AdminDossiersPage() {
   const [showStatutModal, setShowStatutModal] = useState<{ dossierId: string; dossierTitre: string; currentStatut: string; newStatut: string } | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
   const [statusFilter, setStatusFilter] = useState<
-    'all' | 'pending' | 'in_progress' | 'favorable' | 'unfavorable' | 'closed'
+    'all' | 'pending' | 'in_progress' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
   >('all');
   const [userFilter, setUserFilter] = useState<string>('all');
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState<any>(null);
