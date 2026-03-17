@@ -1352,6 +1352,7 @@ export default function AdminDossiersPage() {
             <>
               {/* Statistiques rapides (badges cliquables) */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                {/* En attente : dossiers créés par un utilisateur dont le statut n'a pas encore été édité par l'admin */}
                 <button
                   type="button"
                   onClick={() => setStatusFilter('pending')}
@@ -1363,9 +1364,23 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-yellow-700 font-semibold mb-1 uppercase tracking-wide">En attente</p>
                   <p className="text-2xl font-bold text-yellow-900">
-                    {dossiers.filter((d: any) => d.statut === 'recu' || d.statut === 'en_attente_onboarding').length}
+                    {dossiers.filter((d: any) => {
+                      const hasClient = !!d.user; // dossier créé par un utilisateur
+                      const rawStatut = d.statut || '';
+                      const initialStatut =
+                        !rawStatut ||
+                        rawStatut === 'recu' ||
+                        rawStatut === 'en_attente_onboarding';
+                      return (
+                        hasClient &&
+                        initialStatut &&
+                        !d.estCloture &&
+                        !d.estArchive
+                      );
+                    }).length}
                   </p>
                 </button>
+                {/* En cours : tous les autres dossiers non clôturés / non archivés */}
                 <button
                   type="button"
                   onClick={() => setStatusFilter('in_progress')}
@@ -1377,35 +1392,48 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-blue-700 font-semibold mb-1 uppercase tracking-wide">En cours</p>
                   <p className="text-2xl font-bold text-blue-900">
-                    {dossiers.filter((d: any) => d.statut === 'en_cours_instruction' || d.statut === 'dossier_complet').length}
+                    {dossiers.filter((d: any) => {
+                      const hasClient = !!d.user;
+                      const rawStatut = d.statut || '';
+                      const initialStatut =
+                        hasClient &&
+                        (!rawStatut ||
+                          rawStatut === 'recu' ||
+                          rawStatut === 'en_attente_onboarding');
+                      return (
+                        !d.estCloture &&
+                        !d.estArchive &&
+                        !initialStatut
+                      );
+                    }).length}
                   </p>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStatusFilter('favorable')}
+                  onClick={() => setStatusFilter('closed')}
                   className={`text-left bg-gradient-to-br from-green-50 to-green-100 border-l-4 border-green-500 rounded-lg p-4 shadow-sm transition-all ${
-                    statusFilter === 'favorable'
+                    statusFilter === 'closed'
                       ? 'ring-2 ring-green-500/60 shadow-md'
                       : 'hover:shadow-md hover:-translate-y-0.5'
                   }`}
                 >
-                  <p className="text-xs text-green-700 font-semibold mb-1 uppercase tracking-wide">Favorables</p>
+                  <p className="text-xs text-green-700 font-semibold mb-1 uppercase tracking-wide">Clôturés</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {dossiers.filter((d: any) => d.statut === 'decision_favorable' || d.statut === 'gain_cause').length}
+                    {dossiers.filter((d: any) => d.estCloture).length}
                   </p>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStatusFilter('unfavorable')}
+                  onClick={() => setStatusFilter('archived')}
                   className={`text-left bg-gradient-to-br from-red-50 to-red-100 border-l-4 border-red-500 rounded-lg p-4 shadow-sm transition-all ${
-                    statusFilter === 'unfavorable'
+                    statusFilter === 'archived'
                       ? 'ring-2 ring-red-500/60 shadow-md'
                       : 'hover:shadow-md hover:-translate-y-0.5'
                   }`}
                 >
-                  <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Défavorables</p>
+                  <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
                   <p className="text-2xl font-bold text-red-900">
-                    {dossiers.filter((d: any) => d.statut === 'decision_defavorable' || d.statut === 'refuse' || d.statut === 'rejet').length}
+                    {dossiers.filter((d: any) => d.estArchive).length}
                   </p>
                 </button>
               </div>
@@ -1423,8 +1451,8 @@ export default function AdminDossiersPage() {
                           <>
                             {statusFilter === 'pending' && 'En attente'}
                             {statusFilter === 'in_progress' && 'En cours'}
-                            {statusFilter === 'favorable' && 'Favorables'}
-                            {statusFilter === 'unfavorable' && 'Défavorables'}
+                            {statusFilter === 'closed' && 'Clôturés'}
+                            {statusFilter === 'archived' && 'Archivés'}
                           </>
                         )}
                         {statusFilter !== 'all' && userFilter !== 'all' && ' • '}
@@ -1459,15 +1487,43 @@ export default function AdminDossiersPage() {
               {/* Liste des dossiers en cartes */}
               {(() => {
                 const filteredDossiers = dossiers.filter((d: any) => {
-                  // Filtre par statut
+                  // Filtre par statut (logique simplifiée admin)
                   if (statusFilter === 'pending') {
-                    if (!(d.statut === 'recu' || d.statut === 'en_attente_onboarding')) return false;
+                    // Dossiers créés par un utilisateur dont le statut n'a pas encore été édité par l'admin
+                    const hasClient = !!d.user;
+                    const rawStatut = d.statut || '';
+                    const initialStatut =
+                      !rawStatut ||
+                      rawStatut === 'recu' ||
+                      rawStatut === 'en_attente_onboarding';
+                    if (
+                      !hasClient ||
+                      !initialStatut ||
+                      d.estCloture ||
+                      d.estArchive
+                    ) {
+                      return false;
+                    }
                   } else if (statusFilter === 'in_progress') {
-                    if (!(d.statut === 'en_cours_instruction' || d.statut === 'dossier_complet')) return false;
-                  } else if (statusFilter === 'favorable') {
-                    if (!(d.statut === 'decision_favorable' || d.statut === 'gain_cause')) return false;
-                  } else if (statusFilter === 'unfavorable') {
-                    if (!(d.statut === 'decision_defavorable' || d.statut === 'refuse' || d.statut === 'rejet')) return false;
+                    // Tous les autres dossiers non clôturés / non archivés
+                    const hasClient = !!d.user;
+                    const rawStatut = d.statut || '';
+                    const initialStatut =
+                      hasClient &&
+                      (!rawStatut ||
+                        rawStatut === 'recu' ||
+                        rawStatut === 'en_attente_onboarding');
+                    if (
+                      initialStatut ||
+                      d.estCloture ||
+                      d.estArchive
+                    ) {
+                      return false;
+                    }
+                  } else if (statusFilter === 'closed') {
+                    if (!d.estCloture) return false;
+                  } else if (statusFilter === 'archived') {
+                    if (!d.estArchive) return false;
                   }
 
                   // Filtre par utilisateur
@@ -2478,6 +2534,29 @@ export default function AdminDossiersPage() {
                           <label className="text-xs text-muted-foreground mb-1 block">
                             📋 Statut du dossier
                           </label>
+                          {/* Synthèse acceptation partenaire (toujours visible) */}
+                          {Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0 && (() => {
+                            const transmissions = dossier.transmittedTo;
+                            const hasAccepted = transmissions.some((t: any) => t.status === 'accepted');
+                            const hasRefused = transmissions.some((t: any) => t.status === 'refused');
+                            let label = 'En attente';
+                            let badgeClass = 'bg-yellow-50 text-yellow-800 border-yellow-200';
+                            if (hasAccepted) {
+                              label = 'Accepté';
+                              badgeClass = 'bg-green-50 text-green-800 border-green-200';
+                            } else if (hasRefused && !hasAccepted) {
+                              label = 'Refusé';
+                              badgeClass = 'bg-red-50 text-red-800 border-red-200';
+                            }
+                            return (
+                              <div className="mb-1.5">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${badgeClass}`}>
+                                  <span>Statut partenaire :</span>
+                                  <span>{label}</span>
+                                </span>
+                              </div>
+                            );
+                          })()}
                           <select
                             value={dossier.statut || ''}
                             onChange={(e) => handleChangeStatut(dossier._id || dossier.id, e.target.value)}

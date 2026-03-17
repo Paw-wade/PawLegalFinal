@@ -728,96 +728,10 @@ export default function DossiersPage() {
                               );
                             }
                             
-                            const dossierDocs = dossierDocuments[dossier._id || dossier.id] || [];
-                            const hasDocuments = dossierDocs.length > 0;
-                            const isDocDropdownExpanded = expandedDocumentDropdowns.has(dossier._id || dossier.id);
-                            
-                            return (
-                              <div className="relative">
-                                <div className="flex gap-3 text-xs text-muted-foreground">
-                                  {hasDocuments && isDocDropdownExpanded && (
-                                    <>
-                                    <div className="relative">
-                                      {/* Dropdown des documents sans bouton redondant */}
-                                      <div 
-                                          className="absolute left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          <div className="p-2">
-                                            <div className="flex items-center justify-between gap-2 mb-2 px-2 py-1 bg-gray-50 rounded">
-                                              <span className="text-xs font-semibold text-gray-700">Documents du dossier</span>
-                                              <span className="text-xs text-gray-500">{dossierDocs.length} total</span>
-                                            </div>
-                                            <div className="space-y-1">
-                                              {dossierDocs.map((doc: any) => (
-                                                <div
-                                                  key={doc._id || doc.id}
-                                                  className="p-2 rounded-md border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-                                                >
-                                                  <div className="flex items-start justify-between gap-2 mb-2">
-                                                    <div className="flex-1 min-w-0">
-                                                      <p className="text-xs font-medium text-gray-900 truncate">{doc.nom}</p>
-                                                      {doc.description && (
-                                                        <p className="text-[10px] text-gray-500 line-clamp-1 mt-0.5">{doc.description}</p>
-                                                      )}
-                                                      <p className="text-[10px] text-gray-400 mt-1">
-                                                        {doc.typeMime} • {doc.taille ? `${(doc.taille / 1024).toFixed(1)} KB` : ''}
-                                                      </p>
-                                                    </div>
-                                                  </div>
-                                                  <div className="flex items-center gap-1 pt-2 border-t border-gray-100">
-                                                    <button
-                                                      onClick={async (e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        setSelectedDocumentForPreview(doc);
-                                                      }}
-                                                      className="flex-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-medium transition-colors"
-                                                    >
-                                                      👁️ Voir
-                                                    </button>
-                                                    <button
-                                                      onClick={async (e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        try {
-                                                          const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                                                          const blob = new Blob([response.data]);
-                                                          const url = window.URL.createObjectURL(blob);
-                                                          const link = document.createElement('a');
-                                                          link.href = url;
-                                                          link.download = doc.nom;
-                                                          document.body.appendChild(link);
-                                                          link.click();
-                                                          document.body.removeChild(link);
-                                                          window.URL.revokeObjectURL(url);
-                                                        } catch (err) {
-                                                          console.error('Erreur lors du téléchargement:', err);
-                                                          alert('Erreur lors du téléchargement du document');
-                                                        }
-                                                      }}
-                                                      className="flex-1 px-2 py-1 bg-green-50 hover:bg-green-100 text-green-700 rounded text-[10px] font-medium transition-colors"
-                                                    >
-                                                      ⬇️ Télécharger
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        </div>
-                                    </div>
-                                    </>
-                                  )}
-                                  {dossier.messages && dossier.messages.length > 0 && (
-                                    <span>💬 {dossier.messages.length}</span>
-                                  )}
-                                </div>
-                              </div>
-                            );
+                            // Fonctionnalité dropdown documents supprimée pour simplifier la vue client
                           }
                           
-                          return null; // Les demandes sont affichées dans la section dédiée ci-dessus
+                          return null;
                         })()}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
