@@ -277,13 +277,11 @@ export default function DossierDetailPage() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Chargement...</p>
+          <p className="text-muted-foreground">Chargement de votre session...</p>
         </div>
       </div>
     );
   }
-
-  if (status === 'unauthenticated') return null;
 
   if (isLoading) {
     return (
@@ -316,24 +314,24 @@ export default function DossierDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
-      <main className="w-full px-4 py-8 overflow-x-hidden">
-        {/* En-tête amélioré */}
-        <div className="mb-6">
-          <Link href="/client/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 max-w-[100vw]">
+      <main className="w-full max-w-[100vw] px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
+        {/* En-tête — sur mobile: colonne, boutons en bas */}
+        <div className="mb-4 sm:mb-6">
+          <Link href="/client/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-3 sm:mb-4 transition-colors min-h-[44px] items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             Retour aux dossiers
           </Link>
           
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6 overflow-hidden">
-            <div className="flex items-start justify-between mb-4">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2 flex-wrap">
-                  <h1 className="text-3xl font-bold text-foreground break-words">{dossier.titre}</h1>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                  <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
                   {(dossier.numero || dossier.numeroDossier) && (
-                    <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-semibold">
+                    <span className="px-2.5 sm:px-3 py-1 bg-primary/10 text-primary rounded-lg text-xs sm:text-sm font-semibold">
                       N° {dossier.numero || dossier.numeroDossier}
                     </span>
                   )}
@@ -428,22 +426,15 @@ export default function DossierDetailPage() {
                 </div>
               </div>
               
-              <div className="flex flex-col gap-2">
-                <Button variant="outline" onClick={() => {
-                  loadDossier();
-                  loadNotifications();
-                }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="flex flex-row flex-wrap gap-2 sm:flex-col sm:flex-nowrap w-full sm:w-auto">
+                <Button variant="outline" onClick={() => { loadDossier(); loadNotifications(); }} className="min-h-[44px] flex-1 sm:flex-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                   Actualiser
                 </Button>
                 {dossier && !['annule', 'decision_favorable', 'decision_defavorable', 'rejet', 'gain_cause'].includes(dossier.statut) && (
-                  <Button 
-                    variant="outline" 
-                    className="border-red-500 text-red-600 hover:bg-red-50"
-                    onClick={handleCancelDossier}
-                  >
+                  <Button variant="outline" className="min-h-[44px] flex-1 sm:flex-none border-red-500 text-red-600 hover:bg-red-50" onClick={handleCancelDossier}>
                     Annuler le dossier
                   </Button>
                 )}
@@ -474,12 +465,12 @@ export default function DossierDetailPage() {
         {/* Vue détaillée avec téléchargement et impression */}
         <DossierDetailView dossier={dossier} variant="client" />
 
-        <div className="grid md:grid-cols-3 gap-6 mt-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mt-6 sm:mt-8">
           {/* Informations principales */}
-          <div className="md:col-span-2 space-y-6">
+          <div className="md:col-span-2 space-y-4 sm:space-y-6 min-w-0">
             {/* Statut actuel */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Statut actuel</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statut actuel</h2>
               <div className="flex items-center gap-4">
                 <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatutColor(dossier.statut)}`}>
                   {getStatutLabel(dossier.statut)}
@@ -503,16 +494,16 @@ export default function DossierDetailPage() {
 
             {/* Description */}
             {dossier.description && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Description</h2>
+              <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Description</h2>
                 <p className="text-muted-foreground whitespace-pre-wrap">{dossier.description}</p>
               </div>
             )}
 
             {/* Informations complètes du dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">📋 Informations Complètes du Dossier</h2>
-              <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">📋 Informations Complètes du Dossier</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
                 <div>
                   <p className="text-sm text-muted-foreground font-semibold">Numéro de dossier</p>
                   <p className="font-bold text-lg text-primary">{dossier.numero || dossier._id}</p>
@@ -578,10 +569,10 @@ export default function DossierDetailPage() {
             </div>
 
             {/* Coordonnées client complètes */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">👤 Mes Coordonnées</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">👤 Mes Coordonnées</h2>
               {dossier.user ? (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
                     <p className="font-medium">{dossier.user.firstName || 'N/A'}</p>
@@ -698,7 +689,7 @@ export default function DossierDetailPage() {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
                     <p className="font-medium">{dossier.clientPrenom || 'N/A'}</p>
@@ -720,9 +711,9 @@ export default function DossierDetailPage() {
             </div>
 
             {/* Motif et catégorie */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">📑 Motif et Nature du Dossier</h2>
-              <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">📑 Motif et Nature du Dossier</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground font-semibold">Catégorie principale</p>
                   <p className="font-medium text-lg">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
@@ -742,8 +733,8 @@ export default function DossierDetailPage() {
 
             {/* Demandes de documents en attente */}
             {documentRequests.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">📄 Documents demandés</h2>
+              <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">📄 Documents demandés</h2>
                 <div className="space-y-3">
                   {documentRequests.map((request: any) => (
                     <div
@@ -754,8 +745,8 @@ export default function DossierDetailPage() {
                           : 'bg-blue-50 border-blue-500'
                       }`}
                     >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-2">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-lg">{request.isUrgent ? '🔴' : '📄'}</span>
                             <h3 className="font-semibold text-base">
@@ -815,9 +806,9 @@ export default function DossierDetailPage() {
             )}
 
             {/* Historique et Timeline du dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2">
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+                <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2">
                   <History className="w-6 h-6" />
                   Historique et Timeline du dossier
                 </h2>
@@ -846,8 +837,8 @@ export default function DossierDetailPage() {
                     <div className="space-y-4">
                       {history.map((item: any, index: number) => (
                         <div key={index} className="border-l-4 border-primary pl-4 py-3 bg-gray-50/50 rounded-r-lg">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="text-2xl">{getHistoryTypeIcon(item.type)}</span>
                                 <span className="font-semibold text-foreground">{getHistoryTypeLabel(item.type)}</span>
@@ -878,7 +869,7 @@ export default function DossierDetailPage() {
                                 </div>
                               )}
                             </div>
-                            <div className="text-right text-sm text-gray-500 ml-4">
+                            <div className="text-left sm:text-right text-sm text-gray-500 sm:ml-4 flex-shrink-0">
                               <div className="flex items-center gap-1">
                                 <Clock className="w-4 h-4" />
                                 {new Date(item.date).toLocaleDateString('fr-FR', {
@@ -906,17 +897,17 @@ export default function DossierDetailPage() {
 
             {/* Historique des notifications */}
             {notifications.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Notifications récentes</h2>
+              <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Notifications récentes</h2>
                 <div className="space-y-3">
                   {notifications.map((notif) => (
                     <div key={notif._id || notif.id} className="border-l-4 border-primary pl-4 py-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex-1 min-w-0">
                           <h3 className="font-semibold">{notif.titre}</h3>
                           <p className="text-sm text-muted-foreground mt-1">{notif.message}</p>
                         </div>
-                        <span className="text-xs text-muted-foreground ml-4">
+                        <span className="text-xs text-muted-foreground sm:ml-4 flex-shrink-0">
                           {new Date(notif.createdAt).toLocaleDateString('fr-FR', {
                             year: 'numeric',
                             month: 'short',
@@ -933,17 +924,17 @@ export default function DossierDetailPage() {
             )}
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
+          {/* Sidebar — même largeur que le contenu sur mobile */}
+          <div className="space-y-4 sm:space-y-6 min-w-0">
             {/* Actions rapides */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Actions</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Actions</h2>
               <div className="space-y-2">
                 <Link href="/client/documents" className="block">
-                  <Button variant="outline" className="w-full">Voir les documents</Button>
+                  <Button variant="outline" className="w-full min-h-[44px]">Voir les documents</Button>
                 </Link>
                 <Link href="/client/notifications" className="block">
-                  <Button variant="outline" className="w-full">Voir les notifications</Button>
+                  <Button variant="outline" className="w-full min-h-[44px]">Voir les notifications</Button>
                 </Link>
                 <Button 
                   variant="outline" 
@@ -1010,8 +1001,8 @@ export default function DossierDetailPage() {
 
             {/* Assigné à */}
             {dossier.assignedTo && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Assigné à</h2>
+              <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Assigné à</h2>
                 <p className="text-muted-foreground">
                   {dossier.assignedTo.firstName} {dossier.assignedTo.lastName}
                 </p>
@@ -1020,8 +1011,8 @@ export default function DossierDetailPage() {
             )}
 
             {/* Documents du dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">📁 Documents du dossier</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">📁 Documents du dossier</h2>
               {isLoadingDocuments ? (
                 <p className="text-sm text-muted-foreground">Chargement...</p>
               ) : documents.length === 0 ? (
@@ -1031,21 +1022,21 @@ export default function DossierDetailPage() {
                   {documents.map((doc: any) => (
                     <div
                       key={doc._id || doc.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                      className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
                     >
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="text-lg">📄</span>
+                        <span className="text-lg flex-shrink-0">📄</span>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{doc.nom}</p>
                           <p className="text-xs text-muted-foreground">
-                            {(doc.taille / 1024).toFixed(2)} KB
+                            {doc.taille ? (doc.taille / 1024).toFixed(2) : '—'} KB
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Button
                           variant="outline"
-                          className="text-xs h-8"
+                          className="text-xs min-h-[40px] flex-1 sm:flex-none min-w-0"
                           onClick={() => {
                             setSelectedDocumentForPreview(doc);
                             setShowDocumentPreviewModal(true);
@@ -1055,7 +1046,7 @@ export default function DossierDetailPage() {
                         </Button>
                         <Button
                           variant="outline"
-                          className="text-xs h-8"
+                          className="text-xs min-h-[40px] flex-1 sm:flex-none min-w-0"
                           onClick={async () => {
                             try {
                               const response = await documentsAPI.downloadDocument(doc._id || doc.id);
@@ -1084,8 +1075,8 @@ export default function DossierDetailPage() {
             </div>
 
             {/* Statistiques */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Statistiques</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statistiques</h2>
               <div className="space-y-2">
                 {documents.length > 0 && (
                   <div className="flex justify-between">
@@ -1107,8 +1098,8 @@ export default function DossierDetailPage() {
             </div>
 
             {/* Messagerie liée au dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Messagerie du dossier</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Messagerie du dossier</h2>
               {isLoadingMessages ? (
                 <p className="text-sm text-muted-foreground">Chargement des messages...</p>
               ) : messagesError ? (
@@ -1140,7 +1131,7 @@ export default function DossierDetailPage() {
                     </div>
                   ))}
                   <Link href="/client/messages" className="block mt-2">
-                    <Button variant="outline" className="w-full text-xs">
+                    <Button variant="outline" className="w-full text-xs min-h-[44px]">
                       Voir tous les messages
                     </Button>
                   </Link>

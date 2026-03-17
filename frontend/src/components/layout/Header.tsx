@@ -374,14 +374,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 </p>
               </>
             )}
-            {(variant === 'admin' || variant === 'partenaire' || variant === 'client') && (
-              <Link
-                href={variant === 'admin' ? '/admin' : variant === 'partenaire' ? '/partenaire' : '/client'}
-                className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base sm:text-lg min-w-0 max-w-[55vw] sm:max-w-none truncate"
-              >
-                Ada Papers
-              </Link>
-            )}
+            {(variant === 'admin' || variant === 'partenaire' || variant === 'client') && null}
           </div>
 
           {/* Navigation - Liens permanents (Services, FAQ, Forum, Contact, Calculateur, Dashboard) */}

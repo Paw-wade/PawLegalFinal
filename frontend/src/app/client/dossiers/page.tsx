@@ -306,13 +306,11 @@ export default function DossiersPage() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Chargement...</p>
+          <p className="text-muted-foreground">Chargement de votre session...</p>
         </div>
       </div>
     );
   }
-
-  if (status === 'unauthenticated') return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -390,60 +388,18 @@ export default function DossiersPage() {
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
                     <div className="flex-1 min-w-0 pr-0 sm:pr-2">
                       <div className="flex items-center gap-2 mb-1">
-                        <button
-                          onClick={() => {
-                            const dossierId = dossier._id || dossier.id;
-                            const newExpanded = new Set(expandedDossiers);
-                            if (newExpanded.has(dossierId)) {
-                              newExpanded.delete(dossierId);
-                            } else {
-                              newExpanded.add(dossierId);
-                            }
-                            setExpandedDossiers(newExpanded);
-                          }}
-                          className="p-2 -m-1 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary flex-shrink-0"
-                          title={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
-                          aria-label={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d={expandedDossiers.has(dossier._id || dossier.id) ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
-                          </svg>
-                        </button>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-lg text-foreground line-clamp-1 leading-tight truncate">
-                            {typeof dossier.titre === 'string' ? dossier.titre : 'Sans titre'}
-                          </h3>
-                          {(typeof dossier.numero === 'string' || typeof dossier.numeroDossier === 'string') && (
-                            <p className="text-xs text-gray-500 font-mono mt-0.5">
-                              Réf. {typeof dossier.numero === 'string' ? dossier.numero : dossier.numeroDossier}
-                            </p>
-                          )}
-                          {/* Indication de transmission (visible quand plié) */}
-                          {!expandedDossiers.has(dossier._id || dossier.id) && dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
-                            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-800 border border-purple-300">
-                                📤 Transmis
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <h3 className="font-semibold text-base text-foreground line-clamp-1 leading-snug truncate">
+                              {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
+                            </h3>
+                            {(typeof dossier.numero === 'string' || typeof dossier.numeroDossier === 'string') && (
+                              <span className="text-xs text-primary font-mono font-semibold">
+                                Réf. {typeof dossier.numero === 'string' ? dossier.numero : dossier.numeroDossier}
                               </span>
-                              {dossier.transmittedTo.map((trans: any, idx: number) => {
-                                const partenaire = trans.partenaire;
-                                const partenaireName = partenaire 
-                                  ? `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() || partenaire.email
-                                  : trans.user 
-                                    ? `${trans.user.firstName || ''} ${trans.user.lastName || ''}`.trim() || trans.user.email
-                                    : 'Partenaire inconnu';
-                                const organismeName = partenaire?.partenaireInfo?.nomOrganisme || trans.user?.organisationName;
-                                const status = trans.status || 'pending';
-                                const statusLabel = status === 'accepted' ? 'Accepté' : status === 'refused' ? 'Refusé' : 'En attente';
-                                return (
-                                  <span key={idx} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-300">
-                                    {partenaireName}
-                                    {organismeName && typeof organismeName === 'string' && ` (${organismeName})`}
-                                    <span className="ml-1 text-[9px]">• {statusLabel}</span>
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
+                            )}
+                          </div>
+                          {/* Créateur du dossier et transmissions masqués pour le client */}
                           {/* Bloc métriques (dossier plié) */}
                           {!expandedDossiers.has(dossier._id || dossier.id) && (
                             <div className="mt-3 space-y-2">
@@ -501,12 +457,12 @@ export default function DossiersPage() {
                   {expandedDossiers.has(dossier._id || dossier.id) && (
                     <div className="pt-2 mt-1 border-t border-gray-100">
 
-                  {/* Ligne compacte : avancement + échéance + prochaine action */}
+                  {/* Ligne compacte : avancement + échéance + prochaine action (avancement masqué sur mobile) */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2 pb-2 border-b border-gray-100">
                     {(() => {
                       const progress = getDossierProgress(dossier.statut);
                       return (
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="hidden sm:flex items-center gap-2 min-w-0 flex-1">
                           <span className="text-[11px] text-muted-foreground shrink-0">Avancement</span>
                           <div className="w-20 sm:w-28 bg-gray-200 rounded-full h-1.5 flex-1 max-w-28">
                             <div
@@ -553,6 +509,12 @@ export default function DossiersPage() {
                   <div className="mb-2 pb-2 border-b border-gray-100">
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Infos</p>
                     <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-0.5 text-[11px]">
+                      {dossier.titre && (
+                        <>
+                          <dt className="text-muted-foreground">Titre</dt>
+                          <dd className="text-foreground break-words col-span-1 sm:col-span-3">{dossier.titre}</dd>
+                        </>
+                      )}
                       {(dossier.numero || dossier.numeroDossier) && (
                         <>
                           <dt className="text-muted-foreground">Réf.</dt>
@@ -722,99 +684,13 @@ export default function DossiersPage() {
                               );
                             }
                             
-                            const dossierDocs = dossierDocuments[dossier._id || dossier.id] || [];
-                            const hasDocuments = dossierDocs.length > 0;
-                            const isDocDropdownExpanded = expandedDocumentDropdowns.has(dossier._id || dossier.id);
-                            
-                            return (
-                              <div className="relative">
-                                <div className="flex gap-3 text-xs text-muted-foreground">
-                                  {hasDocuments && isDocDropdownExpanded && (
-                                    <>
-                                    <div className="relative">
-                                      {/* Dropdown des documents sans bouton redondant */}
-                                      <div 
-                                          className="absolute left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          <div className="p-2">
-                                            <div className="flex items-center justify-between gap-2 mb-2 px-2 py-1 bg-gray-50 rounded">
-                                              <span className="text-xs font-semibold text-gray-700">Documents du dossier</span>
-                                              <span className="text-xs text-gray-500">{dossierDocs.length} total</span>
-                                            </div>
-                                            <div className="space-y-1">
-                                              {dossierDocs.map((doc: any) => (
-                                                <div
-                                                  key={doc._id || doc.id}
-                                                  className="p-2 rounded-md border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-                                                >
-                                                  <div className="flex items-start justify-between gap-2 mb-2">
-                                                    <div className="flex-1 min-w-0">
-                                                      <p className="text-xs font-medium text-gray-900 truncate">{doc.nom}</p>
-                                                      {doc.description && (
-                                                        <p className="text-[10px] text-gray-500 line-clamp-1 mt-0.5">{doc.description}</p>
-                                                      )}
-                                                      <p className="text-[10px] text-gray-400 mt-1">
-                                                        {doc.typeMime} • {doc.taille ? `${(doc.taille / 1024).toFixed(1)} KB` : ''}
-                                                      </p>
-                                                    </div>
-                                                  </div>
-                                                  <div className="flex items-center gap-1 pt-2 border-t border-gray-100">
-                                                    <button
-                                                      onClick={async (e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        setSelectedDocumentForPreview(doc);
-                                                      }}
-                                                      className="flex-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-medium transition-colors"
-                                                    >
-                                                      👁️ Voir
-                                                    </button>
-                                                    <button
-                                                      onClick={async (e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        try {
-                                                          const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                                                          const blob = new Blob([response.data]);
-                                                          const url = window.URL.createObjectURL(blob);
-                                                          const link = document.createElement('a');
-                                                          link.href = url;
-                                                          link.download = doc.nom;
-                                                          document.body.appendChild(link);
-                                                          link.click();
-                                                          document.body.removeChild(link);
-                                                          window.URL.revokeObjectURL(url);
-                                                        } catch (err) {
-                                                          console.error('Erreur lors du téléchargement:', err);
-                                                          alert('Erreur lors du téléchargement du document');
-                                                        }
-                                                      }}
-                                                      className="flex-1 px-2 py-1 bg-green-50 hover:bg-green-100 text-green-700 rounded text-[10px] font-medium transition-colors"
-                                                    >
-                                                      ⬇️ Télécharger
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        </div>
-                                    </div>
-                                    </>
-                                  )}
-                                  {dossier.messages && dossier.messages.length > 0 && (
-                                    <span>💬 {dossier.messages.length}</span>
-                                  )}
-                                </div>
-                              </div>
-                            );
+                            // Fonctionnalité dropdown documents supprimée pour simplifier la vue client
                           }
                           
-                          return null; // Les demandes sont affichées dans la section dédiée ci-dessus
+                          return null;
                         })()}
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
                         {(() => {
                           const unreadCount = getUnreadNotificationsCountForDossier(dossier._id || dossier.id);
                           return (

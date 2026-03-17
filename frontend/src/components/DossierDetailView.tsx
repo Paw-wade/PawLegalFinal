@@ -78,19 +78,19 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
 
   return (
     <div className="space-y-6">
-      {/* Icône PDF avec actions - visible sur la page */}
-      <div className="bg-white rounded-lg shadow-md p-6 border-2 border-dashed border-primary/30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-red-100 rounded-lg flex items-center justify-center">
-              <span className="text-4xl">📄</span>
+      {/* Icône PDF avec actions — responsive: stack sur mobile */}
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border-2 border-dashed border-primary/30">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <span className="text-2xl sm:text-4xl">📄</span>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-1">
+            <div className="min-w-0">
+              <h3 className="text-base sm:text-lg font-semibold text-foreground mb-0.5 sm:mb-1">
                 Récapitulatif du dossier
               </h3>
-              <p className="text-sm text-muted-foreground">
-                Téléchargez ou imprimez le récapitulatif complet de votre dossier
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Téléchargez ou imprimez le récapitulatif complet
               </p>
               {dossier.numero && (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -99,14 +99,14 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
               )}
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-shrink-0">
             {(() => {
               const dossierId = dossier._id || dossier.id;
               const basePath = variant === 'admin' ? '/admin' : variant === 'partenaire' ? '/partenaire' : '/client';
               return (
                 <Link
                   href={`${basePath}/dossiers/${dossierId}/recap`}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] w-full sm:w-auto bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm text-sm font-medium"
                   title="Voir le récit récapitulatif complet"
                 >
                   <span>📋</span>

@@ -74,7 +74,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       try {
         const res = await documentRequestsAPI.getRequests({ status: 'pending' });
         if (res.data?.success && Array.isArray(res.data.documentRequests)) {
-          setDocumentsPendingCount(res.data.documentRequests.length);
+          // Ne compter que les documents demandés et non encore fournis
+          const pendingOnly = res.data.documentRequests.filter((req: any) => {
+            const status = req.status || req.statut || '';
+            return status === 'pending';
+          });
+          setDocumentsPendingCount(pendingOnly.length);
         } else if (res.data?.success && typeof res.data.count === 'number') {
           setDocumentsPendingCount(res.data.count);
         }

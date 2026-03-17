@@ -495,7 +495,7 @@ export default function AdminDossierDetailPage() {
         </div>
       )}
 
-      <main className="w-full px-4 py-8 overflow-x-hidden">
+      <main className="w-full max-w-[100vw] px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
         {/* Bannière visible : accès document en préparation accordé (pour cohérence affichage) */}
         {(() => {
           const draftAccessNotifs = (notifications || []).filter((n: any) => n.type === 'draft_access_granted' && !n.lu);
@@ -541,11 +541,11 @@ export default function AdminDossierDetailPage() {
             </Link>
           </div>
           
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6 overflow-hidden">
-            <div className="flex items-start justify-between mb-4">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-3xl font-bold text-foreground">{dossier.titre}</h1>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                  <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
                   {(dossier.numero || dossier.numeroDossier) && (
                     <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-semibold">
                       N° {dossier.numero || dossier.numeroDossier}
@@ -717,7 +717,7 @@ export default function AdminDossierDetailPage() {
         {/* Informations complètes du dossier - Section visible */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">📋 Informations Complètes du Dossier</h2>
-          <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
             <div>
               <p className="text-sm text-muted-foreground font-semibold">Numéro de dossier</p>
               <p className="font-bold text-lg text-primary">{dossier.numero || dossier._id}</p>
@@ -818,7 +818,7 @@ export default function AdminDossierDetailPage() {
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">👤 Coordonnées Client</h2>
           {dossier.user ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
                 <p className="font-medium">{dossier.user.firstName || 'N/A'}</p>
@@ -935,7 +935,7 @@ export default function AdminDossierDetailPage() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
                 <p className="font-medium">{dossier.clientPrenom || 'N/A'}</p>
@@ -965,7 +965,7 @@ export default function AdminDossierDetailPage() {
         {/* Motif et catégorie */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">📑 Motif et Nature du Dossier</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <p className="text-sm text-muted-foreground font-semibold">Catégorie principale</p>
               <p className="font-medium text-lg">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
@@ -990,7 +990,7 @@ export default function AdminDossierDetailPage() {
             <div className="space-y-3">
               {dossier.rendezVous.map((rdv: any, index: number) => (
                 <div key={index} className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground font-semibold">Date</p>
                       <p className="font-medium">
