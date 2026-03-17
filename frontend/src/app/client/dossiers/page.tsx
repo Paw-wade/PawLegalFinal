@@ -390,66 +390,18 @@ export default function DossiersPage() {
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
                     <div className="flex-1 min-w-0 pr-0 sm:pr-2">
                       <div className="flex items-center gap-2 mb-1">
-                        <button
-                          onClick={() => {
-                            const dossierId = dossier._id || dossier.id;
-                            const newExpanded = new Set(expandedDossiers);
-                            if (newExpanded.has(dossierId)) {
-                              newExpanded.delete(dossierId);
-                            } else {
-                              newExpanded.add(dossierId);
-                            }
-                            setExpandedDossiers(newExpanded);
-                          }}
-                          className="p-2 -m-1 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary flex-shrink-0"
-                          title={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
-                          aria-label={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d={expandedDossiers.has(dossier._id || dossier.id) ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
-                          </svg>
-                        </button>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-lg text-foreground line-clamp-1 leading-tight truncate">
-                            {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
-                          </h3>
-                          {(typeof dossier.numero === 'string' || typeof dossier.numeroDossier === 'string') && (
-                            <p className="text-xs text-gray-500 font-mono mt-0.5">
-                              Réf. {typeof dossier.numero === 'string' ? dossier.numero : dossier.numeroDossier}
-                            </p>
-                          )}
-                          {/* Créateur du dossier — toujours visible, même plié */}
-                          {dossier.createdBy && typeof dossier.createdBy === 'object' && (
-                            <p className="text-xs text-gray-600 mt-0.5">
-                              Créé par {[dossier.createdBy.firstName, dossier.createdBy.lastName].filter(Boolean).join(' ') || dossier.createdBy.email || '—'}
-                            </p>
-                          )}
-                          {/* Indication de transmission (visible quand plié) */}
-                          {!expandedDossiers.has(dossier._id || dossier.id) && dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
-                            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-800 border border-purple-300">
-                                📤 Transmis
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <h3 className="font-semibold text-base text-foreground line-clamp-1 leading-snug truncate">
+                              {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
+                            </h3>
+                            {(typeof dossier.numero === 'string' || typeof dossier.numeroDossier === 'string') && (
+                              <span className="text-xs text-primary font-mono font-semibold">
+                                Réf. {typeof dossier.numero === 'string' ? dossier.numero : dossier.numeroDossier}
                               </span>
-                              {dossier.transmittedTo.map((trans: any, idx: number) => {
-                                const partenaire = trans.partenaire;
-                                const partenaireName = partenaire 
-                                  ? `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() || partenaire.email
-                                  : trans.user 
-                                    ? `${trans.user.firstName || ''} ${trans.user.lastName || ''}`.trim() || trans.user.email
-                                    : 'Partenaire inconnu';
-                                const organismeName = partenaire?.partenaireInfo?.nomOrganisme || trans.user?.organisationName;
-                                const status = trans.status || 'pending';
-                                const statusLabel = status === 'accepted' ? 'Accepté' : status === 'refused' ? 'Refusé' : 'En attente';
-                                return (
-                                  <span key={idx} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-300">
-                                    {partenaireName}
-                                    {organismeName && typeof organismeName === 'string' && ` (${organismeName})`}
-                                    <span className="ml-1 text-[9px]">• {statusLabel}</span>
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
+                            )}
+                          </div>
+                          {/* Créateur du dossier et transmissions masqués pour le client */}
                           {/* Bloc métriques (dossier plié) */}
                           {!expandedDossiers.has(dossier._id || dossier.id) && (
                             <div className="mt-3 space-y-2">
@@ -559,6 +511,12 @@ export default function DossiersPage() {
                   <div className="mb-2 pb-2 border-b border-gray-100">
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Infos</p>
                     <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-0.5 text-[11px]">
+                      {dossier.titre && (
+                        <>
+                          <dt className="text-muted-foreground">Titre</dt>
+                          <dd className="text-foreground break-words col-span-1 sm:col-span-3">{dossier.titre}</dd>
+                        </>
+                      )}
                       {(dossier.numero || dossier.numeroDossier) && (
                         <>
                           <dt className="text-muted-foreground">Réf.</dt>
