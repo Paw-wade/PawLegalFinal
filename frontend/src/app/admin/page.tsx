@@ -136,7 +136,8 @@ export default function AdminDashboardPage() {
       return; // Attendre que la session soit chargée
     }
 
-    if (status === 'unauthenticated') {
+    // Si la session est vraiment absente et qu'on est déclaré non authentifié, rediriger
+    if (status === 'unauthenticated' && !session) {
       hasChecked.current = true;
       window.location.href = '/auth/signin';
       return;

@@ -306,13 +306,11 @@ export default function DossiersPage() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Chargement...</p>
+          <p className="text-muted-foreground">Chargement de votre session...</p>
         </div>
       </div>
     );
   }
-
-  if (status === 'unauthenticated') return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -459,12 +457,12 @@ export default function DossiersPage() {
                   {expandedDossiers.has(dossier._id || dossier.id) && (
                     <div className="pt-2 mt-1 border-t border-gray-100">
 
-                  {/* Ligne compacte : avancement + échéance + prochaine action */}
+                  {/* Ligne compacte : avancement + échéance + prochaine action (avancement masqué sur mobile) */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2 pb-2 border-b border-gray-100">
                     {(() => {
                       const progress = getDossierProgress(dossier.statut);
                       return (
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="hidden sm:flex items-center gap-2 min-w-0 flex-1">
                           <span className="text-[11px] text-muted-foreground shrink-0">Avancement</span>
                           <div className="w-20 sm:w-28 bg-gray-200 rounded-full h-1.5 flex-1 max-w-28">
                             <div
@@ -692,7 +690,7 @@ export default function DossiersPage() {
                           return null;
                         })()}
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
                         {(() => {
                           const unreadCount = getUnreadNotificationsCountForDossier(dossier._id || dossier.id);
                           return (
