@@ -54,6 +54,9 @@ export default function PartenaireDossierDetailPage() {
   const [discharging, setDischarging] = useState(false);
   const [showDischargeModal, setShowDischargeModal] = useState(false);
   const [dischargeNotes, setDischargeNotes] = useState('');
+  const [isClosing, setIsClosing] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   
@@ -364,8 +367,8 @@ export default function PartenaireDossierDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
-      <main className="w-full px-4 py-8 overflow-x-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 max-w-[100vw]">
+      <main className="w-full max-w-[100vw] px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
         {/* Bannière visible : accès document en préparation accordé */}
         {draftAccessNotifs.length > 0 && (
           <div className="mb-6 rounded-xl border-2 border-orange-400 bg-gradient-to-r from-orange-50 to-amber-50 shadow-lg p-4">
@@ -401,11 +404,11 @@ export default function PartenaireDossierDetailPage() {
         Retour aux dossiers
       </Link>
       
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6 overflow-hidden">
-        <div className="flex items-start justify-between mb-4">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2 flex-wrap">
-                  <h1 className="text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                  <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
                   {(dossier.numero || dossier.numeroDossier) && (
                     <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-semibold">
                       N° {dossier.numero || dossier.numeroDossier}
@@ -513,23 +516,16 @@ export default function PartenaireDossierDetailPage() {
                 </div>
           </div>
               
-              <div className="flex flex-col gap-2">
-                <Button variant="outline" onClick={() => {
-                  loadDossier();
-                  loadNotifications();
-                }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="flex flex-row flex-wrap gap-2 w-full sm:w-auto sm:flex-col">
+                <Button variant="outline" onClick={() => { loadDossier(); loadNotifications(); }} className="min-h-[44px] flex-1 sm:flex-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                   Actualiser
                 </Button>
                 {transmission && (
-                  <Button 
-                    variant="outline" 
-                    className="border-orange-500 text-orange-600 hover:bg-orange-50"
-                    onClick={() => setShowDischargeModal(true)}
-                  >
-                    Se décharger du dossier
+                  <Button variant="outline" className="min-h-[44px] flex-1 sm:flex-none border-orange-500 text-orange-600 hover:bg-orange-50" onClick={() => setShowDischargeModal(true)}>
+                    Se décharger
                   </Button>
                 )}
               </div>
@@ -558,25 +554,19 @@ export default function PartenaireDossierDetailPage() {
         
             {/* Boutons d'accusé de réception */}
         {canAcknowledge && (
-          <div className="flex gap-4 mt-6">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-4 sm:mt-6">
             <button
-              onClick={() => {
-                setAcknowledgeAction('accept');
-                setShowAcknowledgeModal(true);
-              }}
-              className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              onClick={() => { setAcknowledgeAction('accept'); setShowAcknowledgeModal(true); }}
+              className="flex items-center justify-center gap-2 px-4 py-3 min-h-[48px] bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors w-full sm:w-auto"
             >
-              <CheckCircle className="w-5 h-5" />
+              <CheckCircle className="w-5 h-5 flex-shrink-0" />
               Accepter le dossier
             </button>
             <button
-              onClick={() => {
-                setAcknowledgeAction('refuse');
-                setShowAcknowledgeModal(true);
-              }}
-              className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              onClick={() => { setAcknowledgeAction('refuse'); setShowAcknowledgeModal(true); }}
+              className="flex items-center justify-center gap-2 px-4 py-3 min-h-[48px] bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors w-full sm:w-auto"
             >
-              <XCircle className="w-5 h-5" />
+              <XCircle className="w-5 h-5 flex-shrink-0" />
               Refuser le dossier
             </button>
           </div>
@@ -606,12 +596,12 @@ export default function PartenaireDossierDetailPage() {
         {/* Vue détaillée avec téléchargement et impression */}
         <DossierDetailView dossier={dossier} variant="partenaire" />
 
-        <div className="grid md:grid-cols-3 gap-6 mt-8">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 mt-6 sm:mt-8">
           {/* Informations principales */}
-          <div className="md:col-span-2 space-y-6">
+          <div className="space-y-4 sm:space-y-6 min-w-0">
             {/* Statut actuel */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Statut actuel</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statut actuel</h2>
               <div className="flex items-center gap-4">
                 <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatutColor(dossier.statut)}`}>
                   {getStatutLabel(dossier.statut)}
@@ -644,7 +634,7 @@ export default function PartenaireDossierDetailPage() {
             {/* Informations complètes du dossier */}
             <div className="bg-white rounded-lg shadow-lg p-6">
               <h2 className="text-xl font-bold mb-4">📋 Informations Complètes du Dossier</h2>
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
                 <div>
                   <p className="text-sm text-muted-foreground font-semibold">Numéro de dossier</p>
                   <p className="font-bold text-lg text-primary">{dossier.numero || dossier._id}</p>
@@ -713,7 +703,7 @@ export default function PartenaireDossierDetailPage() {
             {dossier.user && typeof dossier.user === 'object' && (
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <h2 className="text-xl font-bold mb-4">👤 Informations Client</h2>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
                     <p className="font-medium">{dossier.user.firstName || 'N/A'}</p>
@@ -871,32 +861,44 @@ export default function PartenaireDossierDetailPage() {
               )}
             </div>
 
-            {/* Historique des notifications */}
+            {/* Historique des notifications (repliable, plié par défaut) */}
             {notifications.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Notifications récentes</h2>
-                <div className="space-y-3">
-                  {notifications.slice(0, 5).map((notif) => (
-                    <div key={notif._id || notif.id} className="border-l-4 border-primary pl-4 py-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-semibold">{notif.titre}</h3>
-                          <p className="text-sm text-muted-foreground mt-1">{notif.message}</p>
+              <details className="bg-white rounded-lg shadow-lg">
+                <summary className="list-none cursor-pointer p-4 sm:p-6 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold mb-1">Notifications récentes</h2>
+                    <p className="text-xs text-muted-foreground">
+                      {notifications.length} notification{notifications.length > 1 ? 's' : ''} pour ce dossier
+                    </p>
+                  </div>
+                  <span className="ml-4 text-gray-500 text-sm select-none">
+                    Afficher / masquer
+                  </span>
+                </summary>
+                <div className="px-4 sm:px-6 pb-4 sm:pb-6">
+                  <div className="space-y-3">
+                    {notifications.slice(0, 5).map((notif) => (
+                      <div key={notif._id || notif.id} className="border-l-4 border-primary pl-4 py-2">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-semibold">{notif.titre}</h3>
+                            <p className="text-sm text-muted-foreground mt-1">{notif.message}</p>
+                          </div>
+                          <span className="text-xs text-muted-foreground ml-4">
+                            {new Date(notif.createdAt).toLocaleDateString('fr-FR', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
                         </div>
-                        <span className="text-xs text-muted-foreground ml-4">
-                          {new Date(notif.createdAt).toLocaleDateString('fr-FR', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </details>
             )}
           </div>
           </div>
@@ -1092,24 +1094,18 @@ export default function PartenaireDossierDetailPage() {
               className="w-full p-3 border border-gray-300 rounded-lg mb-4"
               rows={4}
             />
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
               <button
-                onClick={() => {
-                  setShowAcknowledgeModal(false);
-                  setAcknowledgeAction(null);
-                  setAcknowledgeNotes('');
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                onClick={() => { setShowAcknowledgeModal(false); setAcknowledgeAction(null); setAcknowledgeNotes(''); }}
+                className="flex-1 min-h-[44px] px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                 disabled={acknowledging}
               >
                 Annuler
               </button>
               <button
                 onClick={handleAcknowledge}
-                className={`flex-1 px-4 py-2 rounded-lg text-white ${
-                  acknowledgeAction === 'accept' 
-                    ? 'bg-green-600 hover:bg-green-700' 
-                    : 'bg-red-600 hover:bg-red-700'
+                className={`flex-1 min-h-[44px] px-4 py-2 rounded-lg text-white ${
+                  acknowledgeAction === 'accept' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
                 }`}
                 disabled={acknowledging}
               >
@@ -1123,8 +1119,8 @@ export default function PartenaireDossierDetailPage() {
       {/* Modal de décharge */}
       {showDischargeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold mb-4">Se décharger du dossier</h2>
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-3 sm:mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Se décharger du dossier</h2>
             <p className="text-gray-600 mb-4">
               Vous allez vous décharger de ce dossier. Le dossier ne sera <strong>pas supprimé</strong> et restera disponible pour les administrateurs. 
               Vous ne pourrez plus y accéder depuis votre compte partenaire.
@@ -1139,20 +1135,17 @@ export default function PartenaireDossierDetailPage() {
               className="w-full p-3 border border-gray-300 rounded-lg mb-4"
               rows={4}
             />
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
               <button
-                onClick={() => {
-                  setShowDischargeModal(false);
-                  setDischargeNotes('');
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                onClick={() => { setShowDischargeModal(false); setDischargeNotes(''); }}
+                className="flex-1 min-h-[44px] px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                 disabled={discharging}
               >
                 Annuler
               </button>
               <button
                 onClick={handleDischarge}
-                className="flex-1 px-4 py-2 rounded-lg text-white bg-orange-600 hover:bg-orange-700"
+                className="flex-1 min-h-[44px] px-4 py-2 rounded-lg text-white bg-orange-600 hover:bg-orange-700"
                 disabled={discharging}
               >
                 {discharging ? 'Traitement...' : 'Confirmer la décharge'}
@@ -1161,6 +1154,73 @@ export default function PartenaireDossierDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Actions globales sur le dossier (en bas de page) */}
+      <div className="mt-10 pt-6 border-t border-gray-200 flex flex-col sm:flex-row flex-wrap gap-3 justify-end">
+        <button
+          type="button"
+          disabled={isClosing || !dossier}
+          onClick={async () => {
+            if (!dossierId || isClosing) return;
+            if (!window.confirm('Confirmer la clôture de ce dossier ?')) return;
+            try {
+              setIsClosing(true);
+              await dossiersAPI.updateDossier(String(dossierId), { estCloture: true });
+              await loadDossier();
+            } catch (e) {
+              console.error('Erreur lors de la clôture du dossier', e);
+              alert('Impossible de clôturer le dossier pour le moment.');
+            } finally {
+              setIsClosing(false);
+            }
+          }}
+          className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+        >
+          {isClosing ? 'Clôture en cours...' : 'Clôturer le dossier'}
+        </button>
+        <button
+          type="button"
+          disabled={isArchiving || !dossier}
+          onClick={async () => {
+            if (!dossierId || isArchiving) return;
+            if (!window.confirm('Confirmer l’archivage de ce dossier ?')) return;
+            try {
+              setIsArchiving(true);
+              await dossiersAPI.updateDossier(String(dossierId), { estArchive: true });
+              await loadDossier();
+            } catch (e) {
+              console.error('Erreur lors de l’archivage du dossier', e);
+              alert('Impossible d’archiver le dossier pour le moment.');
+            } finally {
+              setIsArchiving(false);
+            }
+          }}
+          className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+        >
+          {isArchiving ? 'Archivage en cours...' : 'Archiver le dossier'}
+        </button>
+        <button
+          type="button"
+          disabled={isDeleting || !dossier}
+          onClick={async () => {
+            if (!dossierId || isDeleting) return;
+            if (!window.confirm('ATTENTION : cette action est définitive. Supprimer ce dossier ?')) return;
+            try {
+              setIsDeleting(true);
+              await dossiersAPI.deleteDossier(String(dossierId));
+              router.push('/partenaire/dossiers');
+            } catch (e) {
+              console.error('Erreur lors de la suppression du dossier', e);
+              alert('Impossible de supprimer le dossier pour le moment.');
+            } finally {
+              setIsDeleting(false);
+            }
+          }}
+          className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-red-300 bg-red-50 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+        >
+          {isDeleting ? 'Suppression en cours...' : 'Supprimer le dossier'}
+        </button>
+      </div>
 
       {/* Modal de prévisualisation de document */}
       {showDocumentPreviewModal && selectedDocumentForPreview && (

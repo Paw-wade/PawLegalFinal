@@ -411,11 +411,17 @@ export default function DossiersPage() {
                         </button>
                         <div className="flex-1 min-w-0">
                           <h3 className="font-bold text-lg text-foreground line-clamp-1 leading-tight truncate">
-                            {typeof dossier.titre === 'string' ? dossier.titre : 'Sans titre'}
+                            {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
                           </h3>
                           {(typeof dossier.numero === 'string' || typeof dossier.numeroDossier === 'string') && (
                             <p className="text-xs text-gray-500 font-mono mt-0.5">
                               Réf. {typeof dossier.numero === 'string' ? dossier.numero : dossier.numeroDossier}
+                            </p>
+                          )}
+                          {/* Créateur du dossier — toujours visible, même plié */}
+                          {dossier.createdBy && typeof dossier.createdBy === 'object' && (
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Créé par {[dossier.createdBy.firstName, dossier.createdBy.lastName].filter(Boolean).join(' ') || dossier.createdBy.email || '—'}
                             </p>
                           )}
                           {/* Indication de transmission (visible quand plié) */}
