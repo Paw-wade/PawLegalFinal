@@ -77,6 +77,7 @@ export default function SignupPage() {
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const validateField = (name: string, value: string) => {
     setFieldErrors(prev => {
@@ -134,6 +135,11 @@ export default function SignupPage() {
 
     if (!firstName || !lastName || !email || !cleanedPhone) {
       setError('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setError('Vous devez accepter les Conditions Générales d\'Utilisation et la Politique de confidentialité pour créer un compte.');
       return;
     }
 
@@ -357,7 +363,6 @@ export default function SignupPage() {
                           </span>
                         ) : (
                           <span className="flex items-center gap-2">
-                            <span>📱</span>
                             <span>Créer mon compte</span>
                           </span>
                         )}

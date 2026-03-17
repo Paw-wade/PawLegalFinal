@@ -389,6 +389,12 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               Services
             </Link>
             <Link
+              href="/a-propos"
+              className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+            >
+              À propos
+            </Link>
+            <Link
               href="/faq"
               className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
             >
@@ -576,6 +582,13 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
               >
                 Services
+              </Link>
+              <Link
+                href="/a-propos"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+              >
+                À propos
               </Link>
               <Link
                 href="/faq"
