@@ -605,7 +605,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               >
                 Calculateur
               </Link>
-              {isAuthenticated ? (
+              {isAuthenticated && (
                 <>
                   <button
                     type="button"
@@ -623,8 +623,15 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                       Logs
                     </Link>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => { setMobileNavOpen(false); handleSignOut(); }}
+                    className="mt-2 w-full text-left px-4 py-3.5 rounded-xl text-base font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 active:bg-red-100 transition-colors min-h-[48px] flex items-center justify-center"
+                  >
+                    Déconnexion
+                  </button>
                 </>
-              ) : null}
+              )}
             </nav>
           </div>
         </>

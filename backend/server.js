@@ -350,6 +350,15 @@ try {
   console.error('❌ Erreur lors du chargement des routes de brouillons collaboratifs:', error.message);
 }
 
+// Répertoire des recours (types + modèles)
+try {
+  const recoursRouter = require('./routes/recours');
+  app.use('/api', recoursRouter);
+  console.log('✅ Routes du répertoire des recours enregistrées');
+} catch (error) {
+  console.error('❌ Erreur lors du chargement des routes du répertoire des recours:', error.message);
+}
+
 // Middleware de gestion d'erreurs (doit être après les routes)
 const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);

@@ -362,6 +362,17 @@ export default function SignupPage() {
                           </span>
                         )}
                       </Button>
+                      <p className="mt-3 text-[11px] text-muted-foreground leading-snug">
+                        En créant un compte, vous acceptez les{' '}
+                        <Link href="/cgu" className="text-primary hover:underline font-semibold">
+                          Conditions Générales d&apos;Utilisation
+                        </Link>{' '}
+                        et la{' '}
+                        <Link href="/politique-confidentialite" className="text-primary hover:underline font-semibold">
+                          Politique de confidentialité
+                        </Link>
+                        .
+                      </p>
                     </div>
                 </form>
 

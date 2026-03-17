@@ -16,7 +16,7 @@ const generateToken = (id) => {
 };
 
 // Mot de passe temporaire par défaut envoyé par SMS lors de la création de compte
-const DEFAULT_TEMP_PASSWORD = process.env.DEFAULT_TEMP_PASSWORD || 'Adap2026+';
+const DEFAULT_TEMP_PASSWORD = process.env.DEFAULT_TEMP_PASSWORD || 'P@w2026+';
 
 // @route   POST /api/auth/register
 // @desc    Enregistrer un nouvel utilisateur avec mot de passe par défaut envoyé par SMS
