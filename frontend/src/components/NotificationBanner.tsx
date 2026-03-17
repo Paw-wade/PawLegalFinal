@@ -130,10 +130,29 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
           if (notificationsResponse.data.success) {
             const notifications = notificationsResponse.data.notifications || [];
             
-            // Filtrer les notifications importantes (documents manquants, échéances, explications, etc.)
+            // Filtrer les notifications importantes pour le client :
+            // - demandes de documents
+            // - transmissions de dossier
+            // - clôture / archivage de dossier
             const importantNotifications = notifications.filter((notif: any) => {
-              const type = notif.type || '';
-              return type.includes('document') || type.includes('echeance') || type.includes('urgent') || type === 'dossier_updated';
+              const rawType = notif.type || '';
+              const type = rawType.toLowerCase();
+
+              const isDocument =
+                type === 'document_request' ||
+                type.includes('document');
+
+              const isTransmission =
+                type.includes('transmis') ||
+                type.includes('transmission');
+
+              const isClosureOrArchive =
+                type.includes('cloture') ||
+                type.includes('clôture') ||
+                type.includes('closed') ||
+                type.includes('archive');
+
+              return isDocument || isTransmission || isClosureOrArchive;
             });
 
             importantNotifications.slice(0, 3).forEach((notif: any) => {
@@ -170,23 +189,45 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
                 return;
               }
 
-              if (notifType.includes('document')) {
+              const lowerType = notifType.toLowerCase();
+
+              if (lowerType.includes('document')) {
                 icon = '📄';
                 const dossierId = safeString(notif.dossierId) || safeString(notif.metadata?.dossierId);
                 if (dossierId) {
                   link = `/client/dossiers/${dossierId}`;
                 }
-              } else if (notifType.includes('echeance')) {
-                icon = '⏰';
-                const dossierId = safeString(notif.dossierId) || safeString(notif.metadata?.dossierId);
+              } else if (
+                lowerType.includes('transmis') ||
+                lowerType.includes('transmission')
+              ) {
+                icon = '📤';
+                const dossierId =
+                  safeString(notif.dossierId) ||
+                  safeString(notif.metadata?.dossierId) ||
+                  safeString(data.dossierId);
                 if (dossierId) {
                   link = `/client/dossiers/${dossierId}`;
                 }
-              } else if (notifType === 'dossier_updated' && (notif.metadata?.source === 'complementsRecit')) {
-                icon = '📝';
-                const dossierId = safeString(notif.metadata?.dossierId);
+                if (!message) {
+                  message = 'Votre dossier a été transmis.';
+                }
+              } else if (
+                lowerType.includes('cloture') ||
+                lowerType.includes('clôture') ||
+                lowerType.includes('closed') ||
+                lowerType.includes('archive')
+              ) {
+                icon = '📁';
+                const dossierId =
+                  safeString(notif.dossierId) ||
+                  safeString(notif.metadata?.dossierId) ||
+                  safeString(data.dossierId);
                 if (dossierId) {
-                  link = `/client/dossiers/${dossierId}/recap`;
+                  link = `/client/dossiers/${dossierId}`;
+                }
+                if (!message) {
+                  message = 'Le statut de votre dossier a été mis à jour.';
                 }
               }
 
@@ -246,23 +287,27 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
       >
         <span className="text-sm">×</span>
       </button>
-      <div className="overflow-x-auto pr-10">
-        <div className="flex whitespace-nowrap">
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5">
+        <div className="space-y-2">
           {bannerItems.map((item) => (
             <Link
               key={item.id}
               href={item.link || '#'}
-              className={`inline-flex items-center gap-2 px-6 py-3 mx-2 rounded-lg transition-all hover:bg-primary/20 ${
-                item.priority === 'high' ? 'bg-red-50 border border-red-200' : 'bg-white/50'
+              className={`flex items-start gap-2 px-3 py-2 rounded-lg transition-all hover:bg-primary/10 ${
+                item.priority === 'high' ? 'bg-red-50 border border-red-200' : 'bg-white/70 border border-primary/10'
               }`}
             >
-              <span className="text-lg">{item.icon}</span>
-              <span className={`text-sm font-medium ${
-                item.priority === 'high' ? 'text-red-900' : 'text-foreground'
-              }`}>
-                {item.message}
-              </span>
-              <span className="text-xs text-muted-foreground">→</span>
+              <span className="text-lg mt-0.5">{item.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p
+                  className={`text-sm font-medium leading-snug ${
+                    item.priority === 'high' ? 'text-red-900' : 'text-foreground'
+                  }`}
+                >
+                  {item.message}
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground shrink-0 mt-0.5">→</span>
             </Link>
           ))}
         </div>
