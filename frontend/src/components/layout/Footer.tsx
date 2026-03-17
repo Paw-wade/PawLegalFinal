@@ -20,6 +20,7 @@ export function Footer() {
             <Link href="/faq" className="text-gray-400 hover:text-primary transition-colors">FAQ</Link>
             <Link href="/cgu" className="text-gray-400 hover:text-primary transition-colors">CGU</Link>
             <Link href="/politique-confidentialite" className="text-gray-400 hover:text-primary transition-colors">Confidentialité</Link>
+            <Link href="/mentions-legales" className="text-gray-400 hover:text-primary transition-colors">Mentions légales</Link>
             <span className="text-gray-400">|</span>
             <span className="text-gray-400">contact@adapapers.fr</span>
             <span className="text-gray-400">|</span>

@@ -587,6 +587,10 @@ Pourquoi ce mécanisme existe ? Sans cette règle, une personne pourrait rester 
                     setActiveSectionIndex(index);
                     setOpenItems(new Set());
                   }}
+                  onMouseEnter={() => {
+                    setActiveSectionIndex(index);
+                    setOpenItems(new Set());
+                  }}
                   className={`w-full flex items-start gap-3 rounded-lg px-3 py-2 text-sm text-left transition-colors ${
                     effectiveSectionIndex === index
                       ? 'bg-white border border-orange-300 shadow-sm'

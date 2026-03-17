@@ -120,6 +120,22 @@ export function PartenaireSidebar({ isOpen = true, onClose }: PartenaireSidebarP
           );
         })}
         </nav>
+        {/* Bouton de déconnexion en bas du menu */}
+        <div className="border-t border-gray-200 p-4">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('token');
+                sessionStorage.removeItem('token');
+                window.location.href = '/';
+              }
+            }}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors min-h-[44px]"
+          >
+            <span>Déconnexion</span>
+          </button>
+        </div>
       </aside>
     </>
   );

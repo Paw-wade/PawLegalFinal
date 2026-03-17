@@ -77,6 +77,7 @@ export default function SignupPage() {
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const validateField = (name: string, value: string) => {
     setFieldErrors(prev => {
@@ -134,6 +135,11 @@ export default function SignupPage() {
 
     if (!firstName || !lastName || !email || !cleanedPhone) {
       setError('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setError('Vous devez accepter les Conditions Générales d\'Utilisation et la Politique de confidentialité pour créer un compte.');
       return;
     }
 
@@ -357,11 +363,21 @@ export default function SignupPage() {
                           </span>
                         ) : (
                           <span className="flex items-center gap-2">
-                            <span>📱</span>
                             <span>Créer mon compte</span>
                           </span>
                         )}
                       </Button>
+                      <p className="mt-3 text-[11px] text-muted-foreground leading-snug">
+                        En créant un compte, vous acceptez les{' '}
+                        <Link href="/cgu" className="text-primary hover:underline font-semibold">
+                          Conditions Générales d&apos;Utilisation
+                        </Link>{' '}
+                        et la{' '}
+                        <Link href="/politique-confidentialite" className="text-primary hover:underline font-semibold">
+                          Politique de confidentialité
+                        </Link>
+                        .
+                      </p>
                     </div>
                 </form>
 

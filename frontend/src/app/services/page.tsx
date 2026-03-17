@@ -1,12 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { servicesConfig } from '@/data/servicesConfig';
 
 function Button({ children, variant = 'default', className = '', size = 'default', ...props }: any) {
-  const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
+  const baseClasses =
+    'inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
   const variantClasses = {
     default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
     outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
@@ -17,39 +19,21 @@ function Button({ children, variant = 'default', className = '', size = 'default
     sm: 'h-9 px-3 text-sm',
     lg: 'h-11 px-8 text-base',
   };
-  return <button className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`} {...props}>{children}</button>;
+  return (
+    <button
+      className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function ServicesPage() {
-  const getColorClasses = (color: string) => {
-    const colors: Record<string, { bg: string; text: string; border: string; hover: string }> = {
-      primary: {
-        bg: 'bg-primary/5',
-        text: 'text-primary',
-        border: 'border-primary/20',
-        hover: 'hover:border-primary',
-      },
-      blue: {
-        bg: 'bg-blue-500/5',
-        text: 'text-blue-600',
-        border: 'border-blue-500/20',
-        hover: 'hover:border-blue-500',
-      },
-      green: {
-        bg: 'bg-green-500/5',
-        text: 'text-green-600',
-        border: 'border-green-500/20',
-        hover: 'hover:border-green-500',
-      },
-      purple: {
-        bg: 'bg-purple-500/5',
-        text: 'text-purple-600',
-        border: 'border-purple-500/20',
-        hover: 'hover:border-purple-500',
-      },
-    };
-    return colors[color] || colors.primary;
-  };
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const selectedService =
+    servicesConfig[selectedIndex] ?? (servicesConfig.length > 0 ? servicesConfig[0] : null);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/10">
@@ -66,104 +50,186 @@ export default function ServicesPage() {
               </span>
             </div>
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 text-foreground leading-tight px-4">
-              Des solutions juridiques claires, structurées et opérationnelles
+              Des solutions claires, structurées et opérationnelles
             </h1>
-            <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed px-4">
-              Nous vous accompagnons à chaque étape&nbsp;: première analyse, suivi de dossier
-              et gestion complète de votre titre de séjour.
-            </p>
           </div>
         </div>
       </section>
 
-      <main className="container mx-auto px-4 py-16">
+      <main className="container mx-auto px-4 py-12 md:py-16">
+        {/* Navigation thématique + contenu détaillé */}
+        <div className="max-w-6xl mx-auto grid gap-8 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.9fr)]">
+          {/* Colonne gauche : thèmes de services */}
+          <aside className="space-y-3">
+            <div className="md:hidden mb-2">
+              <p className="text-xs text-muted-foreground mb-2">
+                Faites défiler les cartes puis touchez un service pour afficher le détail.
+              </p>
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                {servicesConfig.map((service, index) => {
+                  const Icon = service.icon;
+                  const isActive = index === selectedIndex;
+                  return (
+                    <button
+                      key={service.title + index}
+                      type="button"
+                      onClick={() => setSelectedIndex(index)}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                      className={`flex-shrink-0 min-w-[220px] rounded-2xl border px-4 py-3 text-left transition-all duration-200 ${
+                        isActive
+                          ? 'border-primary bg-primary/5 shadow-md'
+                          : 'border-gray-200 bg-white hover:border-primary/40 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center text-primary bg-primary/5`}
+                        >
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground line-clamp-2">
+                            {service.title}
+                          </p>
+                          {service.duree && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
+                              {service.duree}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-        {/* Cartes de services */}
-        <div className="max-w-6xl mx-auto mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-              Vue d&apos;ensemble de nos accompagnements
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              Survolez un service pour mettre en avant ses points clés
-            </span>
-          </div>
-        </div>
+            <div className="hidden md:block">
+              <div className="rounded-2xl border border-gray-200 bg-white p-3 space-y-1.5 shadow-sm">
+                {servicesConfig.map((service, index) => {
+                  const Icon = service.icon;
+                  const isActive = index === selectedIndex;
+                  return (
+                    <button
+                      key={service.title + index}
+                      type="button"
+                      onClick={() => setSelectedIndex(index)}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                      className={`w-full text-left rounded-xl px-3.5 py-3 flex items-start gap-3 transition-all duration-200 ${
+                        isActive
+                          ? 'bg-primary/5 border border-primary/60 shadow-sm'
+                          : 'border border-transparent hover:bg-muted/40'
+                      }`}
+                    >
+                      <div
+                        className={`mt-0.5 w-8 h-8 rounded-xl flex items-center justify-center ${
+                          isActive ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          {service.title}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto mb-12">
-          {servicesConfig.map((service, index) => {
-            const Icon = service.icon;
-            const colors = getColorClasses(service.color);
-            const isCalculator = service.isPortal === true; // Portail -> calculateur
-            return (
-              <div
-                key={index}
-                className={`group relative bg-white rounded-2xl shadow-sm p-6 border ${colors.border} transition-all duration-300 hover:shadow-xl hover:-translate-y-2 hover:border-primary/70 flex flex-col`}
-              >
-                <div className={`mb-4 w-14 h-14 rounded-xl ${colors.bg} ${colors.text} flex items-center justify-center border ${colors.border} transition-colors duration-300 group-hover:bg-primary/10 group-hover:border-primary/40`}>
-                  <Icon className="w-8 h-8 group-hover:scale-105 transition-transform duration-300" />
-                </div>
-                <div className="mb-4">
-                  <h3 className="text-lg md:text-xl font-semibold text-foreground mb-1 break-words hyphens-auto">
-                    {service.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed break-words">
-                    {service.description}
-                  </p>
-                </div>
-
-                {/* Informations clés */}
-                <div className="mb-6 pb-4 border-b border-border/60 space-y-2">
-                  {service.duree && (
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">Durée&nbsp;:</span> {service.duree}
+          {/* Colonne droite : contenu détaillé du service sélectionné */}
+          <section>
+            {selectedService ? (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 md:p-7">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div className="min-w-0">
+                    <h2 className="text-xl md:text-2xl font-semibold text-foreground mb-1">
+                      {selectedService.title}
+                    </h2>
+                    <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
+                      {selectedService.description}
                     </p>
-                  )}
-                  {service.prix && (
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">Tarif&nbsp;:</span> {service.prix}
-                    </p>
-                  )}
+                  </div>
                 </div>
 
-                {/* Liste des fonctionnalités */}
-                {service.points?.length ? (
-                  <ul className="mb-6 flex-1 space-y-1.5 text-sm text-muted-foreground list-disc pl-4">
-                    {service.points.map((point, i) => (
-                      <li key={i} className="leading-relaxed">
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
+                {/* Infos clés */}
+                {(selectedService.duree || selectedService.prix) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6 pb-4 border-b border-border/60">
+                    {selectedService.duree && (
+                      <div className="text-xs md:text-sm">
+                        <p className="font-semibold text-foreground">Durée indicative</p>
+                        <p className="text-muted-foreground mt-0.5">
+                          {selectedService.duree}
+                        </p>
+                      </div>
+                    )}
+                    {selectedService.prix && (
+                      <div className="text-xs md:text-sm">
+                        <p className="font-semibold text-foreground">Tarification</p>
+                        <p className="text-muted-foreground mt-0.5">
+                          {selectedService.prix}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Points détaillés */}
+                {selectedService.points?.length ? (
+                  <div className="mb-6">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">
+                      Ce que comprend cet accompagnement
+                    </p>
+                    <ul className="space-y-1.5 text-sm text-muted-foreground list-disc pl-4">
+                      {selectedService.points.map((point: string, i: number) => (
+                        <li key={i} className="leading-relaxed">
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
 
-                <div className="pt-4 border-t border-border/60 mt-auto">
-                  {isCalculator ? (
-                    <Link href="/calculateur" className="block">
-                      <Button
-                        className="w-full bg-primary text-white hover:bg-primary/90 transition-colors"
-                        size="lg"
-                      >
-                        Accéder au Calculateur
-                      </Button>
-                    </Link>
-                  ) : (
-                    <Link href="/contact" className="block">
-                      <Button
-                        variant="outline"
-                        className="w-full border border-border text-foreground hover:bg-primary hover:text-white hover:border-primary transition-colors"
-                        size="lg"
-                      >
-                        Nous contacter
-                      </Button>
-                    </Link>
-                  )}
+                {/* Appel à l'action */}
+                <div className="pt-4 border-t border-border/60 mt-4 flex flex-wrap gap-3 justify-between items-center">
+                  <div className="text-xs text-muted-foreground max-w-xs">
+                    Un doute sur le service le plus adapté ? Nous pouvons vous orienter lors d&apos;un
+                    premier échange.
+                  </div>
+                  <div className="flex gap-3">
+                    {selectedService.isPortal === true ? (
+                      <Link href="/calculateur">
+                        <Button
+                          className="bg-primary text-white hover:bg-primary/90 transition-colors"
+                          size="lg"
+                        >
+                          Accéder au calculateur
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Link href="/contact">
+                        <Button
+                          variant="outline"
+                          className="border border-border text-foreground hover:bg-primary hover:text-white hover:border-primary transition-colors"
+                          size="lg"
+                        >
+                          Parler de mon dossier
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </div>
-            );
-          })}
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-sm text-muted-foreground">
+                Aucun service n&apos;est configuré pour le moment.
+              </div>
+            )}
+          </section>
         </div>
-
       </main>
       <Footer />
     </div>
