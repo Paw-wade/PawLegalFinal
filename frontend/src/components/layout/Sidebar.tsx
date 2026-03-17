@@ -94,7 +94,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 top-14 bg-black/50 z-40 lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -168,6 +168,23 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             );
           })}
         </nav>
+        {/* Bouton de déconnexion en bas du menu (mobile et desktop) */}
+        <div className="border-t border-gray-200 p-3 sm:p-4">
+          <button
+            type="button"
+            onClick={() => {
+              // Nettoyer les tokens et recharger vers la home
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('token');
+                sessionStorage.removeItem('token');
+                window.location.href = '/';
+              }
+            }}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors min-h-[44px]"
+          >
+            <span>Déconnexion</span>
+          </button>
+        </div>
       </aside>
     </>
   );

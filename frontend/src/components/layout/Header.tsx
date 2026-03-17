@@ -160,12 +160,8 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               // L'utilisateur peut toujours utiliser l'application en mode hors ligne
             } else {
               console.error('Erreur lors de la récupération du profil:', error);
-              // Si le token est invalide (401, 403), le supprimer
-              if (error.response?.status === 401 || error.response?.status === 403) {
-                localStorage.removeItem('token');
-                sessionStorage.removeItem('token');
-                setUserInfo(null);
-              }
+              // Ne plus supprimer automatiquement le token :
+              // l'utilisateur restera connecté tant qu'il ne clique pas sur "Déconnexion".
             }
           }
         } else if (status === 'unauthenticated') {
@@ -330,7 +326,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
   };
 
   return (
-    <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-50 shadow-sm safe-top">
+    <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-[80] shadow-sm safe-top">
       <div className="w-full max-w-[100vw] mx-auto px-3 sm:px-4 py-2 sm:py-2.5">
         <div className="flex items-center justify-between gap-2">
           {/* Logo ; bouton menu (mobile) : sidebar dashboard ou menu nav selon la page */}
@@ -374,7 +370,14 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 </p>
               </>
             )}
-            {(variant === 'admin' || variant === 'partenaire' || variant === 'client') && null}
+            {(variant === 'admin' || variant === 'partenaire' || variant === 'client') && (
+              <Link
+                href="/"
+                className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base sm:text-lg max-w-[55vw] sm:max-w-none truncate"
+              >
+                Ada Papers
+              </Link>
+            )}
           </div>
 
           {/* Navigation - Liens permanents (Services, FAQ, Forum, Contact, Calculateur, Dashboard) */}
@@ -524,18 +527,13 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   <NotificationBadge variant="header" className="mr-0 sm:mr-2" />
                   {/* Nom + rôle : masquer le sous-titre sur mobile */}
                   <div className="text-right border-r border-gray-200 pr-2 sm:pr-2.5 mr-1 sm:mr-2 min-w-0 max-w-[100px] sm:max-w-none">
-                    <Link 
-                      href={
-                        variant === 'admin'
-                          ? '/admin/compte'
-                          : variant === 'partenaire'
-                          ? '/partenaire/compte'
-                          : '/client/compte'
-                      }
-                      className="text-xs font-semibold text-gray-900 hover:text-orange-500 transition-colors cursor-pointer block leading-tight truncate"
+                    <button
+                      type="button"
+                      onClick={handleDashboardClick}
+                      className="text-xs font-semibold text-gray-900 hover:text-orange-500 transition-colors cursor-pointer block leading-tight truncate text-right w-full"
                     >
                       {userName || 'Utilisateur'}
-                    </Link>
+                    </button>
                     <p className="hidden sm:block text-[10px] text-gray-500 font-normal leading-tight">{roleLabel}</p>
                   </div>
                   <Button 
@@ -564,8 +562,9 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
       {/* Menu de navigation mobile (page d'accueil, calculateur, etc.) — plein écran lisible */}
       {variant === 'home' && mobileNavOpen && (
         <>
+          {/* Overlay mobile : commence sous le header pour laisser le header cliquable */}
           <div
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            className="fixed inset-0 top-14 bg-black/50 z-40 md:hidden"
             onClick={() => setMobileNavOpen(false)}
             aria-hidden="true"
           />
