@@ -41,12 +41,14 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
           return;
         }
         
-        // Utiliser la même logique que api.ts pour éviter le double /api
-        let baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-        // Si baseURL contient déjà /api, ne pas l'ajouter à nouveau
-        const url = baseURL.endsWith('/api') 
-          ? `${baseURL}/user/documents/${documentId}/preview`
-          : `${baseURL}/api/user/documents/${documentId}/preview`;
+        // Construire l'URL de preview sans jamais générer ".../api/api/..."
+        // (Render peut injecter des caractères invisibles dans NEXT_PUBLIC_API_URL).
+        let baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005')
+          .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
+          .trim();
+        baseURL = baseURL.replace(/\/+$/, '');
+        const apiBase = /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
+        const url = `${apiBase}/user/documents/${documentId}/preview`;
         
         console.log('📄 URL de prévisualisation:', url);
         console.log('📄 Token présent:', token ? 'Oui' : 'Non');
@@ -233,11 +235,12 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
             <button
               onClick={() => {
                 const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
-                let baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-                // Si baseURL contient déjà /api, ne pas l'ajouter à nouveau
-                const url = baseURL.endsWith('/api')
-                  ? `${baseURL}/user/documents/${documentId}/preview?token=${encodeURIComponent(token)}`
-                  : `${baseURL}/api/user/documents/${documentId}/preview?token=${encodeURIComponent(token)}`;
+                let baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005')
+                  .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
+                  .trim();
+                baseURL = baseURL.replace(/\/+$/, '');
+                const apiBase = /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
+                const url = `${apiBase}/user/documents/${documentId}/preview?token=${encodeURIComponent(token)}`;
                 window.open(url, '_blank');
               }}
               className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm transition-colors"

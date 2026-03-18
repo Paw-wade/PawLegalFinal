@@ -864,11 +864,12 @@ export const documentsAPI = {
   // Prévisualiser un document (retourne une Promise qui résout avec l'URL du blob)
   previewDocument: async (id: string): Promise<string> => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || sessionStorage.getItem('token') : null;
-    let baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-    // Si baseURL contient déjà /api, ne pas l'ajouter à nouveau
-    const url = baseURL.endsWith('/api')
-      ? `${baseURL}/user/documents/${id}/preview`
-      : `${baseURL}/api/user/documents/${id}/preview`;
+    let baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005')
+      .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
+      .trim();
+    baseURL = baseURL.replace(/\/+$/, '');
+    const apiBase = /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
+    const url = `${apiBase}/user/documents/${id}/preview`;
     
     const response = await fetch(url, {
       headers: {
@@ -887,11 +888,12 @@ export const documentsAPI = {
   // Obtenir l'URL directe de prévisualisation (pour iframe)
   getPreviewUrl: (id: string): string => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || sessionStorage.getItem('token') : null;
-    let baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-    // Si baseURL contient déjà /api, ne pas l'ajouter à nouveau
-    return baseURL.endsWith('/api')
-      ? `${baseURL}/user/documents/${id}/preview`
-      : `${baseURL}/api/user/documents/${id}/preview`;
+    let baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005')
+      .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
+      .trim();
+    baseURL = baseURL.replace(/\/+$/, '');
+    const apiBase = /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
+    return `${apiBase}/user/documents/${id}/preview`;
   },
   
   // Télécharger un document
