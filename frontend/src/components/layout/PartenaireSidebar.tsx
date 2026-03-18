@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { signOut } from 'next-auth/react';
 import { forumAPI } from '@/lib/api';
 import { 
   LayoutDashboard,
@@ -82,10 +83,10 @@ export function PartenaireSidebar({ isOpen = true, onClose }: PartenaireSidebarP
           {onClose && (
             <button
               onClick={onClose}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors shrink-0"
+              className="lg:hidden px-3 py-2 ml-2 min-h-[36px] flex items-center justify-center rounded-full border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
               aria-label="Fermer le menu"
             >
-              <span className="text-2xl">×</span>
+              Fermer
             </button>
           )}
         </div>
@@ -124,10 +125,16 @@ export function PartenaireSidebar({ isOpen = true, onClose }: PartenaireSidebarP
         <div className="border-t border-gray-200 p-4">
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               if (typeof window !== 'undefined') {
                 localStorage.removeItem('token');
                 sessionStorage.removeItem('token');
+                try {
+                  // Déconnexion NextAuth (sinon la session peut rester active)
+                  await signOut({ redirect: false });
+                } catch {
+                  // ignore - redirection forcée juste après
+                }
                 window.location.href = '/';
               }
             }}

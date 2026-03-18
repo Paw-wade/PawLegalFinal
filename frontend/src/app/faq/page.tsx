@@ -576,7 +576,8 @@ Pourquoi ce mécanisme existe ? Sans cette règle, une personne pourrait rester 
             )}
           </div>
 
-          <div className="grid gap-6 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-start">
+          {/* Desktop/tablette : 2 colonnes */}
+          <div className="hidden md:grid gap-6 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-start">
             {/* Liste des thèmes de FAQ (gauche) */}
             <div className="space-y-2.5">
               {filteredSections.map((section, index) => (
@@ -668,6 +669,75 @@ Pourquoi ce mécanisme existe ? Sans cette règle, une personne pourrait rester 
                 </>
               )}
             </div>
+          </div>
+
+          {/* Mobile : accordéon inline (le texte s'affiche juste après le thème cliqué) */}
+          <div className="md:hidden space-y-3">
+            {filteredSections.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-white/60 p-4 text-gray-500 text-sm">
+                Aucun thème ne correspond à votre recherche. Modifiez les termes ou effacez la recherche.
+              </div>
+            ) : (
+              filteredSections.map((section, index) => (
+                <div key={section.title} className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveSectionIndex(index);
+                      setOpenItems(new Set());
+                    }}
+                    className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors ${
+                      activeSectionIndex === index
+                        ? 'bg-white border-b border-orange-200'
+                        : 'hover:bg-muted/30'
+                    }`}
+                  >
+                    <span className="mt-0.5 h-6 w-6 flex items-center justify-center rounded-full bg-orange-50 text-orange-500 text-xs font-semibold">
+                      {index + 1}
+                    </span>
+                    <p className="font-medium text-foreground">{section.title}</p>
+                  </button>
+
+                  {activeSectionIndex === index && (
+                    <div className="px-4 pb-4 pt-1 space-y-3">
+                      {section.items.map((item, itemIndex) => {
+                        const sectionId = `section-${index}`;
+                        const itemId = `${sectionId}-item-${itemIndex}`;
+                        const isItemOpen = openItems.has(itemId);
+
+                        return (
+                          <div
+                            key={itemIndex}
+                            className="bg-white rounded-lg border border-border shadow-sm"
+                          >
+                            <button
+                              onClick={() => toggleItem(itemId)}
+                              className="w-full flex items-start justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors rounded-lg"
+                            >
+                              <span className="font-semibold text-foreground pr-4 flex-1 text-sm">
+                                {item.question}
+                              </span>
+                              <span
+                                className={`text-primary text-lg flex-shrink-0 transform transition-transform ${
+                                  isItemOpen ? 'rotate-180' : ''
+                                }`}
+                              >
+                                ▼
+                              </span>
+                            </button>
+                            {isItemOpen && (
+                              <div className="px-4 pb-4 text-muted-foreground leading-relaxed whitespace-pre-line text-sm">
+                                {item.answer}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
 
           {/* CTA Section */}

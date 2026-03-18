@@ -21,7 +21,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
   const { data: session } = useSession();
   const router = useRouter();
   const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   
   // Déterminer si l'utilisateur est admin ou partenaire
   const userRole = (session?.user as any)?.role || 'client';

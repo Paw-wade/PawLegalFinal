@@ -77,7 +77,6 @@ export default function SignupPage() {
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const validateField = (name: string, value: string) => {
     setFieldErrors(prev => {
@@ -138,10 +137,7 @@ export default function SignupPage() {
       return;
     }
 
-    if (!acceptedTerms) {
-      setError('Vous devez accepter les Conditions Générales d\'Utilisation et la Politique de confidentialité pour créer un compte.');
-      return;
-    }
+    // Le fait de cliquer sur "Créer mon compte" vaut acceptation CGU + Politique de confidentialité.
 
     // Validation simple de l'email côté client
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

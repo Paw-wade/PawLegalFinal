@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import { signOut } from 'next-auth/react';
 import { forumAPI, documentRequestsAPI } from '@/lib/api';
 import {
   LayoutDashboard,
@@ -121,10 +122,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           {onClose && (
             <button
               onClick={onClose}
-              className="lg:hidden p-2 -m-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gray-100 rounded-md transition-colors shrink-0"
+              className="lg:hidden px-3 py-2 ml-2 min-h-[36px] flex items-center justify-center rounded-full border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
               aria-label="Fermer le menu"
             >
-              <span className="text-2xl leading-none">×</span>
+              Fermer
             </button>
           )}
         </div>
@@ -172,11 +173,17 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="border-t border-gray-200 p-3 sm:p-4">
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               // Nettoyer les tokens et recharger vers la home
               if (typeof window !== 'undefined') {
                 localStorage.removeItem('token');
                 sessionStorage.removeItem('token');
+                try {
+                  // Déconnexion NextAuth (important : juste vider les tokens ne suffit pas)
+                  await signOut({ redirect: false });
+                } catch {
+                  // Si signOut échoue, on force quand même la redirection
+                }
                 window.location.href = '/';
               }
             }}

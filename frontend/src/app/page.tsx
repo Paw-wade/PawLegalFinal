@@ -111,6 +111,7 @@ export default function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [hoveredLimiteIndex, setHoveredLimiteIndex] = useState<number | null>(0);
   const [hoveredPlateformeIndex, setHoveredPlateformeIndex] = useState<number | null>(0);
+  const [showMobileTopBar, setShowMobileTopBar] = useState(true);
   const [isWidgetOpen, setIsWidgetOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('reservationWidgetOpen');
@@ -155,6 +156,16 @@ export default function HomePage() {
     'home.domains.subtitle',
     'Une expertise reconnue dans trois domaines essentiels du droit'
   );
+
+  // Barre de menu mobile sous le header qui disparaît au scroll
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleScroll = () => {
+      setShowMobileTopBar(window.scrollY < 10);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     const loadTemoignages = async () => {
@@ -267,6 +278,48 @@ export default function HomePage() {
     <div className="min-h-screen bg-background flex flex-col scroll-smooth overflow-x-hidden max-w-[100vw]">
       {/* Header Professionnel */}
       <Header variant="home" />
+
+      {/* Barre de menu mobile sous le header (disparaît au scroll) */}
+      {showMobileTopBar && (
+        <div className="md:hidden sticky top-[56px] z-40 bg-white/95 border-b border-gray-200">
+          <div className="w-full max-w-[100vw] mx-auto px-2">
+            <div className="w-full flex items-center justify-center overflow-x-auto no-scrollbar py-2">
+              <div className="flex items-center gap-1 min-w-max">
+                <Link
+                  href="/a-propos"
+                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
+                >
+                  À propos
+                </Link>
+                <Link
+                  href="/faq"
+                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
+                >
+                  FAQ
+                </Link>
+                <Link
+                  href="/forum"
+                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
+                >
+                  Forum
+                </Link>
+                <Link
+                  href="/contact"
+                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
+                >
+                  Contact
+                </Link>
+                <Link
+                  href="/calculateur"
+                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-white bg-orange-500 hover:bg-orange-600 whitespace-nowrap"
+                >
+                  Calculateur
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Hero Section — design renforcé, padding mobile */}
       <section className="relative min-h-[80vh] sm:min-h-[85vh] flex items-center py-12 sm:py-20 lg:py-28 overflow-hidden">
