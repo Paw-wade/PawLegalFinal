@@ -416,64 +416,64 @@ export default function ComptePage() {
   const isClient = userRole === 'client';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
+    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20 overflow-x-hidden max-w-[100vw]">
       <Toast message={success || ''} visible={!!success} />
-      <main className="w-full px-4 py-8">
+      <main className="w-full px-3 sm:px-4 py-5 sm:py-8">
         {/* En-tête amélioré */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center shadow-lg">
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-2xl">
                 {session?.user?.name?.charAt(0)?.toUpperCase() || 'U'}
               </span>
             </div>
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-4xl font-bold mb-1 sm:mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
                 Mon compte
               </h1>
-              <p className="text-muted-foreground text-lg">Gérez vos informations personnelles et vos paramètres de sécurité</p>
+              <p className="text-muted-foreground text-sm sm:text-lg">Gérez vos informations personnelles et vos paramètres de sécurité</p>
             </div>
           </div>
         </div>
 
         {/* Onglets améliorés */}
-        <div className="mb-8 bg-white rounded-xl shadow-md p-2 inline-flex gap-2">
+        <div className="mb-6 sm:mb-8 bg-white rounded-xl shadow-md p-2 flex gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('profil')}
-            className={`px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200 ${
+            className={`px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
               activeTab === 'profil'
                 ? 'bg-primary text-white shadow-md'
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             }`}
           >
             <span className="flex items-center gap-2">
-              <span>👤</span>
+              <span className="text-sm sm:text-base">👤</span>
               <span>Informations personnelles</span>
             </span>
           </button>
           <button
             onClick={() => setActiveTab('password')}
-            className={`px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200 ${
+            className={`px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
               activeTab === 'password'
                 ? 'bg-primary text-white shadow-md'
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             }`}
           >
             <span className="flex items-center gap-2">
-              <span>🔒</span>
+              <span className="text-sm sm:text-base">🔒</span>
               <span>Mot de passe</span>
             </span>
           </button>
           <button
             onClick={() => setActiveTab('sms')}
-            className={`px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200 ${
+            className={`px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
               activeTab === 'sms'
                 ? 'bg-primary text-white shadow-md'
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             }`}
           >
             <span className="flex items-center gap-2">
-              <span>📱</span>
+              <span className="text-sm sm:text-base">📱</span>
               <span>Notifications SMS</span>
             </span>
           </button>
@@ -504,14 +504,14 @@ export default function ComptePage() {
         {/* Contenu des onglets */}
         {activeTab === 'profil' && (
           <div className="bg-white rounded-xl shadow-lg border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
-              <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
-                <span className="text-3xl">👤</span>
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2 sm:gap-3">
+                <span className="text-2xl sm:text-3xl">👤</span>
                 <span>Informations personnelles</span>
               </h2>
               <p className="text-sm text-muted-foreground mt-2">Mettez à jour vos informations de profil</p>
             </div>
-            <form onSubmit={handleProfileSubmit} className="p-8 space-y-8">
+            <form onSubmit={handleProfileSubmit} className="p-4 sm:p-8 space-y-7 sm:space-y-8">
               {/* Informations de base */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3 mb-4">
@@ -760,11 +760,11 @@ export default function ComptePage() {
               </div>
 
               {/* Boutons d'action améliorés */}
-              <div className="flex gap-4 pt-6 border-t border-border">
+              <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-border">
                 <Button 
                   type="submit" 
                   disabled={isSaving} 
-                  className="flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                  className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
                 >
                   {isSaving ? (
                     <span className="flex items-center gap-2">
@@ -778,11 +778,11 @@ export default function ComptePage() {
                     </span>
                   )}
                 </Button>
-                <Link href="/client">
+                <Link href="/client" className="w-full sm:w-auto">
                   <Button 
                     type="button" 
                     variant="outline" 
-                    className="h-12 px-6 border-2 hover:bg-accent transition-colors"
+                    className="w-full h-12 px-6 border-2 hover:bg-accent transition-colors"
                   >
                     Annuler
                   </Button>
@@ -794,14 +794,14 @@ export default function ComptePage() {
 
         {activeTab === 'password' && (
           <div className="bg-white rounded-xl shadow-lg border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
-              <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
-                <span className="text-3xl">🔒</span>
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2 sm:gap-3">
+                <span className="text-2xl sm:text-3xl">🔒</span>
                 <span>Changer le mot de passe</span>
               </h2>
               <p className="text-sm text-muted-foreground mt-2">Mettez à jour votre mot de passe pour sécuriser votre compte</p>
             </div>
-            <div className="p-8 space-y-10">
+            <div className="p-4 sm:p-8 space-y-8 sm:space-y-10">
               <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl">
                 <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
                   <p className="text-sm text-blue-800">
@@ -858,11 +858,11 @@ export default function ComptePage() {
                   )}
                 </div>
                 
-                <div className="flex gap-4 pt-6 border-t border-border">
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-border">
                   <Button 
                     type="submit" 
                     disabled={isSaving || (passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword)} 
-                    className="flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                    className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
                   >
                     {isSaving ? (
                       <span className="flex items-center gap-2">
@@ -880,7 +880,7 @@ export default function ComptePage() {
               </form>
 
               {/* Désactivation du compte */}
-              <div className="border-t border-border pt-6 flex items-start justify-between gap-6 max-w-2xl">
+              <div className="border-t border-border pt-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6 max-w-2xl">
                 <div>
                   <h3 className="text-base font-semibold text-red-600 flex items-center gap-2">
                     <span>🛑</span>
@@ -890,7 +890,7 @@ export default function ComptePage() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-red-500 text-red-600 hover:bg-red-50"
+                  className="w-full sm:w-auto border-red-500 text-red-600 hover:bg-red-50"
                   disabled={isSaving}
                   onClick={async () => {
                     const confirmed = window.confirm(
@@ -923,9 +923,9 @@ export default function ComptePage() {
 
         {activeTab === 'sms' && (
           <div className="bg-white rounded-xl shadow-lg border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
-              <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
-                <span className="text-3xl">📱</span>
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2 sm:gap-3">
+                <span className="text-2xl sm:text-3xl">📱</span>
                 <span>Préférences SMS</span>
               </h2>
               <p className="text-sm text-muted-foreground mt-2">Gérez les notifications SMS que vous souhaitez recevoir</p>
@@ -946,7 +946,7 @@ export default function ComptePage() {
                   setIsSaving(false);
                 }
               }}
-              className="p-8 space-y-6"
+              className="p-4 sm:p-8 space-y-6"
             >
               <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
                 <p className="text-sm text-blue-800">

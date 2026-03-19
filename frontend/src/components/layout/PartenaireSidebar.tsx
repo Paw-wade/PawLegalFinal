@@ -22,7 +22,7 @@ const menuItems = [
   { href: '/partenaire/messages', label: 'Messages', icon: MessageSquare },
   { href: '/partenaire/documents', label: 'Documents', icon: FileText },
   { href: '/partenaire/notifications', label: 'Notifications', icon: Bell },
-  { href: '/partenaire/calculateur', label: 'Calculateur', icon: Calculator },
+  { href: '/calculateur', label: 'Calculateur', icon: Calculator },
   { href: '/partenaire/rendez-vous', label: 'Rendez-vous', icon: Calendar },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
   { href: '/partenaire/compte', label: 'Mon compte', icon: User },

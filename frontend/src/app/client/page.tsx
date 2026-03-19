@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { ReservationWidget } from '@/components/ReservationWidget';
@@ -25,7 +25,6 @@ function Button({ children, variant = 'default', className = '', ...props }: any
 
 function ClientDashboardContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const [stats, setStats] = useState({
     dossiers: 0,
@@ -58,6 +57,17 @@ function ClientDashboardContent() {
   const [heuresRestantes, setHeuresRestantes] = useState(0);
   const [minutesRestantes, setMinutesRestantes] = useState(0);
   const [secondesRestantes, setSecondesRestantes] = useState(0);
+
+  // Charger les blocs secondaires en différé pour accélérer l'affichage initial mobile
+  const loadDeferredDashboardData = () => {
+    setTimeout(() => {
+      checkUnreadMessages();
+      checkDocumentRequestNotifications();
+      loadNotifications();
+      loadDocumentRequests();
+      loadForumBookmarks();
+    }, 350);
+  };
 
   // Textes CMS pour le header du dashboard client
   const dashboardTitleClient = useCmsText(
@@ -143,21 +153,14 @@ function ClientDashboardContent() {
       // Charger les statistiques depuis l'API
       loadStats();
       loadUserProfile();
-      checkUnreadMessages();
-      checkDocumentRequestNotifications();
-      loadNotifications();
-      loadDocumentRequests();
-      loadForumBookmarks();
+      loadDeferredDashboardData();
     } else if (token) {
       // Si on a un token mais pas de session, charger quand même les stats
       loadStats();
       loadUserProfile();
-      checkUnreadMessages();
-      checkDocumentRequestNotifications();
-      loadNotifications();
-      loadDocumentRequests();
+      loadDeferredDashboardData();
     }
-  }, [session, status, router, searchParams]);
+  }, [session, status, router]);
 
   const loadNotifications = async () => {
     try {
@@ -493,9 +496,15 @@ function ClientDashboardContent() {
         }
       }
 
-      // Charger les dossiers
-      try {
-        const dossiersResponse = await dossiersAPI.getMyDossiers();
+      const [dossiersResult, documentsResult, appointmentsResult] = await Promise.allSettled([
+        dossiersAPI.getMyDossiers(),
+        documentsAPI.getMyDocuments(),
+        appointmentsAPI.getMyAppointments(),
+      ]);
+
+      // Dossiers
+      if (dossiersResult.status === 'fulfilled') {
+        const dossiersResponse = dossiersResult.value;
         if (dossiersResponse.data.success) {
           const dossiers = dossiersResponse.data.dossiers || [];
           setStats(prev => ({
@@ -503,68 +512,63 @@ function ClientDashboardContent() {
             dossiers: dossiers.length,
             dossiersEnCours: dossiers.filter((d: any) => {
               const statut = d.statut;
-              // Nouveaux statuts en cours
-              return statut === 'recu' || 
-                     statut === 'accepte' || 
-                     statut === 'en_attente_onboarding' || 
-                     statut === 'en_cours_instruction' || 
-                     statut === 'pieces_manquantes' || 
-                     statut === 'dossier_complet' || 
-                     statut === 'depose' || 
-                     statut === 'reception_confirmee' || 
-                     statut === 'complement_demande' || 
-                     statut === 'communication_motifs' || 
-                     statut === 'recours_preparation' || 
-                     statut === 'refere_mesures_utiles' || 
+              return statut === 'recu' ||
+                     statut === 'accepte' ||
+                     statut === 'en_attente_onboarding' ||
+                     statut === 'en_cours_instruction' ||
+                     statut === 'pieces_manquantes' ||
+                     statut === 'dossier_complet' ||
+                     statut === 'depose' ||
+                     statut === 'reception_confirmee' ||
+                     statut === 'complement_demande' ||
+                     statut === 'communication_motifs' ||
+                     statut === 'recours_preparation' ||
+                     statut === 'refere_mesures_utiles' ||
                      statut === 'refere_suspension_rep' ||
-                     // Anciens statuts pour compatibilité
-                     statut === 'en_cours' || 
+                     statut === 'en_cours' ||
                      statut === 'en_attente' ||
                      statut === 'en_revision';
             }).length
           }));
-          // Garder les 5 dossiers les plus récents
           setRecentDossiers(dossiers.slice(0, 5));
         }
-      } catch (err) {
-        console.error('❌ Erreur lors du chargement des dossiers:', err);
+      } else {
+        console.error('❌ Erreur lors du chargement des dossiers:', dossiersResult.reason);
       }
 
-      // Charger les documents
-      try {
-        const documentsResponse = await documentsAPI.getMyDocuments();
+      // Documents
+      if (documentsResult.status === 'fulfilled') {
+        const documentsResponse = documentsResult.value;
         if (documentsResponse.data.success) {
           setStats(prev => ({
             ...prev,
             documents: documentsResponse.data.documents?.length || 0
           }));
         }
-      } catch (err) {
-        console.error('❌ Erreur lors du chargement des documents:', err);
+      } else {
+        console.error('❌ Erreur lors du chargement des documents:', documentsResult.reason);
       }
 
-      // Charger les rendez-vous
-      try {
-        const appointmentsResponse = await appointmentsAPI.getMyAppointments();
+      // Rendez-vous
+      if (appointmentsResult.status === 'fulfilled') {
+        const appointmentsResponse = appointmentsResult.value;
         if (appointmentsResponse.data.success) {
           const appointments = appointmentsResponse.data.data || appointmentsResponse.data.appointments || [];
           setStats(prev => ({
             ...prev,
             rendezVous: appointments.length
           }));
-          
-          // Trier par date (plus récents en premier) et prendre les 3 prochains
+
           const sortedAppointments = appointments
             .filter((apt: any) => apt.statut !== 'annule' && apt.statut !== 'annulé')
             .map((apt: any) => {
-              // Calculer les alertes pour chaque rendez-vous
               const aptDate = new Date(apt.date);
               const aptTime = apt.heure ? apt.heure.split(':') : ['00', '00'];
               aptDate.setHours(parseInt(aptTime[0]), parseInt(aptTime[1]), 0, 0);
               const now = new Date();
               const diffMs = aptDate.getTime() - now.getTime();
               const diffHours = diffMs / (1000 * 60 * 60);
-              
+
               return {
                 ...apt,
                 alertLevel: diffHours < 0 ? 'past' : diffHours <= 1 ? 'urgent' : diffHours <= 24 ? 'soon' : 'upcoming',
@@ -574,14 +578,14 @@ function ClientDashboardContent() {
             .sort((a: any, b: any) => {
               const dateA = new Date(a.date).getTime();
               const dateB = new Date(b.date).getTime();
-              return dateA - dateB; // Plus proche en premier
+              return dateA - dateB;
             })
             .slice(0, 3);
-          
+
           setRecentAppointments(sortedAppointments);
         }
-      } catch (err) {
-        console.error('❌ Erreur lors du chargement des rendez-vous:', err);
+      } else {
+        console.error('❌ Erreur lors du chargement des rendez-vous:', appointmentsResult.reason);
       }
     } catch (error) {
       console.error('❌ Erreur lors du chargement des statistiques:', error);
@@ -609,6 +613,7 @@ function ClientDashboardContent() {
   const displayUser = getDisplayUser();
   const userName = getUserName();
   const userEmail = getUserEmail();
+  const showDashboardSkeleton = isLoading && stats.dossiers === 0 && stats.documents === 0 && stats.rendezVous === 0;
 
   if (status === 'loading') {
     return (
@@ -777,22 +782,36 @@ function ClientDashboardContent() {
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
         <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4 scroll-mt-20">
           <Link href="/client/dossiers" className="group block min-w-0">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                  <span className="text-2xl">📁</span>
+            <div
+              className={`rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-orange-200/70 to-orange-200/70 shadow-sm group-hover:shadow-md group-hover:from-orange-400/70 group-hover:via-orange-400/70 group-hover:to-orange-400/70 transition-all duration-300 cursor-pointer ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
+            >
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                    <span className="text-2xl">📁</span>
+                  </div>
+                  <div className="text-right">
+                    {showDashboardSkeleton ? (
+                      <div className="h-8 w-14 bg-gray-200 rounded ml-auto" />
+                    ) : (
+                      <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-primary transition-colors">{stats.dossiers}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-primary transition-colors">{stats.dossiers}</p>
+                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Mes Dossiers</h3>
+                <p className="text-xs text-gray-600 mb-3">Total de vos dossiers</p>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  {showDashboardSkeleton ? (
+                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-200 text-transparent text-xs font-semibold">
+                      00 en cours
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 text-xs font-semibold group-hover:bg-blue-500/20 transition-colors">
+                      {stats.dossiersEnCours} en cours
+                    </span>
+                  )}
+                  <span className="text-primary text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
                 </div>
-              </div>
-              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Mes Dossiers</h3>
-              <p className="text-xs text-gray-600 mb-3">Total de vos dossiers</p>
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 text-xs font-semibold group-hover:bg-blue-500/20 transition-colors">
-                  {stats.dossiersEnCours} en cours
-                </span>
-                <span className="text-primary text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
           </Link>
@@ -800,20 +819,28 @@ function ClientDashboardContent() {
           {/* Badge Documents avec lien direct */}
           <div id="documents-section" className="scroll-mt-20 min-w-0">
           <Link href="/client/documents" className="group block min-w-0">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
-                  <span className="text-2xl">📄</span>
+            <div
+              className={`rounded-xl p-[1px] bg-gradient-to-r from-green-200/70 via-emerald-200/70 to-green-200/70 shadow-sm group-hover:shadow-md group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 transition-all duration-300 cursor-pointer ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
+            >
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
+                    <span className="text-2xl">📄</span>
+                  </div>
+                  <div className="text-right">
+                    {showDashboardSkeleton ? (
+                      <div className="h-8 w-14 bg-gray-200 rounded ml-auto" />
+                    ) : (
+                      <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.documents}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.documents}</p>
+                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Documents</h3>
+                <p className="text-xs text-gray-600 mb-3">Documents disponibles</p>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <span className="text-xs text-gray-600">Tous vos documents</span>
+                  <span className="text-green-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
                 </div>
-              </div>
-              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Documents</h3>
-              <p className="text-xs text-gray-600 mb-3">Documents disponibles</p>
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-gray-600">Tous vos documents</span>
-                <span className="text-green-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
           </Link>
@@ -823,7 +850,10 @@ function ClientDashboardContent() {
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Rendez-vous et accès</p>
         <div id="rendez-vous-section" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 scroll-mt-20">
           <div className="group min-w-0">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all">
+            <div
+              className={`rounded-xl p-[1px] bg-gradient-to-r from-blue-200/70 via-indigo-200/70 to-blue-200/70 shadow-sm group-hover:shadow-md group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 transition-all duration-300 ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
+            >
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
                   <span className="text-2xl">📅</span>
@@ -834,7 +864,12 @@ function ClientDashboardContent() {
                 </div>
               </div>
               {/* Rendez-vous récents avec alertes */}
-              {recentAppointments.length > 0 && (
+              {showDashboardSkeleton ? (
+                <div className="mb-4 space-y-2">
+                  <div className="h-12 bg-gray-200 rounded-lg" />
+                  <div className="h-12 bg-gray-200 rounded-lg" />
+                </div>
+              ) : recentAppointments.length > 0 && (
                 <div className="mb-4 space-y-2 max-h-32 overflow-y-auto">
                   {recentAppointments.map((apt: any) => {
                     const aptDate = apt.date ? new Date(apt.date) : null;
@@ -901,38 +936,43 @@ function ClientDashboardContent() {
                   </Button>
                 </Link>
               </div>
+              </div>
             </div>
           </div>
 
           <div id="temoignages-section" className="scroll-mt-20 min-w-0">
           <Link href="/client/temoignages" className="group block min-w-0">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all">
-              <div className="flex items-center gap-4 mb-2">
-                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <span className="text-2xl">⭐</span>
+            <div className="rounded-xl p-[1px] bg-gradient-to-r from-yellow-200/70 via-amber-200/70 to-yellow-200/70 shadow-sm transition-all duration-300 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-md">
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <span className="text-2xl">⭐</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-foreground mb-0.5">Témoignage</h3>
+                    <p className="text-xs text-gray-600">Partagez votre expérience</p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-foreground mb-0.5">Témoignage</h3>
-                  <p className="text-xs text-gray-600">Partagez votre expérience</p>
-                </div>
+                <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
               </div>
-              <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
             </div>
           </Link>
           </div>
 
           <Link href="/client/compte" className="group block min-w-0">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all">
-              <div className="flex items-center gap-4 mb-2">
-                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <span className="text-2xl">👤</span>
+            <div className="rounded-xl p-[1px] bg-gradient-to-r from-gray-200/70 via-slate-200/70 to-gray-200/70 shadow-sm transition-all duration-300 group-hover:from-gray-300/70 group-hover:via-slate-300/70 group-hover:to-gray-300/70 group-hover:shadow-md">
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <span className="text-2xl">👤</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-foreground mb-0.5">Mon compte</h3>
+                    <p className="text-xs text-gray-600">Gérez vos informations</p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-foreground mb-0.5">Mon compte</h3>
-                  <p className="text-xs text-gray-600">Gérez vos informations</p>
-                </div>
+                <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
               </div>
-              <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
             </div>
           </Link>
 

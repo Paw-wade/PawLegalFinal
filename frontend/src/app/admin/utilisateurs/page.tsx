@@ -709,6 +709,12 @@ export default function AdminUtilisateursPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const [expirations, setExpirations] = useState<any[]>([]);
+  const [expirationsLoading, setExpirationsLoading] = useState(false);
+  const [expirationsError, setExpirationsError] = useState<string | null>(null);
+  const EXPIRATION_PAST_DAYS = 125;
+  const EXPIRATION_FUTURE_DAYS = 15;
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'client' | 'admin' | 'superadmin'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -745,6 +751,7 @@ export default function AdminUtilisateursPage() {
   useEffect(() => {
     if (status === 'authenticated' && ((session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin')) {
       loadUsers();
+      loadExpirations();
     }
   }, [session, status]);
 
@@ -763,6 +770,27 @@ export default function AdminUtilisateursPage() {
       setError(err.response?.data?.message || 'Erreur lors du chargement des utilisateurs');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadExpirations = async () => {
+    setExpirationsLoading(true);
+    setExpirationsError(null);
+    try {
+      const response = await userAPI.getClientExpirationsRegister({
+        pastDays: EXPIRATION_PAST_DAYS,
+        futureDays: EXPIRATION_FUTURE_DAYS,
+      });
+      if (response.data.success) {
+        setExpirations(response.data.users || []);
+      } else {
+        setExpirationsError('Erreur lors du chargement du registre des expirations');
+      }
+    } catch (err: any) {
+      console.error('Erreur lors du chargement du registre des expirations:', err);
+      setExpirationsError(err.response?.data?.message || 'Erreur lors du chargement du registre des expirations');
+    } finally {
+      setExpirationsLoading(false);
     }
   };
 
@@ -871,6 +899,62 @@ export default function AdminUtilisateursPage() {
               <p className="text-sm text-green-600">{success}</p>
             </div>
           )}
+
+          <div className="mb-8">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-xl font-semibold">Registre expirations (J-{EXPIRATION_PAST_DAYS} à J+{EXPIRATION_FUTURE_DAYS})</h2>
+                <p className="text-muted-foreground mt-1">
+                  Clients avec `dateExpiration` dans l'intervalle, triés par date (les déjà expirés sont inclus).
+                </p>
+              </div>
+              {!expirationsLoading && (
+                <span className="px-2 py-1 rounded-full bg-orange-50 text-orange-700 text-xs font-semibold border border-orange-200">
+                  {expirations.length} client{expirations.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+
+            {expirationsLoading ? (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                <p className="text-muted-foreground">Chargement du registre...</p>
+              </div>
+            ) : expirationsError ? (
+              <p className="text-red-600 text-sm">{expirationsError}</p>
+            ) : expirations.length === 0 ? (
+              <p className="text-muted-foreground">Aucun client dans cette plage.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-3 font-semibold">Nom</th>
+                      <th className="text-left p-3 font-semibold">Prénom</th>
+                      <th className="text-left p-3 font-semibold">Téléphone</th>
+                      <th className="text-left p-3 font-semibold">Email</th>
+                      <th className="text-left p-3 font-semibold">Adresse</th>
+                      <th className="text-left p-3 font-semibold">Expiration</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expirations.map((u: any) => (
+                      <tr key={u.id || `${u.email}-${u.dateExpiration}`} className="border-b hover:bg-muted/30 transition-colors">
+                        <td className="p-3">{u.nom}</td>
+                        <td className="p-3">{u.prenom}</td>
+                        <td className="p-3">{u.telephone || '-'}</td>
+                        <td className="p-3">{u.email}</td>
+                        <td className="p-3">{u.adresse || '-'}</td>
+                        <td className="p-3 text-sm text-muted-foreground">
+                          {u.dateExpiration ? new Date(u.dateExpiration).toLocaleDateString('fr-FR') : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
           {(session?.user as any)?.role === 'superadmin' && (
             <div className="mb-6">

@@ -169,7 +169,8 @@ export default function PartenaireDashboard() {
           <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <Link href="/partenaire/dossiers" className="group">
-            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
+            <div className="rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-orange-200/70 to-orange-200/70 shadow-sm group-hover:shadow-md transition-all duration-300 group-hover:from-orange-400/70 group-hover:via-orange-400/70 group-hover:to-orange-400/70">
+              <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
               <div className="flex items-center justify-between mb-3">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <FolderOpen className="w-6 h-6 text-primary" />
@@ -185,97 +186,108 @@ export default function PartenaireDashboard() {
                 <span className="text-primary text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
+            </div>
           </Link>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-12 h-12 bg-yellow-500/10 rounded-lg flex items-center justify-center">
-                <Clock className="w-6 h-6 text-yellow-600" />
+          <div className="group rounded-xl p-[1px] bg-gradient-to-r from-yellow-200/70 via-amber-200/70 to-yellow-200/70 shadow-sm group-hover:shadow-md transition-all duration-300">
+            <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-12 h-12 bg-yellow-500/10 rounded-lg flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-yellow-600" />
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-foreground mb-0">{stats.dossiersEnAttente}</p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-3xl font-bold text-foreground mb-0">{stats.dossiersEnAttente}</p>
-          </div>
-        </div>
-            <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">En attente</h3>
-            <p className="text-xs text-gray-600 mb-3">Dossiers en attente de traitement</p>
-            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-              <span className="inline-flex items-center px-2 py-1 rounded-md bg-yellow-500/10 text-yellow-600 text-xs font-semibold">
-                En attente d'action
-              </span>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">En attente</h3>
+              <p className="text-xs text-gray-600 mb-3">Dossiers en attente de traitement</p>
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <span className="inline-flex items-center px-2 py-1 rounded-md bg-yellow-500/10 text-yellow-600 text-xs font-semibold">
+                  En attente d'action
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-green-600" />
+          <div className="group rounded-xl p-[1px] bg-gradient-to-r from-green-200/70 via-emerald-200/70 to-green-200/70 shadow-sm group-hover:shadow-md transition-all duration-300">
+            <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.dossiersAcceptes}</p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.dossiersAcceptes}</p>
-          </div>
-        </div>
-            <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Acceptés</h3>
-            <p className="text-xs text-gray-600 mb-3">Dossiers acceptés</p>
-            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-              <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-500/10 text-green-600 text-xs font-semibold">
-                En cours de traitement
-              </span>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Acceptés</h3>
+              <p className="text-xs text-gray-600 mb-3">Dossiers acceptés</p>
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-500/10 text-green-600 text-xs font-semibold">
+                  En cours de traitement
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-12 h-12 bg-red-500/10 rounded-lg flex items-center justify-center">
-                <XCircle className="w-6 h-6 text-red-600" />
+          <div className="group rounded-xl p-[1px] bg-gradient-to-r from-red-200/70 via-rose-200/70 to-red-200/70 shadow-sm group-hover:shadow-md transition-all duration-300">
+            <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-12 h-12 bg-red-500/10 rounded-lg flex items-center justify-center">
+                  <XCircle className="w-6 h-6 text-red-600" />
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-foreground mb-0">{stats.dossiersRefuses}</p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-3xl font-bold text-foreground mb-0">{stats.dossiersRefuses}</p>
-          </div>
-        </div>
-            <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Refusés</h3>
-            <p className="text-xs text-gray-600 mb-3">Dossiers refusés</p>
-            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-              <span className="inline-flex items-center px-2 py-1 rounded-md bg-red-500/10 text-red-600 text-xs font-semibold">
-                Dossiers refusés
-              </span>
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Refusés</h3>
+              <p className="text-xs text-gray-600 mb-3">Dossiers refusés</p>
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <span className="inline-flex items-center px-2 py-1 rounded-md bg-red-500/10 text-red-600 text-xs font-semibold">
+                  Dossiers refusés
+                </span>
+              </div>
             </div>
           </div>
 
           {/* Badge Messages */}
           <Link href="/partenaire/messages" className="group">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 hover:shadow-lg hover:border-blue-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
-                  <MessageSquare className="w-6 h-6 text-blue-600" />
+            <div className="rounded-xl p-[1px] bg-gradient-to-r from-blue-200/70 via-indigo-200/70 to-blue-200/70 shadow-sm group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)] transition-all duration-300">
+              <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                    <MessageSquare className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div className="text-right">
+                    <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-blue-600 transition-colors">{stats.messagesNonLus}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-blue-600 transition-colors">{stats.messagesNonLus}</p>
+                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Messages</h3>
+                <p className="text-xs text-gray-600 mb-3">Messages non lus</p>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <span className="text-xs text-gray-600">Consulter les messages</span>
+                  <span className="text-blue-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
                 </div>
-              </div>
-              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Messages</h3>
-              <p className="text-xs text-gray-600 mb-3">Messages non lus</p>
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-gray-600">Consulter les messages</span>
-                <span className="text-blue-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
           </Link>
 
           <Link href="/partenaire/notifications" className="group">
-            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-                  <Bell className="w-6 h-6 text-purple-600" />
+            <div className="rounded-xl p-[1px] bg-gradient-to-r from-purple-200/70 via-fuchsia-200/70 to-purple-200/70 shadow-sm transition-all duration-300 group-hover:from-purple-400/70 group-hover:via-fuchsia-400/70 group-hover:to-purple-400/70">
+              <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                    <Bell className="w-6 h-6 text-purple-600" />
+                  </div>
+                  <div className="text-right">
+                    <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-purple-600 transition-colors">{stats.notificationsNonLues}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-purple-600 transition-colors">{stats.notificationsNonLues}</p>
+                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Notifications</h3>
+                <p className="text-xs text-gray-600 mb-3">Notifications non lues</p>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <span className="text-xs text-gray-600">Consulter les notifications</span>
+                  <span className="text-purple-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
                 </div>
-              </div>
-              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Notifications</h3>
-              <p className="text-xs text-gray-600 mb-3">Notifications non lues</p>
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-gray-600">Consulter les notifications</span>
-                <span className="text-purple-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
           </Link>

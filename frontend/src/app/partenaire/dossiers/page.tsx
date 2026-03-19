@@ -1344,7 +1344,7 @@ export default function PartenaireDossiersPage() {
         <button
                   type="button"
                   onClick={() => setStatusFilter('pending')}
-                  className={`text-left bg-gradient-to-br from-yellow-50 to-yellow-100 border-l-4 border-yellow-500 rounded-lg p-4 shadow-sm transition-all ${
+                  className={`text-left bg-gradient-to-br from-yellow-50 to-yellow-100 border border-yellow-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                     statusFilter === 'pending'
                       ? 'ring-2 ring-yellow-500/60 shadow-md'
                       : 'hover:shadow-md hover:-translate-y-0.5'
@@ -1362,7 +1362,7 @@ export default function PartenaireDossiersPage() {
         <button
                   type="button"
                   onClick={() => setStatusFilter('in_progress')}
-                  className={`text-left bg-gradient-to-br from-blue-50 to-blue-100 border-l-4 border-blue-500 rounded-lg p-4 shadow-sm transition-all ${
+                  className={`text-left bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                     statusFilter === 'in_progress'
                       ? 'ring-2 ring-blue-500/60 shadow-md'
                       : 'hover:shadow-md hover:-translate-y-0.5'
@@ -1382,7 +1382,7 @@ export default function PartenaireDossiersPage() {
         <button
                   type="button"
                   onClick={() => setStatusFilter('closed')}
-                  className={`text-left bg-gradient-to-br from-green-50 to-green-100 border-l-4 border-green-500 rounded-lg p-4 shadow-sm transition-all ${
+                  className={`text-left bg-gradient-to-br from-green-50 to-green-100 border border-green-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                     statusFilter === 'closed'
                       ? 'ring-2 ring-green-500/60 shadow-md'
                       : 'hover:shadow-md hover:-translate-y-0.5'
@@ -1396,7 +1396,7 @@ export default function PartenaireDossiersPage() {
                 <button
                   type="button"
                   onClick={() => setStatusFilter('archived')}
-                  className={`text-left bg-gradient-to-br from-red-50 to-red-100 border-l-4 border-red-500 rounded-lg p-4 shadow-sm transition-all ${
+                  className={`text-left bg-gradient-to-br from-red-50 to-red-100 border border-red-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                     statusFilter === 'archived'
                       ? 'ring-2 ring-red-500/60 shadow-md'
                       : 'hover:shadow-md hover:-translate-y-0.5'
@@ -1516,15 +1516,15 @@ export default function PartenaireDossiersPage() {
                     {filteredDossiers.map((dossier) => (
                   <div
                     key={dossier._id || dossier.id}
-                    className={`border rounded-xl p-4 sm:p-5 hover:shadow-xl transition-all duration-200 bg-white w-full min-w-0 ${
+                    className={`relative group overflow-hidden rounded-xl p-4 sm:p-5 transition-all duration-300 bg-gradient-to-r shadow-sm hover:-translate-y-0.5 w-full min-w-0 ${
                       dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
-                        ? 'border-l-4 border-l-yellow-500 border-t border-r border-b border-gray-200'
+                        ? 'from-yellow-200/70 via-amber-200/70 to-yellow-200/70 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(234,179,8,0.5)]'
                         : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
-                        ? 'border-l-4 border-l-green-500 border-t border-r border-b border-gray-200'
+                        ? 'from-green-200/70 via-emerald-200/70 to-green-200/70 group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(34,197,94,0.5)]'
                         : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet'
-                        ? 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200'
-                        : 'border-l-4 border-l-blue-500 border-t border-r border-b border-gray-200'
-                    }`}
+                        ? 'from-red-200/70 via-rose-200/70 to-red-200/70 group-hover:from-red-400/70 group-hover:via-rose-400/70 group-hover:to-red-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(239,68,68,0.5)]'
+                        : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
+                    } after:content-[''] after:absolute after:inset-[1px] after:rounded-xl after:bg-white after:border after:border-white/70 after:-z-10 after:transition-transform after:duration-300 group-hover:after:shadow-md`}
                   >
                     {/* En-tête de la carte : vue compacte, identique à l’espace admin */}
                     <div className="flex flex-col gap-2 mb-2">

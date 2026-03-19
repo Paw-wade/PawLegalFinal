@@ -374,15 +374,15 @@ export default function DossiersPage() {
               {dossiers.map((dossier) => (
                 <div
                   key={dossier._id || dossier.id}
-                  className={`border rounded-xl p-4 sm:p-5 hover:shadow-xl transition-all duration-200 bg-white w-full min-w-0 ${
+                  className={`relative group overflow-hidden rounded-xl p-4 sm:p-5 transition-all duration-300 bg-gradient-to-r shadow-sm hover:-translate-y-0.5 w-full min-w-0 ${
                     dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
-                      ? 'border-l-4 border-l-yellow-500 border-t border-r border-b border-gray-200'
+                      ? 'from-yellow-200/70 via-amber-200/70 to-yellow-200/70 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(234,179,8,0.5)]'
                       : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
-                      ? 'border-l-4 border-l-green-500 border-t border-r border-b border-gray-200'
+                      ? 'from-green-200/70 via-emerald-200/70 to-green-200/70 group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(34,197,94,0.5)]'
                       : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet'
-                      ? 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200'
-                      : 'border-l-4 border-l-blue-500 border-t border-r border-b border-gray-200'
-                  }`}
+                      ? 'from-red-200/70 via-rose-200/70 to-red-200/70 group-hover:from-red-400/70 group-hover:via-rose-400/70 group-hover:to-red-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(239,68,68,0.5)]'
+                      : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
+                  } after:content-[''] after:absolute after:inset-[1px] after:rounded-xl after:bg-white after:border after:border-white/70 after:-z-10 after:transition-transform after:duration-300 group-hover:after:shadow-md`}
                 >
                   {/* En-tête de la carte : sur mobile en colonne (titre puis badges + lien) */}
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">

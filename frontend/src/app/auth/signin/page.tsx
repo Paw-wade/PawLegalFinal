@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { signIn } from 'next-auth/react';
+import { signIn, getSession } from 'next-auth/react';
 
 // Composants simplifiés
 function Button({ children, variant = 'default', size = 'default', className = '', disabled = false, type = 'button', ...props }: any) {
@@ -49,6 +49,17 @@ export default function SignInPage() {
   const [showPassword, setShowPassword] = useState(false);
   const isRedirecting = useRef(false);
 
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const getSessionWithRetry = async () => {
+    for (let i = 0; i < 4; i++) {
+      const session = await getSession();
+      if ((session?.user as any)?.role) return session;
+      await sleep(120);
+    }
+    return null;
+  };
+
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     
@@ -67,107 +78,61 @@ export default function SignInPage() {
       });
 
       if (result?.error) {
-        // Essayer d'obtenir le message d'erreur exact du backend
-        try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
-          const loginResponse = await fetch(`${API_URL}/auth/login`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email, password }),
-          });
-          
-          const loginData = await loginResponse.json();
-          setError(loginData.message || 'Email ou mot de passe incorrect');
-        } catch (err) {
-          // Si l'appel direct échoue, utiliser le message d'erreur de NextAuth
-          setError(result.error === 'CredentialsSignin' ? 'Email ou mot de passe incorrect' : result.error);
-        }
+        setError(result.error === 'CredentialsSignin' ? 'Email ou mot de passe incorrect' : result.error);
         setIsLoading(false);
       } else if (result?.ok) {
-        // Récupérer le token et les infos utilisateur depuis le backend
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
-          const loginResponse = await fetch(`${API_URL}/auth/login`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email, password }),
-          });
-          const loginData = await loginResponse.json();
-          if (loginData.success && loginData.token) {
-            // Stocker le token immédiatement
-            try {
-              localStorage.setItem('token', loginData.token);
-              console.log('🔑 Token stocké dans localStorage depuis signin');
-            } catch (e) {
-              console.error('Erreur lors du stockage du token:', e);
-            }
-            
-            // Si l'utilisateur doit personnaliser son mot de passe, le rediriger vers la page dédiée
-            if (loginData.user?.needsPasswordSetup) {
-              isRedirecting.current = true;
-              window.location.href = '/auth/setup-password';
-              return;
-            }
+          const sessionData = await getSessionWithRetry();
+          const sessionUser: any = sessionData?.user || {};
 
-            // Utiliser les données de la réponse pour rediriger immédiatement selon le rôle
-            const userRole = loginData.user?.role;
-            isRedirecting.current = true;
-            
-            // Les rôles admin et superadmin accèdent au dashboard admin
-            if (userRole === 'admin' || userRole === 'superadmin') {
-              window.location.href = '/admin';
-            } else if (userRole === 'partenaire') {
-              window.location.href = '/partenaire';
-            } else {
-              // Ne pas forcer la complétion immédiate, mais vérifier le délai de 7 jours
-              const daysRemaining = loginData.user?.daysRemaining;
-              if (daysRemaining !== null && daysRemaining <= 0) {
-                // Le délai est dépassé, rediriger vers la page de complétion avec un message
-                window.location.href = '/auth/complete-profile?expired=true';
-              } else {
-                window.location.href = '/client';
-              }
+          // Stocker le token pour les appels API Axios dès la connexion
+          if (sessionUser?.accessToken) {
+            try {
+              localStorage.setItem('token', sessionUser.accessToken);
+              console.log('🔑 Token stocké dans localStorage depuis signin');
+            } catch (storageError) {
+              console.error('Erreur lors du stockage du token:', storageError);
             }
-            return; // Sortir immédiatement
           }
+
+          isRedirecting.current = true;
+
+          if (sessionUser?.needsPasswordSetup) {
+            window.location.href = '/auth/setup-password';
+            return;
+          }
+
+          const userRole = sessionUser?.role;
+          if (userRole === 'admin' || userRole === 'superadmin') {
+            window.location.href = '/admin';
+            return;
+          }
+
+          if (userRole === 'partenaire') {
+            window.location.href = '/partenaire';
+            return;
+          }
+
+          const daysRemaining = sessionUser?.daysRemaining;
+          if (typeof daysRemaining === 'number' && daysRemaining <= 0) {
+            window.location.href = '/auth/complete-profile?expired=true';
+            return;
+          }
+
+          if (sessionUser?.profilComplete === false) {
+            window.location.href = '/auth/complete-profile';
+            return;
+          }
+
+          window.location.href = '/client';
+          return;
         } catch (err) {
-          console.error('Erreur lors de la récupération du token:', err);
+          console.error('Erreur lors de la lecture de session:', err);
         }
-        
-        // Fallback : attendre un peu et récupérer la session
-        setTimeout(async () => {
-          if (isRedirecting.current) return;
-          
-          try {
-            const sessionResponse = await fetch('/api/auth/session');
-            const sessionData = await sessionResponse.json();
-            const userRole = sessionData?.user?.role;
-            
-            isRedirecting.current = true;
-            
-            // Les rôles admin et superadmin accèdent au dashboard admin
-            if (userRole === 'admin' || userRole === 'superadmin') {
-              window.location.href = '/admin';
-            } else if (userRole === 'partenaire') {
-              window.location.href = '/partenaire';
-            } else {
-              const profilComplete = sessionData?.user?.profilComplete;
-              if (!profilComplete) {
-                window.location.href = '/auth/complete-profile';
-              } else {
-                window.location.href = '/client';
-              }
-            }
-          } catch (err) {
-            console.error('Erreur lors de la récupération de la session:', err);
-            isRedirecting.current = true;
-            window.location.href = '/client';
-          }
-        }, 300);
+
+        // Fallback ultra-simple si la session n'est pas encore prête
+        isRedirecting.current = true;
+        window.location.href = '/client';
       } else {
         setIsLoading(false);
       }

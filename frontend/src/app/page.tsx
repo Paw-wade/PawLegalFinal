@@ -131,7 +131,7 @@ export default function HomePage() {
   );
   const heroSubtitle = useCmsText(
     'home.hero.subtitle',
-    "Nous vous accompagnons dans toutes vos démarches administratives liées au séjour en France : première demande et renouvellement de titre de séjour, regroupement familial et demande de visa. Bénéficiez d’un accompagnement personnalisé pour constituer un dossier complet, conforme et sécurisé. Suivez l'évolution de votre dossier en temps réel sur la plateforme."
+    "Nous vous accompagnons dans toutes vos démarches administratives liées au séjour en France : première demande et renouvellement de titre de séjour, regroupement familial et demande de visa. Bénéficiez d’un accompagnement personnalisé pour constituer un dossier complet. Suivez l'évolution de votre dossier en temps réel sur la plateforme."
   );
   const heroCtaPrimary = useCmsText(
     'home.hero.cta_primary',
@@ -154,7 +154,7 @@ export default function HomePage() {
   );
   const domainsSubtitle = useCmsText(
     'home.domains.subtitle',
-    'Une expertise reconnue dans trois domaines essentiels du droit'
+    'Une expertise reconnue en droit des étrangers'
   );
 
   // Barre de menu mobile sous le header qui disparaît au scroll
@@ -271,7 +271,11 @@ export default function HomePage() {
   }, [heroSlides.length]);
 
   // Données structurées pour la section "Solutions" (thèmes à gauche / détail à droite)
-  const solutions = servicesConfig;
+  const solutions = [...servicesConfig].sort((a, b) => {
+    if (a.title === 'Consultation juridique') return 1;
+    if (b.title === 'Consultation juridique') return -1;
+    return 0;
+  });
   const [selectedSolutionIndex, setSelectedSolutionIndex] = useState(0);
 
   return (
@@ -590,7 +594,7 @@ export default function HomePage() {
                               Accéder au calculateur
                             </Button>
                           </Link>
-                        ) : selectedSolutionIndex === 0 ? (
+                        ) : current.title === 'Consultation juridique' ? (
                           <Link href="/auth/signup">
                             <Button size="lg" className="min-w-[180px]">
                               Créer mon compte
@@ -657,7 +661,6 @@ export default function HomePage() {
                 {[
                   "Pas de représentation en qualité d'avocat",
                   "Pas de représentation devant les juridictions",
-                  "Pas de conseil juridique personnalisé",
                   "Pas de représentation légale devant l'administration",
                   "Pas d'intervention dans les procédures contentieuses",
                 ].map((label, index) => (
@@ -687,12 +690,12 @@ export default function HomePage() {
                     {
                       title: "Nous ne nous représentons pas les utilisateurs en qualité d'avocats",
                       details:
-                        "Notre plateforme fournit des services d'assistance administrative et de facilitation, mais nous ne sommes pas un cabinet d'avocats. Nous ne pouvons pas vous représenter en tant qu'avocat, ni exercer les prérogatives réservées aux avocats. Pour toute représentation juridique, vous devez faire appel à un avocat inscrit au barreau.",
+                        "Notre plateforme fournit des services d'assistance administrative et de facilitation, mais nous ne sommes pas un cabinet d'avocats. Nous ne pouvons pas vous représenter en tant qu'avocat, ni exercer les prérogatives réservées aux avocats. Pour toute représentation juridique, nous vous mettons en relation avec un avocat spécialisé qui collabore avec nous.",
                     },
                     {
-                      title: "Nous ne représentons pas les utilisateurs devant les juridictions",
+                      title: "Nous ne représentons pas directement les utilisateurs devant les juridictions",
                       details:
-                        "Nous n'intervenons pas dans les procédures judiciaires. Si votre dossier nécessite une représentation devant un tribunal administratif, un tribunal judiciaire, ou toute autre juridiction, vous devez obligatoirement faire appel à un avocat. Nous pouvons cependant vous aider à trouver un avocat compétent dans votre région.",
+                        "Nous n'intervenons pas dans les procédures judiciaires. Si votre dossier nécessite une représentation devant un tribunal administratif, un tribunal judiciaire, ou toute autre juridiction, nous vous mettons en relation avec un avocat spécialisé.",
                     },
                     {
                       title: "Nous ne fournissons pas de conseil juridique personnalisé",
@@ -820,7 +823,7 @@ export default function HomePage() {
                         "Déléguer les formalités de demande et de renouvellement de titres de séjour et de visas, avec préparation et dépôt complet du dossier.",
                         "Accéder à des informations générales sur les différentes catégories de titres de séjour et leurs conditions.",
                         "Suivre l'avancement de tous vos dossiers dans un espace personnel sécurisé.",
-                        "Utiliser un outil de calcul des délais applicables aux titres de séjour et aux visas.",
+                        "Utiliser un outil de calcul des délais de recours applicables aux titres de séjour et aux visas.",
                         "Accéder à un répertoire de professionnels du droit (avocats) spécialisés en droit des étrangers pour être orienté en cas de situation complexe ou contentieuse.",
                       ],
                     },
@@ -856,14 +859,6 @@ export default function HomePage() {
                         </ul>
                       </div>
 
-                      <div className="mt-1 p-3 bg-orange-50 rounded-lg border border-orange-100 text-xs md:text-sm">
-                        <p className="text-gray-700 leading-relaxed">
-                          <strong className="text-gray-900">Note importante :</strong> La plateforme facilite la
-                          mise en relation et le suivi administratif, mais n'intervient pas juridiquement. En cas de
-                          refus, de contestation ou de procédure contentieuse, l'utilisateur est invité à consulter
-                          un avocat. La plateforme peut faciliter la mise en relation avec un professionnel du droit.
-                        </p>
-                      </div>
                     </>
                   );
                 })()}
@@ -903,7 +898,7 @@ export default function HomePage() {
             <p className={`text-lg text-gray-600 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-200 ${
               isVisible['temoignages-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
-              Plus de 1000 clients nous font confiance pour leurs démarches juridiques
+              Ils nous font confiance...
             </p>
           </div>
           
@@ -917,47 +912,69 @@ export default function HomePage() {
               <p className="text-muted-foreground">Aucun témoignage disponible pour le moment.</p>
             </div>
           ) : (
-            <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-              {temoignages.slice(0, 3).map((temoignage, index) => (
-                <div 
-                  key={temoignage._id || index} 
-                  className="group relative bg-gradient-to-br from-white to-primary/5 rounded-2xl p-6 shadow-md hover:shadow-2xl transition-all duration-500 border border-primary/10 hover:border-primary/30 transform hover:-translate-y-2"
-                  style={{ 
-                    animation: isVisible['temoignages'] ? `fadeIn 0.6s ease-out ${index * 150}ms both` : 'none'
-                  }}
-                >
-                  {/* Note avec étoiles améliorée */}
-                  <div className="flex items-center gap-1 mb-4 relative z-10">
-                    {[...Array(5)].map((_, i) => (
-                      <span 
-                        key={i} 
-                        className={`text-lg transition-all duration-200 ${i < temoignage.note ? 'text-yellow-400 drop-shadow-sm' : 'text-gray-300'}`}
-                      >
-                        ★
-                      </span>
-                    ))}
-                    <span className="ml-2 text-xs font-medium text-primary/70">{temoignage.note}/5</span>
+            <>
+              {/* Desktop: 3 colonnes */}
+              <div className="hidden md:grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+                {temoignages.slice(0, 3).map((temoignage, index) => (
+                  <div
+                    key={temoignage._id || index}
+                    className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200"
+                    style={{
+                      animation: isVisible['temoignages'] ? `fadeIn 0.6s ease-out ${index * 150}ms both` : 'none',
+                    }}
+                  >
+                    {/* Note avec étoiles */}
+                    <div className="flex items-center gap-1 mb-4">
+                      {[...Array(5)].map((_, i) => (
+                        <span
+                          key={i}
+                          className={`text-lg ${i < temoignage.note ? 'text-orange-500' : 'text-gray-300'}`}
+                        >
+                          ★
+                        </span>
+                      ))}
+                      <span className="ml-2 text-xs font-semibold text-primary/80">{temoignage.note}/5</span>
+                    </div>
+
+                    {/* Texte du témoignage */}
+                    <p className="text-gray-800 leading-relaxed font-medium text-sm">
+                      {temoignage.texte}
+                    </p>
                   </div>
-                  
-                  {/* Texte du témoignage */}
-                  <p className="text-foreground mb-6 leading-relaxed relative z-10 font-medium text-sm">
-                    {temoignage.texte}
-                  </p>
-                  
-                  {/* Informations client améliorées */}
-                  <div className="flex items-center gap-3 pt-4 border-t border-primary/20 relative z-10">
-                    <div className="flex-1">
-                      <p className="font-bold text-foreground text-sm font-semibold">
-                        {temoignage.nom || 'Client'}
-                      </p>
-                      <p className="text-xs text-primary/70 font-medium">
-                        {temoignage.role || 'Client'}
+                ))}
+              </div>
+
+              {/* Mobile: défilement horizontal 2 par 2 */}
+              <div className="md:hidden max-w-6xl mx-auto -mx-4 px-4 overflow-x-auto snap-x snap-mandatory pb-2">
+                <div className="flex gap-4">
+                  {temoignages.slice(0, 3).map((temoignage, index) => (
+                    <div
+                      key={temoignage._id || index}
+                      className="snap-start min-w-[calc(50%-0.5rem)] bg-white rounded-2xl p-6 shadow-sm border border-gray-200"
+                      style={{
+                        animation: isVisible['temoignages'] ? `fadeIn 0.6s ease-out ${index * 150}ms both` : 'none',
+                      }}
+                    >
+                      <div className="flex items-center gap-1 mb-4">
+                        {[...Array(5)].map((_, i) => (
+                          <span
+                            key={i}
+                            className={`text-lg ${i < temoignage.note ? 'text-orange-500' : 'text-gray-300'}`}
+                          >
+                            ★
+                          </span>
+                        ))}
+                        <span className="ml-2 text-xs font-semibold text-primary/80">{temoignage.note}/5</span>
+                      </div>
+
+                      <p className="text-gray-800 leading-relaxed font-medium text-sm">
+                        {temoignage.texte}
                       </p>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
       </section>
