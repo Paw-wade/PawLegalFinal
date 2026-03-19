@@ -1355,7 +1355,9 @@ export default function PartenaireDossiersPage() {
                     {dossiers.filter((d: any) =>
                       // Dossiers transmis au partenaire mais pas encore acceptés ni refusés
                       Array.isArray(d.transmittedTo) &&
-                      d.transmittedTo.some((t: any) => t.status === 'pending')
+                      d.transmittedTo.some((t: any) => t.status === 'pending') &&
+                      !d.estCloture &&
+                      !(d.estArchive || d.statut === 'annule')
                     ).length}
                   </p>
         </button>
@@ -1375,7 +1377,27 @@ export default function PartenaireDossiersPage() {
                       Array.isArray(d.transmittedTo) &&
                       d.transmittedTo.some((t: any) => t.status === 'accepted') &&
                       !d.estCloture &&
-                      !d.estArchive
+                      !(d.estArchive || d.statut === 'annule')
+                    ).length}
+                  </p>
+        </button>
+        <button
+                  type="button"
+                  onClick={() => setStatusFilter('unfavorable')}
+                  className={`text-left bg-gradient-to-br from-red-50 to-red-100 border border-red-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
+                    statusFilter === 'unfavorable'
+                      ? 'ring-2 ring-red-500/60 shadow-md'
+                      : 'hover:shadow-md hover:-translate-y-0.5'
+                  }`}
+                >
+                  <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Délais</p>
+                  <p className="text-2xl font-bold text-red-900">
+                    {dossiers.filter((d: any) =>
+                      // Dossiers refusés par le partenaire (à traiter côté client)
+                      Array.isArray(d.transmittedTo) &&
+                      d.transmittedTo.some((t: any) => t.status === 'refused') &&
+                      !d.estCloture &&
+                      !(d.estArchive || d.statut === 'annule')
                     ).length}
                   </p>
         </button>
@@ -1404,7 +1426,7 @@ export default function PartenaireDossiersPage() {
                 >
                   <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
                   <p className="text-2xl font-bold text-red-900">
-                    {dossiers.filter((d: any) => d.estArchive).length}
+                    {dossiers.filter((d: any) => d.estArchive || d.statut === 'annule').length}
                   </p>
         </button>
       </div>
@@ -1422,6 +1444,7 @@ export default function PartenaireDossiersPage() {
                           <>
                             {statusFilter === 'pending' && 'En attente (dossiers transmis non encore acceptés)'}
                             {statusFilter === 'in_progress' && 'En cours (dossiers acceptés non clôturés)'}
+                            {statusFilter === 'unfavorable' && 'Délais (dossiers refusés)'}
                             {statusFilter === 'closed' && 'Clôturés'}
                             {statusFilter === 'archived' && 'Archivés'}
                           </>
@@ -1454,7 +1477,9 @@ export default function PartenaireDossiersPage() {
                     // Dossiers transmis au partenaire mais pas encore acceptés / refusés
                     if (
                       !Array.isArray(d.transmittedTo) ||
-                      !d.transmittedTo.some((t: any) => t.status === 'pending')
+                      !d.transmittedTo.some((t: any) => t.status === 'pending') ||
+                      d.estCloture ||
+                      (d.estArchive || d.statut === 'annule')
                     ) {
                       return false;
                     }
@@ -1464,7 +1489,17 @@ export default function PartenaireDossiersPage() {
                       !Array.isArray(d.transmittedTo) ||
                       !d.transmittedTo.some((t: any) => t.status === 'accepted') ||
                       d.estCloture ||
-                      d.estArchive
+                      (d.estArchive || d.statut === 'annule')
+                    ) {
+                      return false;
+                    }
+                  } else if (statusFilter === 'unfavorable') {
+                    // Dossiers refusés par le partenaire
+                    if (
+                      !Array.isArray(d.transmittedTo) ||
+                      !d.transmittedTo.some((t: any) => t.status === 'refused') ||
+                      d.estCloture ||
+                      (d.estArchive || d.statut === 'annule')
                     ) {
                       return false;
                     }
@@ -1473,7 +1508,7 @@ export default function PartenaireDossiersPage() {
                     if (!d.estCloture) return false;
                   } else if (statusFilter === 'archived') {
                     // Dossiers archivés
-                    if (!d.estArchive) return false;
+                    if (!(d.estArchive || (d.statut || '') === 'annule')) return false;
                   }
 
                   // Filtre par utilisateur
@@ -1516,18 +1551,19 @@ export default function PartenaireDossiersPage() {
                     {filteredDossiers.map((dossier) => (
                   <div
                     key={dossier._id || dossier.id}
-                    className={`relative group overflow-hidden rounded-xl p-4 sm:p-5 transition-all duration-300 bg-gradient-to-r shadow-sm hover:-translate-y-0.5 w-full min-w-0 ${
+                    className={`relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 bg-gradient-to-r shadow-sm w-full min-w-0 ${
                       dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
                         ? 'from-yellow-200/70 via-amber-200/70 to-yellow-200/70 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(234,179,8,0.5)]'
                         : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
                         ? 'from-green-200/70 via-emerald-200/70 to-green-200/70 group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(34,197,94,0.5)]'
-                        : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet'
+                        : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet' || dossier.statut === 'annule'
                         ? 'from-red-200/70 via-rose-200/70 to-red-200/70 group-hover:from-red-400/70 group-hover:via-rose-400/70 group-hover:to-red-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(239,68,68,0.5)]'
                         : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
-                    } after:content-[''] after:absolute after:inset-[1px] after:rounded-xl after:bg-white after:border after:border-white/70 after:-z-10 after:transition-transform after:duration-300 group-hover:after:shadow-md`}
+                    }`}
                   >
-                    {/* En-tête de la carte : vue compacte, identique à l’espace admin */}
-                    <div className="flex flex-col gap-2 mb-2">
+                    <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                      {/* En-tête de la carte : vue compacte, identique à l’espace admin */}
+                      <div className="flex flex-col gap-2 mb-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <button
@@ -2462,6 +2498,7 @@ export default function PartenaireDossiersPage() {
                     </div>
                     </>
                     )}
+                      </div>
                   </div>
                 ))}
                   </div>
