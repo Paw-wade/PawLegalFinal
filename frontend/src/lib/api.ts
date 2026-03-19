@@ -781,6 +781,10 @@ export const notificationsAPI = {
   // Supprimer une notification
   deleteNotification: (id: string) =>
     api.delete(`/notifications/${id}`),
+
+  // Supprimer toutes les notifications de l'utilisateur connecté
+  deleteAllNotifications: () =>
+    api.delete('/notifications'),
 };
 
 export const messagesAPI = {
