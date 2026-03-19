@@ -374,7 +374,7 @@ export default function DossiersPage() {
               {dossiers.map((dossier) => (
                 <div
                   key={dossier._id || dossier.id}
-                  className={`relative group overflow-hidden rounded-xl p-4 sm:p-5 transition-all duration-300 bg-gradient-to-r shadow-sm hover:-translate-y-0.5 w-full min-w-0 ${
+                  className={`relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 bg-gradient-to-r shadow-sm w-full min-w-0 ${
                     dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
                       ? 'from-yellow-200/70 via-amber-200/70 to-yellow-200/70 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(234,179,8,0.5)]'
                       : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
@@ -382,14 +382,15 @@ export default function DossiersPage() {
                       : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet'
                       ? 'from-red-200/70 via-rose-200/70 to-red-200/70 group-hover:from-red-400/70 group-hover:via-rose-400/70 group-hover:to-red-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(239,68,68,0.5)]'
                       : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
-                  } after:content-[''] after:absolute after:inset-[1px] after:rounded-xl after:bg-white after:border after:border-white/70 after:-z-10 after:transition-transform after:duration-300 group-hover:after:shadow-md`}
+                  }`}
                 >
-                  {/* En-tête de la carte : sur mobile en colonne (titre puis badges + lien) */}
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
-                    <div className="flex-1 min-w-0 pr-0 sm:pr-2">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-baseline gap-2">
+                  <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                    {/* En-tête de la carte : sur mobile en colonne (titre puis badges + lien) */}
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                      <div className="flex-1 min-w-0 pr-0 sm:pr-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-baseline gap-2">
                             <h3 className="font-semibold text-base text-foreground line-clamp-1 leading-snug truncate">
                               {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
                             </h3>
@@ -726,6 +727,7 @@ export default function DossiersPage() {
                   </div>
                     </div>
                   )}
+                  </div>
                 </div>
               ))}
             </div>

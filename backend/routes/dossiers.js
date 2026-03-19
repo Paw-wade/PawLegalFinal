@@ -2077,6 +2077,21 @@ router.put(
       if (categorie) dossier.categorie = categorie;
       if (type !== undefined) dossier.type = type;
       if (statut) dossier.statut = statut;
+
+      // Synchroniser le statut partenaire (tableau transmittedTo) quand l'admin change le statut du dossier.
+      // Cela permet aux filtres des espaces client/partenaire de réagir immédiatement.
+      if (statut && Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0) {
+        if (statut === 'en_cours') {
+          dossier.transmittedTo.forEach((t) => {
+            t.status = 'accepted';
+          });
+        } else if (statut === 'refuse') {
+          dossier.transmittedTo.forEach((t) => {
+            t.status = 'refused';
+          });
+        }
+      }
+
       if (priorite) dossier.priorite = priorite;
       if (dateEcheance) dossier.dateEcheance = dateEcheance;
       if (notes !== undefined) dossier.notes = notes;

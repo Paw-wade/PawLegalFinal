@@ -202,6 +202,9 @@ export default function DocumentsPage() {
       if (response.data.success) {
         setSuccess('Document supprimé avec succès');
         loadDocuments();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('documentsUpdated'));
+        }
         setTimeout(() => setSuccess(null), 3000);
       }
     } catch (err: any) {

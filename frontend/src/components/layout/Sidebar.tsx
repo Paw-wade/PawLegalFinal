@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { signOut } from 'next-auth/react';
-import { forumAPI, documentRequestsAPI } from '@/lib/api';
+import { forumAPI, documentsAPI } from '@/lib/api';
 import {
   LayoutDashboard,
   FolderOpen,
@@ -70,25 +70,35 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     loadForumCount();
   }, []);
 
-  useEffect(() => {
-    const loadDocumentsPendingCount = async () => {
-      try {
-        const res = await documentRequestsAPI.getRequests({ status: 'pending' });
-        if (res.data?.success && Array.isArray(res.data.documentRequests)) {
-          // Ne compter que les documents demandés et non encore fournis
-          const pendingOnly = res.data.documentRequests.filter((req: any) => {
-            const status = req.status || req.statut || '';
-            return status === 'pending';
-          });
-          setDocumentsPendingCount(pendingOnly.length);
-        } else if (res.data?.success && typeof res.data.count === 'number') {
-          setDocumentsPendingCount(res.data.count);
-        }
-      } catch (err) {
-        console.error('Erreur lors du chargement du nombre de documents demandés non fournis:', err);
+  const refreshDocumentsCount = async () => {
+    try {
+      const res = await documentsAPI.getMyDocuments();
+      const docs = res.data?.documents;
+      if (res.data?.success && Array.isArray(docs)) {
+        setDocumentsPendingCount(docs.length);
+      } else if (res.data?.success && typeof res.data.count === 'number') {
+        setDocumentsPendingCount(res.data.count);
+      } else {
+        setDocumentsPendingCount(0);
       }
+    } catch (err) {
+      console.error('Erreur lors du chargement du nombre de documents existants:', err);
+      setDocumentsPendingCount(0);
+    }
+  };
+
+  useEffect(() => {
+    refreshDocumentsCount();
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      refreshDocumentsCount();
     };
-    loadDocumentsPendingCount();
+    window.addEventListener('documentsUpdated', handler);
+    return () => window.removeEventListener('documentsUpdated', handler);
+    // refreshDocumentsCount est stable ici car il ne dépend pas de props/state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

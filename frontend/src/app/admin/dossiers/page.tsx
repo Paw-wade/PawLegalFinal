@@ -288,6 +288,34 @@ export default function AdminDossiersPage() {
     'all' | 'pending' | 'in_progress' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
   >('all');
   const [userFilter, setUserFilter] = useState<string>('all');
+
+  // Toujours proposer un minimum de 3 actions avant toute "édition des étapes".
+  const DEFAULT_ADMIN_ETAPES = [
+    { id: 'en_cours', label: 'Accepter', ordre: 0 },
+    { id: 'refuse', label: 'Refuser', ordre: 1 },
+    { id: 'annule', label: 'Archiver', ordre: 2 },
+  ];
+
+  const getEffectiveEtapes = (dossier: any) => {
+    const customSteps = Array.isArray(dossier?.etapesSupplementaires) ? dossier.etapesSupplementaires : [];
+    const defaultIds = new Set(DEFAULT_ADMIN_ETAPES.map((s) => s.id));
+
+    const normalizedCustom = customSteps.map((s: any, idx: number) => ({
+      id: s?.id || s?.label || String(idx),
+      label: s?.label || s?.id || `Étape ${idx + 1}`,
+      ordre: typeof s?.ordre === 'number' ? s.ordre : idx,
+      date: s?.date,
+      addedAt: s?.addedAt,
+      addedBy: s?.addedBy,
+    }));
+
+    // Conserver l'ordre des étapes custom (mais toujours avec les 3 étapes par défaut en tête).
+    const customExtra = normalizedCustom
+      .filter((s: any) => !defaultIds.has(String(s.id)))
+      .sort((a: any, b: any) => (a.ordre ?? 0) - (b.ordre ?? 0));
+
+    return [...DEFAULT_ADMIN_ETAPES, ...customExtra];
+  };
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState<any>(null);
   const [documentRequestData, setDocumentRequestData] = useState({
     selectedDocumentTypes: [] as string[],
@@ -1364,7 +1392,7 @@ export default function AdminDossiersPage() {
                       : 'hover:shadow-md hover:-translate-y-0.5'
                   }`}
                 >
-                  <p className="text-xs text-yellow-700 font-semibold mb-1 uppercase tracking-wide">En attente</p>
+                  <p className="text-xs text-yellow-700 font-semibold mb-1 uppercase tracking-wide">Délais</p>
                   <p className="text-2xl font-bold text-yellow-900">
                     {dossiers.filter((d: any) => {
                       const hasClient = !!d.user; // dossier créé par un utilisateur
@@ -1373,11 +1401,13 @@ export default function AdminDossiersPage() {
                         !rawStatut ||
                         rawStatut === 'recu' ||
                         rawStatut === 'en_attente_onboarding';
+                      const isDelaysByRefusal = rawStatut === 'refuse';
                       return (
                         hasClient &&
-                        initialStatut &&
+                        (initialStatut || isDelaysByRefusal) &&
                         !d.estCloture &&
-                        !d.estArchive
+                        !d.estArchive &&
+                        rawStatut !== 'annule'
                       );
                     }).length}
                   </p>
@@ -1402,9 +1432,13 @@ export default function AdminDossiersPage() {
                         (!rawStatut ||
                           rawStatut === 'recu' ||
                           rawStatut === 'en_attente_onboarding');
+                      const isRefused = rawStatut === 'refuse';
+                      const isArchived = rawStatut === 'annule';
                       return (
                         !d.estCloture &&
                         !d.estArchive &&
+                        !isArchived &&
+                        !isRefused &&
                         !initialStatut
                       );
                     }).length}
@@ -1435,7 +1469,7 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
                   <p className="text-2xl font-bold text-red-900">
-                    {dossiers.filter((d: any) => d.estArchive).length}
+                    {dossiers.filter((d: any) => d.estArchive || d.statut === 'annule').length}
                   </p>
                 </button>
               </div>
@@ -1451,7 +1485,7 @@ export default function AdminDossiersPage() {
                       <span className="font-semibold text-primary">
                         {statusFilter !== 'all' && (
                           <>
-                            {statusFilter === 'pending' && 'En attente'}
+                            {statusFilter === 'pending' && 'Délais'}
                             {statusFilter === 'in_progress' && 'En cours'}
                             {statusFilter === 'closed' && 'Clôturés'}
                             {statusFilter === 'archived' && 'Archivés'}
@@ -1498,11 +1532,13 @@ export default function AdminDossiersPage() {
                       !rawStatut ||
                       rawStatut === 'recu' ||
                       rawStatut === 'en_attente_onboarding';
+                    const isDelaysByRefusal = rawStatut === 'refuse';
                     if (
                       !hasClient ||
-                      !initialStatut ||
+                      !(initialStatut || isDelaysByRefusal) ||
                       d.estCloture ||
-                      d.estArchive
+                      d.estArchive ||
+                      rawStatut === 'annule'
                     ) {
                       return false;
                     }
@@ -1515,8 +1551,12 @@ export default function AdminDossiersPage() {
                       (!rawStatut ||
                         rawStatut === 'recu' ||
                         rawStatut === 'en_attente_onboarding');
+                    const isRefused = rawStatut === 'refuse';
+                    const isArchived = rawStatut === 'annule';
                     if (
                       initialStatut ||
+                      isRefused ||
+                      isArchived ||
                       d.estCloture ||
                       d.estArchive
                     ) {
@@ -1525,7 +1565,7 @@ export default function AdminDossiersPage() {
                   } else if (statusFilter === 'closed') {
                     if (!d.estCloture) return false;
                   } else if (statusFilter === 'archived') {
-                    if (!d.estArchive) return false;
+                    if (!(d.estArchive || (d.statut || '') === 'annule')) return false;
                   }
 
                   // Filtre par utilisateur
@@ -1568,18 +1608,19 @@ export default function AdminDossiersPage() {
                     {filteredDossiers.map((dossier) => (
                   <div
                     key={dossier._id || dossier.id}
-                    className={`relative group overflow-hidden rounded-xl p-4 sm:p-5 transition-all duration-300 bg-gradient-to-r shadow-sm hover:-translate-y-0.5 w-full min-w-0 ${
+                    className={`relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 bg-gradient-to-r shadow-sm w-full min-w-0 ${
                       dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
                         ? 'from-yellow-200/70 via-amber-200/70 to-yellow-200/70 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(234,179,8,0.5)]'
                         : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
                         ? 'from-green-200/70 via-emerald-200/70 to-green-200/70 group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(34,197,94,0.5)]'
-                        : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet'
+                        : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet' || dossier.statut === 'annule'
                         ? 'from-red-200/70 via-rose-200/70 to-red-200/70 group-hover:from-red-400/70 group-hover:via-rose-400/70 group-hover:to-red-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(239,68,68,0.5)]'
                         : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
-                    } after:content-[''] after:absolute after:inset-[1px] after:rounded-xl after:bg-white after:border after:border-white/70 after:-z-10 after:transition-transform after:duration-300 group-hover:after:shadow-md`}
+                    }`}
                   >
-                    {/* En-tête de la carte : vue admin très compacte, infos essentielles sur toute la largeur */}
-                    <div className="flex flex-col gap-2 mb-2">
+                    <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                      {/* En-tête de la carte : vue admin très compacte, infos essentielles sur toute la largeur */}
+                      <div className="flex flex-col gap-2 mb-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <button
@@ -1736,6 +1777,7 @@ export default function AdminDossiersPage() {
                     {/* Avancement du dossier */}
                     {(() => {
                       const progress = getDossierProgress(dossier.statut);
+                      const effectiveEtapes = getEffectiveEtapes(dossier);
                       return (
                         <div className="mb-4">
                           <div className="flex items-center justify-between text-xs mb-1.5">
@@ -1753,10 +1795,10 @@ export default function AdminDossiersPage() {
                               style={{width: `${progress}%`}}
                             />
                           </div>
-                          {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
+                          {Array.isArray(effectiveEtapes) && effectiveEtapes.length > 0 && (
                             <div className="mt-1">
                               <div className="flex items-center gap-1 justify-between">
-                                {dossier.etapesSupplementaires.map((step: any, index: number) => {
+                                {effectiveEtapes.map((step: any, index: number) => {
                                   const isCurrent =
                                     dossier.statut &&
                                     (dossier.statut === step.label || dossier.statut === step.id);
@@ -2564,28 +2606,33 @@ export default function AdminDossiersPage() {
                             onChange={(e) => handleChangeStatut(dossier._id || dossier.id, e.target.value)}
                             className="text-xs px-2 py-1.5 rounded-md border border-gray-300 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors w-full"
                             disabled={isLoading}
-                            title="Étape actuelle du dossier, choisie parmi les étapes définies dans l'édition des étapes."
+                            title="Étape actuelle du dossier, choisie parmi les étapes (y compris les étapes par défaut)."
                           >
-                            {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 ? (
-                              <>
-                                {!dossier.statut && (
-                                  <option value="">Sélectionner une étape</option>
-                                )}
-                                {dossier.etapesSupplementaires.map((etape: any, idx: number) => {
-                                  const value = etape.id || etape.label || String(idx);
-                                  return (
-                                    <option
-                                      key={value}
-                                      value={value}
-                                    >
-                                      {etape.label || etape.id || `Étape ${idx + 1}`}
-                                    </option>
-                                  );
-                                })}
-                              </>
-                            ) : (
-                              <option value="">Aucune étape définie (ouvrir "Éditer les étapes")</option>
-                            )}
+                            {(() => {
+                              const effectiveEtapes = getEffectiveEtapes(dossier);
+                              const currentStatut = dossier.statut || '';
+                              const hasCurrentOption = !!currentStatut && effectiveEtapes.some((s: any) => String(s.id) === String(currentStatut));
+
+                              return (
+                                <>
+                                  {/* Si le statut actuel n'est pas dans les étapes (ex: "Reçu"), afficher une option dédiée */}
+                                  {currentStatut && !hasCurrentOption && (
+                                    <option value={currentStatut}>{getStatutLabel(currentStatut)}</option>
+                                  )}
+
+                                  {!currentStatut && <option value="">Sélectionner une étape</option>}
+
+                                  {effectiveEtapes.map((etape: any, idx: number) => {
+                                    const value = String(etape.id ?? etape.label ?? idx);
+                                    return (
+                                      <option key={value} value={value}>
+                                        {etape.label || etape.id || `Étape ${idx + 1}`}
+                                      </option>
+                                    );
+                                  })}
+                                </>
+                              );
+                            })()}
                           </select>
                         </div>
                         <div>
@@ -2611,6 +2658,7 @@ export default function AdminDossiersPage() {
                     </div>
                     </>
                     )}
+                  </div>
                   </div>
                 ))}
                   </div>
