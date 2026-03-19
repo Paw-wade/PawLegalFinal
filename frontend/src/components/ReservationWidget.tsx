@@ -97,8 +97,14 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
       localStorage.setItem('reservationWidgetOpen', 'true');
     }
   };
-  // Date du jour au format YYYY-MM-DD
-  const getTodayDate = () => new Date().toISOString().split('T')[0];
+  // Date du jour au format YYYY-MM-DD (timezone locale, sans décalage UTC)
+  const getTodayDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // Liste des motifs de rendez-vous
   const motifsOptions = [

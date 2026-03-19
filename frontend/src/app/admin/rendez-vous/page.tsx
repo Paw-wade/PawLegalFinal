@@ -426,7 +426,7 @@ export default function AdminRendezVousPage() {
             <button
               type="button"
               onClick={() => setStatusFilter('en_attente')}
-              className={`text-left bg-gradient-to-br from-yellow-50 to-yellow-100 border-l-4 border-yellow-500 rounded-lg p-4 shadow-sm transition-all ${
+              className={`text-left bg-gradient-to-br from-yellow-50 to-yellow-100 border border-yellow-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                 statusFilter === 'en_attente'
                   ? 'ring-2 ring-yellow-500/60 shadow-md'
                   : 'hover:shadow-md hover:-translate-y-0.5'
@@ -440,7 +440,7 @@ export default function AdminRendezVousPage() {
             <button
               type="button"
               onClick={() => setStatusFilter('confirme')}
-              className={`text-left bg-gradient-to-br from-blue-50 to-blue-100 border-l-4 border-blue-500 rounded-lg p-4 shadow-sm transition-all ${
+              className={`text-left bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                 statusFilter === 'confirme'
                   ? 'ring-2 ring-blue-500/60 shadow-md'
                   : 'hover:shadow-md hover:-translate-y-0.5'
@@ -454,7 +454,7 @@ export default function AdminRendezVousPage() {
             <button
               type="button"
               onClick={() => setStatusFilter('annule')}
-              className={`text-left bg-gradient-to-br from-red-50 to-red-100 border-l-4 border-red-500 rounded-lg p-4 shadow-sm transition-all ${
+              className={`text-left bg-gradient-to-br from-red-50 to-red-100 border border-red-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                 statusFilter === 'annule'
                   ? 'ring-2 ring-red-500/60 shadow-md'
                   : 'hover:shadow-md hover:-translate-y-0.5'
@@ -468,7 +468,7 @@ export default function AdminRendezVousPage() {
             <button
               type="button"
               onClick={() => setStatusFilter('termine')}
-              className={`text-left bg-gradient-to-br from-green-50 to-green-100 border-l-4 border-green-500 rounded-lg p-4 shadow-sm transition-all ${
+              className={`text-left bg-gradient-to-br from-green-50 to-green-100 border border-green-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                 statusFilter === 'termine'
                   ? 'ring-2 ring-green-500/60 shadow-md'
                   : 'hover:shadow-md hover:-translate-y-0.5'
@@ -611,27 +611,27 @@ export default function AdminRendezVousPage() {
                 // Déterminer le style de la bordure gauche selon le statut (comme pour les dossiers)
                 const getCardBorderStyle = () => {
                   if (rdv.archived) {
-                    return 'border-l-4 border-l-gray-500 border-t border-r border-b border-gray-200 opacity-75';
+                    return 'border border-gray-400/70 opacity-75 hover:border-gray-500/80 hover:shadow-[0_12px_30px_-18px_rgba(107,114,128,0.5)]';
                   }
                   if (statut === 'annule' || statut === 'annulé') {
-                    return 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200';
+                    return 'border border-red-300/70 hover:border-red-500/80 hover:shadow-[0_12px_30px_-18px_rgba(239,68,68,0.55)]';
                   }
                   if (statut === 'termine' || statut === 'terminé' || rdv.effectue) {
-                    return 'border-l-4 border-l-green-500 border-t border-r border-b border-gray-200';
+                    return 'border border-green-300/70 hover:border-green-500/80 hover:shadow-[0_12px_30px_-18px_rgba(34,197,94,0.55)]';
                   }
                   if (isPast && !rdv.effectue && statut !== 'annule' && statut !== 'annulé') {
-                    return 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200';
+                    return 'border border-red-300/70 hover:border-red-500/80 hover:shadow-[0_12px_30px_-18px_rgba(239,68,68,0.55)]';
                   }
                   if (statut === 'confirme' || statut === 'confirmé') {
-                    return 'border-l-4 border-l-blue-500 border-t border-r border-b border-gray-200';
+                    return 'border border-blue-300/70 hover:border-blue-500/80 hover:shadow-[0_12px_30px_-18px_rgba(59,130,246,0.55)]';
                   }
-                  return 'border-l-4 border-l-yellow-500 border-t border-r border-b border-gray-200';
+                  return 'border border-yellow-300/70 hover:border-yellow-500/80 hover:shadow-[0_12px_30px_-18px_rgba(234,179,8,0.55)]';
                 };
                 
                 return (
                   <div
                     key={rdv._id || rdv.id}
-                    className={`border rounded-xl p-5 hover:shadow-xl transition-all duration-200 bg-white ${getCardBorderStyle()}`}
+                    className={`rounded-xl p-5 transition-all duration-300 bg-white hover:-translate-y-0.5 ${getCardBorderStyle()}`}
                   >
                     {/* En-tête de la carte */}
                     <div className="flex items-start justify-between mb-3">

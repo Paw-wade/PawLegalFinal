@@ -40,6 +40,8 @@ const authOptions: NextAuthOptions = {
               name: `${data.user.firstName} ${data.user.lastName}`,
               role: data.user.role || 'client',
               profilComplete: data.user.profilComplete || false,
+              needsPasswordSetup: !!data.user.needsPasswordSetup,
+              daysRemaining: typeof data.user.daysRemaining === 'number' ? data.user.daysRemaining : null,
               token: data.token
             };
           }
@@ -65,6 +67,8 @@ const authOptions: NextAuthOptions = {
         token.email = user.email || undefined; // Stocker l'email dans le token
         token.role = (user as any).role || 'client';
         token.profilComplete = (user as any).profilComplete || false;
+        token.needsPasswordSetup = (user as any).needsPasswordSetup || false;
+        token.daysRemaining = (user as any).daysRemaining ?? null;
         token.accessToken = (user as any).token;
       }
       return token;
@@ -78,6 +82,8 @@ const authOptions: NextAuthOptions = {
         }
         (session.user as any).role = token.role as string;
         (session.user as any).profilComplete = token.profilComplete as boolean;
+        (session.user as any).needsPasswordSetup = token.needsPasswordSetup as boolean;
+        (session.user as any).daysRemaining = (token.daysRemaining as number | null) ?? null;
         (session.user as any).accessToken = token.accessToken as string;
         
         // Stocker le token dans localStorage côté client si disponible

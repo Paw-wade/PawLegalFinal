@@ -49,9 +49,9 @@ interface ThreadResponse {
 }
 
 const getAuthorLabel = (user?: { prenom?: string; nom?: string; role?: string }) => {
-  if (!user) return 'Auteur inconnu';
+  if (!user) return 'Auteur anonyme';
   const fullName = `${user.prenom || ''} ${user.nom || ''}`.trim();
-  return fullName || 'Auteur inconnu';
+  return fullName || 'Auteur anonyme';
 };
 
 export default function ForumThreadPage() {

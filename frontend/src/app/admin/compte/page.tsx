@@ -342,69 +342,69 @@ export default function AdminComptePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background">
+    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background overflow-x-hidden max-w-[100vw]">
       <Toast message={success || ''} visible={!!success} />
-      <main className="w-full px-4 py-8">
+      <main className="w-full px-3 sm:px-4 py-5 sm:py-8">
         {/* En-tête amélioré */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-primary to-primary/70 rounded-2xl flex items-center justify-center shadow-lg">
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-primary to-primary/70 rounded-2xl flex items-center justify-center shadow-lg">
               <span className="text-3xl">👤</span>
             </div>
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-4xl font-bold mb-1 sm:mb-2 bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
                 Mon Compte
               </h1>
-              <p className="text-muted-foreground text-lg">Gérez vos informations personnelles et votre sécurité</p>
+              <p className="text-muted-foreground text-sm sm:text-lg">Gérez vos informations personnelles et votre sécurité</p>
             </div>
           </div>
         </div>
 
         {/* Onglets améliorés */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-6">
-          <div className="flex gap-1 border-b bg-gray-50/50 p-2">
+          <div className="flex gap-1 border-b bg-gray-50/50 p-2 overflow-x-auto">
             <button
               onClick={() => setActiveTab('profil')}
-              className={`flex-1 px-6 py-3 font-semibold text-sm transition-all duration-200 rounded-lg ${
+              className={`min-w-max flex-1 px-3 sm:px-6 py-2.5 sm:py-3 font-semibold text-xs sm:text-sm transition-all duration-200 rounded-lg whitespace-nowrap ${
                 activeTab === 'profil'
                   ? 'bg-white text-primary shadow-md border border-primary/20'
                   : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
               }`}
             >
               <span className="flex items-center justify-center gap-2">
-                <span className="text-lg">👤</span>
+                <span className="text-sm sm:text-lg">👤</span>
                 <span>Informations personnelles</span>
               </span>
             </button>
             <button
               onClick={() => setActiveTab('password')}
-              className={`flex-1 px-6 py-3 font-semibold text-sm transition-all duration-200 rounded-lg ${
+              className={`min-w-max flex-1 px-3 sm:px-6 py-2.5 sm:py-3 font-semibold text-xs sm:text-sm transition-all duration-200 rounded-lg whitespace-nowrap ${
                 activeTab === 'password'
                   ? 'bg-white text-primary shadow-md border border-primary/20'
                   : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
               }`}
             >
               <span className="flex items-center justify-center gap-2">
-                <span className="text-lg">🔒</span>
+                <span className="text-sm sm:text-lg">🔒</span>
                 <span>Mot de passe</span>
               </span>
             </button>
             <button
               onClick={() => setActiveTab('sms')}
-              className={`flex-1 px-6 py-3 font-semibold text-sm transition-all duration-200 rounded-lg ${
+              className={`min-w-max flex-1 px-3 sm:px-6 py-2.5 sm:py-3 font-semibold text-xs sm:text-sm transition-all duration-200 rounded-lg whitespace-nowrap ${
                 activeTab === 'sms'
                   ? 'bg-white text-primary shadow-md border border-primary/20'
                   : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
               }`}
             >
               <span className="flex items-center justify-center gap-2">
-                <span className="text-lg">📱</span>
+                <span className="text-sm sm:text-lg">📱</span>
                 <span>Notifications SMS</span>
               </span>
             </button>
           </div>
 
-          <div className="p-8">
+          <div className="p-4 sm:p-8">
 
           {error && (
             <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-red-100/50 border-2 border-red-300 rounded-xl shadow-sm">
@@ -427,14 +427,14 @@ export default function AdminComptePage() {
           {/* Formulaire de profil */}
           {activeTab === 'profil' && (
             <form onSubmit={handleProfileSubmit} className="space-y-8">
-              <div className="grid lg:grid-cols-2 gap-8">
+              <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
                 {/* Informations de base */}
                 <div className="space-y-6">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-1 h-8 bg-blue-500 rounded-full"></div>
                     <h3 className="text-xl font-bold text-foreground">Informations de base</h3>
                   </div>
-                  <div className="bg-gradient-to-br from-blue-50/50 to-white rounded-xl p-6 border border-blue-100 space-y-5">
+                  <div className="bg-gradient-to-br from-blue-50/50 to-white rounded-xl p-4 sm:p-6 border border-blue-100 space-y-5">
                   
                     <div>
                       <Label htmlFor="firstName" className="flex items-center gap-2 mb-2">
@@ -559,7 +559,7 @@ export default function AdminComptePage() {
                     <div className="w-1 h-8 bg-purple-500 rounded-full"></div>
                     <h3 className="text-xl font-bold text-foreground">Informations administratives</h3>
                   </div>
-                  <div className="bg-gradient-to-br from-purple-50/50 to-white rounded-xl p-6 border border-purple-100 space-y-5">
+                  <div className="bg-gradient-to-br from-purple-50/50 to-white rounded-xl p-4 sm:p-6 border border-purple-100 space-y-5">
 
                     <div>
                       <Label htmlFor="numeroEtranger" className="flex items-center gap-2 mb-2">
@@ -648,7 +648,7 @@ export default function AdminComptePage() {
                     <div className="w-1 h-8 bg-green-500 rounded-full"></div>
                     <h3 className="text-xl font-bold text-foreground">Adresse</h3>
                   </div>
-                  <div className="bg-gradient-to-br from-green-50/50 to-white rounded-xl p-6 border border-green-100 space-y-5">
+                  <div className="bg-gradient-to-br from-green-50/50 to-white rounded-xl p-4 sm:p-6 border border-green-100 space-y-5">
 
                     <div>
                       <Label htmlFor="adressePostale" className="flex items-center gap-2 mb-2">
@@ -664,7 +664,7 @@ export default function AdminComptePage() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="codePostal" className="flex items-center gap-2 mb-2">
                           <span>📮</span>
@@ -711,20 +711,20 @@ export default function AdminComptePage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-4 pt-6 border-t border-gray-200 mt-8">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-6 border-t border-gray-200 mt-8">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.push('/admin')}
                   disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
                 >
                   Annuler
                 </Button>
                 <Button 
                   type="submit" 
                   disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
                 >
                   {isSaving ? (
                     <span className="flex items-center gap-2">
@@ -745,7 +745,7 @@ export default function AdminComptePage() {
           {/* Formulaire de changement de mot de passe */}
           {activeTab === 'password' && (
             <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl">
-              <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-6 border border-orange-100 space-y-6">
+              <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-4 sm:p-6 border border-orange-100 space-y-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-1 h-8 bg-orange-500 rounded-full"></div>
                   <h3 className="text-xl font-bold text-foreground">Sécurité du compte</h3>
@@ -808,20 +808,20 @@ export default function AdminComptePage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-4 pt-4 border-t border-gray-200">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-4 border-t border-gray-200">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.push('/admin')}
                   disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
                 >
                   Annuler
                 </Button>
                 <Button 
                   type="submit" 
                   disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
                 >
                   {isSaving ? (
                     <span className="flex items-center gap-2">
@@ -858,7 +858,7 @@ export default function AdminComptePage() {
               }}
               className="space-y-6 max-w-4xl"
             >
-              <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-6 border border-orange-100 space-y-6">
+              <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-4 sm:p-6 border border-orange-100 space-y-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-1 h-8 bg-orange-500 rounded-full"></div>
                   <h3 className="text-xl font-bold text-foreground">Préférences SMS</h3>
@@ -942,20 +942,20 @@ export default function AdminComptePage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-4 pt-4 border-t border-gray-200">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-4 border-t border-gray-200">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.push('/admin')}
                   disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
                 >
                   Annuler
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
                 >
                   {isSaving ? (
                     <span className="flex items-center gap-2">

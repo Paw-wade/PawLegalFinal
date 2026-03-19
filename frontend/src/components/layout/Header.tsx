@@ -357,14 +357,6 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 </p>
               </>
             )}
-            {(variant === 'admin' || variant === 'partenaire' || variant === 'client') && (
-              <Link
-                href="/"
-                className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base sm:text-lg max-w-[55vw] sm:max-w-none truncate"
-              >
-                Ada Papers
-              </Link>
-            )}
           </div>
 
           {/* Navigation - Liens permanents (Services, FAQ, Forum, Contact, Calculateur, Dashboard) */}
@@ -613,6 +605,13 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   >
                     Dashboard
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMobileNavOpen(false); handleSignOut(); }}
+                    className="w-full text-left px-4 py-3.5 rounded-xl text-base font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 active:bg-red-100 transition-colors min-h-[48px] flex items-center"
+                  >
+                    Déconnexion
+                  </button>
                   {(userRole === 'admin' || userRole === 'superadmin') && (
                     <Link
                       href="/admin/logs"
@@ -622,13 +621,6 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                       Logs
                     </Link>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => { setMobileNavOpen(false); handleSignOut(); }}
-                    className="mt-2 w-full text-left px-4 py-3.5 rounded-xl text-base font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 active:bg-red-100 transition-colors min-h-[48px] flex items-center justify-center"
-                  >
-                    Déconnexion
-                  </button>
                 </>
               )}
             </nav>

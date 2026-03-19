@@ -300,6 +300,10 @@ export const userAPI = {
   // Admin - Récupérer tous les utilisateurs
   getAllUsers: () =>
     api.get('/user/all'),
+
+  // Admin - Registre des expirations (clients)
+  getClientExpirationsRegister: (params: { pastDays: number; futureDays: number }) =>
+    api.get('/user/expirations', { params }),
   
   // Admin - Récupérer un utilisateur par ID
   getUserById: (id: string) =>

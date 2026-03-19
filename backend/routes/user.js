@@ -385,6 +385,71 @@ router.get('/all', authorize('admin', 'superadmin'), async (req, res) => {
   }
 });
 
+// @route   GET /api/user/expirations
+// @desc    Récupérer les comptes clients dont la date d'expiration est dans une plage (trié par date)
+// @access  Private/Admin
+router.get('/expirations', authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const pastDays = Math.max(0, parseInt(req.query.pastDays, 10) || 125);
+    const futureDays = Math.max(0, parseInt(req.query.futureDays, 10) || 15);
+
+    const now = new Date();
+    const start = new Date(now.getTime() - pastDays * 24 * 60 * 60 * 1000);
+    const end = new Date(now.getTime() + futureDays * 24 * 60 * 60 * 1000);
+
+    // Filtrer uniquement les clients avec une date d'expiration dans l'intervalle.
+    // (Les clients déjà expirés sont inclus via pastDays)
+    const clients = await User.find({
+      role: 'client',
+      isActive: true,
+      dateExpiration: { $gte: start, $lte: end }
+    }).select('firstName lastName email phone adressePostale ville codePostal pays dateExpiration');
+
+    const formatAddress = (u) => {
+      const parts = [
+        u.adressePostale,
+        u.codePostal,
+        u.ville,
+        u.pays,
+      ].filter(Boolean).map((p) => String(p).trim());
+
+      // Retirer les virgules en double si des éléments manquent
+      return parts.join(', ').replace(/,\s*,/g, ', ');
+    };
+
+    const users = clients
+      .sort((a, b) => (a.dateExpiration?.getTime?.() || 0) - (b.dateExpiration?.getTime?.() || 0))
+      .map((u) => ({
+        id: u._id,
+        nom: u.lastName || '',
+        prenom: u.firstName || '',
+        telephone: u.phone || '',
+        email: u.email || '',
+        adresse: formatAddress(u),
+        dateExpiration: u.dateExpiration || null,
+      }));
+
+    res.json({
+      success: true,
+      count: users.length,
+      users,
+      range: {
+        pastDays,
+        futureDays,
+        start: start.toISOString(),
+        end: end.toISOString(),
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors du chargement des expirations:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: error.message
+    });
+  }
+});
+
 // @route   GET /api/user/:id
 // @desc    Récupérer un utilisateur par ID (Admin seulement)
 // @access  Private/Admin

@@ -600,10 +600,10 @@ export default function PartenaireMessagesPage() {
                     return (
                       <div
                         key={messageId}
-                        className={`p-6 transition-all duration-200 hover:bg-gray-50 ${
+                        className={`p-6 transition-all duration-300 hover:bg-gray-50 border rounded-xl ${
                           (isReceived && !isRead)
-                            ? 'bg-gradient-to-r from-primary/5 via-primary/2 to-white border-l-4 border-primary' 
-                            : ''
+                            ? 'bg-gradient-to-r from-primary/5 via-primary/2 to-white border-primary/70 hover:shadow-[0_12px_30px_-18px_rgba(249,115,22,0.45)]' 
+                            : 'border-gray-200/80'
                         } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
                       >
                         <div className="flex items-start gap-4">

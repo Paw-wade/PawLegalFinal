@@ -773,10 +773,10 @@ function MessagesContent() {
               return (
                 <div
                   key={messageId}
-                  className={`bg-white rounded-xl shadow-md border-l-4 transition-all duration-200 hover:shadow-xl ${
+                  className={`bg-white rounded-xl shadow-sm border transition-all duration-300 hover:shadow-[0_12px_30px_-18px_rgba(249,115,22,0.45)] ${
                     (isReceived && !isRead)
-                      ? 'border-primary bg-gradient-to-r from-primary/5 via-primary/2 to-white' 
-                      : 'border-gray-300 bg-white'
+                      ? 'border-primary/70 bg-gradient-to-r from-primary/5 via-primary/2 to-white' 
+                      : 'border-gray-300/80 bg-white'
                   } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
                 >
                   <div className="p-6">

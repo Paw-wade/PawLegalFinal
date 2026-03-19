@@ -144,20 +144,20 @@ export default function AdminNotificationsPage() {
 
   const getNotificationColor = (type: string) => {
     const colors: { [key: string]: string } = {
-      dossier_created: 'bg-blue-50 border-l-4 border-blue-500',
-      dossier_updated: 'bg-yellow-50 border-l-4 border-yellow-500',
-      dossier_deleted: 'bg-red-50 border-l-4 border-red-500',
-      dossier_status_changed: 'bg-green-50 border-l-4 border-green-500',
-      dossier_assigned: 'bg-purple-50 border-l-4 border-purple-500',
-      dossier_cancelled: 'bg-orange-50 border-l-4 border-orange-500',
-      document_uploaded: 'bg-indigo-50 border-l-4 border-indigo-500',
-      appointment_created: 'bg-teal-50 border-l-4 border-teal-500',
-      appointment_updated: 'bg-teal-50 border-l-4 border-teal-500',
-      appointment_cancelled: 'bg-red-50 border-l-4 border-red-500',
-      message_received: 'bg-pink-50 border-l-4 border-pink-500',
-      other: 'bg-gray-50 border-l-4 border-gray-500',
+      dossier_created: 'bg-blue-50 border border-blue-300/70',
+      dossier_updated: 'bg-yellow-50 border border-yellow-300/70',
+      dossier_deleted: 'bg-red-50 border border-red-300/70',
+      dossier_status_changed: 'bg-green-50 border border-green-300/70',
+      dossier_assigned: 'bg-purple-50 border border-purple-300/70',
+      dossier_cancelled: 'bg-orange-50 border border-orange-300/70',
+      document_uploaded: 'bg-indigo-50 border border-indigo-300/70',
+      appointment_created: 'bg-teal-50 border border-teal-300/70',
+      appointment_updated: 'bg-teal-50 border border-teal-300/70',
+      appointment_cancelled: 'bg-red-50 border border-red-300/70',
+      message_received: 'bg-pink-50 border border-pink-300/70',
+      other: 'bg-gray-50 border border-gray-300/70',
     };
-    return colors[type] || 'bg-gray-50 border-l-4 border-gray-500';
+    return colors[type] || 'bg-gray-50 border border-gray-300/70';
   };
 
   type NotificationCategoryKey = 'dossiers' | 'rendezvous' | 'messages' | 'documents' | 'autres';
@@ -395,8 +395,8 @@ export default function AdminNotificationsPage() {
                 {visibleNotifications.map((notification: any) => (
                   <div
                     key={notification._id || notification.id}
-                    className={`bg-white rounded-xl border p-4 transition-all hover:shadow-sm ${
-                      notification.lu ? 'border-gray-200' : 'border-primary/30'
+                    className={`bg-white rounded-xl border p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_-18px_rgba(59,130,246,0.35)] ${getNotificationColor(notification.type)} ${
+                      notification.lu ? 'opacity-90' : ''
                     }`}
                   >
                     <div className="flex items-start gap-3">

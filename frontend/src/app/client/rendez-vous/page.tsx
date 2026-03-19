@@ -431,24 +431,24 @@ function RendezVousPageContent() {
                 // Déterminer le style de la carte (bordure gauche colorée comme les dossiers)
                 const getCardBorderStyle = () => {
                   if (rdv.statut === 'annule') {
-                    return 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200';
+                    return 'border border-red-300/70 hover:border-red-500/80 hover:shadow-[0_12px_30px_-18px_rgba(239,68,68,0.55)]';
                   }
                   if (rdv.statut === 'termine' || rdv.effectue) {
-                    return 'border-l-4 border-l-green-500 border-t border-r border-b border-gray-200';
+                    return 'border border-green-300/70 hover:border-green-500/80 hover:shadow-[0_12px_30px_-18px_rgba(34,197,94,0.55)]';
                   }
                   if (isPast && !rdv.effectue) {
-                    return 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200';
+                    return 'border border-red-300/70 hover:border-red-500/80 hover:shadow-[0_12px_30px_-18px_rgba(239,68,68,0.55)]';
                   }
                   if (rdv.statut === 'confirme') {
-                    return 'border-l-4 border-l-blue-500 border-t border-r border-b border-gray-200';
+                    return 'border border-blue-300/70 hover:border-blue-500/80 hover:shadow-[0_12px_30px_-18px_rgba(59,130,246,0.55)]';
                   }
-                  return 'border-l-4 border-l-yellow-500 border-t border-r border-b border-gray-200';
+                  return 'border border-yellow-300/70 hover:border-yellow-500/80 hover:shadow-[0_12px_30px_-18px_rgba(234,179,8,0.55)]';
                 };
 
                 return (
                   <div
                     key={appointmentId}
-                    className={`border rounded-xl p-5 hover:shadow-xl transition-all duration-200 bg-white ${getCardBorderStyle()}`}
+                    className={`rounded-xl p-5 transition-all duration-300 bg-white hover:-translate-y-0.5 ${getCardBorderStyle()}`}
                   >
                     {/* En-tête de la carte */}
                     <div className="flex items-start justify-between mb-3">

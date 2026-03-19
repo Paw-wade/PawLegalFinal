@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { notificationsAPI } from '@/lib/api';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function PartenaireNotificationsPage() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
   
   // Fonction pour convertir en string de manière sécurisée
@@ -47,6 +48,58 @@ export default function PartenaireNotificationsPage() {
       setLoading(false);
     }
   };
+
+  const handleDeleteAll = async () => {
+    try {
+      const confirmed = window.confirm('Supprimer toutes vos notifications ?');
+      if (!confirmed) return;
+      setLoading(true);
+      await notificationsAPI.deleteAllNotifications();
+      setNotifications([]);
+    } catch (error) {
+      console.error('Erreur lors de la suppression des notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNotificationClick = async (e: MouseEvent, notifId: string, notifLien: string, isRead: boolean) => {
+    if (isRead) return;
+    if (!notifId || notifId === '#') return;
+
+    // On attend la requête "mark as read" puis on navigue.
+    e.preventDefault();
+    try {
+      await notificationsAPI.markAsRead(notifId);
+      await loadNotifications();
+    } catch (error) {
+      console.error('Erreur lors du marquage notification comme lue:', error);
+    }
+
+    if (notifLien && notifLien !== '#') {
+      router.push(notifLien);
+    }
+  };
+
+  const getNotificationColor = (type: string) => {
+    const colors: { [key: string]: string } = {
+      dossier_created: 'border-blue-300/70',
+      dossier_updated: 'border-yellow-300/70',
+      dossier_deleted: 'border-red-300/70',
+      dossier_status_changed: 'border-green-300/70',
+      dossier_assigned: 'border-purple-300/70',
+      dossier_cancelled: 'border-orange-300/70',
+      document_uploaded: 'border-indigo-300/70',
+      document_request: 'border-orange-300/70',
+      document_received: 'border-green-300/70',
+      appointment_created: 'border-teal-300/70',
+      appointment_updated: 'border-teal-300/70',
+      appointment_cancelled: 'border-red-300/70',
+      message_received: 'border-pink-300/70',
+      other: 'border-gray-300/70',
+    };
+    return colors[type] || 'border-gray-300/70';
+  };
   
   if (loading) {
     return (
@@ -58,7 +111,19 @@ export default function PartenaireNotificationsPage() {
   
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Notifications</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <h1 className="text-2xl font-bold">Notifications</h1>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteAll();
+          }}
+          className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors w-full sm:w-auto"
+        >
+          Supprimer tout
+        </button>
+      </div>
       
       {(() => {
         const filtered = selectedDossierId
@@ -110,9 +175,10 @@ export default function PartenaireNotificationsPage() {
               <Link
                 key={notifId}
                 href={notifLien}
-                className={`block bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow ${
-                  !isRead ? 'border-l-4 border-primary' : ''
+                className={`block bg-white rounded-xl border p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_-18px_rgba(59,130,246,0.35)] ${getNotificationColor(notif.type)} ${
+                  !isRead ? 'ring-1 ring-primary/30' : 'opacity-90'
                 }`}
+                onClick={(e) => handleNotificationClick(e, notifId, notifLien, isRead)}
               >
                 <h3 className="font-semibold mb-1">{notifTitre}</h3>
                 {notifMessage && (

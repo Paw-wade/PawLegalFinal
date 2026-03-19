@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "scripts\\pre-dev.bat && next dev -p 3004",
+    "dev": "next dev -p 3004 --webpack",
+    "dev:pre": "scripts\\pre-dev.bat && next dev -p 3004 --webpack",
     "dev:alt": "next dev -p 3001",
     "kill-port": "node scripts/kill-port.js 3004",
     "kill-port:ps1": "powershell -ExecutionPolicy Bypass -File scripts/kill-port.ps1 -Port 3004",
