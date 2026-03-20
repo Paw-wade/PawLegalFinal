@@ -765,8 +765,18 @@ router.post(
         .populate('createdBy', 'firstName lastName email');
 
       // Si le dossier a été créé par un client (pas un admin), notifier tous les admins
-      if (req.user && req.user.role === 'client') {
+      // (robuste: si req.user n'est pas défini, mais qu'un userId client existe en entrée)
+      const isClientCreator = (req.user && req.user.role === 'client') || (!req.user && user && user.role === 'client');
+      if (isClientCreator) {
         try {
+          const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+
+          const clientId = req.user ? req.user.id : user._id.toString();
+          const clientEmail = req.user ? req.user.email : user.email;
+          const clientFirstName = req.user ? req.user.firstName : user.firstName;
+          const clientLastName = req.user ? req.user.lastName : user.lastName;
+          const clientDisplayName = `${clientFirstName} ${clientLastName}`.trim() || 'Client';
+
           // Trouver tous les admins et superadmins
           const admins = await User.find({
             role: { $in: ['admin', 'superadmin'] },
@@ -779,15 +789,41 @@ router.post(
               admin._id.toString(),
               'dossier_created',
               'Nouveau dossier créé par un client',
-              `${req.user.firstName} ${req.user.lastName} (${req.user.email}) a créé un nouveau dossier : "${titre || 'Sans titre'}"`,
+              `${clientDisplayName} (${clientEmail}) a créé un nouveau dossier : "${titre || 'Sans titre'}"`,
               `/admin/dossiers/${dossier._id}`,
               { 
                 dossierId: dossier._id.toString(), 
                 titre: titre || 'Sans titre',
-                clientId: req.user.id,
-                clientEmail: req.user.email
+                clientId,
+                clientEmail
               }
             );
+
+            // SMS (non bloquant) aux admins : permet d'être averti même sans passer par le dashboard
+            if (admin.phone) {
+              try {
+                const formattedPhone = formatPhoneNumber(admin.phone);
+                if (formattedPhone) {
+                  void sendNotificationSMS(
+                    formattedPhone,
+                    'dossier_created',
+                    {
+                      dossierTitle: titre || dossier.titre || 'Sans titre',
+                      dossierId: dossier.numero || dossier._id.toString()
+                    },
+                    {
+                      userId: admin._id.toString(),
+                      context: 'dossier',
+                      contextId: dossier._id.toString()
+                    }
+                  ).catch((smsError) => {
+                    console.error(`⚠️ Erreur lors de l'envoi du SMS à l'admin ${admin.email}:`, smsError);
+                  });
+                }
+              } catch (smsFormatError) {
+                console.error(`⚠️ Erreur lors du formatage du téléphone admin ${admin.email}:`, smsFormatError);
+              }
+            }
           }
           console.log(`✅ Notifications envoyées à ${admins.length} administrateur(s) pour le nouveau dossier`);
         } catch (notifError) {

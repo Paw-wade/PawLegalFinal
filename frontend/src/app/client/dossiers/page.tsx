@@ -497,8 +497,30 @@ export default function DossiersPage() {
                       <div className="flex flex-wrap gap-1.5">
                         {dossier.transmittedTo.map((trans: any, idx: number) => (
                           <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 border border-purple-200 rounded text-[11px] text-purple-800">
-                            {trans.quality || (trans.user?.role === 'consulat' ? 'Consulat' : 'Avocat')}: {trans.user?.firstName} {trans.user?.lastName}
-                            {trans.user?.organisationName && ` (${trans.user.organisationName})`}
+                            {(() => {
+                              // Backend: transmittedTo stocke l'utilisateur partenaire dans `partenaire`
+                              // et le type (consulat/association/avocat) dans `partenaireInfo.typeOrganisme`.
+                              const partenaire = trans.partenaire || trans.user;
+                              const typeOrganisme = partenaire?.partenaireInfo?.typeOrganisme;
+
+                              const label =
+                                trans.quality ||
+                                (typeOrganisme === 'consulat'
+                                  ? 'Consulat'
+                                  : typeOrganisme === 'association'
+                                  ? 'Association'
+                                  : 'Avocat');
+
+                              const fullName = [partenaire?.firstName, partenaire?.lastName].filter(Boolean).join(' ');
+                              const nomOrganisme = partenaire?.partenaireInfo?.nomOrganisme || partenaire?.organisationName;
+
+                              return (
+                                <>
+                                  {label}: {fullName || '—'}
+                                  {nomOrganisme ? ` (${nomOrganisme})` : null}
+                                </>
+                              );
+                            })()}
                             <span className="text-purple-600">· {new Date(trans.transmittedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' })}</span>
                           </span>
                         ))}

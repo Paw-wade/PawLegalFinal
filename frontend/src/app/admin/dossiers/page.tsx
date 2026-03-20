@@ -1392,7 +1392,7 @@ export default function AdminDossiersPage() {
                       : 'hover:shadow-md hover:-translate-y-0.5'
                   }`}
                 >
-                  <p className="text-xs text-yellow-700 font-semibold mb-1 uppercase tracking-wide">Délais</p>
+                  <p className="text-xs text-yellow-700 font-semibold mb-1 uppercase tracking-wide">En attente</p>
                   <p className="text-2xl font-bold text-yellow-900">
                     {dossiers.filter((d: any) => {
                       const hasClient = !!d.user; // dossier créé par un utilisateur
@@ -1401,10 +1401,9 @@ export default function AdminDossiersPage() {
                         !rawStatut ||
                         rawStatut === 'recu' ||
                         rawStatut === 'en_attente_onboarding';
-                      const isDelaysByRefusal = rawStatut === 'refuse';
                       return (
                         hasClient &&
-                        (initialStatut || isDelaysByRefusal) &&
+                        initialStatut &&
                         !d.estCloture &&
                         !d.estArchive &&
                         rawStatut !== 'annule'
@@ -1469,7 +1468,7 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
                   <p className="text-2xl font-bold text-red-900">
-                    {dossiers.filter((d: any) => d.estArchive || d.statut === 'annule').length}
+                    {dossiers.filter((d: any) => d.estArchive || d.statut === 'annule' || d.statut === 'refuse').length}
                   </p>
                 </button>
               </div>
@@ -1485,7 +1484,7 @@ export default function AdminDossiersPage() {
                       <span className="font-semibold text-primary">
                         {statusFilter !== 'all' && (
                           <>
-                            {statusFilter === 'pending' && 'Délais'}
+                            {statusFilter === 'pending' && 'En attente'}
                             {statusFilter === 'in_progress' && 'En cours'}
                             {statusFilter === 'closed' && 'Clôturés'}
                             {statusFilter === 'archived' && 'Archivés'}
@@ -1532,10 +1531,9 @@ export default function AdminDossiersPage() {
                       !rawStatut ||
                       rawStatut === 'recu' ||
                       rawStatut === 'en_attente_onboarding';
-                    const isDelaysByRefusal = rawStatut === 'refuse';
                     if (
                       !hasClient ||
-                      !(initialStatut || isDelaysByRefusal) ||
+                      !initialStatut ||
                       d.estCloture ||
                       d.estArchive ||
                       rawStatut === 'annule'
@@ -1565,7 +1563,13 @@ export default function AdminDossiersPage() {
                   } else if (statusFilter === 'closed') {
                     if (!d.estCloture) return false;
                   } else if (statusFilter === 'archived') {
-                    if (!(d.estArchive || (d.statut || '') === 'annule')) return false;
+                    if (
+                      !(
+                        d.estArchive ||
+                        (d.statut || '') === 'annule' ||
+                        (d.statut || '') === 'refuse'
+                      )
+                    ) return false;
                   }
 
                   // Filtre par utilisateur
@@ -1666,10 +1670,28 @@ export default function AdminDossiersPage() {
                                   const tasks = dossierTasks[dossierId] || [];
                                   const draftsCount = dossierDrafts[dossierId]?.length ?? 0;
                                   const transmissions = (dossier.transmittedTo && dossier.transmittedTo.length) || 0;
-                                  const mainTransmission =
+                                  const transmittedPartners =
                                     Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0
-                                      ? dossier.transmittedTo[0]
-                                      : null;
+                                      ? dossier.transmittedTo.map((t: any) => {
+                                          const partenaire = t.partenaire || t.user;
+                                          const typeOrganisme = partenaire?.partenaireInfo?.typeOrganisme;
+                                          const typeLabel =
+                                            typeOrganisme === 'consulat'
+                                              ? 'Consulat'
+                                              : typeOrganisme === 'association'
+                                              ? 'Association'
+                                              : 'Avocat';
+
+                                          const fullName = [partenaire?.firstName, partenaire?.lastName]
+                                            .filter(Boolean)
+                                            .join(' ')
+                                            .trim() || partenaire?.email || '—';
+
+                                          const nomOrganisme = partenaire?.partenaireInfo?.nomOrganisme || partenaire?.organisationName;
+
+                                          return { typeLabel, fullName, nomOrganisme };
+                                        })
+                                      : [];
                                   const hasDeadline = !!dossier.dateEcheance;
                                   const deadlineDays = hasDeadline ? calculateDaysUntil(dossier.dateEcheance) : null;
 
@@ -1685,14 +1707,29 @@ export default function AdminDossiersPage() {
                                       {tasks.length > 0 && (
                                         <span>✅ Tâches : <span className="font-semibold text-foreground">{tasks.length}</span></span>
                                       )}
-                                      {transmissions > 0 && (
-                                        <span>
-                                          📤 Transmissions :{' '}
-                                          <span className="font-semibold text-foreground">
-                                            {transmissions}
-                                          </span>
-                                        </span>
-                                      )}
+                                      <span>
+                                        {transmissions > 0 ? (
+                                          <>
+                                            📤 Transmis à :{' '}
+                                            <span className="font-semibold text-foreground">
+                                              {transmittedPartners
+                                                .slice(0, 2)
+                                                .map((p: any, idx: number) => (
+                                                  <span key={idx} className="inline-flex items-center gap-1">
+                                                    {p.typeLabel} - {p.fullName}
+                                                    {p.nomOrganisme ? ` (${p.nomOrganisme})` : ''}
+                                                    {idx < Math.min(2, transmittedPartners.length) - 1 ? ', ' : null}
+                                                  </span>
+                                                ))}
+                                              {transmissions > 2 ? ` +${transmissions - 2} autre(s)` : ''}
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            📤 Transmis à : <span className="font-semibold">Personne</span>
+                                          </>
+                                        )}
+                                      </span>
                                       {hasDeadline && (
                                         <span>
                                           ⏰ Échéance :{' '}
@@ -1711,7 +1748,7 @@ export default function AdminDossiersPage() {
                           </div>
                         </div>
                       </div>
-                      {/* Bloc statut / priorité / action aligné en haut à droite */}
+                      {/* Bloc statut / priorité / partenaires transmis / action */}
                       <div className="flex flex-wrap items-center justify-end gap-2 flex-shrink-0 w-full">
                         <div className="flex flex-wrap items-center gap-1">
                           <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getStatutColor(dossier.statut)}`}>
@@ -1721,6 +1758,48 @@ export default function AdminDossiersPage() {
                             <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getPrioriteColor(dossier.priorite)}`}>
                               {dossier.priorite}
                             </span>
+                          )}
+                          {Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0 && (
+                            (() => {
+                              const transmittedPartners = dossier.transmittedTo.map((t: any) => {
+                                const partenaire = t.partenaire || t.user;
+                                const typeOrganisme = partenaire?.partenaireInfo?.typeOrganisme;
+                                const typeLabel =
+                                  typeOrganisme === 'consulat'
+                                    ? 'Consulat'
+                                    : typeOrganisme === 'association'
+                                    ? 'Association'
+                                    : 'Avocat';
+
+                                const fullName = [partenaire?.firstName, partenaire?.lastName]
+                                  .filter(Boolean)
+                                  .join(' ')
+                                  .trim() || partenaire?.email || '—';
+
+                                const nomOrganisme = partenaire?.partenaireInfo?.nomOrganisme || partenaire?.organisationName;
+
+                                return { typeLabel, fullName, nomOrganisme };
+                              });
+
+                              return (
+                                <>
+                                  {transmittedPartners.slice(0, 2).map((p: any, idx: number) => (
+                                    <span
+                                      key={`${p.typeLabel}-${p.fullName}-${idx}`}
+                                      className="px-2 py-1 rounded-md text-[11px] font-semibold bg-indigo-50 border border-indigo-200 text-indigo-800"
+                                      title={`${p.typeLabel} - ${p.fullName}${p.nomOrganisme ? ` (${p.nomOrganisme})` : ''}`}
+                                    >
+                                      {p.typeLabel}: {p.fullName}
+                                    </span>
+                                  ))}
+                                  {transmittedPartners.length > 2 && (
+                                    <span className="px-2 py-1 rounded-md text-[11px] font-semibold bg-indigo-50 border border-indigo-200 text-indigo-800">
+                                      +{transmittedPartners.length - 2} autres
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()
                           )}
                         </div>
                         <Link
@@ -1908,14 +1987,6 @@ export default function AdminDossiersPage() {
                     {/* Informations du dossier — version compacte */}
                     <div className="mb-3 pb-3 border-b border-gray-200">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        {(dossier.numero || dossier.numeroDossier) && (
-                          <span>
-                            Réf.{" "}
-                            <span className="font-mono font-semibold text-foreground">
-                              {dossier.numero || dossier.numeroDossier}
-                            </span>
-                          </span>
-                        )}
                         <span>
                           Catégorie :{" "}
                           <span className="font-medium text-foreground">
@@ -2579,28 +2650,7 @@ export default function AdminDossiersPage() {
                             📋 Statut du dossier
                           </label>
                           {/* Synthèse acceptation partenaire (toujours visible) */}
-                          {Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0 && (() => {
-                            const transmissions = dossier.transmittedTo;
-                            const hasAccepted = transmissions.some((t: any) => t.status === 'accepted');
-                            const hasRefused = transmissions.some((t: any) => t.status === 'refused');
-                            let label = 'En attente';
-                            let badgeClass = 'bg-yellow-50 text-yellow-800 border-yellow-200';
-                            if (hasAccepted) {
-                              label = 'Accepté';
-                              badgeClass = 'bg-green-50 text-green-800 border-green-200';
-                            } else if (hasRefused && !hasAccepted) {
-                              label = 'Refusé';
-                              badgeClass = 'bg-red-50 text-red-800 border-red-200';
-                            }
-                            return (
-                              <div className="mb-1.5">
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${badgeClass}`}>
-                                  <span>Statut partenaire :</span>
-                                  <span>{label}</span>
-                                </span>
-                              </div>
-                            );
-                          })()}
+                          {/* Le badge partenaire est déjà résumé via les badges "Transmis à" en vue simplifiée */}
                           <select
                             value={dossier.statut || ''}
                             onChange={(e) => handleChangeStatut(dossier._id || dossier.id, e.target.value)}
@@ -2800,11 +2850,15 @@ export default function AdminDossiersPage() {
               setIsLoading(true);
               setError(null);
               try {
-                // Créer une demande pour chaque type de document sélectionné
-                const requests = documentRequestData.selectedDocumentTypes.map(async (docType) => {
+                // Créer une demande pour chaque type de document sélectionné.
+                // Important: on exécute séquentiellement pour éviter un throttling SMS/Twilio
+                // quand plusieurs appels API sont lancés en même temps.
+                let successCount = 0;
+                let failedCount = 0;
+                for (const docType of documentRequestData.selectedDocumentTypes) {
                   const docInfo = documentTypesList.find(d => d.value === docType);
                   const documentTypeLabel = docInfo?.label || docType;
-                  
+
                   // Utiliser le type de base pour l'enum backend (mapping)
                   const baseTypeMap: Record<string, string> = {
                     passeport: 'passeport',
@@ -2870,25 +2924,35 @@ export default function AdminDossiersPage() {
                     isUrgent: documentRequestData.isUrgent
                   });
                   
-                  return await documentRequestsAPI.createRequest({
-                    dossierId: showDocumentRequestModal._id || showDocumentRequestModal.id,
-                    documentType: baseType,
-                    documentTypeLabel: documentTypeLabel,
-                    message: documentRequestData.message,
-                    isUrgent: documentRequestData.isUrgent
-                  });
+                  try {
+                    const resp = await documentRequestsAPI.createRequest({
+                      dossierId: showDocumentRequestModal._id || showDocumentRequestModal.id,
+                      documentType: baseType,
+                      documentTypeLabel: documentTypeLabel,
+                      message: documentRequestData.message,
+                      isUrgent: documentRequestData.isUrgent
+                    });
+                    if (resp?.data?.success) {
+                      successCount += 1;
+                    } else {
+                      failedCount += 1;
+                    }
+                  } catch (err) {
+                    failedCount += 1;
+                    console.error('❌ Erreur création demande docType:', docType, err);
+                  }
+                }
+
+                console.log('✅ Résultat créations demandes documents:', {
+                  successCount,
+                  failedCount
                 });
-                
-                const responses = await Promise.all(requests);
-                const allSuccess = responses.every(r => r.data.success);
-                
-                console.log('✅ Réponses de l\'API:', responses);
-                
-                if (allSuccess) {
+
+                if (failedCount === 0 && successCount > 0) {
                   // Afficher un message de succès temporaire
                   setError(null);
-                  const count = documentRequestData.selectedDocumentTypes.length;
-                  alert(`✅ ${count} demande(s) de document(s) créée(s) avec succès ! Le client a été notifié.`);
+                  const totalCount = documentRequestData.selectedDocumentTypes.length;
+                  alert(`✅ ${totalCount} demande(s) de document(s) créée(s) avec succès ! Le client a été notifié.`);
                   
                   setShowDocumentRequestModal(null);
                   setDocumentRequestData({
@@ -2899,8 +2963,8 @@ export default function AdminDossiersPage() {
                   // Recharger les dossiers pour afficher les nouvelles demandes
                   await loadDossiers();
                 } else {
-                  const failedCount = responses.filter(r => !r.data.success).length;
-                  setError(`${failedCount} demande(s) n'a(ont) pas pu être créée(s). Veuillez réessayer.`);
+                  const totalCount = documentRequestData.selectedDocumentTypes.length;
+                  setError(`${failedCount} demande(s) sur ${totalCount} n'a(ont) pas pu être créée(s). Veuillez réessayer.`);
                 }
               } catch (err: any) {
                 console.error('❌ Erreur lors de la création de la demande:', err);
