@@ -1383,26 +1383,6 @@ export default function PartenaireDossiersPage() {
         </button>
         <button
                   type="button"
-                  onClick={() => setStatusFilter('unfavorable')}
-                  className={`text-left bg-gradient-to-br from-red-50 to-red-100 border border-red-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
-                    statusFilter === 'unfavorable'
-                      ? 'ring-2 ring-red-500/60 shadow-md'
-                      : 'hover:shadow-md hover:-translate-y-0.5'
-                  }`}
-                >
-                  <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Délais</p>
-                  <p className="text-2xl font-bold text-red-900">
-                    {dossiers.filter((d: any) =>
-                      // Dossiers refusés par le partenaire (à traiter côté client)
-                      Array.isArray(d.transmittedTo) &&
-                      d.transmittedTo.some((t: any) => t.status === 'refused') &&
-                      !d.estCloture &&
-                      !(d.estArchive || d.statut === 'annule')
-                    ).length}
-                  </p>
-        </button>
-        <button
-                  type="button"
                   onClick={() => setStatusFilter('closed')}
                   className={`text-left bg-gradient-to-br from-green-50 to-green-100 border border-green-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                     statusFilter === 'closed'
@@ -1426,7 +1406,11 @@ export default function PartenaireDossiersPage() {
                 >
                   <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
                   <p className="text-2xl font-bold text-red-900">
-                    {dossiers.filter((d: any) => d.estArchive || d.statut === 'annule').length}
+                    {dossiers.filter((d: any) =>
+                      d.estArchive ||
+                      d.statut === 'annule' ||
+                      (Array.isArray(d.transmittedTo) && d.transmittedTo.some((t: any) => t.status === 'refused'))
+                    ).length}
                   </p>
         </button>
       </div>
@@ -1444,7 +1428,6 @@ export default function PartenaireDossiersPage() {
                           <>
                             {statusFilter === 'pending' && 'En attente (dossiers transmis non encore acceptés)'}
                             {statusFilter === 'in_progress' && 'En cours (dossiers acceptés non clôturés)'}
-                            {statusFilter === 'unfavorable' && 'Délais (dossiers refusés)'}
                             {statusFilter === 'closed' && 'Clôturés'}
                             {statusFilter === 'archived' && 'Archivés'}
                           </>
@@ -1508,7 +1491,14 @@ export default function PartenaireDossiersPage() {
                     if (!d.estCloture) return false;
                   } else if (statusFilter === 'archived') {
                     // Dossiers archivés
-                    if (!(d.estArchive || (d.statut || '') === 'annule')) return false;
+                    if (
+                      !(
+                        d.estArchive ||
+                        (d.statut || '') === 'annule' ||
+                        (Array.isArray(d.transmittedTo) && d.transmittedTo.some((t: any) => t.status === 'refused'))
+                      )
+                    )
+                      return false;
                   }
 
                   // Filtre par utilisateur
@@ -2640,11 +2630,15 @@ export default function PartenaireDossiersPage() {
               setIsLoading(true);
               setError(null);
               try {
-                // Créer une demande pour chaque type de document sélectionné
-                const requests = documentRequestData.selectedDocumentTypes.map(async (docType) => {
+                // Créer une demande pour chaque type de document sélectionné.
+                // Important: on exécute séquentiellement pour éviter un throttling SMS/Twilio
+                // quand plusieurs appels API sont lancés en même temps.
+                let successCount = 0;
+                let failedCount = 0;
+                for (const docType of documentRequestData.selectedDocumentTypes) {
                   const docInfo = documentTypesList.find(d => d.value === docType);
                   const documentTypeLabel = docInfo?.label || docType;
-                  
+
                   // Utiliser le type de base pour l'enum backend (mapping)
                   const baseTypeMap: Record<string, string> = {
                     passeport: 'passeport',
@@ -2710,25 +2704,35 @@ export default function PartenaireDossiersPage() {
                     isUrgent: documentRequestData.isUrgent
                   });
                   
-                  return await documentRequestsAPI.createRequest({
-                    dossierId: showDocumentRequestModal._id || showDocumentRequestModal.id,
-                    documentType: baseType,
-                    documentTypeLabel: documentTypeLabel,
-                    message: documentRequestData.message,
-                    isUrgent: documentRequestData.isUrgent
-                  });
+                  try {
+                    const resp = await documentRequestsAPI.createRequest({
+                      dossierId: showDocumentRequestModal._id || showDocumentRequestModal.id,
+                      documentType: baseType,
+                      documentTypeLabel: documentTypeLabel,
+                      message: documentRequestData.message,
+                      isUrgent: documentRequestData.isUrgent
+                    });
+                    if (resp?.data?.success) {
+                      successCount += 1;
+                    } else {
+                      failedCount += 1;
+                    }
+                  } catch (err) {
+                    failedCount += 1;
+                    console.error('❌ Erreur création demande docType:', docType, err);
+                  }
+                }
+
+                console.log('✅ Résultat créations demandes documents:', {
+                  successCount,
+                  failedCount
                 });
-                
-                const responses = await Promise.all(requests);
-                const allSuccess = responses.every(r => r.data.success);
-                
-                console.log('✅ Réponses de l\'API:', responses);
-                
-                if (allSuccess) {
+
+                if (failedCount === 0 && successCount > 0) {
                   // Afficher un message de succès temporaire
                   setError(null);
-                  const count = documentRequestData.selectedDocumentTypes.length;
-                  alert(`✅ ${count} demande(s) de document(s) créée(s) avec succès ! Le client a été notifié.`);
+                  const totalCount = documentRequestData.selectedDocumentTypes.length;
+                  alert(`✅ ${totalCount} demande(s) de document(s) créée(s) avec succès ! Le client a été notifié.`);
                   
                   setShowDocumentRequestModal(null);
                   setDocumentRequestData({
@@ -2739,8 +2743,8 @@ export default function PartenaireDossiersPage() {
                   // Recharger les dossiers pour afficher les nouvelles demandes
                   await loadDossiers();
                 } else {
-                  const failedCount = responses.filter(r => !r.data.success).length;
-                  setError(`${failedCount} demande(s) n'a(ont) pas pu être créée(s). Veuillez réessayer.`);
+                  const totalCount = documentRequestData.selectedDocumentTypes.length;
+                  setError(`${failedCount} demande(s) sur ${totalCount} n'a(ont) pas pu être créée(s). Veuillez réessayer.`);
                 }
               } catch (err: any) {
                 console.error('❌ Erreur lors de la création de la demande:', err);

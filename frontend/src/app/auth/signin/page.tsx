@@ -49,17 +49,6 @@ export default function SignInPage() {
   const [showPassword, setShowPassword] = useState(false);
   const isRedirecting = useRef(false);
 
-  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  const getSessionWithRetry = async () => {
-    for (let i = 0; i < 4; i++) {
-      const session = await getSession();
-      if ((session?.user as any)?.role) return session;
-      await sleep(120);
-    }
-    return null;
-  };
-
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     
@@ -82,7 +71,8 @@ export default function SignInPage() {
         setIsLoading(false);
       } else if (result?.ok) {
         try {
-          const sessionData = await getSessionWithRetry();
+          // Une seule lecture de session pour limiter la latence de connexion ressentie.
+          const sessionData = await getSession();
           const sessionUser: any = sessionData?.user || {};
 
           // Stocker le token pour les appels API Axios dès la connexion

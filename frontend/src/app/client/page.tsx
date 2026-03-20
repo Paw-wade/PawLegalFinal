@@ -738,42 +738,47 @@ function ClientDashboardContent() {
 
           {/* Barre des discussions mises en signet */}
           {showBookmarksBar && bookmarkedThreads.length > 0 && (
-            <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl px-4 py-2 overflow-hidden">
-              <div className="flex items-center justify-between gap-3 mb-1">
-                <span className="text-sm font-semibold text-orange-800 flex items-center gap-1">
-                  <span>⭐</span>
-                  <span>Discussions que vous suivez</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowBookmarksBar(false)}
-                  className="text-[11px] text-orange-700 hover:text-orange-900 hover:underline"
-                >
-                  Fermer
-                </button>
-              </div>
-              <div className="whitespace-nowrap text-sm text-orange-800">
-                {bookmarkedThreads.map((thread: any) => {
-                  const id = thread._id || thread.id;
-                  const newReplies = thread.newRepliesCount ?? 0;
-                  return (
-                    <Link
-                      key={id}
-                      href={`/forum/${id}`}
-                      className="inline-flex items-center gap-1 mr-6 hover:underline"
-                    >
-                      <span>⭐</span>
-                      <span className="font-medium truncate max-w-[240px] inline-block align-middle">
-                        {thread.title}
-                      </span>
-                      {newReplies > 0 && (
-                        <span className="text-xs font-semibold text-orange-700">
-                          ({newReplies} nouvelle{newReplies > 1 ? 's' : ''} réponse{newReplies > 1 ? 's' : ''})
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
+            <div className="mt-4 rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-orange-200/70 to-orange-200/70 shadow-sm">
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-orange-600 text-xl leading-none">⭐</span>
+                    <span className="text-sm font-semibold text-orange-800 truncate">
+                      Discussions que vous suivez
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowBookmarksBar(false)}
+                    className="text-[11px] text-orange-700 hover:text-orange-900 hover:underline shrink-0"
+                  >
+                    Fermer
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {bookmarkedThreads.map((thread: any) => {
+                    const id = thread._id || thread.id;
+                    const newReplies = thread.newRepliesCount ?? 0;
+                    return (
+                      <Link key={id} href={`/forum/${id}`} className="block">
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-orange-100 bg-orange-50/60 px-3 py-2 hover:border-orange-200 hover:bg-orange-50 transition-colors">
+                          <div className="min-w-0 flex items-center gap-2">
+                            <span className="text-orange-600 text-sm leading-none">⭐</span>
+                            <span className="text-sm font-medium text-orange-900 truncate">
+                              {thread.title}
+                            </span>
+                          </div>
+                          {newReplies > 0 && (
+                            <span className="text-xs font-semibold text-orange-700 whitespace-nowrap">
+                              ({newReplies} nouvelle{newReplies > 1 ? 's' : ''} réponse{newReplies > 1 ? 's' : ''})
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}

@@ -188,10 +188,10 @@ router.post(
 
       const token = generateToken(user._id);
 
-      // Logger la connexion
+      // Logger la connexion en non-bloquant pour ne pas ralentir la réponse login.
       try {
         const Log = require('../models/Log');
-        await Log.create({
+        Log.create({
           action: 'login',
           user: user._id,
           userEmail: user.email,
@@ -201,10 +201,11 @@ router.post(
           metadata: {
             role: user.role
           }
+        }).catch((logError) => {
+          console.error('Erreur lors de l\'enregistrement du log de connexion:', logError);
         });
       } catch (logError) {
-        console.error('Erreur lors de l\'enregistrement du log de connexion:', logError);
-        // Continuer même si le log échoue
+        console.error('Erreur lors de l\'initialisation du log de connexion:', logError);
       }
 
       // Calculer les jours restants pour compléter le profil (sauf pour admin/superadmin)
