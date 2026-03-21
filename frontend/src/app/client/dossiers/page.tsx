@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -111,6 +111,15 @@ export default function DossiersPage() {
   const [dossierDocuments, setDossierDocuments] = useState<Record<string, any[]>>({});
   const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<any>(null);
   const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(() => new Set());
+  const [activeDirectUploadDossierId, setActiveDirectUploadDossierId] = useState<string | null>(null);
+  const [directUploadData, setDirectUploadData] = useState({
+    nom: '',
+    description: '',
+    categorie: 'autre'
+  });
+  const [directUploadError, setDirectUploadError] = useState<string | null>(null);
+  const [directUploading, setDirectUploading] = useState(false);
+  const directFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Vérifier si l'utilisateur a un token même sans session
@@ -250,6 +259,65 @@ export default function DossiersPage() {
     }
   };
 
+  const handleDirectUploadFromList = async (e: React.FormEvent, dossierId: string) => {
+    e.preventDefault();
+    setDirectUploadError(null);
+
+    // Sécuriser le dossierId pour éviter un upload "sans dossier"
+    if (!/^[a-f0-9]{24}$/i.test(dossierId)) {
+      setDirectUploadError('Impossible d\'associer le document au dossier (identifiant invalide).');
+      return;
+    }
+
+    if (!directFileInputRef.current?.files?.[0]) {
+      setDirectUploadError('Veuillez sélectionner un fichier');
+      return;
+    }
+    if (!directUploadData.nom.trim()) {
+      setDirectUploadError('Veuillez saisir un nom de document');
+      return;
+    }
+
+    setDirectUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('document', directFileInputRef.current.files[0]);
+      formData.append('nom', directUploadData.nom.trim());
+      formData.append('description', directUploadData.description.trim());
+      formData.append('categorie', directUploadData.categorie);
+      formData.append('dossierId', dossierId);
+
+      const response = await documentsAPI.uploadDocument(formData);
+      if (!response?.data?.success) {
+        throw new Error(response?.data?.message || 'Erreur lors du téléversement du document');
+      }
+
+      // Mise à jour immédiate de la carte dossier (sans attendre le prochain refresh global)
+      const createdDoc = response.data.document;
+      if (createdDoc) {
+        setDossierDocuments((prev) => {
+          const current = prev[dossierId] || [];
+          return {
+            ...prev,
+            [dossierId]: [createdDoc, ...current]
+          };
+        });
+      }
+
+      setDirectUploadData({ nom: '', description: '', categorie: 'autre' });
+      if (directFileInputRef.current) {
+        directFileInputRef.current.value = '';
+      }
+      setActiveDirectUploadDossierId(null);
+      await loadDossierDocuments();
+    } catch (err: any) {
+      console.error('Erreur upload direct depuis la liste:', err);
+      setDirectUploadError(err.response?.data?.message || err.message || 'Erreur lors du téléversement du document');
+    } finally {
+      setDirectUploading(false);
+    }
+  };
+
   const loadDossiers = async () => {
     setIsLoading(true);
     setError(null);
@@ -384,14 +452,14 @@ export default function DossiersPage() {
                       : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
                   }`}
                 >
-                  <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                  <div className="bg-white rounded-xl border border-white/70 p-3 sm:p-4 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
                     {/* En-tête de la carte : sur mobile en colonne (titre puis badges + lien) */}
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
                       <div className="flex-1 min-w-0 pr-0 sm:pr-2">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-0.5">
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-baseline gap-2">
-                            <h3 className="font-semibold text-base text-foreground line-clamp-1 leading-snug truncate">
+                            <h3 className="font-semibold text-sm sm:text-base text-foreground line-clamp-1 leading-snug truncate">
                               {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
                             </h3>
                             {(typeof dossier.numero === 'string' || typeof dossier.numeroDossier === 'string') && (
@@ -403,7 +471,7 @@ export default function DossiersPage() {
                           {/* Créateur du dossier et transmissions masqués pour le client */}
                           {/* Bloc métriques (dossier plié) */}
                           {!expandedDossiers.has(dossier._id || dossier.id) && (
-                            <div className="mt-3 space-y-2">
+                            <div className="mt-1.5 space-y-1.5">
                               {(() => {
                                 const dossierRequests = documentRequests[dossier._id || dossier.id] || [];
                                 const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
@@ -433,7 +501,7 @@ export default function DossiersPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-col sm:items-end gap-2 flex-shrink-0 w-full sm:max-w-none">
+                    <div className="flex flex-col sm:items-end gap-1.5 flex-shrink-0 w-full sm:w-auto sm:max-w-none">
                       <div className="flex flex-wrap items-center gap-2 justify-end sm:justify-end">
                         <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getStatutColor(dossier.statut)}`}>
                           {getStatutLabel(dossier.statut)}
@@ -447,7 +515,7 @@ export default function DossiersPage() {
                       <Link
                         href={`/client/dossiers/${dossier._id || dossier.id}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center justify-center px-3 py-2.5 min-h-[44px] rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors text-center w-full sm:w-auto"
+                        className="inline-flex items-center justify-center px-3 py-2 min-h-[40px] sm:min-h-[36px] rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors text-center w-full sm:w-auto"
                       >
                         Voir les détails
                       </Link>
@@ -532,18 +600,6 @@ export default function DossiersPage() {
                   <div className="mb-2 pb-2 border-b border-gray-100">
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Infos</p>
                     <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-0.5 text-[11px]">
-                      {dossier.titre && (
-                        <>
-                          <dt className="text-muted-foreground">Titre</dt>
-                          <dd className="text-foreground break-words col-span-1 sm:col-span-3">{dossier.titre}</dd>
-                        </>
-                      )}
-                      {(dossier.numero || dossier.numeroDossier) && (
-                        <>
-                          <dt className="text-muted-foreground">Réf.</dt>
-                          <dd className="font-mono text-foreground truncate">{dossier.numero || dossier.numeroDossier}</dd>
-                        </>
-                      )}
                       <dt className="text-muted-foreground">Catégorie</dt>
                       <dd className="text-foreground">{getCategorieLabel(dossier.categorie || 'autre')}</dd>
                       {dossier.type && (
@@ -595,25 +651,124 @@ export default function DossiersPage() {
                     
                     return (
                       <div className="pt-2 border-t border-gray-100 mb-2">
-                        <button
-                          type="button"
-                          className="w-full flex items-center justify-between gap-2 py-1.5 px-1 rounded hover:bg-gray-50 transition-colors text-left"
-                          onClick={() => {
-                            const dossierId = dossier._id || dossier.id;
-                            const newExpanded = new Set(expandedDocumentSections);
-                            if (isExpanded) newExpanded.delete(dossierId);
-                            else newExpanded.add(dossierId);
-                            setExpandedDocumentSections(newExpanded);
-                          }}
-                        >
-                          <span className="text-[11px] font-semibold text-foreground">📄 Documents demandés</span>
-                          <span className="text-[11px] text-muted-foreground">
-                            {pendingRequests.length > 0 && <span className="text-orange-600">{pendingRequests.length} attente</span>}
-                            {pendingRequests.length > 0 && receivedRequests.length > 0 && ' · '}
-                            {receivedRequests.length > 0 && <span className="text-green-600">{receivedRequests.length} reçu(s)</span>}
-                          </span>
-                          <span className="text-muted-foreground text-xs">{isExpanded ? '▲' : '▼'}</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="flex-1 min-w-0 flex items-center justify-between gap-2 py-1.5 px-1 rounded hover:bg-gray-50 transition-colors text-left"
+                            onClick={() => {
+                              const dossierId = dossier._id || dossier.id;
+                              const newExpanded = new Set(expandedDocumentSections);
+                              if (isExpanded) newExpanded.delete(dossierId);
+                              else newExpanded.add(dossierId);
+                              setExpandedDocumentSections(newExpanded);
+                            }}
+                          >
+                            <span className="text-[11px] font-semibold text-foreground">📄 Documents demandés</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              {pendingRequests.length > 0 && <span className="text-orange-600">{pendingRequests.length} attente</span>}
+                              {pendingRequests.length > 0 && receivedRequests.length > 0 && ' · '}
+                              {receivedRequests.length > 0 && <span className="text-green-600">{receivedRequests.length} reçu(s)</span>}
+                            </span>
+                            <span className="text-muted-foreground text-xs">{isExpanded ? '▲' : '▼'}</span>
+                          </button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            title="Ajouter un document"
+                            aria-label="Ajouter un document"
+                            className="h-7 w-7 p-0 text-sm leading-none shadow-none"
+                            onClick={(e: any) => {
+                              e.stopPropagation();
+                              const currentDossierId = (dossier._id || dossier.id).toString();
+                              setDirectUploadError(null);
+                              if (activeDirectUploadDossierId === currentDossierId) {
+                                setActiveDirectUploadDossierId(null);
+                              } else {
+                                setActiveDirectUploadDossierId(currentDossierId);
+                              }
+                            }}
+                          >
+                            +
+                          </Button>
+                        </div>
+
+                        {activeDirectUploadDossierId === (dossier._id || dossier.id).toString() && (
+                          <form
+                            onSubmit={(e) => handleDirectUploadFromList(e, (dossier._id || dossier.id).toString())}
+                            className="mt-2 p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-2.5"
+                          >
+                            {directUploadError && <p className="text-xs text-red-600">{directUploadError}</p>}
+                            <div>
+                              <label className="text-[11px] font-medium">Fichier *</label>
+                              <input
+                                ref={directFileInputRef}
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                                className="mt-1 w-full text-xs"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file && !directUploadData.nom.trim()) {
+                                    setDirectUploadData((prev) => ({ ...prev, nom: file.name }));
+                                  }
+                                }}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-medium">Nom du document *</label>
+                              <input
+                                type="text"
+                                value={directUploadData.nom}
+                                onChange={(e) => setDirectUploadData((prev) => ({ ...prev, nom: e.target.value }))}
+                                className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-medium">Catégorie</label>
+                              <select
+                                value={directUploadData.categorie}
+                                onChange={(e) => setDirectUploadData((prev) => ({ ...prev, categorie: e.target.value }))}
+                                className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs"
+                              >
+                                <option value="identite">Identité</option>
+                                <option value="titre_sejour">Titre de séjour</option>
+                                <option value="contrat">Contrat</option>
+                                <option value="facture">Facture</option>
+                                <option value="autre">Autre</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-medium">Description</label>
+                              <textarea
+                                value={directUploadData.description}
+                                onChange={(e) => setDirectUploadData((prev) => ({ ...prev, description: e.target.value }))}
+                                className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs min-h-[56px]"
+                              />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-7 px-2 text-[10px]"
+                                onClick={() => {
+                                  setActiveDirectUploadDossierId(null);
+                                  setDirectUploadError(null);
+                                }}
+                                disabled={directUploading}
+                              >
+                                Annuler
+                              </Button>
+                              <Button
+                                type="submit"
+                                className="h-7 px-2 text-[10px]"
+                                disabled={directUploading}
+                              >
+                                {directUploading ? 'Envoi...' : 'Envoyer'}
+                              </Button>
+                            </div>
+                          </form>
+                        )}
                         
                         {isExpanded && (
                           <div className="mt-1.5 space-y-1.5">
@@ -675,6 +830,86 @@ export default function DossiersPage() {
                             })}
                           </div>
                         )}
+
+                        {(() => {
+                          const dossierId = (dossier._id || dossier.id).toString();
+                          const docs = dossierDocuments[dossierId] || [];
+                          if (docs.length === 0) return null;
+                          const docsExpanded = expandedDocumentDropdowns.has(dossierId);
+
+                          return (
+                            <div className="mt-2 pt-2 border-t border-gray-100">
+                              <button
+                                type="button"
+                                className="w-full flex items-center justify-between gap-2 py-1 px-1 rounded hover:bg-gray-50 transition-colors text-left mb-1"
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedDocumentDropdowns);
+                                  if (docsExpanded) newExpanded.delete(dossierId);
+                                  else newExpanded.add(dossierId);
+                                  setExpandedDocumentDropdowns(newExpanded);
+                                }}
+                              >
+                                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                  Documents du dossier
+                                </span>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {docs.length} doc{docs.length > 1 ? 's' : ''} {docsExpanded ? '▲' : '▼'}
+                                </span>
+                              </button>
+
+                              {docsExpanded && (
+                                <div className="space-y-1">
+                                  {docs.map((doc: any) => (
+                                    <div
+                                      key={doc._id || doc.id}
+                                      className="flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[11px]"
+                                    >
+                                      <div className="min-w-0 flex-1 truncate font-medium text-foreground">
+                                        {doc.nom || doc.filename || 'Document'}
+                                      </div>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <button
+                                          type="button"
+                                          className="px-1.5 py-0.5 rounded border border-gray-300 text-[10px] hover:bg-gray-50"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedDocumentForPreview(doc);
+                                          }}
+                                        >
+                                          Voir
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="h-5 w-5 inline-flex items-center justify-center rounded border border-gray-300 text-[10px] hover:bg-gray-50"
+                                          title="Télécharger"
+                                          aria-label="Télécharger"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            try {
+                                              const response = await documentsAPI.downloadDocument(doc._id || doc.id);
+                                              const url = window.URL.createObjectURL(new Blob([response.data]));
+                                              const link = document.createElement('a');
+                                              link.href = url;
+                                              link.setAttribute('download', doc.nom || 'document');
+                                              document.body.appendChild(link);
+                                              link.click();
+                                              link.remove();
+                                              window.URL.revokeObjectURL(url);
+                                            } catch (err) {
+                                              console.error('Erreur téléchargement document dossier:', err);
+                                            }
+                                          }}
+                                        >
+                                          ⬇
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })()}

@@ -2299,9 +2299,9 @@ export default function PartenaireDossiersPage() {
                                                       {doc.description && (
                                                         <p className="text-[10px] text-gray-500 line-clamp-1 mt-0.5">{doc.description}</p>
                                                       )}
-                                                      <p className="text-[10px] text-gray-400 mt-1">
-                                                        {doc.typeMime} • {doc.taille ? `${(doc.taille / 1024).toFixed(1)} KB` : ''}
-                                                      </p>
+                                                      {doc.typeMime && (
+                                                        <p className="text-[10px] text-gray-400 mt-1">{doc.typeMime}</p>
+                                                      )}
                                                     </div>
                                                   </div>
                                                   <div className="flex items-center gap-1 pt-2 border-t border-gray-100">
@@ -2635,7 +2635,8 @@ export default function PartenaireDossiersPage() {
                 // quand plusieurs appels API sont lancés en même temps.
                 let successCount = 0;
                 let failedCount = 0;
-                for (const docType of documentRequestData.selectedDocumentTypes) {
+                for (let index = 0; index < documentRequestData.selectedDocumentTypes.length; index += 1) {
+                  const docType = documentRequestData.selectedDocumentTypes[index];
                   const docInfo = documentTypesList.find(d => d.value === docType);
                   const documentTypeLabel = docInfo?.label || docType;
 
@@ -2710,7 +2711,9 @@ export default function PartenaireDossiersPage() {
                       documentType: baseType,
                       documentTypeLabel: documentTypeLabel,
                       message: documentRequestData.message,
-                      isUrgent: documentRequestData.isUrgent
+                      isUrgent: documentRequestData.isUrgent,
+                      // Une demande multiple doit produire un seul SMS client.
+                      skipSms: index > 0
                     });
                     if (resp?.data?.success) {
                       successCount += 1;

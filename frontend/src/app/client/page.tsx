@@ -51,6 +51,7 @@ function ClientDashboardContent() {
   const [documentRequestNotification, setDocumentRequestNotification] = useState<any>(null);
   const [bookmarkedThreads, setBookmarkedThreads] = useState<any[]>([]);
   const [showBookmarksBar, setShowBookmarksBar] = useState(true);
+  const [bookmarksSignature, setBookmarksSignature] = useState('');
   const [isPersonalInfoOpen, setIsPersonalInfoOpen] = useState(false);
   const [isAdminInfoOpen, setIsAdminInfoOpen] = useState(true);
   const [joursRestantsSidebar, setJoursRestantsSidebar] = useState<number | null>(null);
@@ -197,6 +198,48 @@ function ClientDashboardContent() {
       console.error('Erreur lors du chargement des signets forum:', err);
     }
   };
+
+  const getBookmarksStorageKey = () => {
+    const userId = (session?.user as any)?._id || (session?.user as any)?.id || (session?.user as any)?.email || 'anonymous';
+    return `clientForumBookmarksSeenSignature:${userId}`;
+  };
+
+  const computeBookmarksSignature = (threads: any[]) => {
+    if (!threads || threads.length === 0) return '';
+    return threads
+      .map((t: any) => `${t._id || t.id}:${t.newRepliesCount ?? 0}`)
+      .sort()
+      .join('|');
+  };
+
+  const markBookmarksAsSeen = (signature: string) => {
+    if (typeof window === 'undefined' || !signature) return;
+    try {
+      localStorage.setItem(getBookmarksStorageKey(), signature);
+    } catch (e) {
+      console.warn('Impossible de sauvegarder l’état des signets vus:', e);
+    }
+  };
+
+  useEffect(() => {
+    const signature = computeBookmarksSignature(bookmarkedThreads);
+    setBookmarksSignature(signature);
+
+    if (!signature) {
+      setShowBookmarksBar(false);
+      return;
+    }
+
+    if (typeof window === 'undefined') return;
+    try {
+      const seenSignature = localStorage.getItem(getBookmarksStorageKey()) || '';
+      // Afficher seulement s'il y a une nouveauté depuis la dernière fois où la barre a été vue/fermée.
+      setShowBookmarksBar(signature !== seenSignature);
+    } catch (e) {
+      console.warn('Impossible de lire l’état des signets vus:', e);
+      setShowBookmarksBar(true);
+    }
+  }, [bookmarkedThreads, session]);
 
   const getLastNotificationForDossier = (dossierId: string) => {
     const dossierNotifications = notifications.filter((notif) => {
@@ -452,6 +495,20 @@ function ClientDashboardContent() {
 
   const formatDateCourte = (d: Date) => {
     return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const getProfileTypeTitre = () => {
+    const candidates = [
+      userProfile?.typeTitre,
+      userProfile?.type_titre,
+      userProfile?.titreSejourType,
+      userProfile?.typeTitreSejour,
+      userProfile?.titreSejour?.typeTitre,
+      userProfile?.titreSejour?.type,
+      (session?.user as any)?.typeTitre,
+    ];
+    const firstNonEmpty = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+    return firstNonEmpty ? String(firstNonEmpty).trim() : '';
   };
 
   // Minuteur dynamique pour la sidebar (temps restant avant expiration)
@@ -749,7 +806,10 @@ function ClientDashboardContent() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowBookmarksBar(false)}
+                    onClick={() => {
+                      markBookmarksAsSeen(bookmarksSignature);
+                      setShowBookmarksBar(false);
+                    }}
                     className="text-[11px] text-orange-700 hover:text-orange-900 hover:underline shrink-0"
                   >
                     Fermer
@@ -761,7 +821,15 @@ function ClientDashboardContent() {
                     const id = thread._id || thread.id;
                     const newReplies = thread.newRepliesCount ?? 0;
                     return (
-                      <Link key={id} href={`/forum/${id}`} className="block">
+                      <Link
+                        key={id}
+                        href={`/forum/${id}`}
+                        className="block"
+                        onClick={() => {
+                          // Considérer la bannière comme "vue" à l'ouverture d'une discussion.
+                          markBookmarksAsSeen(bookmarksSignature);
+                        }}
+                      >
                         <div className="flex items-center justify-between gap-3 rounded-lg border border-orange-100 bg-orange-50/60 px-3 py-2 hover:border-orange-200 hover:bg-orange-50 transition-colors">
                           <div className="min-w-0 flex items-center gap-2">
                             <span className="text-orange-600 text-sm leading-none">⭐</span>
@@ -1078,7 +1146,7 @@ function ClientDashboardContent() {
                       <div className="space-y-2.5">
                         <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                           <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Type de titre</p>
-                          <p className="text-xs font-medium text-foreground break-words">{userProfile.typeTitre || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
+                          <p className="text-xs font-medium text-foreground break-words">{getProfileTypeTitre() || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">

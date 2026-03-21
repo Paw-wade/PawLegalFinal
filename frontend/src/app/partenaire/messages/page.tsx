@@ -773,7 +773,7 @@ export default function PartenaireMessagesPage() {
                     <div className="mt-2 space-y-1">
                       {attachments.map((file, index) => (
                         <div key={index} className="text-xs text-muted-foreground flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span>📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          <span>📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
@@ -859,9 +859,6 @@ export default function PartenaireMessagesPage() {
                           <div className="flex items-center gap-2">
                             <span>📎</span>
                             <span className="text-sm">{pj.originalName}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({(pj.size / 1024 / 1024).toFixed(2)} MB)
-                            </span>
                           </div>
                           <Button
                             variant="outline"
@@ -952,7 +949,7 @@ export default function PartenaireMessagesPage() {
                     <div className="mt-2 space-y-1">
                       {replyAttachments.map((file, index) => (
                         <div key={index} className="text-xs text-muted-foreground flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span>📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          <span>📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setReplyAttachments(replyAttachments.filter((_, i) => i !== index))}

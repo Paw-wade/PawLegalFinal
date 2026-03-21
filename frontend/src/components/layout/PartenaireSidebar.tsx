@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { signOut } from 'next-auth/react';
 import { forumAPI } from '@/lib/api';
 import { 
@@ -37,19 +37,28 @@ export function PartenaireSidebar({ isOpen = true, onClose }: PartenaireSidebarP
   const pathname = usePathname();
   const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
 
-  useEffect(() => {
-    const loadForumCount = async () => {
-      try {
-        const res = await forumAPI.getUnreadThreadsCount();
-        if (res.data?.success && typeof res.data.count === 'number') {
-          setForumUnreadCount(res.data.count);
-        }
-      } catch (err) {
-        console.error('Erreur lors du chargement du nombre de nouvelles discussions forum (partenaire):', err);
+  const loadForumCount = useCallback(async () => {
+    try {
+      const res = await forumAPI.getUnreadThreadsCount();
+      if (res.data?.success && typeof res.data.count === 'number') {
+        setForumUnreadCount(res.data.count);
       }
-    };
-    loadForumCount();
+    } catch (err) {
+      console.error('Erreur lors du chargement du nombre de nouvelles discussions forum (partenaire):', err);
+    }
   }, []);
+
+  useEffect(() => {
+    loadForumCount();
+  }, [loadForumCount, pathname]);
+
+  useEffect(() => {
+    const onForumUnreadUpdated = () => loadForumCount();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('forumUnreadUpdated', onForumUnreadUpdated);
+      return () => window.removeEventListener('forumUnreadUpdated', onForumUnreadUpdated);
+    }
+  }, [loadForumCount]);
 
   return (
     <>

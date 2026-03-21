@@ -239,6 +239,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
     ],
     client: [
       { href: '/client/dossiers', label: 'Mes dossiers', requiresAuth: true },
+      { href: '/client/tarification', label: 'Tarification', requiresAuth: true },
       { href: '/client/rendez-vous', label: 'Rendez-vous', requiresAuth: true },
       { href: '/client/documents', label: 'Documents', requiresAuth: true },
       { href: '/client/messages', label: 'Messages', requiresAuth: true },

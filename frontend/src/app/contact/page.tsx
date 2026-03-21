@@ -132,12 +132,6 @@ export default function ContactPage() {
     setFileErrors([]);
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' Ko';
-    return (bytes / (1024 * 1024)).toFixed(2) + ' Mo';
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -466,7 +460,6 @@ export default function ContactPage() {
                                 <span className="text-xl">📄</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
-                                  <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
                                 </div>
                               </div>
                               <button

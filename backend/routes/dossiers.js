@@ -9,6 +9,36 @@ const { protect, authorize } = require('../middleware/auth');
 const router = express.Router();
 
 // Helper function pour créer une notification
+/** Aligné sur le filtre « En cours » du dashboard admin (dossiers avec utilisateur lié) */
+function isDossierInAdminEnCoursFilter(dossierLike) {
+  const hasClient = !!(dossierLike.user);
+  const rawStatut = dossierLike.statut || '';
+  const initialStatut =
+    hasClient &&
+    (!rawStatut ||
+      rawStatut === 'recu' ||
+      rawStatut === 'en_attente_onboarding');
+  const isRefused = rawStatut === 'refuse';
+  const isArchived = rawStatut === 'annule';
+  const estCloture = !!dossierLike.estCloture;
+  const estArchive = !!dossierLike.estArchive;
+  return (
+    !estCloture &&
+    !estArchive &&
+    !isArchived &&
+    !isRefused &&
+    !initialStatut
+  );
+}
+
+function sanitizeDossierForPartenaire(dossier) {
+  const o = dossier && typeof dossier.toObject === 'function' ? dossier.toObject() : { ...dossier };
+  delete o.formuleTarifaire;
+  delete o.formuleTarifaireChoisieAt;
+  delete o.formuleTarifaireReminderSent;
+  return o;
+}
+
 const createNotification = async (userId, type, titre, message, lien = null, metadata = {}) => {
   try {
     if (!userId) {
@@ -562,11 +592,14 @@ router.get('/', async (req, res) => {
         }
       });
     }
-    
+
+    const dossiersOut =
+      userRole === 'partenaire' ? dossiers.map((d) => sanitizeDossierForPartenaire(d)) : dossiers;
+
     res.json({
       success: true,
-      count: dossiers.length,
-      dossiers
+      count: dossiersOut.length,
+      dossiers: dossiersOut
     });
   } catch (error) {
     console.error('Erreur lors de la récupération des dossiers:', error);
@@ -633,6 +666,9 @@ router.get('/admin', authorize('admin', 'superadmin'), async (req, res) => {
     });
   }
 });
+
+// Note : PATCH /api/user/dossiers/:id/formule-tarifaire est enregistré dans server.js (avant ce routeur)
+// pour garantir la résolution de la route en toutes circonstances.
 
 // @route   POST /api/user/dossiers
 // @desc    Créer un nouveau dossier
@@ -1986,9 +2022,11 @@ router.get('/:id', async (req, res) => {
       });
     }
 
+    const dossierOut = req.user.role === 'partenaire' ? sanitizeDossierForPartenaire(dossier) : dossier;
+
     res.json({
       success: true,
-      dossier
+      dossier: dossierOut
     });
   } catch (error) {
     console.error('Erreur lors de la récupération du dossier:', error);
@@ -2267,6 +2305,74 @@ router.put(
           }
         } else {
           console.warn('⚠️ Impossible de créer une notification : aucun utilisateur trouvé pour le dossier', dossierForNotification._id);
+        }
+      }
+
+      // Rappel choix formule tarifaire : passage dans le filtre admin « En cours » sans formule choisie
+      if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+        try {
+          if (statut && statut !== oldStatut) {
+            const prevSnap = {
+              user: dossierForNotification.user,
+              statut: oldStatut,
+              estCloture: dossierForNotification.estCloture,
+              estArchive: dossierForNotification.estArchive
+            };
+            const nextSnap = {
+              user: dossierForNotification.user,
+              statut: dossierForNotification.statut,
+              estCloture: dossierForNotification.estCloture,
+              estArchive: dossierForNotification.estArchive
+            };
+            const wasIn = isDossierInAdminEnCoursFilter(prevSnap);
+            const nowIn = isDossierInAdminEnCoursFilter(nextSnap);
+            if (
+              !wasIn &&
+              nowIn &&
+              dossierForNotification.user &&
+              !dossier.formuleTarifaire &&
+              !dossier.formuleTarifaireReminderSent
+            ) {
+              const clientUserId = dossierForNotification.user._id
+                ? dossierForNotification.user._id.toString()
+                : dossierForNotification.user.toString();
+              await Dossier.updateOne(
+                { _id: dossier._id },
+                { $set: { formuleTarifaireReminderSent: true } }
+              );
+              dossier.formuleTarifaireReminderSent = true;
+              const titreTarif = 'Choisissez votre formule tarifaire';
+              const messageTarif = `Votre dossier « ${dossierForNotification.titre || dossierForNotification.numero || 'votre dossier'} » est désormais suivi comme « en cours ». Merci de sélectionner votre formule (Standard ou Premium) dans votre espace client, rubrique Tarification.`;
+              await createNotification(
+                clientUserId,
+                'tarification_choice_requested',
+                titreTarif,
+                messageTarif,
+                '/client/tarification',
+                { dossierId: dossierForNotification._id.toString() }
+              );
+              const { sendNotificationSMS } = require('../sendSMS');
+              const UserModel = require('../models/User');
+              const phoneUser = await UserModel.findById(clientUserId).select('phone');
+              if (phoneUser && phoneUser.phone) {
+                await sendNotificationSMS(
+                  phoneUser.phone,
+                  'tarification_choice_reminder',
+                  {
+                    dossierTitle: dossierForNotification.titre || dossierForNotification.numero || 'Votre dossier'
+                  },
+                  {
+                    userId: clientUserId,
+                    skipPreferences: true,
+                    context: 'tarification_reminder',
+                    contextId: dossier._id.toString()
+                  }
+                );
+              }
+            }
+          }
+        } catch (tarifErr) {
+          console.error('⚠️ Rappel tarification non envoyé:', tarifErr);
         }
       }
 

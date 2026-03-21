@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { signOut } from 'next-auth/react';
 import { forumAPI, documentsAPI } from '@/lib/api';
 import {
@@ -14,6 +14,7 @@ import {
   Bell,
   Calculator,
   User,
+  CircleDollarSign,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,6 +32,7 @@ interface MenuItem {
 const clientMenuItems: MenuItem[] = [
   { href: '/client', label: 'Tableau de bord', icon: LayoutDashboard },
   { href: '/client/dossiers', label: 'Mes dossiers', icon: FolderOpen },
+  { href: '/client/tarification', label: 'Tarification', icon: CircleDollarSign },
   { href: '/client/documents', label: 'Documents', icon: FileText },
   { href: '/client/rendez-vous', label: 'Rendez-vous', icon: Calendar },
   { href: '/client/messages', label: 'Messages', icon: MessageSquare },
@@ -53,22 +55,33 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     return pathname.startsWith(href);
   };
 
-  useEffect(() => {
-    const loadForumCount = async () => {
-      try {
-        const res = await forumAPI.getUnreadThreadsCount();
-        if (res.data?.success && typeof res.data.count === 'number') {
-          setForumUnreadCount(res.data.count);
-        }
-        if (typeof res.data?.newRepliesCount === 'number') {
-          setForumRepliesCount(res.data.newRepliesCount);
-        }
-      } catch (err) {
-        console.error('Erreur lors du chargement du nombre de nouvelles discussions forum:', err);
+  const loadForumCount = useCallback(async () => {
+    try {
+      const res = await forumAPI.getUnreadThreadsCount();
+      if (res.data?.success && typeof res.data.count === 'number') {
+        setForumUnreadCount(res.data.count);
       }
-    };
-    loadForumCount();
+      if (typeof res.data?.newRepliesCount === 'number') {
+        setForumRepliesCount(res.data.newRepliesCount);
+      }
+    } catch (err) {
+      console.error('Erreur lors du chargement du nombre de nouvelles discussions forum:', err);
+    }
   }, []);
+
+  useEffect(() => {
+    loadForumCount();
+  }, [loadForumCount, pathname]);
+
+  useEffect(() => {
+    const onForumUnreadUpdated = () => {
+      loadForumCount();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('forumUnreadUpdated', onForumUnreadUpdated);
+      return () => window.removeEventListener('forumUnreadUpdated', onForumUnreadUpdated);
+    }
+  }, [loadForumCount]);
 
   const refreshDocumentsCount = async () => {
     try {

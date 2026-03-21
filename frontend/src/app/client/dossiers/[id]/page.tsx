@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
@@ -25,6 +25,7 @@ export default function DossierDetailPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const dossierId = params?.id as string;
   
   const [dossier, setDossier] = useState<any>(null);
@@ -46,6 +47,29 @@ export default function DossierDetailPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showDirectUploadForm, setShowDirectUploadForm] = useState(false);
+  const [directUploadData, setDirectUploadData] = useState({
+    nom: '',
+    description: '',
+    categorie: 'autre'
+  });
+  const [directUploading, setDirectUploading] = useState(false);
+  const [directUploadError, setDirectUploadError] = useState<string | null>(null);
+  const directFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const shouldOpenUpload = searchParams?.get('openUpload') === '1';
+    if (!shouldOpenUpload) return;
+
+    setShowDirectUploadForm(true);
+    // Laisser le temps au rendu puis scroller sur la zone upload
+    setTimeout(() => {
+      const el = document.getElementById('documents-upload');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 120);
+  }, [searchParams]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -272,6 +296,48 @@ export default function DossierDetailPage() {
     }
   };
 
+  const handleDirectUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDirectUploadError(null);
+
+    if (!directFileInputRef.current?.files?.[0]) {
+      setDirectUploadError('Veuillez sélectionner un fichier');
+      return;
+    }
+
+    if (!directUploadData.nom.trim()) {
+      setDirectUploadError('Veuillez saisir un nom de document');
+      return;
+    }
+
+    setDirectUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('document', directFileInputRef.current.files[0]);
+      formData.append('nom', directUploadData.nom.trim());
+      formData.append('description', directUploadData.description.trim());
+      formData.append('categorie', directUploadData.categorie);
+      formData.append('dossierId', dossierId);
+
+      const response = await documentsAPI.uploadDocument(formData);
+      if (!response?.data?.success) {
+        throw new Error(response?.data?.message || 'Erreur lors du téléversement');
+      }
+
+      setDirectUploadData({ nom: '', description: '', categorie: 'autre' });
+      if (directFileInputRef.current) {
+        directFileInputRef.current.value = '';
+      }
+      setShowDirectUploadForm(false);
+      await loadDocuments();
+    } catch (err: any) {
+      console.error('Erreur upload direct dossier:', err);
+      setDirectUploadError(err.response?.data?.message || err.message || 'Erreur lors du téléversement du document');
+    } finally {
+      setDirectUploading(false);
+    }
+  };
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -469,7 +535,7 @@ export default function DossierDetailPage() {
           {/* Informations principales */}
           <div className="md:col-span-2 space-y-4 sm:space-y-6 min-w-0">
             {/* Statut actuel */}
-            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+            <div id="documents-upload" className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
               <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statut actuel</h2>
               <div className="flex items-center gap-4">
                 <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatutColor(dossier.statut)}`}>
@@ -1012,7 +1078,99 @@ export default function DossierDetailPage() {
 
             {/* Documents du dossier */}
             <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
-              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">📁 Documents du dossier</h2>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3 sm:mb-4">
+                <h2 className="text-lg sm:text-xl font-bold">📁 Documents du dossier</h2>
+                <Button
+                  variant={showDirectUploadForm ? 'outline' : 'default'}
+                  className="min-h-[44px] w-full sm:w-auto"
+                  onClick={() => {
+                    setShowDirectUploadForm(!showDirectUploadForm);
+                    setDirectUploadError(null);
+                  }}
+                >
+                  {showDirectUploadForm ? 'Fermer' : 'Ajouter un document'}
+                </Button>
+              </div>
+
+              {showDirectUploadForm && (
+                <form onSubmit={handleDirectUpload} className="mb-4 p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50 space-y-3">
+                  {directUploadError && (
+                    <p className="text-sm text-red-600">{directUploadError}</p>
+                  )}
+                  <div>
+                    <label className="text-sm font-medium">Fichier *</label>
+                    <input
+                      ref={directFileInputRef}
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                      className="mt-1 w-full text-sm"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file && !directUploadData.nom.trim()) {
+                          setDirectUploadData((prev) => ({ ...prev, nom: file.name }));
+                        }
+                      }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Nom du document *</label>
+                    <input
+                      type="text"
+                      value={directUploadData.nom}
+                      onChange={(e) => setDirectUploadData((prev) => ({ ...prev, nom: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      placeholder="Ex: Contrat signé"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Catégorie</label>
+                    <select
+                      value={directUploadData.categorie}
+                      onChange={(e) => setDirectUploadData((prev) => ({ ...prev, categorie: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="identite">Identité</option>
+                      <option value="titre_sejour">Titre de séjour</option>
+                      <option value="contrat">Contrat</option>
+                      <option value="facture">Facture</option>
+                      <option value="autre">Autre</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Description</label>
+                    <textarea
+                      value={directUploadData.description}
+                      onChange={(e) => setDirectUploadData((prev) => ({ ...prev, description: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[72px]"
+                      placeholder="Description (optionnelle)"
+                    />
+                  </div>
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-[44px] w-full sm:w-auto"
+                      onClick={() => {
+                        setShowDirectUploadForm(false);
+                        setDirectUploadError(null);
+                      }}
+                      disabled={directUploading}
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="min-h-[44px] w-full sm:w-auto"
+                      disabled={directUploading}
+                    >
+                      {directUploading ? 'Envoi...' : 'Envoyer le document'}
+                    </Button>
+                  </div>
+                </form>
+              )}
+
               {isLoadingDocuments ? (
                 <p className="text-sm text-muted-foreground">Chargement...</p>
               ) : documents.length === 0 ? (
@@ -1028,9 +1186,6 @@ export default function DossierDetailPage() {
                         <span className="text-lg flex-shrink-0">📄</span>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{doc.nom}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {doc.taille ? (doc.taille / 1024).toFixed(2) : '—'} KB
-                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">

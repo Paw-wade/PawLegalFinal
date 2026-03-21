@@ -100,6 +100,32 @@ export function DocumentRequestNotificationModal({ isOpen, onClose, notification
     }
   };
 
+  const normalizeCategorie = (rawCategorie?: string) => {
+    if (!rawCategorie) return 'autre';
+    const normalized = rawCategorie
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\s-]+/g, '_');
+
+    const mapping: Record<string, string> = {
+      identite: 'identite',
+      piece_identite: 'identite',
+      pieces_identite: 'identite',
+      passeport: 'identite',
+      carte_identite: 'identite',
+      titre_sejour: 'titre_sejour',
+      titre_de_sejour: 'titre_sejour',
+      sejour: 'titre_sejour',
+      contrat: 'contrat',
+      facture: 'facture',
+      autre: 'autre'
+    };
+
+    return mapping[normalized] || 'autre';
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -168,7 +194,7 @@ export function DocumentRequestNotificationModal({ isOpen, onClose, notification
       formData.append('document', file, file.name);
       formData.append('nom', uploadData.nom.trim());
       formData.append('description', uploadData.description.trim());
-      formData.append('categorie', documentRequest.documentType || uploadData.categorie);
+      formData.append('categorie', normalizeCategorie(documentRequest.documentType || uploadData.categorie));
       formData.append('dossierId', documentRequest.dossier._id || documentRequest.dossier);
 
       // Vérifier que le fichier est bien dans le FormData
@@ -447,15 +473,12 @@ export function DocumentRequestNotificationModal({ isOpen, onClose, notification
                                 <p className="text-sm font-medium text-green-800">
                                   Fichier sélectionné: {selectedFile.name}
                                 </p>
-                                <p className="text-xs text-green-600 mt-1">
-                                  Taille: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                                  {uploading && (
-                                    <span className="ml-2 inline-flex items-center gap-1">
-                                      <span className="animate-spin">⏳</span>
-                                      <span>Envoi en cours...</span>
-                                    </span>
-                                  )}
-                                </p>
+                                {uploading && (
+                                  <p className="text-xs text-green-600 mt-1 inline-flex items-center gap-1">
+                                    <span className="animate-spin">⏳</span>
+                                    <span>Envoi en cours...</span>
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </div>

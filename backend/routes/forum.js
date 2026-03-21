@@ -443,23 +443,96 @@ router.get('/bookmarks', protect, async (req, res) => {
   }
 });
 
-// GET /api/forum/unread-count - Nombre de discussions avec nouvelles réponses depuis la dernière visite de l'utilisateur
-router.get('/unread-count', protect, async (req, res) => {
+// POST /api/forum/threads/:id/mark-read - Enregistrer que l'utilisateur a consulté le fil (efface le badge)
+router.post('/threads/:id/mark-read', protect, async (req, res) => {
   try {
+    const threadId = req.params.id;
+    const thread = await ForumThread.findById(threadId).select('_id');
+    if (!thread) {
+      return res.status(404).json({ success: false, message: 'Discussion introuvable' });
+    }
+
     const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
 
-    // Pour simplifier, on considère qu'une "nouvelle discussion" est une discussion créée
-    // après la date de création du compte utilisateur OU qu'il n'a jamais consultée.
-    const sinceDate = user.createdAt || new Date(0);
+    if (!Array.isArray(user.forumThreadReads)) {
+      user.forumThreadReads = [];
+    }
 
-    const count = await ForumThread.countDocuments({
-      createdAt: { $gt: sinceDate },
-    });
+    const now = new Date();
+    const idx = user.forumThreadReads.findIndex((r) => r.thread.toString() === threadId.toString());
+    if (idx >= 0) {
+      user.forumThreadReads[idx].readAt = now;
+    } else {
+      user.forumThreadReads.push({ thread: threadId, readAt: now });
+    }
 
-    return res.json({ success: true, count });
+    await user.save();
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Erreur mark-read forum:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// GET /api/forum/unread-count - Mes discussions avec nouvelles réponses non lues + signets avec activité
+router.get('/unread-count', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId).select('forumThreadReads forumBookmarks');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+
+    const readsMap = new Map(
+      (user.forumThreadReads || []).map((r) => [r.thread.toString(), r.readAt])
+    );
+
+    // Orange : fils que j'ai créés, avec au moins une réponse, et activité après ma dernière lecture
+    const myThreads = await ForumThread.find({
+      createdBy: userId,
+      repliesCount: { $gt: 0 },
+    })
+      .select('_id createdAt lastReplyAt')
+      .lean();
+
+    let count = 0;
+    for (const t of myThreads) {
+      const tid = t._id.toString();
+      const readAt = readsMap.get(tid) || new Date(t.createdAt || 0);
+      if (t.lastReplyAt && new Date(t.lastReplyAt) > new Date(readAt)) {
+        count += 1;
+      }
+    }
+
+    // Vert : discussions en signet avec une réponse d’un tiers après max(signet, dernière lecture)
+    let newRepliesCount = 0;
+    const bookmarks = user.forumBookmarks || [];
+    for (const b of bookmarks) {
+      const raw = b.thread;
+      const tid =
+        raw && typeof raw === 'object' && raw._id
+          ? raw._id.toString()
+          : raw
+            ? raw.toString()
+            : '';
+      if (!tid) continue;
+      const thread = await ForumThread.findById(tid).select('lastReplyAt lastReplyBy').lean();
+      if (!thread || !thread.lastReplyAt) continue;
+      const readAt = readsMap.get(tid) || new Date(0);
+      const baseline = new Date(
+        Math.max(new Date(readAt).getTime(), new Date(b.addedAt || 0).getTime())
+      );
+      if (new Date(thread.lastReplyAt) <= baseline) continue;
+      const lastBy = thread.lastReplyBy ? thread.lastReplyBy.toString() : '';
+      if (lastBy && lastBy !== userId.toString()) {
+        newRepliesCount += 1;
+      }
+    }
+
+    return res.json({ success: true, count, newRepliesCount });
   } catch (error) {
     console.error('Erreur lors de la récupération du nombre de nouvelles discussions:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });

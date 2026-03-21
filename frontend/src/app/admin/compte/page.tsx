@@ -17,11 +17,51 @@ function Button({ children, variant = 'default', className = '', disabled = fals
   return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} disabled={disabled} {...props}>{children}</button>;
 }
 
-function Input({ className = '', type, value, onChange, ...props }: any) {
+function Input({ className = '', type, value, onChange, id, name, autoComplete, ...props }: any) {
+  const resolvedName = name || id;
+  const normalizedField = String(resolvedName || '').toLowerCase();
+  const inferredAutoCompleteByField =
+    normalizedField === 'firstname'
+      ? 'given-name'
+      : normalizedField === 'lastname'
+        ? 'family-name'
+        : normalizedField === 'email'
+          ? 'email'
+          : normalizedField === 'phone'
+            ? 'tel'
+            : normalizedField === 'adresspostale' || normalizedField === 'adressepostale'
+              ? 'street-address'
+              : normalizedField === 'ville'
+                ? 'address-level2'
+                : normalizedField === 'codepostal'
+                  ? 'postal-code'
+                  : normalizedField === 'pays'
+                    ? 'country-name'
+                    : normalizedField === 'datenaissance'
+                      ? 'bday'
+                      : (normalizedField === 'datedelivrance' || normalizedField === 'dateexpiration')
+                        ? 'off'
+                        : undefined;
+  const resolvedAutoComplete =
+    autoComplete ||
+    inferredAutoCompleteByField ||
+    (type === 'email'
+      ? 'email'
+      : type === 'tel'
+        ? 'tel'
+        : type === 'password'
+          ? 'current-password'
+          : type === 'date'
+            ? 'off'
+            : 'on');
+
   // Pour les champs de date, utiliser le composant DateInput qui garantit le format jour/mois/année
   if (type === 'date') {
     return (
       <DateInputComponent
+        id={id}
+        name={resolvedName}
+        autoComplete={resolvedAutoComplete}
         value={value || ''}
         onChange={(newValue) => {
           if (onChange) {
@@ -40,6 +80,9 @@ function Input({ className = '', type, value, onChange, ...props }: any) {
   
   return (
     <input
+      id={id}
+      name={resolvedName}
+      autoComplete={resolvedAutoComplete}
       type={type}
       className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
@@ -55,9 +98,13 @@ function Label({ className = '', children, ...props }: any) {
   );
 }
 
-function Textarea({ className = '', ...props }: any) {
+function Textarea({ className = '', id, name, autoComplete, ...props }: any) {
+  const resolvedName = name || id;
   return (
     <textarea
+      id={id}
+      name={resolvedName}
+      autoComplete={autoComplete || 'street-address'}
       className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     />
@@ -68,6 +115,7 @@ export default function AdminComptePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [activeTab, setActiveTab] = useState<'profil' | 'password' | 'sms'>('profil');
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -204,6 +252,7 @@ export default function AdminComptePage() {
         
         console.log('📝 Données pré-remplies:', preFilledData);
         setProfileData(preFilledData);
+        setIsEditingProfile(false);
         
         // Charger les préférences SMS
         if (user.smsPreferences) {
@@ -426,7 +475,11 @@ export default function AdminComptePage() {
 
           {/* Formulaire de profil */}
           {activeTab === 'profil' && (
-            <form onSubmit={handleProfileSubmit} className="space-y-8">
+            <form onSubmit={handleProfileSubmit} className="space-y-8" autoComplete="on">
+              <fieldset
+                aria-disabled={!isEditingProfile}
+                className={!isEditingProfile ? 'opacity-100 pointer-events-none' : ''}
+              >
               <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
                 {/* Informations de base */}
                 <div className="space-y-6">
@@ -710,41 +763,73 @@ export default function AdminComptePage() {
                   </div>
                 </div>
               </div>
+              </fieldset>
 
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-6 border-t border-gray-200 mt-8">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push('/admin')}
-                  disabled={isSaving}
-                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
-                >
-                  Annuler
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={isSaving}
-                  className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
-                >
-                  {isSaving ? (
-                    <span className="flex items-center gap-2">
-                      <span className="animate-spin">⏳</span>
-                      <span>Enregistrement...</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <span>💾</span>
-                      <span>Enregistrer les modifications</span>
-                    </span>
-                  )}
-                </Button>
+                {!isEditingProfile ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => router.push('/admin')}
+                      className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                    >
+                      Retour
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                        e.preventDefault();
+                        setIsEditingProfile(true);
+                      }}
+                      className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>✏️</span>
+                        <span>Modifier</span>
+                      </span>
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        await loadProfile();
+                        setIsEditingProfile(false);
+                      }}
+                      disabled={isSaving}
+                      className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={isSaving}
+                      className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
+                    >
+                      {isSaving ? (
+                        <span className="flex items-center gap-2">
+                          <span className="animate-spin">⏳</span>
+                          <span>Enregistrement...</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <span>💾</span>
+                          <span>Enregistrer les modifications</span>
+                        </span>
+                      )}
+                    </Button>
+                  </>
+                )}
               </div>
             </form>
           )}
 
           {/* Formulaire de changement de mot de passe */}
           {activeTab === 'password' && (
-            <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl">
+            <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl" autoComplete="on">
               <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-4 sm:p-6 border border-orange-100 space-y-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-1 h-8 bg-orange-500 rounded-full"></div>
@@ -759,6 +844,7 @@ export default function AdminComptePage() {
                   <Input
                     id="currentPassword"
                     type="password"
+                    autoComplete="current-password"
                     value={passwordData.currentPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
                     required
@@ -775,6 +861,7 @@ export default function AdminComptePage() {
                   <Input
                     id="newPassword"
                     type="password"
+                    autoComplete="new-password"
                     value={passwordData.newPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
                     required
@@ -798,6 +885,7 @@ export default function AdminComptePage() {
                   <Input
                     id="confirmPassword"
                     type="password"
+                    autoComplete="new-password"
                     value={passwordData.confirmPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
                     required

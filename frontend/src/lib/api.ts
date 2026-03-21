@@ -732,6 +732,10 @@ export const dossiersAPI = {
   deleteRecapComplement: (dossierId: string, complementId: string) =>
     api.delete(`/user/dossiers/${dossierId}/recap/complements/${complementId}`),
   
+  // Client — choix de la formule tarifaire (Premium / Standard)
+  setDossierFormuleTarifaire: (dossierId: string, formule: 'standard' | 'premium') =>
+    api.patch(`/user/dossiers/${dossierId}/formule-tarifaire`, { formule }),
+
   // Client - Annuler un dossier
   cancelDossier: (id: string) =>
     api.patch(`/user/dossiers/${id}/cancel`),
@@ -980,7 +984,11 @@ export const forumAPI = {
   getBookmarks: () =>
     api.get('/forum/bookmarks'),
 
-  // Récupérer le nombre de nouvelles discussions (approximation)
+  // Marquer un fil comme lu (met à jour le badge dans la sidebar)
+  markThreadRead: (id: string) =>
+    api.post(`/forum/threads/${id}/mark-read`),
+
+  // Nombre de discussions à jour (réponses non lues sur mes fils + signets)
   getUnreadThreadsCount: () =>
     api.get('/forum/unread-count'),
 };
@@ -1183,6 +1191,7 @@ export const documentRequestsAPI = {
     documentTypeLabel: string;
     message?: string;
     isUrgent?: boolean;
+    skipSms?: boolean;
   }) => {
     return api.post('/document-requests', data);
   },

@@ -155,6 +155,18 @@ const userSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  /** Dernière ouverture d’un fil forum (pour badge « nouvelles réponses ») */
+  forumThreadReads: [{
+    thread: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ForumThread',
+      required: true
+    },
+    readAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   // Réinitialisation de mot de passe (token temporaire)
   resetPasswordToken: {
     type: String,

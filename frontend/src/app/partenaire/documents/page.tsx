@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { documentsAPI, dossiersAPI } from '@/lib/api';
-import { FileText, Download, Folder, User, Calendar } from 'lucide-react';
+import { FileText, Download, Folder, User, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { DocumentPreview } from '@/components/DocumentPreview';
 
@@ -130,6 +130,17 @@ export default function PartenaireDocumentsPage() {
     return a.clientName.localeCompare(b.clientName);
   });
 
+  const getCategoryLabel = (categorie: string) => {
+    const labels: Record<string, string> = {
+      identite: 'Identité',
+      titre_sejour: 'Titre de séjour',
+      contrat: 'Contrat',
+      facture: 'Facture',
+      autre: 'Autre'
+    };
+    return labels[categorie] || categorie;
+  };
+
   const handleDownload = async (documentId: string, originalName: string) => {
     try {
       const response = await documentsAPI.downloadDocument(documentId);
@@ -148,25 +159,6 @@ export default function PartenaireDocumentsPage() {
     }
   };
 
-  const formatDate = (date: string | Date) => {
-    if (!date) return '';
-    const d = new Date(date);
-    return d.toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (!bytes) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -180,19 +172,19 @@ export default function PartenaireDocumentsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
-      <main className="w-full px-4 py-8">
+      <main className="w-full max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8 pb-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-1 sm:mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
             Documents
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground">
             Documents des dossiers transmis, classés par dossier et client
           </p>
         </div>
 
         {documents.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-lg p-16 text-center border border-gray-200">
+          <div className="bg-white rounded-xl shadow-lg p-8 sm:p-12 lg:p-16 text-center border border-gray-200">
             <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500 text-lg mb-2">Aucun document disponible</p>
             <p className="text-gray-400 text-sm">
@@ -200,7 +192,7 @@ export default function PartenaireDocumentsPage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {sortedGroups.map((group: any) => {
               const isExpanded = expandedDossiers.has(group.dossierId);
               const dossierId = group.dossierId;
@@ -210,71 +202,73 @@ export default function PartenaireDocumentsPage() {
                   key={`${group.dossierId}-${group.clientId}`}
                   className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden"
                 >
-                  {/* En-tête du groupe (Dossier + Client) */}
-                  <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-4 border-b border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <button
-                          onClick={() => {
-                            const newExpanded = new Set(expandedDossiers);
-                            if (newExpanded.has(dossierId)) {
-                              newExpanded.delete(dossierId);
-                            } else {
-                              newExpanded.add(dossierId);
-                            }
-                            setExpandedDossiers(newExpanded);
-                          }}
-                          className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-                        >
-                          <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
-                            <Folder className="w-5 h-5 text-primary" />
+                  {/* En-tête du groupe — aligné admin */}
+                  <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-3 sm:px-5 py-3 sm:py-4 border-b border-gray-200">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between sm:gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newExpanded = new Set(expandedDossiers);
+                          if (newExpanded.has(dossierId)) {
+                            newExpanded.delete(dossierId);
+                          } else {
+                            newExpanded.add(dossierId);
+                          }
+                          setExpandedDossiers(newExpanded);
+                        }}
+                        className="flex items-center gap-2 sm:gap-3 hover:opacity-90 active:opacity-100 transition-opacity flex-1 min-w-0 text-left rounded-lg sm:rounded-none -mx-1 px-1 sm:mx-0 sm:px-0 py-1 sm:py-0"
+                      >
+                        <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center shrink-0">
+                          <Folder className="w-5 h-5 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <h2 className="text-base sm:text-lg font-bold text-foreground break-words">
+                              {group.dossierTitre}
+                            </h2>
+                            {group.dossierNumero && group.dossierNumero !== 'Sans numéro' && (
+                              <span className="px-2 py-0.5 bg-primary/20 text-primary rounded text-xs font-semibold shrink-0">
+                                N° {group.dossierNumero}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-left">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h2 className="text-lg font-bold text-foreground">
-                                {group.dossierTitre}
-                              </h2>
-                              {group.dossierNumero && group.dossierNumero !== 'Sans numéro' && (
-                                <span className="px-2 py-0.5 bg-primary/20 text-primary rounded text-xs font-semibold">
-                                  N° {group.dossierNumero}
-                                </span>
-                              )}
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <User className="w-4 h-4 shrink-0" />
+                              <span className="font-medium truncate max-w-[12rem] sm:max-w-none">{group.clientName}</span>
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <div className="flex items-center gap-1.5">
-                                <User className="w-4 h-4" />
-                                <span className="font-medium">{group.clientName}</span>
-                                {group.clientEmail && (
-                                  <span className="text-xs">({group.clientEmail})</span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <FileText className="w-4 h-4" />
-                                <span>{group.documents.length} document{group.documents.length > 1 ? 's' : ''}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="ml-auto">
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className={`h-5 w-5 text-gray-500 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={2}
+                            <div
+                              className="flex items-center gap-1.5"
+                              title={`${group.documents.length} document${group.documents.length > 1 ? 's' : ''}`}
                             >
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                            </svg>
+                              <FileText className="w-4 h-4 shrink-0" />
+                              <span className="tabular-nums font-medium">{group.documents.length}</span>
+                            </div>
                           </div>
-                        </button>
-                      </div>
-                      <div className="ml-4">
-                        <Link href={`/partenaire/dossiers/${group.dossierId}`}>
-                          <Button variant="outline" size="sm">
-                            Voir le dossier →
-                          </Button>
-                        </Link>
-                      </div>
+                        </div>
+                        <div className="shrink-0 self-center sm:self-auto">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className={`h-5 w-5 text-gray-500 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            aria-hidden
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </button>
+                      {group.dossierId !== 'sans-dossier' && (
+                        <div className="shrink-0 w-full sm:w-auto">
+                          <Link href={`/partenaire/dossiers/${group.dossierId}`} className="block w-full sm:w-auto">
+                            <Button variant="outline" size="sm" className="w-full sm:w-auto min-h-[44px] sm:min-h-9 text-sm justify-center">
+                              Voir le dossier →
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -284,66 +278,49 @@ export default function PartenaireDocumentsPage() {
                       {group.documents.map((doc: any) => {
                         const docId = safeString(doc._id || doc.id);
                         const docNom = safeString(doc.nom || doc.filename || 'Document');
-                        const docType = safeString(doc.type || doc.categorie || 'Type inconnu');
-                        const docTaille = doc.taille ? formatFileSize(doc.taille) : '';
-                        const docDate = doc.createdAt ? formatDate(doc.createdAt) : '';
                         const originalName = doc.originalName || doc.nom || doc.filename || 'document';
 
                         return (
                           <div
                             key={docId}
-                            className="p-6 hover:bg-gray-50 transition-colors"
+                            className="p-4 sm:p-5 md:p-6 hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="flex items-center gap-4 flex-1 min-w-0">
-                                <div className="flex-shrink-0 w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                                  <FileText className="w-6 h-6 text-primary" />
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                              <div className="min-w-0 flex-1">
+                                <h3 className="font-semibold text-foreground mb-1 text-sm sm:text-base break-words sm:truncate">
+                                  {docNom}
+                                </h3>
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                                  <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-md text-xs font-medium">
+                                    {getCategoryLabel(safeString(doc.categorie) || 'autre')}
+                                  </span>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <h3 className="font-semibold text-foreground mb-1 truncate">
-                                    {docNom}
-                                  </h3>
-                                  <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                                    <span className="flex items-center gap-1">
-                                      <span>📄</span>
-                                      <span>{docType}</span>
-                                    </span>
-                                    {docTaille && (
-                                      <span className="flex items-center gap-1">
-                                        <span>💾</span>
-                                        <span>{docTaille}</span>
-                                      </span>
-                                    )}
-                                    {docDate && (
-                                      <span className="flex items-center gap-1">
-                                        <Calendar className="w-4 h-4" />
-                                        <span>{docDate}</span>
-                                      </span>
-                                    )}
-                                  </div>
-                                  {doc.description && (
-                                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                                      {doc.description}
-                                    </p>
-                                  )}
-                                </div>
+                                {doc.description && (
+                                  <p className="text-sm text-muted-foreground mt-2 line-clamp-3 sm:line-clamp-2">
+                                    {doc.description}
+                                  </p>
+                                )}
                               </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
+                              <div className="flex items-center justify-end gap-2 shrink-0 pt-1 border-t border-gray-100 sm:border-0 sm:pt-0 -mx-1 px-1 sm:mx-0 sm:px-0">
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => setPreviewDocument(doc)}
+                                  title="Prévisualiser"
+                                  aria-label="Prévisualiser"
+                                  className="!h-11 !w-11 !min-h-[44px] !min-w-[44px] sm:!h-9 sm:!w-9 sm:!min-h-0 sm:!min-w-0 !p-0"
                                 >
-                                  Prévisualiser
+                                  <Eye className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   variant="default"
                                   size="sm"
                                   onClick={() => handleDownload(docId, originalName)}
-                                  className="flex items-center gap-2"
+                                  title="Télécharger"
+                                  aria-label="Télécharger"
+                                  className="!h-11 !w-11 !min-h-[44px] !min-w-[44px] sm:!h-9 sm:!w-9 sm:!min-h-0 sm:!min-w-0 !p-0"
                                 >
-                                  <Download className="w-4 h-4" />
-                                  Télécharger
+                                  <Download className="h-4 w-4" />
                                 </Button>
                               </div>
                             </div>

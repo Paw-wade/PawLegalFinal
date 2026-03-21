@@ -99,6 +99,81 @@ try {
 // Routes supplémentaires (si les fichiers existent)
 // IMPORTANT: Les routes spécifiques doivent être montées AVANT les routes génériques
 // pour éviter que les routes paramétrées (/:id) capturent les routes spécifiques
+
+// Choix formule tarifaire (client) — enregistré sur `app` en premier pour éviter tout 404
+// si le sous-routeur dossiers ne matche pas le PATCH (ordre Express / déploiements).
+try {
+  const { body, validationResult } = require('express-validator');
+  const { protect } = require('./middleware/auth');
+  const Dossier = require('./models/Dossier');
+
+  app.patch(
+    '/api/user/dossiers/:id/formule-tarifaire',
+    protect,
+    body('formule').isIn(['standard', 'premium']).withMessage('Formule invalide'),
+    async (req, res) => {
+      try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+          return res.status(400).json({
+            success: false,
+            message: 'Erreurs de validation',
+            errors: errors.array(),
+          });
+        }
+
+        if (req.user.role !== 'client') {
+          return res.status(403).json({
+            success: false,
+            message: 'Seuls les clients peuvent choisir leur formule tarifaire',
+          });
+        }
+
+        const dossier = await Dossier.findById(req.params.id).populate('user', 'firstName lastName email phone');
+        if (!dossier) {
+          return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+        }
+
+        const ownerId = dossier.user
+          ? dossier.user._id
+            ? dossier.user._id.toString()
+            : dossier.user.toString()
+          : null;
+        const emailMatch =
+          dossier.clientEmail &&
+          req.user.email &&
+          dossier.clientEmail.toLowerCase() === req.user.email.toLowerCase();
+        const isOwner = ownerId && ownerId === req.user.id.toString();
+        if (!isOwner && !emailMatch) {
+          return res.status(403).json({ success: false, message: 'Accès non autorisé à ce dossier' });
+        }
+
+        const { formule } = req.body;
+        dossier.formuleTarifaire = formule;
+        dossier.formuleTarifaireChoisieAt = new Date();
+        await dossier.save();
+
+        const updated = await Dossier.findById(dossier._id).populate('user', 'firstName lastName email phone');
+        return res.json({
+          success: true,
+          message: 'Formule tarifaire enregistrée',
+          dossier: updated,
+        });
+      } catch (error) {
+        console.error('Erreur PATCH /api/user/dossiers/:id/formule-tarifaire:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Erreur serveur',
+          error: error.message,
+        });
+      }
+    }
+  );
+  console.log('✅ Route PATCH /api/user/dossiers/:id/formule-tarifaire enregistrée (app)');
+} catch (e) {
+  console.error('❌ Impossible d’enregistrer la route formule-tarifaire:', e.message);
+}
+
 try {
   if (require.resolve('./routes/dossiers')) {
     const dossiersRouter = require('./routes/dossiers');

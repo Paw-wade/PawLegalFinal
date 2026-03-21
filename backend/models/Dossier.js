@@ -153,6 +153,21 @@ const dossierSchema = new mongoose.Schema({
     role: { type: String, trim: true },
     text: { type: String, required: true, trim: true }
   }],
+  // Formule tarifaire choisie par le client (visible admin uniquement côté API pour les partenaires)
+  formuleTarifaire: {
+    type: String,
+    enum: ['standard', 'premium'],
+    required: false
+  },
+  formuleTarifaireChoisieAt: {
+    type: Date,
+    required: false
+  },
+  // Rappel envoyé au client (notification + SMS) si le dossier passe « En cours » sans choix
+  formuleTarifaireReminderSent: {
+    type: Boolean,
+    default: false
+  },
   transmittedTo: [{
     partenaire: {
       type: mongoose.Schema.Types.ObjectId,

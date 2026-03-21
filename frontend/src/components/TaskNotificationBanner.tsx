@@ -243,61 +243,34 @@ export function TaskNotificationBanner({ userRole, userId }: TaskNotificationBan
       >
         <span className="text-sm">×</span>
       </button>
-      <div className="overflow-hidden pr-10">
-        <div className="flex animate-scroll-banner whitespace-nowrap">
+      <div className="px-4 py-3 pr-12">
+        <ul className="flex flex-col gap-2 list-none m-0 p-0">
           {bannerItems.map((item) => (
-            <Link
-              key={item.id}
-              href={item.link}
-              className={`inline-flex items-center gap-2 px-6 py-3 mx-2 rounded-lg transition-all hover:bg-blue-500/20 ${
-                item.priority === 'high' ? 'bg-red-50 border border-red-200' : 'bg-white/50'
-              }`}
-            >
-              <span className="text-lg">✅</span>
-              <span className={`text-sm font-medium ${
-                item.priority === 'high' ? 'text-red-900' : 'text-foreground'
-              }`}>
-                {item.message}
-              </span>
-              <span className="text-xs text-muted-foreground">→</span>
-            </Link>
+            <li key={item.id}>
+              <Link
+                href={item.link}
+                className={`flex items-start sm:items-center gap-2 px-4 py-2.5 rounded-lg transition-all border ${
+                  item.priority === 'high'
+                    ? 'bg-red-50 border-red-200 hover:bg-red-50/90'
+                    : 'bg-white/50 border-transparent hover:bg-blue-500/20 hover:border-blue-500/20'
+                }`}
+              >
+                <span className="text-lg shrink-0" aria-hidden>✅</span>
+                <span
+                  className={`text-sm font-medium text-left flex-1 min-w-0 break-words ${
+                    item.priority === 'high' ? 'text-red-900' : 'text-foreground'
+                  }`}
+                >
+                  {item.message}
+                </span>
+                <span className="text-xs text-muted-foreground shrink-0" aria-hidden>
+                  →
+                </span>
+              </Link>
+            </li>
           ))}
-          {/* Dupliquer pour animation continue */}
-          {bannerItems.map((item) => (
-            <Link
-              key={`${item.id}-dup`}
-              href={item.link}
-              className={`inline-flex items-center gap-2 px-6 py-3 mx-2 rounded-lg transition-all hover:bg-blue-500/20 ${
-                item.priority === 'high' ? 'bg-red-50 border border-red-200' : 'bg-white/50'
-              }`}
-            >
-              <span className="text-lg">✅</span>
-              <span className={`text-sm font-medium ${
-                item.priority === 'high' ? 'text-red-900' : 'text-foreground'
-              }`}>
-                {item.message}
-              </span>
-              <span className="text-xs text-muted-foreground">→</span>
-            </Link>
-          ))}
-        </div>
+        </ul>
       </div>
-      <style jsx>{`
-        @keyframes scroll-banner {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
-        }
-        .animate-scroll-banner {
-          animation: scroll-banner 30s linear infinite;
-        }
-        .animate-scroll-banner:hover {
-          animation-play-state: paused;
-        }
-      `}</style>
     </div>
   );
 }

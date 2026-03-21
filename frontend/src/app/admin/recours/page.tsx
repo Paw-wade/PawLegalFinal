@@ -431,8 +431,7 @@ export default function RecoursDirectoryPage() {
                           {tpl.description || tpl.fileName}
                         </p>
                         <p className="text-[11px] text-gray-500 mt-0.5">
-                          {tpl.mimeType.includes('pdf') ? 'PDF' : 'Document'} ·{' '}
-                          {tpl.size ? `${(tpl.size / 1024).toFixed(1)} KB` : 'Taille inconnue'}
+                          {tpl.mimeType.includes('pdf') ? 'PDF' : 'Document'}
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
