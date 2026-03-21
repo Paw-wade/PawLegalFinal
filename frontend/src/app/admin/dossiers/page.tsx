@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, userAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI, collaborativeDraftsAPI } from '@/lib/api';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -291,10 +291,24 @@ export default function AdminDossiersPage() {
 
   // Toujours proposer un minimum de 3 actions avant toute "édition des étapes".
   const DEFAULT_ADMIN_ETAPES = [
-    { id: 'en_cours', label: 'Accepter', ordre: 0 },
-    { id: 'refuse', label: 'Refuser', ordre: 1 },
-    { id: 'annule', label: 'Archiver', ordre: 2 },
+    { id: 'en_cours', label: 'Accepté', ordre: 0 },
+    { id: 'refuse', label: 'Refusé', ordre: 1 },
+    { id: 'annule', label: 'Archivé', ordre: 2 },
   ];
+
+  /** Aligne la valeur affichée du select sur les ids des étapes (ex. accepte → en_cours). */
+  const normalizeStatutForAdminSelect = (statut: string | undefined) => {
+    if (!statut) return '';
+    if (statut === 'accepte') return 'en_cours';
+    return statut;
+  };
+
+  const adminSelectStatutMatchesEtape = (currentStatut: string, etape: { id?: string }) => {
+    const id = String(etape.id ?? '');
+    if (id === currentStatut) return true;
+    if (id === 'en_cours' && (currentStatut === 'en_cours' || currentStatut === 'accepte')) return true;
+    return false;
+  };
 
   const getEffectiveEtapes = (dossier: any) => {
     const customSteps = Array.isArray(dossier?.etapesSupplementaires) ? dossier.etapesSupplementaires : [];
@@ -1759,6 +1773,26 @@ export default function AdminDossiersPage() {
                               {dossier.priorite}
                             </span>
                           )}
+                          {dossier.formuleTarifaire ? (
+                            <span
+                              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${
+                                dossier.formuleTarifaire === 'premium'
+                                  ? 'bg-orange-100 text-orange-900 border border-orange-200'
+                                  : 'bg-slate-100 text-slate-800 border border-slate-200'
+                              }`}
+                              title={
+                                dossier.formuleTarifaireChoisieAt
+                                  ? `Choix enregistré le ${new Date(dossier.formuleTarifaireChoisieAt).toLocaleString('fr-FR')}`
+                                  : undefined
+                              }
+                            >
+                              Formule : {dossier.formuleTarifaire === 'premium' ? 'Premium' : 'Standard'}
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-200">
+                              Tarif : non choisi
+                            </span>
+                          )}
                           {Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0 && (
                             (() => {
                               const transmittedPartners = dossier.transmittedTo.map((t: any) => {
@@ -1853,47 +1887,62 @@ export default function AdminDossiersPage() {
                       </div>
                     </div>
 
-                    {/* Avancement du dossier */}
+                    {/* Avancement : uniquement les étapes définies dans « Éditer les étapes » (pas Accepté / Refusé / Archivé) */}
                     {(() => {
-                      const progress = getDossierProgress(dossier.statut);
-                      const effectiveEtapes = getEffectiveEtapes(dossier);
+                      const editedEtapes = getEditedEtapesOnly(dossier?.etapesSupplementaires);
+                      const progress = getDossierProgressFromEditedEtapes(dossier.statut, editedEtapes);
+                      const currentEtapeIdx = editedEtapes.findIndex((step) =>
+                        customEtapeMatchesStatut(step, dossier.statut || '')
+                      );
                       return (
                         <div className="mb-4">
                           <div className="flex items-center justify-between text-xs mb-1.5">
-                            <span className="text-muted-foreground font-medium">Avancement du dossier</span>
+                            <span className="text-muted-foreground font-medium">Avancement (étapes éditées)</span>
                             <span className="font-semibold text-foreground">{progress} %</span>
                           </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full transition-all duration-300 ${
-                                progress >= 80 ? 'bg-green-500' : 
-                                progress >= 50 ? 'bg-blue-500' : 
-                                progress >= 25 ? 'bg-yellow-500' : 
-                                'bg-gray-400'
-                              }`}
-                              style={{width: `${progress}%`}}
-                            />
-                          </div>
-                          {Array.isArray(effectiveEtapes) && effectiveEtapes.length > 0 && (
-                            <div className="mt-1">
-                              <div className="flex items-center gap-1 justify-between">
-                                {effectiveEtapes.map((step: any, index: number) => {
-                                  const isCurrent =
-                                    dossier.statut &&
-                                    (dossier.statut === step.label || dossier.statut === step.id);
+                          {editedEtapes.length === 0 ? (
+                            <p className="text-[11px] text-muted-foreground leading-snug">
+                              Aucune étape personnalisée. Définissez-les dans la fiche dossier via{' '}
+                              <span className="font-medium text-foreground">Éditer les étapes</span> pour suivre la progression ici.
+                            </p>
+                          ) : (
+                            <>
+                              <div className="w-full rounded-full h-2 overflow-hidden flex ring-1 ring-gray-200 bg-gray-100">
+                                {editedEtapes.map((step, index) => {
+                                  const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
+                                  const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
+                                  const fillClass = isCompleted
+                                    ? 'bg-green-500'
+                                    : isCurrent
+                                      ? 'bg-blue-500'
+                                      : 'bg-gray-300';
                                   return (
                                     <div
-                                      key={step.id || index}
-                                      className="flex-1 flex flex-col items-center"
+                                      key={step.id + String(index)}
+                                      className="h-2 flex-1 min-w-0 border-r border-white/60 last:border-r-0"
+                                      title={step.label}
                                     >
-                                      <div
-                                        className={`w-full h-1 rounded-full ${
-                                          isCurrent ? 'bg-blue-500' : 'bg-transparent'
-                                        }`}
-                                      />
+                                      <div className={`h-full w-full ${fillClass}`} />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="mt-1.5 flex items-start gap-0.5 justify-between">
+                                {editedEtapes.map((step, index) => {
+                                  const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
+                                  const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
+                                  return (
+                                    <div
+                                      key={`lbl-${step.id}-${index}`}
+                                      className="flex-1 min-w-0 flex flex-col items-center px-0.5"
+                                    >
                                       <span
-                                        className={`mt-0.5 text-[9px] text-center truncate max-w-[80px] ${
-                                          isCurrent ? 'text-blue-700 font-semibold' : 'text-gray-400'
+                                        className={`text-[9px] text-center leading-tight line-clamp-2 ${
+                                          isCurrent
+                                            ? 'text-blue-700 font-semibold'
+                                            : isCompleted
+                                              ? 'text-green-700 font-medium'
+                                              : 'text-gray-400'
                                         }`}
                                         title={step.label}
                                       >
@@ -1903,7 +1952,7 @@ export default function AdminDossiersPage() {
                                   );
                                 })}
                               </div>
-                            </div>
+                            </>
                           )}
                         </div>
                       );
@@ -2652,16 +2701,18 @@ export default function AdminDossiersPage() {
                           {/* Synthèse acceptation partenaire (toujours visible) */}
                           {/* Le badge partenaire est déjà résumé via les badges "Transmis à" en vue simplifiée */}
                           <select
-                            value={dossier.statut || ''}
+                            value={normalizeStatutForAdminSelect(dossier.statut)}
                             onChange={(e) => handleChangeStatut(dossier._id || dossier.id, e.target.value)}
                             className="text-xs px-2 py-1.5 rounded-md border border-gray-300 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors w-full"
                             disabled={isLoading}
-                            title="Étape actuelle du dossier, choisie parmi les étapes (y compris les étapes par défaut)."
+                            title="Étape actuelle du dossier (y compris Accepté, Refusé, Archivé). La barre « étapes éditées » utilise uniquement les étapes définies dans la fiche dossier."
                           >
                             {(() => {
                               const effectiveEtapes = getEffectiveEtapes(dossier);
                               const currentStatut = dossier.statut || '';
-                              const hasCurrentOption = !!currentStatut && effectiveEtapes.some((s: any) => String(s.id) === String(currentStatut));
+                              const hasCurrentOption =
+                                !!currentStatut &&
+                                effectiveEtapes.some((s: any) => adminSelectStatutMatchesEtape(currentStatut, s));
 
                               return (
                                 <>

@@ -108,6 +108,25 @@ export default function ForumThreadPage() {
     loadThread();
   }, [threadId]);
 
+  // Consulter le fil = marquer comme lu (badge « nouvelles réponses » dans la sidebar)
+  useEffect(() => {
+    if (!threadId || status !== 'authenticated') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await forumAPI.markThreadRead(threadId);
+        if (!cancelled && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('forumUnreadUpdated'));
+        }
+      } catch {
+        /* fil introuvable ou hors ligne : ignorer */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId, status]);
+
   // Charger l'état du signet pour cette discussion
   useEffect(() => {
     const loadBookmarks = async () => {
@@ -164,6 +183,14 @@ export default function ForumThreadPage() {
       if (created) {
         setPosts((prev) => [...prev, created]);
         setReplyBody('');
+        try {
+          await forumAPI.markThreadRead(threadId);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('forumUnreadUpdated'));
+          }
+        } catch {
+          /* ignore */
+        }
       }
     } catch (err: any) {
       console.error('Erreur lors de l\'envoi de la réponse:', err);

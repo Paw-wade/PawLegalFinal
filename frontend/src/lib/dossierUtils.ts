@@ -137,6 +137,54 @@ export const getDossierProgress = (statut: string): number => {
   return progress;
 };
 
+/** Ids des trois étapes admin par défaut (hors barre d'avancement « étapes éditées ») */
+export const ADMIN_DEFAULT_ETAPE_IDS = new Set(['en_cours', 'refuse', 'annule']);
+
+export interface EditedEtapeItem {
+  id: string;
+  label: string;
+  ordre: number;
+}
+
+/**
+ * Étapes issues uniquement de l'édition (« étapes supplémentaires »), sans les 3 défauts.
+ */
+export const getEditedEtapesOnly = (etapesSupplementaires: unknown[] | null | undefined): EditedEtapeItem[] => {
+  const raw = Array.isArray(etapesSupplementaires) ? etapesSupplementaires : [];
+  const normalized = raw.map((s: any, idx: number) => {
+    const id = String(s?.id ?? s?.label ?? `step-${idx}`);
+    return {
+      id,
+      label: String(s?.label ?? s?.id ?? `Étape ${idx + 1}`),
+      ordre: typeof s?.ordre === 'number' ? s.ordre : idx,
+    };
+  });
+  return normalized
+    .filter((step) => !ADMIN_DEFAULT_ETAPE_IDS.has(step.id))
+    .sort((a, b) => a.ordre - b.ordre);
+};
+
+export const customEtapeMatchesStatut = (step: EditedEtapeItem, statut: string): boolean => {
+  if (!statut) return false;
+  return step.id === statut || step.label === statut;
+};
+
+/**
+ * Pourcentage d'avancement : uniquement les étapes définies à l'édition (pas les défauts Accepté / Refusé / Annulé).
+ * Aucune étape éditée → 0 %. Statut ne correspond à aucune étape éditée → 0 %.
+ */
+export const getDossierProgressFromEditedEtapes = (
+  statut: string | undefined | null,
+  editedEtapes: EditedEtapeItem[]
+): number => {
+  const s = statut || '';
+  const n = editedEtapes.length;
+  if (n === 0) return 0;
+  const idx = editedEtapes.findIndex((step) => customEtapeMatchesStatut(step, s));
+  if (idx < 0) return 0;
+  return Math.round(((idx + 1) / n) * 100);
+};
+
 // Calculer le nombre de jours depuis une date
 export const calculateDaysSince = (date: Date | string | null | undefined): number => {
   if (!date) return 0;

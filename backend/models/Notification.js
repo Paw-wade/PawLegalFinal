@@ -26,6 +26,7 @@ const notificationSchema = new mongoose.Schema({
       'message_sent',
       'account_created',
       'draft_access_granted',
+      'tarification_choice_requested',
       'other'
     ]
   },

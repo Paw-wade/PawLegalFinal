@@ -497,6 +497,20 @@ function ClientDashboardContent() {
     return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
+  const getProfileTypeTitre = () => {
+    const candidates = [
+      userProfile?.typeTitre,
+      userProfile?.type_titre,
+      userProfile?.titreSejourType,
+      userProfile?.typeTitreSejour,
+      userProfile?.titreSejour?.typeTitre,
+      userProfile?.titreSejour?.type,
+      (session?.user as any)?.typeTitre,
+    ];
+    const firstNonEmpty = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+    return firstNonEmpty ? String(firstNonEmpty).trim() : '';
+  };
+
   // Minuteur dynamique pour la sidebar (temps restant avant expiration)
   useEffect(() => {
     if (!userProfile?.dateExpiration) {
@@ -1132,7 +1146,7 @@ function ClientDashboardContent() {
                       <div className="space-y-2.5">
                         <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                           <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Type de titre</p>
-                          <p className="text-xs font-medium text-foreground break-words">{userProfile.typeTitre || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
+                          <p className="text-xs font-medium text-foreground break-words">{getProfileTypeTitre() || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">

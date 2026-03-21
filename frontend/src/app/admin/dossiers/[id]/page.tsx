@@ -23,9 +23,6 @@ function Button({ children, variant = 'default', className = '', ...props }: any
 }
 
 const STATUT_STEPS = [
-  { id: 'recu', label: 'Reçu' },
-  { id: 'accepte', label: 'Accepté' },
-  { id: 'refuse', label: 'Refusé' },
   { id: 'en_attente_onboarding', label: "En attente d'onboarding" },
   { id: 'en_cours_instruction', label: "En cours d'instruction" },
   { id: 'pieces_manquantes', label: 'Pièces manquantes' },

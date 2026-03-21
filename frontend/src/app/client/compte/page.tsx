@@ -19,11 +19,51 @@ function Button({ children, variant = 'default', className = '', disabled = fals
   return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} disabled={disabled} {...props}>{children}</button>;
 }
 
-function Input({ className = '', type, value, onChange, ...props }: any) {
+function Input({ className = '', type, value, onChange, id, name, autoComplete, ...props }: any) {
+  const resolvedName = name || id;
+  const normalizedField = String(resolvedName || '').toLowerCase();
+  const inferredAutoCompleteByField =
+    normalizedField === 'firstname'
+      ? 'given-name'
+      : normalizedField === 'lastname'
+        ? 'family-name'
+        : normalizedField === 'email'
+          ? 'email'
+          : normalizedField === 'phone'
+            ? 'tel'
+            : normalizedField === 'adresspostale' || normalizedField === 'adressepostale'
+              ? 'street-address'
+              : normalizedField === 'ville'
+                ? 'address-level2'
+                : normalizedField === 'codepostal'
+                  ? 'postal-code'
+                  : normalizedField === 'pays'
+                    ? 'country-name'
+                    : normalizedField === 'datenaissance'
+                      ? 'bday'
+                      : (normalizedField === 'datedelivrance' || normalizedField === 'dateexpiration')
+                        ? 'off'
+                        : undefined;
+  const resolvedAutoComplete =
+    autoComplete ||
+    inferredAutoCompleteByField ||
+    (type === 'email'
+      ? 'email'
+      : type === 'tel'
+        ? 'tel'
+        : type === 'password'
+          ? 'current-password'
+          : type === 'date'
+            ? 'off'
+            : 'on');
+
   // Pour les champs de date, utiliser le composant DateInput qui garantit le format jour/mois/année
   if (type === 'date') {
     return (
       <DateInputComponent
+        id={id}
+        name={resolvedName}
+        autoComplete={resolvedAutoComplete}
         value={value || ''}
         onChange={(newValue) => {
           if (onChange) {
@@ -42,6 +82,9 @@ function Input({ className = '', type, value, onChange, ...props }: any) {
   
   return (
     <input
+      id={id}
+      name={resolvedName}
+      autoComplete={resolvedAutoComplete}
       type={type}
       className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
@@ -62,6 +105,7 @@ export default function ComptePage() {
   const { data: session, status } = useSession();
   const errorRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<'profil' | 'password' | 'sms'>('profil');
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +239,7 @@ export default function ComptePage() {
         
         console.log('📝 Données pré-remplies:', preFilledData);
         setProfileData(preFilledData);
+        setIsEditingProfile(false);
         
         // Charger aussi les préférences SMS depuis les mêmes données
         if (user.smsPreferences) {
@@ -268,23 +313,6 @@ export default function ComptePage() {
     setIsSaving(true);
     setError(null);
     setSuccess(null);
-
-    const userRoleSubmit = (session?.user as any)?.role ?? 'client';
-    const isClientSubmit = userRoleSubmit === 'client';
-    if (isClientSubmit) {
-      const { typeTitre, dateDelivrance, dateExpiration } = profileData;
-      if (!typeTitre?.trim() || !dateDelivrance?.trim() || !dateExpiration?.trim()) {
-        setError('Pour les comptes client, les informations de séjour sont obligatoires : type de titre, date de délivrance et date d\'expiration.');
-        setIsSaving(false);
-        // Mettre en avant le message d'erreur au centre de la page
-        setTimeout(() => {
-          if (errorRef.current) {
-            errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 0);
-        return;
-      }
-    }
 
     const payload = {
       firstName: profileData.firstName ?? '',
@@ -511,7 +539,11 @@ export default function ComptePage() {
               </h2>
               <p className="text-sm text-muted-foreground mt-2">Mettez à jour vos informations de profil</p>
             </div>
-            <form onSubmit={handleProfileSubmit} className="p-4 sm:p-8 space-y-7 sm:space-y-8">
+            <form onSubmit={handleProfileSubmit} className="p-4 sm:p-8 space-y-7 sm:space-y-8" autoComplete="on">
+              <fieldset
+                aria-disabled={!isEditingProfile}
+                className={!isEditingProfile ? 'opacity-100 pointer-events-none' : ''}
+              >
               {/* Informations de base */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3 mb-4">
@@ -660,7 +692,7 @@ export default function ComptePage() {
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="typeTitre" className="text-sm font-semibold">
-                      Type de titre {isClient && <span className="text-destructive">*</span>}
+                      Type de titre
                     </Label>
                     <Input
                       id="typeTitre"
@@ -675,7 +707,7 @@ export default function ComptePage() {
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="dateDelivrance" className="text-sm font-semibold">
-                      Date de délivrance {isClient && <span className="text-destructive">*</span>}
+                      Date de délivrance
                     </Label>
                     <Input
                       id="dateDelivrance"
@@ -687,7 +719,7 @@ export default function ComptePage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="dateExpiration" className="text-sm font-semibold">
-                      Date d'expiration {isClient && <span className="text-destructive">*</span>}
+                      Date d'expiration
                     </Label>
                     <Input
                       id="dateExpiration"
@@ -758,35 +790,67 @@ export default function ComptePage() {
                   </div>
                 </div>
               </div>
+              </fieldset>
 
               {/* Boutons d'action améliorés */}
               <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-border">
-                <Button 
-                  type="submit" 
-                  disabled={isSaving} 
-                  className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                >
-                  {isSaving ? (
-                    <span className="flex items-center gap-2">
-                      <span className="animate-spin">⏳</span>
-                      <span>Enregistrement...</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <span>💾</span>
-                      <span>Enregistrer les modifications</span>
-                    </span>
-                  )}
-                </Button>
-                <Link href="/client" className="w-full sm:w-auto">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="w-full h-12 px-6 border-2 hover:bg-accent transition-colors"
-                  >
-                    Annuler
-                  </Button>
-                </Link>
+                {!isEditingProfile ? (
+                  <>
+                    <Button
+                      type="button"
+                      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                        e.preventDefault();
+                        setIsEditingProfile(true);
+                      }}
+                      className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>✏️</span>
+                        <span>Modifier</span>
+                      </span>
+                    </Button>
+                    <Link href="/client" className="w-full sm:w-auto">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full h-12 px-6 border-2 hover:bg-accent transition-colors"
+                      >
+                        Retour
+                      </Button>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="submit"
+                      disabled={isSaving}
+                      className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                    >
+                      {isSaving ? (
+                        <span className="flex items-center gap-2">
+                          <span className="animate-spin">⏳</span>
+                          <span>Enregistrement...</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <span>💾</span>
+                          <span>Enregistrer les modifications</span>
+                        </span>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full sm:w-auto h-12 px-6 border-2 hover:bg-accent transition-colors"
+                      onClick={async () => {
+                        await loadProfile();
+                        setIsEditingProfile(false);
+                      }}
+                    >
+                      Annuler
+                    </Button>
+                  </>
+                )}
               </div>
             </form>
           </div>
@@ -802,7 +866,7 @@ export default function ComptePage() {
               <p className="text-sm text-muted-foreground mt-2">Mettez à jour votre mot de passe pour sécuriser votre compte</p>
             </div>
             <div className="p-4 sm:p-8 space-y-8 sm:space-y-10">
-              <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl">
+              <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl" autoComplete="on">
                 <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
                   <p className="text-sm text-blue-800">
                     <strong>Conseil de sécurité :</strong> Utilisez un mot de passe fort contenant au moins 8 caractères, avec des majuscules, minuscules, chiffres et symboles.
@@ -814,6 +878,7 @@ export default function ComptePage() {
                   <Input
                     id="currentPassword"
                     type="password"
+                    autoComplete="current-password"
                     value={passwordData.currentPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
                     required
@@ -827,6 +892,7 @@ export default function ComptePage() {
                   <Input
                     id="newPassword"
                     type="password"
+                    autoComplete="new-password"
                     value={passwordData.newPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
                     required
@@ -844,6 +910,7 @@ export default function ComptePage() {
                   <Input
                     id="confirmPassword"
                     type="password"
+                    autoComplete="new-password"
                     value={passwordData.confirmPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
                     required
