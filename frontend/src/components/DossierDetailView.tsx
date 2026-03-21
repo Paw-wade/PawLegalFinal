@@ -195,22 +195,22 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
           <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
             Informations Générales
           </h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="info-item">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="info-item min-w-0">
               <p className="info-label">Numéro de dossier</p>
-              <p className="info-value font-semibold">{dossier.numero || dossier._id || 'N/A'}</p>
+              <p className="info-value font-semibold break-words">{dossier.numero || dossier._id || 'N/A'}</p>
             </div>
-            <div className="info-item">
+            <div className="info-item min-w-0">
               <p className="info-label">Titre</p>
-              <p className="info-value font-semibold">{dossier.titre || 'Sans titre'}</p>
+              <p className="info-value font-semibold break-words">{dossier.titre || 'Sans titre'}</p>
             </div>
-            <div className="info-item">
+            <div className="info-item min-w-0">
               <p className="info-label">Catégorie</p>
-              <p className="info-value">{getCategorieLabel(dossier.categorie || 'autre')}</p>
+              <p className="info-value break-words">{getCategorieLabel(dossier.categorie || 'autre')}</p>
             </div>
-            <div className="info-item">
+            <div className="info-item min-w-0">
               <p className="info-label">Type de demande</p>
-              <p className="info-value">{dossier.type || 'Non spécifié'}</p>
+              <p className="info-value break-words">{dossier.type || 'Non spécifié'}</p>
             </div>
             <div className="info-item">
               <p className="info-label">Statut</p>
@@ -275,7 +275,7 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
               </div>
             )}
             {dossier.teamMembers && dossier.teamMembers.length > 0 && (
-              <div className="info-item col-span-2">
+              <div className="info-item col-span-1 sm:col-span-2 min-w-0">
                 <p className="info-label">Membres de l'équipe</p>
                 <p className="info-value">
                   {dossier.teamMembers.map((member: any, idx: number) => (
@@ -443,19 +443,19 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
             <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
               Informations Spécifiques à la Demande
             </h2>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <table className="w-full">
+            <div className="bg-gray-50 p-4 rounded-lg overflow-x-auto">
+              <table className="w-full min-w-0 text-sm">
                 <thead>
                   <tr>
-                    <th className="text-left p-2">Champ</th>
-                    <th className="text-left p-2">Valeur</th>
+                    <th className="text-left p-2 align-top w-[35%] max-w-[40%]">Champ</th>
+                    <th className="text-left p-2 align-top">Valeur</th>
                   </tr>
                 </thead>
                 <tbody>
                   {specificFields.map((field, index) => (
                     <tr key={index} className="border-b">
-                      <td className="p-2 font-semibold">{field.label}</td>
-                      <td className="p-2">{field.value}</td>
+                      <td className="p-2 font-semibold break-words align-top">{field.label}</td>
+                      <td className="p-2 break-words align-top">{field.value}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -531,19 +531,19 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
           <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
             Motif et Nature du Dossier
           </h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="info-item">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="info-item min-w-0">
               <p className="info-label">Catégorie principale</p>
-              <p className="info-value font-semibold">{getCategorieLabel(dossier.categorie || 'autre')}</p>
+              <p className="info-value font-semibold break-words hyphens-auto">{getCategorieLabel(dossier.categorie || 'autre')}</p>
             </div>
-            <div className="info-item">
+            <div className="info-item min-w-0">
               <p className="info-label">Type de demande</p>
-              <p className="info-value font-semibold">{dossier.type || 'Non spécifié'}</p>
+              <p className="info-value font-semibold break-words hyphens-auto">{dossier.type || 'Non spécifié'}</p>
             </div>
             {dossier.categorie && (
-              <div className="info-item col-span-2">
+              <div className="info-item col-span-1 sm:col-span-2 min-w-0">
                 <p className="info-label">Code catégorie</p>
-                <p className="info-value text-sm text-muted-foreground">{dossier.categorie}</p>
+                <p className="info-value text-sm text-muted-foreground break-all">{dossier.categorie}</p>
               </div>
             )}
           </div>

@@ -404,7 +404,7 @@ export default function DossiersPage() {
         <div className="mb-6 sm:mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-1 sm:mb-2 truncate">Mes Dossiers</h1>
-            <p className="text-sm text-muted-foreground">Gérez tous vos dossiers en un seul endroit</p>
+            <p className="text-sm md:text-base text-muted-foreground">Gérez tous vos dossiers en un seul endroit</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={loadDossiers} disabled={isLoading} className="min-h-[44px] sm:min-h-0">
@@ -452,18 +452,18 @@ export default function DossiersPage() {
                       : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
                   }`}
                 >
-                  <div className="bg-white rounded-xl border border-white/70 p-3 sm:p-4 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                  <div className="bg-white rounded-xl border border-white/70 p-3 sm:p-4 md:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
                     {/* En-tête de la carte : sur mobile en colonne (titre puis badges + lien) */}
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
                       <div className="flex-1 min-w-0 pr-0 sm:pr-2">
                         <div className="flex items-center gap-2 mb-0.5">
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-baseline gap-2">
-                            <h3 className="font-semibold text-sm sm:text-base text-foreground line-clamp-1 leading-snug truncate">
+                            <h3 className="font-semibold text-sm sm:text-base md:text-lg text-foreground line-clamp-1 leading-snug truncate">
                               {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
                             </h3>
                             {(typeof dossier.numero === 'string' || typeof dossier.numeroDossier === 'string') && (
-                              <span className="text-xs text-primary font-mono font-semibold">
+                              <span className="text-xs md:text-sm text-primary font-mono font-semibold">
                                 Réf. {typeof dossier.numero === 'string' ? dossier.numero : dossier.numeroDossier}
                               </span>
                             )}
@@ -480,7 +480,7 @@ export default function DossiersPage() {
 
                                 return (
                                   <>
-                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs md:text-sm text-muted-foreground">
                                       <span>Documents : <span className="font-semibold text-foreground">{totalDocuments}</span></span>
                                       {dossierRequests.length > 0 && (
                                         <span>Demandes : <span className="font-semibold text-orange-600">{pendingRequests.length}</span> en attente</span>
@@ -503,11 +503,11 @@ export default function DossiersPage() {
                     </div>
                     <div className="flex flex-col sm:items-end gap-1.5 flex-shrink-0 w-full sm:w-auto sm:max-w-none">
                       <div className="flex flex-wrap items-center gap-2 justify-end sm:justify-end">
-                        <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getStatutColor(dossier.statut)}`}>
+                        <span className={`px-2.5 py-1 rounded-md text-[11px] md:text-sm font-semibold ${getStatutColor(dossier.statut)}`}>
                           {getStatutLabel(dossier.statut)}
                         </span>
                         {dossier.priorite && (
-                          <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getPrioriteColor(dossier.priorite)}`}>
+                          <span className={`px-2.5 py-1 rounded-md text-[11px] md:text-sm font-semibold ${getPrioriteColor(dossier.priorite)}`}>
                             {dossier.priorite}
                           </span>
                         )}
@@ -515,7 +515,7 @@ export default function DossiersPage() {
                       <Link
                         href={`/client/dossiers/${dossier._id || dossier.id}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center justify-center px-3 py-2 min-h-[40px] sm:min-h-[36px] rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors text-center w-full sm:w-auto"
+                        className="inline-flex items-center justify-center px-3 py-2 min-h-[40px] sm:min-h-[36px] rounded-md bg-primary text-white text-sm md:text-base font-medium hover:bg-primary/90 transition-colors text-center w-full sm:w-auto"
                       >
                         Voir les détails
                       </Link>
@@ -532,28 +532,28 @@ export default function DossiersPage() {
                       const progress = getDossierProgress(dossier.statut);
                       return (
                         <div className="hidden sm:flex items-center gap-2 min-w-0 flex-1">
-                          <span className="text-[11px] text-muted-foreground shrink-0">Avancement</span>
-                          <div className="w-20 sm:w-28 bg-gray-200 rounded-full h-1.5 flex-1 max-w-28">
+                          <span className="text-[11px] md:text-sm text-muted-foreground shrink-0">Avancement</span>
+                          <div className="w-20 sm:w-28 md:w-32 bg-gray-200 rounded-full h-1.5 md:h-2 flex-1 max-w-28 md:max-w-none">
                             <div
-                              className={`h-1.5 rounded-full transition-all ${
+                              className={`h-1.5 md:h-2 rounded-full transition-all ${
                                 progress >= 80 ? 'bg-green-500' : progress >= 50 ? 'bg-blue-500' : progress >= 25 ? 'bg-yellow-500' : 'bg-gray-400'
                               }`}
                               style={{ width: `${progress}%` }}
                             />
                           </div>
-                          <span className="text-[11px] font-semibold text-foreground shrink-0">{progress} %</span>
+                          <span className="text-[11px] md:text-sm font-semibold text-foreground shrink-0">{progress} %</span>
                         </div>
                       );
                     })()}
                     {isDeadlineApproaching(dossier.dateEcheance) && (
-                      <span className="text-[11px] font-semibold text-red-600 shrink-0">
+                      <span className="text-[11px] md:text-sm font-semibold text-red-600 shrink-0">
                         Échéance {calculateDaysUntil(dossier.dateEcheance)} j
                       </span>
                     )}
                     {(() => {
                       const nextAction = getNextAction(dossier.statut);
                       return nextAction ? (
-                        <span className="text-[11px] text-blue-800 truncate max-w-[200px]" title={nextAction}>{nextAction}</span>
+                        <span className="text-[11px] md:text-sm text-blue-800 truncate max-w-[200px] md:max-w-md" title={nextAction}>{nextAction}</span>
                       ) : null;
                     })()}
                   </div>
@@ -561,10 +561,10 @@ export default function DossiersPage() {
                   {/* Dossier transmis — une ligne par transmission */}
                   {dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
                     <div className="mb-2 pb-2 border-b border-gray-100">
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Transmis</p>
+                      <p className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Transmis</p>
                       <div className="flex flex-wrap gap-1.5">
                         {dossier.transmittedTo.map((trans: any, idx: number) => (
-                          <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 border border-purple-200 rounded text-[11px] text-purple-800">
+                          <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 border border-purple-200 rounded text-[11px] md:text-sm text-purple-800">
                             {(() => {
                               // Backend: transmittedTo stocke l'utilisateur partenaire dans `partenaire`
                               // et le type (consulat/association/avocat) dans `partenaireInfo.typeOrganisme`.
@@ -598,8 +598,8 @@ export default function DossiersPage() {
 
                   {/* Informations du dossier — grille compacte */}
                   <div className="mb-2 pb-2 border-b border-gray-100">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Infos</p>
-                    <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-0.5 text-[11px]">
+                    <p className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Infos</p>
+                    <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-0.5 text-[11px] md:text-sm">
                       <dt className="text-muted-foreground">Catégorie</dt>
                       <dd className="text-foreground">{getCategorieLabel(dossier.categorie || 'autre')}</dd>
                       {dossier.type && (
@@ -634,7 +634,7 @@ export default function DossiersPage() {
                   </div>
 
                   {/* Synthèse — une ligne : Documents · Messages · Demandes */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2 pb-2 border-b border-gray-100 text-[11px] text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2 pb-2 border-b border-gray-100 text-[11px] md:text-sm text-muted-foreground">
                     <span><span className="font-semibold text-foreground">{dossierDocuments[dossier._id || dossier.id]?.length || dossier.documents?.length || 0}</span> doc.</span>
                     <span><span className="font-semibold text-foreground">{dossier.messages?.length || 0}</span> msg.</span>
                     <span><span className="font-semibold text-foreground">{documentRequests[dossier._id || dossier.id]?.length || 0}</span> demandes</span>
@@ -663,8 +663,8 @@ export default function DossiersPage() {
                               setExpandedDocumentSections(newExpanded);
                             }}
                           >
-                            <span className="text-[11px] font-semibold text-foreground">📄 Documents demandés</span>
-                            <span className="text-[11px] text-muted-foreground">
+                            <span className="text-[11px] md:text-sm font-semibold text-foreground">📄 Documents demandés</span>
+                            <span className="text-[11px] md:text-sm text-muted-foreground">
                               {pendingRequests.length > 0 && <span className="text-orange-600">{pendingRequests.length} attente</span>}
                               {pendingRequests.length > 0 && receivedRequests.length > 0 && ' · '}
                               {receivedRequests.length > 0 && <span className="text-green-600">{receivedRequests.length} reçu(s)</span>}
@@ -699,12 +699,12 @@ export default function DossiersPage() {
                           >
                             {directUploadError && <p className="text-xs text-red-600">{directUploadError}</p>}
                             <div>
-                              <label className="text-[11px] font-medium">Fichier *</label>
+                              <label className="text-[11px] md:text-sm font-medium">Fichier *</label>
                               <input
                                 ref={directFileInputRef}
                                 type="file"
                                 accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
-                                className="mt-1 w-full text-xs"
+                                className="mt-1 w-full text-xs md:text-sm"
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   if (file && !directUploadData.nom.trim()) {
@@ -715,21 +715,21 @@ export default function DossiersPage() {
                               />
                             </div>
                             <div>
-                              <label className="text-[11px] font-medium">Nom du document *</label>
+                              <label className="text-[11px] md:text-sm font-medium">Nom du document *</label>
                               <input
                                 type="text"
                                 value={directUploadData.nom}
                                 onChange={(e) => setDirectUploadData((prev) => ({ ...prev, nom: e.target.value }))}
-                                className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs"
+                                className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm"
                                 required
                               />
                             </div>
                             <div>
-                              <label className="text-[11px] font-medium">Catégorie</label>
+                              <label className="text-[11px] md:text-sm font-medium">Catégorie</label>
                               <select
                                 value={directUploadData.categorie}
                                 onChange={(e) => setDirectUploadData((prev) => ({ ...prev, categorie: e.target.value }))}
-                                className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs"
+                                className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm"
                               >
                                 <option value="identite">Identité</option>
                                 <option value="titre_sejour">Titre de séjour</option>
@@ -739,18 +739,18 @@ export default function DossiersPage() {
                               </select>
                             </div>
                             <div>
-                              <label className="text-[11px] font-medium">Description</label>
+                              <label className="text-[11px] md:text-sm font-medium">Description</label>
                               <textarea
                                 value={directUploadData.description}
                                 onChange={(e) => setDirectUploadData((prev) => ({ ...prev, description: e.target.value }))}
-                                className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs min-h-[56px]"
+                                className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm min-h-[56px]"
                               />
                             </div>
                             <div className="flex justify-end gap-2 pt-1">
                               <Button
                                 type="button"
                                 variant="outline"
-                                className="h-7 px-2 text-[10px]"
+                                className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
                                 onClick={() => {
                                   setActiveDirectUploadDossierId(null);
                                   setDirectUploadError(null);
@@ -761,7 +761,7 @@ export default function DossiersPage() {
                               </Button>
                               <Button
                                 type="submit"
-                                className="h-7 px-2 text-[10px]"
+                                className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
                                 disabled={directUploading}
                               >
                                 {directUploading ? 'Envoi...' : 'Envoyer'}
@@ -778,7 +778,7 @@ export default function DossiersPage() {
                               return (
                                 <div
                                   key={request._id || request.id}
-                                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 border text-[11px] ${
+                                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 border text-[11px] md:text-sm ${
                                     isPending
                                       ? isUrgent ? 'bg-red-50/50 border-red-200' : 'bg-orange-50/50 border-orange-200'
                                       : 'bg-green-50/50 border-green-200'
@@ -789,12 +789,12 @@ export default function DossiersPage() {
                                     {request.documentTypeLabel || request.documentType || 'Document'}
                                     {request.message && <span className="text-muted-foreground font-normal"> — {request.message}</span>}
                                   </div>
-                                  <span className="text-[10px] text-muted-foreground shrink-0">
+                                  <span className="text-[10px] md:text-xs text-muted-foreground shrink-0">
                                     {request.receivedAt
                                       ? `Reçu ${new Date(request.receivedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`
                                       : `Demandé ${new Date(request.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`}
                                   </span>
-                                  {isUrgent && <span className="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] font-bold shrink-0">URGENT</span>}
+                                  {isUrgent && <span className="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-[10px] md:text-xs font-bold shrink-0">URGENT</span>}
                                   {isPending && (
                                     <button
                                       type="button"
@@ -818,7 +818,7 @@ export default function DossiersPage() {
                                         });
                                         setShowDocumentRequestModal(true);
                                       }}
-                                      className={`shrink-0 px-2 py-1 rounded text-[10px] font-medium ${
+                                      className={`shrink-0 px-2 py-1 rounded text-[10px] md:text-xs font-medium ${
                                         isUrgent ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-orange-500 text-white hover:bg-orange-600'
                                       }`}
                                     >
@@ -849,10 +849,10 @@ export default function DossiersPage() {
                                   setExpandedDocumentDropdowns(newExpanded);
                                 }}
                               >
-                                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                <span className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                                   Documents du dossier
                                 </span>
-                                <span className="text-[11px] text-muted-foreground">
+                                <span className="text-[11px] md:text-sm text-muted-foreground">
                                   {docs.length} doc{docs.length > 1 ? 's' : ''} {docsExpanded ? '▲' : '▼'}
                                 </span>
                               </button>
@@ -862,7 +862,7 @@ export default function DossiersPage() {
                                   {docs.map((doc: any) => (
                                     <div
                                       key={doc._id || doc.id}
-                                      className="flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[11px]"
+                                      className="flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-sm"
                                     >
                                       <div className="min-w-0 flex-1 truncate font-medium text-foreground">
                                         {doc.nom || doc.filename || 'Document'}
@@ -870,7 +870,7 @@ export default function DossiersPage() {
                                       <div className="flex items-center gap-1.5 shrink-0">
                                         <button
                                           type="button"
-                                          className="px-1.5 py-0.5 rounded border border-gray-300 text-[10px] hover:bg-gray-50"
+                                          className="px-1.5 py-0.5 rounded border border-gray-300 text-[10px] md:text-xs hover:bg-gray-50"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             setSelectedDocumentForPreview(doc);
@@ -929,10 +929,10 @@ export default function DossiersPage() {
                               return (
                                 <div className="relative overflow-hidden bg-blue-50/50 rounded px-2 py-1 border border-blue-200/50">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-[11px]">🔔</span>
+                                    <span className="text-[11px] md:text-sm">🔔</span>
                                     <div className="flex-1 min-w-0 overflow-hidden">
                                       <div className="animate-scroll-text whitespace-nowrap">
-                                        <span className="text-[11px] text-blue-900 font-medium">
+                                        <span className="text-[11px] md:text-sm text-blue-900 font-medium">
                                           {lastNotification.title || lastNotification.message || 'Nouvelle notification'}
                                         </span>
                                       </div>
@@ -956,7 +956,7 @@ export default function DossiersPage() {
                               <Button 
                                 variant="outline" 
                                 size="sm" 
-                                className={`text-[11px] h-7 relative px-2 ${unreadCount > 0 ? 'bg-orange-50 border-orange-300 hover:bg-orange-100' : ''}`}
+                                className={`text-[11px] md:text-sm h-7 md:h-8 relative px-2 md:px-3 ${unreadCount > 0 ? 'bg-orange-50 border-orange-300 hover:bg-orange-100' : ''}`}
                                 title="Voir les notifications non lues"
                               >
                                 🔔
@@ -970,12 +970,12 @@ export default function DossiersPage() {
                           );
                         })()}
                         <Link href={`/client/messages?dossierId=${dossier._id || dossier.id}&action=view`}>
-                          <Button variant="outline" size="sm" className="text-[11px] h-7 px-2" title="Voir les discussions">
+                          <Button variant="outline" size="sm" className="text-[11px] md:text-sm h-7 md:h-8 px-2 md:px-3" title="Voir les discussions">
                             💬
                           </Button>
                         </Link>
                         <Link href={`/client/messages?dossierId=${dossier._id || dossier.id}&action=send`}>
-                          <Button size="sm" className="text-[11px] h-7 px-2" title="Envoyer un message">
+                          <Button size="sm" className="text-[11px] md:text-sm h-7 md:h-8 px-2 md:px-3" title="Envoyer un message">
                             ✉️
                           </Button>
                         </Link>
@@ -991,7 +991,7 @@ export default function DossiersPage() {
 
             {dossiers.length > 0 && (
               <div className="mt-6 pt-4 border-t flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm md:text-base text-muted-foreground">
                   Total: <span className="font-semibold text-foreground">{dossiers.length}</span> dossier{dossiers.length > 1 ? 's' : ''}
                 </p>
               </div>
