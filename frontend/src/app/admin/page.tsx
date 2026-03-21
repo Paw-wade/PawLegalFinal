@@ -115,6 +115,12 @@ export default function AdminDashboardPage() {
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   const [isMessagesExpanded, setIsMessagesExpanded] = useState(false);
+  const [adminTopNotice, setAdminTopNotice] = useState<{
+    visible: boolean;
+    latestUser?: any;
+    latestDossier?: any;
+    signature?: string;
+  }>({ visible: false });
 
   // Textes CMS pour le header du dashboard admin
   const dashboardTitle = useCmsText(
@@ -165,7 +171,65 @@ export default function AdminDashboardPage() {
     }
     checkUnreadMessages();
     loadNotifications();
+    loadAdminTopNotice();
   }, [session, status]);
+
+  const buildNoticeStorageKey = () => {
+    const currentUserId = (session?.user as any)?.id || 'admin';
+    return `adminDashboardNoticeSeen:${currentUserId}`;
+  };
+
+  const loadAdminTopNotice = async () => {
+    try {
+      const [usersRes, dossiersRes] = await Promise.all([
+        userAPI.getAllUsers(),
+        dossiersAPI.getMyDossiers()
+      ]);
+
+      const users = usersRes?.data?.success ? (usersRes.data.users || []) : [];
+      const dossiers = dossiersRes?.data?.success ? (dossiersRes.data.dossiers || []) : [];
+
+      const latestUser = users
+        .filter((u: any) => !!u?.createdAt)
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+      const latestDossier = dossiers
+        .filter((d: any) => !!(d?.createdAt || d?.updatedAt))
+        .sort((a: any, b: any) => {
+          const aTime = new Date(a.createdAt || a.updatedAt).getTime();
+          const bTime = new Date(b.createdAt || b.updatedAt).getTime();
+          return bTime - aTime;
+        })[0];
+
+      const userSig = latestUser ? `u:${latestUser._id || latestUser.id}:${latestUser.createdAt}` : '';
+      const dossierSig = latestDossier ? `d:${latestDossier._id || latestDossier.id}:${latestDossier.createdAt || latestDossier.updatedAt}` : '';
+      const signature = `${userSig}|${dossierSig}`;
+
+      const storageKey = buildNoticeStorageKey();
+      const seenSignature = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
+
+      setAdminTopNotice({
+        visible: !!signature && signature !== seenSignature,
+        latestUser,
+        latestDossier,
+        signature
+      });
+    } catch (error) {
+      console.error('Erreur lors du chargement du bandeau admin:', error);
+    }
+  };
+
+  const closeAdminTopNotice = () => {
+    try {
+      if (adminTopNotice.signature && typeof window !== 'undefined') {
+        localStorage.setItem(buildNoticeStorageKey(), adminTopNotice.signature);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la fermeture du bandeau admin:', error);
+    } finally {
+      setAdminTopNotice((prev) => ({ ...prev, visible: false }));
+    }
+  };
 
   // Vérifier les messages non lus à la connexion (internes + contact)
   const checkUnreadMessages = async () => {
@@ -358,14 +422,6 @@ export default function AdminDashboardPage() {
     } catch (error) {
       console.error('Erreur lors du chargement des statistiques:', error);
     }
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
   const getFileIcon = (typeMime: string) => {
@@ -761,6 +817,41 @@ export default function AdminDashboardPage() {
           </h1>
           <p className="text-sm text-gray-700">{dashboardSubtitle}</p>
         </div>
+
+        {adminTopNotice.visible && (
+          <div className="mb-6 rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-amber-200/70 to-orange-200/70 shadow-sm">
+            <div className="bg-white rounded-xl border border-white/70 px-4 py-3 sm:px-5 sm:py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Notifications récentes</p>
+                  <div className="space-y-1 text-sm text-foreground">
+                    {adminTopNotice.latestUser && (
+                      <p>
+                        👤 Nouvelle inscription : <span className="font-semibold">{adminTopNotice.latestUser.firstName || ''} {adminTopNotice.latestUser.lastName || ''}</span>
+                        {adminTopNotice.latestUser.email ? ` (${adminTopNotice.latestUser.email})` : ''}
+                      </p>
+                    )}
+                    {adminTopNotice.latestDossier && (
+                      <p>
+                        📁 Nouveau dossier : <span className="font-semibold">{adminTopNotice.latestDossier.titre || 'Dossier'}</span>
+                        {adminTopNotice.latestDossier.numero ? ` (${adminTopNotice.latestDossier.numero})` : ''}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAdminTopNotice}
+                  className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-foreground transition-colors"
+                  aria-label="Fermer la notification"
+                  title="Fermer"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Vue d'ensemble */}
         <div className="mb-6">

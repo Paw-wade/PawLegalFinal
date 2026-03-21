@@ -1183,6 +1183,7 @@ export const documentRequestsAPI = {
     documentTypeLabel: string;
     message?: string;
     isUrgent?: boolean;
+    skipSms?: boolean;
   }) => {
     return api.post('/document-requests', data);
   },

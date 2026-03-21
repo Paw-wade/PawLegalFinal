@@ -314,7 +314,7 @@ export default function PartenaireDossierMessagesPage() {
                     <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
                       <span className="text-sm text-gray-700 flex items-center">
                         <FileText className="w-4 h-4 mr-2" />
-                        {file.name} ({(file.size / 1024).toFixed(2)} KB)
+                        {file.name}
                       </span>
                       <button
                         type="button"

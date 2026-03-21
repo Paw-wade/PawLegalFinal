@@ -1126,9 +1126,6 @@ export default function AdminDossierDetailPage() {
                       <span className="text-lg">📄</span>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{doc.nom}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(doc.taille / 1024).toFixed(2)} KB
-                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

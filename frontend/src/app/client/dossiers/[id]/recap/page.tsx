@@ -126,14 +126,6 @@ export default function ClientDossierRecapPage() {
     }
   };
   
-  const formatFileSize = (bytes: number) => {
-    if (!bytes || bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-  };
-  
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -280,7 +272,6 @@ export default function ClientDossierRecapPage() {
                         <p className="font-semibold">{doc.nom}</p>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mt-2">
                           <span>Type: {doc.type}</span>
-                          {doc.taille && <span>Taille: {formatFileSize(doc.taille)}</span>}
                           <span>Date: {formatDate(doc.dateUpload)}</span>
                         </div>
                         {doc.description && (

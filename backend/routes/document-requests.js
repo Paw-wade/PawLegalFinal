@@ -23,7 +23,8 @@ router.post(
     body('documentType').notEmpty().withMessage('Le type de document est requis'),
     body('documentTypeLabel').notEmpty().withMessage('Le libellé du type de document est requis'),
     body('message').optional().trim(),
-    body('isUrgent').optional().isBoolean()
+    body('isUrgent').optional().isBoolean(),
+    body('skipSms').optional().isBoolean()
   ],
   async (req, res) => {
     try {
@@ -36,7 +37,7 @@ router.post(
         });
       }
 
-      const { dossierId, documentType, documentTypeLabel, message, isUrgent } = req.body;
+      const { dossierId, documentType, documentTypeLabel, message, isUrgent, skipSms } = req.body;
 
       // Valider que documentType est dans l'enum autorisé
       const allowedDocumentTypes = ['identite', 'titre_sejour', 'contrat', 'facture', 'passeport', 'justificatif_domicile', 'avis_imposition', 'autre'];
@@ -281,8 +282,8 @@ router.post(
         // Ne pas bloquer la création de la demande si la notification échoue
       }
 
-      // Envoyer un SMS si configuré
-      if (clientUser.phone) {
+      // Envoyer un SMS si configuré et non explicitement ignoré
+      if (clientUser.phone && !skipSms) {
         try {
           await sendNotificationSMS(
             clientUser.phone,
@@ -304,6 +305,8 @@ router.post(
           console.error('⚠️ Erreur lors de l\'envoi du SMS:', smsError);
           // Ne pas bloquer la création de la demande si le SMS échoue
         }
+      } else if (skipSms) {
+        console.log('ℹ️ SMS ignoré pour cette demande (skipSms=true)');
       }
 
       res.status(201).json({

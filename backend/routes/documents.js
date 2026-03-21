@@ -8,6 +8,105 @@ const Log = require('../models/Log');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
+const BACKEND_ROOT = path.resolve(__dirname, '..');
+const UPLOADS_ROOT = path.resolve(BACKEND_ROOT, 'uploads');
+
+const searchFileInUploads = (targetNames = []) => {
+  try {
+    if (!fs.existsSync(UPLOADS_ROOT)) return null;
+    const normalizedTargets = targetNames
+      .filter(Boolean)
+      .map((n) => path.basename(String(n)).toLowerCase());
+    if (normalizedTargets.length === 0) return null;
+
+    // Recherche récursive pour récupérer des fichiers migrés/manuellement déplacés
+    const entries = fs.readdirSync(UPLOADS_ROOT, { withFileTypes: true, recursive: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const entryName = entry.name.toLowerCase();
+      if (normalizedTargets.includes(entryName)) {
+        const parent = entry.parentPath || UPLOADS_ROOT;
+        const candidate = path.join(parent, entry.name);
+        if (fs.existsSync(candidate)) {
+          return candidate;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ Recherche fallback uploads échouée:', e.message);
+  }
+  return null;
+};
+
+const resolveExistingDocumentPath = (storedPath, fileName) => {
+  if (!storedPath) return null;
+
+  const rawPath = String(storedPath).trim();
+  if (!rawPath) return null;
+
+  const normalized = rawPath.replace(/[\\/]+/g, path.sep);
+  const withoutLeadingSep = normalized.replace(new RegExp(`^\\${path.sep}+`), '');
+  const uploadsRelative = withoutLeadingSep.replace(/^uploads[\\/]+documents[\\/]+/i, '');
+  const filenameOnly = fileName || path.basename(normalized);
+
+  const candidates = [
+    path.isAbsolute(normalized) ? normalized : null,
+    path.resolve(BACKEND_ROOT, normalized),
+    path.resolve(BACKEND_ROOT, withoutLeadingSep),
+    path.resolve(BACKEND_ROOT, 'uploads', 'documents', uploadsRelative),
+    path.resolve(BACKEND_ROOT, 'uploads', 'documents', filenameOnly),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch (e) {
+      // ignore and continue
+    }
+  }
+
+  // Fallback final: scanner tous les fichiers uploads par nom
+  const foundByName = searchFileInUploads([fileName, path.basename(normalized)]);
+  if (foundByName) return foundByName;
+
+  return null;
+};
+
+// Normaliser la catégorie pour éviter les erreurs de validation Mongoose
+// lorsque la valeur vient d'écrans différents (libellés libres, accents, etc.).
+const normalizeCategorie = (rawCategorie) => {
+  if (!rawCategorie) return 'autre';
+
+  const normalized = String(rawCategorie)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\s-]+/g, '_');
+
+  const mapping = {
+    identite: 'identite',
+    piece_identite: 'identite',
+    pieces_identite: 'identite',
+    identity: 'identite',
+    passport: 'identite',
+    passeport: 'identite',
+    carte_identite: 'identite',
+    titre_sejour: 'titre_sejour',
+    titre_de_sejour: 'titre_sejour',
+    sejour: 'titre_sejour',
+    residence_permit: 'titre_sejour',
+    contrat: 'contrat',
+    contract: 'contrat',
+    facture: 'facture',
+    facture_energie: 'facture',
+    invoice: 'facture',
+    autre: 'autre',
+    other: 'autre'
+  };
+
+  return mapping[normalized] || 'autre';
+};
 
 // Configuration du stockage Multer
 const storage = multer.diskStorage({
@@ -292,22 +391,28 @@ router.post('/', (req, res, next) => {
 
     const { nom, description, categorie, dossierId } = req.body;
     const effectiveUserId = req.user.id;
+    const safeCategorie = normalizeCategorie(categorie);
 
     console.log('📤 Données du document:', {
       userId: effectiveUserId,
       nom: nom || req.file.originalname,
-      dossierId: dossierId
+      dossierId: dossierId,
+      categorieRecue: categorie,
+      categorieNormalisee: safeCategorie
     });
+
+    // Stocker un chemin relatif stable pour éviter les erreurs selon le cwd du serveur
+    const relativeStoredPath = path.relative(BACKEND_ROOT, req.file.path);
 
     const documentData = {
       user: effectiveUserId,
       nom: nom || req.file.originalname,
       nomFichier: req.file.filename,
-      cheminFichier: req.file.path,
+      cheminFichier: relativeStoredPath || req.file.path,
       typeMime: req.file.mimetype,
       taille: req.file.size,
       description: description || '',
-      categorie: categorie || 'autre'
+      categorie: safeCategorie
     };
 
     // Ajouter dossierId seulement s'il est fourni et valide
@@ -367,6 +472,15 @@ router.post('/', (req, res, next) => {
       } catch (unlinkError) {
         console.error('⚠️ Erreur lors de la suppression du fichier temporaire:', unlinkError);
       }
+    }
+
+    // Erreurs de validation Mongoose -> 400 (problème de données d'entrée)
+    if (error && (error.name === 'ValidationError' || error.name === 'CastError')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Données de document invalides',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
 
     res.status(500).json({
@@ -533,11 +647,11 @@ router.get('/:id/preview', async (req, res) => {
     }
 
     // Vérifier que le fichier existe
-    const filePath = path.resolve(document.cheminFichier);
-    console.log('📁 Chemin du fichier:', filePath);
+    const filePath = resolveExistingDocumentPath(document.cheminFichier, document.nomFichier);
+    console.log('📁 Chemin du fichier résolu:', filePath, 'chemin stocké:', document.cheminFichier);
     
-    if (!fs.existsSync(filePath)) {
-      console.error('❌ Fichier non trouvé sur le serveur:', filePath);
+    if (!filePath) {
+      console.error('❌ Fichier non trouvé sur le serveur. chemin stocké:', document.cheminFichier);
       return res.status(404).json({
         success: false,
         message: 'Fichier non trouvé sur le serveur'
@@ -663,8 +777,8 @@ router.get('/:id/download', async (req, res) => {
     }
 
     // Vérifier que le fichier existe
-    const filePath = path.resolve(document.cheminFichier);
-    if (!fs.existsSync(filePath)) {
+    const filePath = resolveExistingDocumentPath(document.cheminFichier, document.nomFichier);
+    if (!filePath) {
       return res.status(404).json({
         success: false,
         message: 'Fichier non trouvé sur le serveur'
@@ -761,8 +875,9 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Supprimer le fichier du système de fichiers
-    if (fs.existsSync(document.cheminFichier)) {
-      fs.unlinkSync(document.cheminFichier);
+    const filePath = resolveExistingDocumentPath(document.cheminFichier, document.nomFichier);
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
     }
 
     // Supprimer le document de la base de données
