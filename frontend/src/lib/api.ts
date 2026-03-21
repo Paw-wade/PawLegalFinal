@@ -12,8 +12,17 @@ const api = axios.create({
   timeout: 10000, // 10 secondes
 });
 
-// Fonction utilitaire pour récupérer le token
-const getToken = async (): Promise<string | null> => {
+/** URL API sans double `/api` (pour fetch hors axios) */
+export function getApiBaseUrl(): string {
+  let baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005')
+    .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
+    .trim();
+  baseURL = baseURL.replace(/\/+$/, '');
+  return /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
+}
+
+// Fonction utilitaire pour récupérer le token (NextAuth + localStorage + session)
+export const getAuthToken = async (): Promise<string | null> => {
   if (typeof window === 'undefined') return null;
 
   // 1. Essayer localStorage
@@ -81,6 +90,9 @@ const getToken = async (): Promise<string | null> => {
   }
   return null;
 };
+
+/** @deprecated alias */
+const getToken = getAuthToken;
 
 // Intercepteur pour ajouter le token d'authentification
 api.interceptors.request.use(
@@ -873,39 +885,39 @@ export const documentsAPI = {
     });
   },
   
-  // Prévisualiser un document (retourne une Promise qui résout avec l'URL du blob)
+  // Prévisualiser un document (blob URL — à révoquer avec URL.revokeObjectURL quand terminé)
   previewDocument: async (id: string): Promise<string> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || sessionStorage.getItem('token') : null;
-    let baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005')
-      .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
-      .trim();
-    baseURL = baseURL.replace(/\/+$/, '');
-    const apiBase = /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
-    const url = `${apiBase}/user/documents/${id}/preview`;
-    
+    const token = typeof window !== 'undefined' ? await getAuthToken() : null;
+    const url = `${getApiBaseUrl()}/user/documents/${encodeURIComponent(id)}/preview`;
+
     const response = await fetch(url, {
       headers: {
-        'Authorization': `Bearer ${token || ''}`
-      }
+        Authorization: `Bearer ${token || ''}`,
+      },
+      credentials: 'omit',
     });
-    
+
     if (!response.ok) {
-      throw new Error('Erreur lors de la prévisualisation');
+      const errText = await response.text().catch(() => '');
+      if (response.status === 401) {
+        throw new Error('Session expirée ou token invalide. Reconnectez-vous.');
+      }
+      if (response.status === 403) {
+        throw new Error('Accès non autorisé à ce document.');
+      }
+      if (response.status === 404) {
+        throw new Error('Document ou fichier introuvable sur le serveur.');
+      }
+      throw new Error(`Erreur prévisualisation (${response.status})${errText ? `: ${errText.slice(0, 120)}` : ''}`);
     }
-    
+
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   },
-  
-  // Obtenir l'URL directe de prévisualisation (pour iframe)
+
+  /** URL d’API preview (sans token) — préférer previewDocument + blob pour l’affichage */
   getPreviewUrl: (id: string): string => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || sessionStorage.getItem('token') : null;
-    let baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005')
-      .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
-      .trim();
-    baseURL = baseURL.replace(/\/+$/, '');
-    const apiBase = /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
-    return `${apiBase}/user/documents/${id}/preview`;
+    return `${getApiBaseUrl()}/user/documents/${encodeURIComponent(id)}/preview`;
   },
   
   // Télécharger un document

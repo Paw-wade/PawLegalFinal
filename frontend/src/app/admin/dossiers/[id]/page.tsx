@@ -691,13 +691,13 @@ export default function AdminDossierDetailPage() {
         </div>
 
         {/* Vue détaillée du dossier */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-6">
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="text-xl font-bold">Vue détaillée du dossier</h2>
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-8 mb-6 min-w-0">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
+            <h2 className="text-xl font-bold min-w-0 break-words">Vue détaillée du dossier</h2>
             <button
               type="button"
               onClick={() => setShowStepsModal(true)}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-gray-300 text-xs font-medium bg-white hover:bg-gray-50"
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 min-h-[44px] rounded-md border border-gray-300 text-xs font-medium bg-white hover:bg-gray-50 w-full sm:w-auto shrink-0"
             >
               <span>✏️</span>
               <span>Éditer les étapes</span>
@@ -960,21 +960,21 @@ export default function AdminDossierDetailPage() {
         </div>
 
         {/* Motif et catégorie */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
           <h2 className="text-xl font-bold mb-4">📑 Motif et Nature du Dossier</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 min-w-0">
+            <div className="min-w-0">
               <p className="text-sm text-muted-foreground font-semibold">Catégorie principale</p>
-              <p className="font-medium text-lg">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
+              <p className="font-medium text-base sm:text-lg break-words hyphens-auto">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-muted-foreground font-semibold">Type de demande</p>
-              <p className="font-medium text-lg">{dossier.type || 'Non spécifié'}</p>
+              <p className="font-medium text-base sm:text-lg break-words hyphens-auto">{dossier.type || 'Non spécifié'}</p>
             </div>
             {dossier.categorie && (
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2 min-w-0">
                 <p className="text-sm text-muted-foreground font-semibold">Code catégorie</p>
-                <p className="font-medium text-sm text-muted-foreground">{dossier.categorie}</p>
+                <p className="font-medium text-sm text-muted-foreground break-all">{dossier.categorie}</p>
               </div>
             )}
           </div>
@@ -1117,18 +1117,18 @@ export default function AdminDossierDetailPage() {
                 {documents.map((doc: any) => (
                   <div
                     key={doc._id || doc.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 min-w-0"
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-lg">📄</span>
+                      <span className="text-lg flex-shrink-0">📄</span>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{doc.nom}</p>
+                        <p className="font-medium text-sm break-words">{doc.nom}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto shrink-0">
                       <Button
                         variant="outline"
-                        className="text-xs h-8"
+                        className="text-xs h-8 w-full sm:w-auto"
                         onClick={() => {
                           setSelectedDocumentForPreview(doc);
                           setShowDocumentPreviewModal(true);
@@ -1138,7 +1138,7 @@ export default function AdminDossierDetailPage() {
                       </Button>
                       <Button
                         variant="outline"
-                        className="text-xs h-8"
+                        className="text-xs h-8 w-full sm:w-auto"
                         onClick={async () => {
                           try {
                             const response = await documentsAPI.downloadDocument(doc._id || doc.id);
@@ -1370,11 +1370,11 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">📤 Transmission aux partenaires</h2>
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-8 mb-6 min-w-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6 min-w-0">
+        <h2 className="text-xl sm:text-2xl font-bold min-w-0 break-words">📤 Transmission aux partenaires</h2>
         {(userRole === 'admin' || userRole === 'superadmin') && (
-          <Button onClick={() => setShowTransmitModal(true)}>
+          <Button onClick={() => setShowTransmitModal(true)} className="w-full sm:w-auto shrink-0">
             + Transmettre le dossier
           </Button>
         )}
@@ -1390,14 +1390,14 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
                 Vous devez accepter ou refuser ce dossier avant de pouvoir le modifier
               </p>
             </div>
-            <div className="flex gap-3">
-              <Button onClick={() => handleAcknowledge('accept')} className="bg-green-600 hover:bg-green-700">
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+              <Button onClick={() => handleAcknowledge('accept')} className="bg-green-600 hover:bg-green-700 w-full sm:w-auto">
                 ✓ Accepter le dossier
               </Button>
               <Button onClick={() => {
                 const notes = prompt('Raison du refus (optionnel):');
                 handleAcknowledge('refuse', notes || undefined);
-              }} variant="outline" className="border-red-500 text-red-600 hover:bg-red-50">
+              }} variant="outline" className="border-red-500 text-red-600 hover:bg-red-50 w-full sm:w-auto">
                 ✗ Refuser le dossier
               </Button>
             </div>
@@ -1462,9 +1462,9 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
             const typeOrganisme = partenaire?.partenaireInfo?.typeOrganisme;
             
             return (
-              <div key={index} className="border rounded-lg p-4 flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
+              <div key={index} className="border rounded-lg p-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between min-w-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${
                       typeOrganisme === 'consulat' 
                         ? 'bg-blue-100 text-blue-800' 
@@ -1515,7 +1515,7 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
                   <Button 
                     variant="outline" 
                     onClick={() => handleRemoveTransmission(partenaire?._id || partenaire)}
-                    className="ml-4"
+                    className="w-full sm:w-auto sm:ml-4 shrink-0"
                   >
                     Retirer
                   </Button>

@@ -516,15 +516,15 @@ export default function PartenaireDossierDetailPage() {
                 </div>
           </div>
               
-              <div className="flex flex-row flex-wrap gap-2 w-full sm:w-auto sm:flex-col">
-                <Button variant="outline" onClick={() => { loadDossier(); loadNotifications(); }} className="min-h-[44px] flex-1 sm:flex-none">
+              <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:flex-wrap sm:items-start shrink-0">
+                <Button variant="outline" onClick={() => { loadDossier(); loadNotifications(); }} className="min-h-[44px] w-full sm:w-auto justify-center">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                   Actualiser
                 </Button>
                 {transmission && (
-                  <Button variant="outline" className="min-h-[44px] flex-1 sm:flex-none border-orange-500 text-orange-600 hover:bg-orange-50" onClick={() => setShowDischargeModal(true)}>
+                  <Button variant="outline" className="min-h-[44px] w-full sm:w-auto justify-center border-orange-500 text-orange-600 hover:bg-orange-50" onClick={() => setShowDischargeModal(true)}>
                     Se décharger
                   </Button>
                 )}
@@ -602,7 +602,7 @@ export default function PartenaireDossierDetailPage() {
             {/* Statut actuel */}
             <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
               <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statut actuel</h2>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatutColor(dossier.statut)}`}>
                   {getStatutLabel(dossier.statut)}
                 </span>

@@ -537,7 +537,7 @@ export default function DossierDetailPage() {
             {/* Statut actuel */}
             <div id="documents-upload" className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
               <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statut actuel</h2>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatutColor(dossier.statut)}`}>
                   {getStatutLabel(dossier.statut)}
                 </span>
@@ -779,19 +779,19 @@ export default function DossierDetailPage() {
             {/* Motif et catégorie */}
             <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
               <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">📑 Motif et Nature du Dossier</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 min-w-0">
+                <div className="min-w-0">
                   <p className="text-sm text-muted-foreground font-semibold">Catégorie principale</p>
-                  <p className="font-medium text-lg">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
+                  <p className="font-medium text-base sm:text-lg break-words hyphens-auto">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm text-muted-foreground font-semibold">Type de demande</p>
-                  <p className="font-medium text-lg">{dossier.type || 'Non spécifié'}</p>
+                  <p className="font-medium text-base sm:text-lg break-words hyphens-auto">{dossier.type || 'Non spécifié'}</p>
                 </div>
                 {dossier.categorie && (
-                  <div className="col-span-2">
+                  <div className="col-span-1 sm:col-span-2 min-w-0">
                     <p className="text-sm text-muted-foreground font-semibold">Code catégorie</p>
-                    <p className="font-medium text-sm text-muted-foreground">{dossier.categorie}</p>
+                    <p className="font-medium text-sm text-muted-foreground break-all">{dossier.categorie}</p>
                   </div>
                 )}
               </div>
