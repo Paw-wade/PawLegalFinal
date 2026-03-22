@@ -21,6 +21,23 @@ function isPartenaire(user) {
   return user.role === 'partenaire';
 }
 
+/** Résout l'entrée partnerAccess pour l'utilisateur (partner peut être un ObjectId ou un objet peuplé). */
+function getPartnerAccessEntry(draft, userId) {
+  const uid = userId.toString();
+  if (!draft.partnerAccess || !draft.partnerAccess.length) return null;
+  return (
+    draft.partnerAccess.find((p) => {
+      const raw = p.partner;
+      if (!raw) return false;
+      const pid =
+        typeof raw === 'object' && raw !== null && raw._id != null
+          ? raw._id.toString()
+          : raw.toString();
+      return pid === uid;
+    }) || null
+  );
+}
+
 // GET /dossiers/:dossierId/drafts - lister les brouillons visibles pour l'utilisateur
 router.get('/dossiers/:dossierId/drafts', async (req, res) => {
   try {
@@ -63,16 +80,19 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
 
     const enhancedDrafts = drafts.map((draft) => {
       const isCreator = draft.createdBy && draft.createdBy._id?.toString() === user._id.toString();
-      const partnerAccessEntry =
-        draft.partnerAccess &&
-        draft.partnerAccess.find((p) => p.partner.toString() === user._id.toString());
+      const partnerAccessEntry = getPartnerAccessEntry(draft, user._id);
 
+      const adminCanSee =
+        isAdmin(user) &&
+        (isCreator ||
+          (draft.visibleToAdmins === true &&
+            !(draft.excludedAdminIds || []).some((id) => id.toString() === user._id.toString())));
+
+      // Admin : toujours éditable dès qu’il voit le document. Partenaire : édition si créateur ou canEdit explicite.
       const canEdit =
-        isCreator ||
-        (isAdmin(user) &&
-          draft.visibleToAdmins &&
-          !(draft.excludedAdminIds || []).some((id) => id.toString() === user._id.toString())) ||
-        (isPartenaire(user) && partnerAccessEntry && partnerAccessEntry.canEdit);
+        adminCanSee ||
+        (isPartenaire(user) &&
+          (isCreator || (partnerAccessEntry && partnerAccessEntry.canEdit === true)));
 
       const canManagePermissions = isCreator || isAdmin(user);
 
@@ -152,14 +172,18 @@ router.patch('/drafts/:draftId', async (req, res) => {
     }
 
     const isCreator = draft.createdBy && draft.createdBy._id.toString() === user._id.toString();
-    const partnerAccessEntry =
-      draft.partnerAccess &&
-      draft.partnerAccess.find((p) => p.partner.toString() === user._id.toString());
+    const partnerAccessEntry = getPartnerAccessEntry(draft, user._id);
+
+    const adminCanSee =
+      isAdmin(user) &&
+      (isCreator ||
+        (draft.visibleToAdmins === true &&
+          !(draft.excludedAdminIds || []).some((id) => id.toString() === user._id.toString())));
 
     const canEdit =
-      isCreator ||
-      (isAdmin(user) && draft.visibleToAdmins && !draft.excludedAdminIds?.includes(user._id)) ||
-      (isPartenaire(user) && partnerAccessEntry && partnerAccessEntry.canEdit);
+      adminCanSee ||
+      (isPartenaire(user) &&
+        (isCreator || (partnerAccessEntry && partnerAccessEntry.canEdit === true)));
 
     if (!canEdit) {
       return res.status(403).json({ success: false, message: 'Vous ne pouvez pas modifier ce brouillon' });

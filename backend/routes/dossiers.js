@@ -570,7 +570,7 @@ router.get('/', async (req, res) => {
     console.log('🔍 Filtre de recherche:', JSON.stringify(filter, null, 2));
     
     const dossiers = await Dossier.find(filter)
-      .populate('user', 'firstName lastName email phone')
+      .populate('user', 'firstName lastName email phone profilePhoto')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedTo', 'firstName lastName email role')
       .populate('transmittedTo.partenaire', 'firstName lastName email partenaireInfo')
@@ -647,7 +647,7 @@ router.get('/admin', authorize('admin', 'superadmin'), async (req, res) => {
     }
     
     const dossiers = await Dossier.find(filter)
-      .populate('user', 'firstName lastName email phone')
+      .populate('user', 'firstName lastName email phone profilePhoto')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedTo', 'firstName lastName email role')
       .sort({ createdAt: -1 });
@@ -797,7 +797,7 @@ router.post(
       }
 
       const dossierPopulated = await Dossier.findById(dossier._id)
-        .populate('user', 'firstName lastName email phone')
+        .populate('user', 'firstName lastName email phone profilePhoto')
         .populate('createdBy', 'firstName lastName email');
 
       // Si le dossier a été créé par un client (pas un admin), notifier tous les admins
@@ -920,7 +920,7 @@ router.get('/:id/recap', protect, async (req, res) => {
     
     // Récupérer le dossier avec toutes les relations
     const dossier = await Dossier.findById(dossierId)
-      .populate('user', 'firstName lastName email phone createdAt')
+      .populate('user', 'firstName lastName email phone profilePhoto createdAt')
       .populate('createdBy', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email role')
       .populate('teamMembers', 'firstName lastName email role')
@@ -975,7 +975,7 @@ router.get('/:id/recap', protect, async (req, res) => {
     
     // Documents
     const documents = await Document.find({ dossierId: dossierId })
-      .populate('user', 'firstName lastName email')
+      .populate('user', 'firstName lastName email profilePhoto')
       .sort({ createdAt: -1 });
     
     // Tâches
@@ -1011,7 +1011,7 @@ router.get('/:id/recap', protect, async (req, res) => {
         { description: { $regex: dossierId, $options: 'i' } }
       ]
     })
-      .populate('user', 'firstName lastName email role')
+      .populate('user', 'firstName lastName email role profilePhoto')
       .sort({ createdAt: -1 });
     
     // Calculer les statistiques
@@ -1212,7 +1212,7 @@ router.post('/:id/recap/complements', protect, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
     }
     const dossier = await Dossier.findById(dossierId)
-      .populate('user', 'firstName lastName')
+      .populate('user', 'firstName lastName profilePhoto')
       .populate('createdBy', 'firstName lastName role')
       .populate('assignedTo', 'firstName lastName role')
       .populate('teamMembers', 'firstName lastName role')
@@ -1326,7 +1326,7 @@ router.patch('/:id/recap/complements/:complementId', protect, async (req, res) =
       return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
     }
     const dossier = await Dossier.findById(dossierId)
-      .populate('user', 'firstName lastName')
+      .populate('user', 'firstName lastName profilePhoto')
       .populate('createdBy', 'firstName lastName role')
       .populate('assignedTo', 'firstName lastName role')
       .populate('teamMembers', 'firstName lastName role')
@@ -1367,7 +1367,7 @@ router.delete('/:id/recap/complements/:complementId', protect, async (req, res) 
   try {
     const { id: dossierId, complementId } = req.params;
     const dossier = await Dossier.findById(dossierId)
-      .populate('user', 'firstName lastName')
+      .populate('user', 'firstName lastName profilePhoto')
       .populate('createdBy', 'firstName lastName role')
       .populate('assignedTo', 'firstName lastName role')
       .populate('teamMembers', 'firstName lastName role')
@@ -1407,7 +1407,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     
     // Récupérer le dossier avec toutes les relations (même logique que /recap)
     const dossier = await Dossier.findById(dossierId)
-      .populate('user', 'firstName lastName email phone createdAt')
+      .populate('user', 'firstName lastName email phone profilePhoto createdAt')
       .populate('createdBy', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email role')
       .populate('teamMembers', 'firstName lastName email role')
@@ -1461,7 +1461,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     const Log = require('../models/Log');
     
     const [documents, tasks, messages, rendezVous, documentRequests, logs] = await Promise.all([
-      Document.find({ dossierId: dossierId }).populate('user', 'firstName lastName email').sort({ createdAt: -1 }),
+      Document.find({ dossierId: dossierId }).populate('user', 'firstName lastName email profilePhoto').sort({ createdAt: -1 }),
       Task.find({ dossier: dossierId }).populate('createdBy', 'firstName lastName email role').populate('assignedTo', 'firstName lastName email role').populate('completedBy', 'firstName lastName email role').sort({ createdAt: -1 }),
       MessageInterne.find({ dossierId: dossierId }).populate('expediteur', 'firstName lastName email role').populate('destinataires', 'firstName lastName email role').sort({ createdAt: -1 }),
       RendezVous.find({ dossierId: dossierId }).populate('client', 'firstName lastName email').populate('createdBy', 'firstName lastName email role').sort({ date: -1 }),
@@ -1471,7 +1471,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
           { 'metadata.dossierId': dossierId },
           { description: { $regex: dossierId, $options: 'i' } }
         ]
-      }).populate('user', 'firstName lastName email role').sort({ createdAt: -1 })
+      }).populate('user', 'firstName lastName email role profilePhoto').sort({ createdAt: -1 })
     ]);
     
     // Construire le récit récapitulatif (même structure que /recap)
@@ -1935,7 +1935,7 @@ router.get('/:id', async (req, res) => {
     console.log('📥 GET /api/user/dossiers/:id - ID:', req.params.id);
     console.log('📥 User:', req.user?.email || req.user?.id);
     const dossier = await Dossier.findById(req.params.id)
-      .populate('user', 'firstName lastName email phone dateNaissance lieuNaissance nationalite sexe numeroEtranger numeroTitre typeTitre dateDelivrance dateExpiration adressePostale ville codePostal pays')
+      .populate('user', 'firstName lastName email phone profilePhoto dateNaissance lieuNaissance nationalite sexe numeroEtranger numeroTitre typeTitre dateDelivrance dateExpiration adressePostale ville codePostal pays')
       .populate('createdBy', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email role')
       .populate('teamMembers', 'firstName lastName email role')
@@ -2070,7 +2070,7 @@ router.put(
       }
 
       const dossier = await Dossier.findById(req.params.id)
-        .populate('user', 'firstName lastName email phone');
+        .populate('user', 'firstName lastName email phone profilePhoto');
 
       if (!dossier) {
         return res.status(404).json({
@@ -2124,7 +2124,7 @@ router.put(
           }));
         }
         await dossier.save();
-        const updated = await Dossier.findById(dossier._id).populate('user', 'firstName lastName email phone');
+        const updated = await Dossier.findById(dossier._id).populate('user', 'firstName lastName email phone profilePhoto');
         return res.status(200).json({ success: true, message: 'Dossier mis à jour', dossier: updated });
       }
 
@@ -2213,7 +2213,7 @@ router.put(
 
       // Recharger le dossier avec les données peuplées pour les notifications
       const dossierForNotification = await Dossier.findById(dossier._id)
-        .populate('user', 'firstName lastName email phone');
+        .populate('user', 'firstName lastName email phone profilePhoto');
 
       // Notifier toutes les parties concernées lors d'une modification
       // Cette fonction gère les notifications pour tous les rôles (admin, consulat, avocat)
@@ -2400,7 +2400,7 @@ router.put(
 
 
       const dossierPopulated = await Dossier.findById(dossier._id)
-        .populate('user', 'firstName lastName email phone')
+        .populate('user', 'firstName lastName email phone profilePhoto')
         .populate('createdBy', 'firstName lastName email');
 
       res.json({
@@ -2505,7 +2505,7 @@ router.patch('/:id/cancel', protect, async (req, res) => {
     }
 
     const dossierPopulated = await Dossier.findById(dossier._id)
-      .populate('user', 'firstName lastName email phone')
+      .populate('user', 'firstName lastName email phone profilePhoto')
       .populate('createdBy', 'firstName lastName email');
 
     res.json({
@@ -2529,7 +2529,7 @@ router.patch('/:id/cancel', protect, async (req, res) => {
 router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
   try {
     const dossier = await Dossier.findById(req.params.id)
-      .populate('user', 'firstName lastName email')
+      .populate('user', 'firstName lastName email profilePhoto')
       .populate('createdBy', 'firstName lastName email');
 
     if (!dossier) {
@@ -3348,7 +3348,7 @@ router.get('/:id/history', async (req, res) => {
         { description: { $regex: dossier._id.toString(), $options: 'i' } }
       ]
     })
-      .populate('user', 'firstName lastName email role')
+      .populate('user', 'firstName lastName email role profilePhoto')
       .sort({ createdAt: -1 });
     
     // Créer un historique structuré

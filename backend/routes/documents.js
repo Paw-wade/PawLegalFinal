@@ -253,22 +253,22 @@ const normalizeCategorie = (rawCategorie) => {
 };
 
 // Configuration du stockage Multer
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads/documents');
-    // Créer le dossier s'il n'existe pas
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    // Générer un nom de fichier unique avec timestamp
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
-    cb(null, name + '-' + uniqueSuffix + ext);
-  }
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const cloudinaryStorage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => ({
+    folder: 'pawlegal/documents',
+    resource_type: 'raw',
+    public_id: `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9]/g, '_')}`,
+  }),
 });
 
 // Filtre pour accepter seulement certains types de fichiers
@@ -293,10 +293,8 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10 MB max
-  },
+  storage: cloudinaryStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: fileFilter
 });
 
@@ -546,13 +544,11 @@ router.post('/', (req, res, next) => {
     });
 
     // Stocker un chemin relatif stable pour éviter les erreurs selon le cwd du serveur
-    const relativeStoredPath = path.relative(BACKEND_ROOT, req.file.path);
-
     const documentData = {
       user: effectiveUserId,
       nom: nom || req.file.originalname,
-      nomFichier: req.file.filename,
-      cheminFichier: relativeStoredPath || req.file.path,
+      nomFichier: req.file.originalname,
+      cheminFichier: req.file.path, // URL Cloudinary
       typeMime: req.file.mimetype,
       taille: req.file.size,
       description: description || '',
@@ -607,14 +603,15 @@ router.post('/', (req, res, next) => {
     console.error('❌ Request file:', req.file);
     
     // Supprimer le fichier si le document n'a pas pu être créé
-    if (req.file && req.file.path) {
+    if (req.file && req.file.path && req.file.path.startsWith('http')) {
       try {
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-          console.log('🗑️ Fichier temporaire supprimé:', req.file.path);
-        }
-      } catch (unlinkError) {
-        console.error('⚠️ Erreur lors de la suppression du fichier temporaire:', unlinkError);
+        const urlParts = req.file.path.split('/');
+        const publicIdWithExt = urlParts.slice(-2).join('/');
+        const publicId = publicIdWithExt.replace(/\.[^/.]+$/, '');
+        await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
+        console.log('🗑️ Fichier Cloudinary supprimé après erreur:', publicId);
+      } catch (cloudErr) {
+        console.warn('⚠️ Suppression Cloudinary échouée:', cloudErr.message);
       }
     }
 
@@ -740,49 +737,16 @@ router.get('/:id/preview', async (req, res) => {
     }
 
     // Vérifier que le fichier existe (résolution étendue + réparation auto du chemin en base)
-    const filePath = await resolveDocumentPhysicalPath(document);
-    console.log('📁 Prévisualisation — résolu:', filePath || '(null)', '| stocké:', document.cheminFichier, '| nomFichier:', document.nomFichier);
-
-    if (!filePath) {
-      console.error('❌ Fichier physique introuvable — id:', docId, '| cheminFichier:', document.cheminFichier, '| nomFichier:', document.nomFichier);
+    const fileUrl = document.cheminFichier;
+    if (!fileUrl || !fileUrl.startsWith('http')) {
       return res.status(404).json({
         success: false,
         code: 'FILE_NOT_FOUND',
-        message: 'Fichier non trouvé sur le serveur',
-        hint: process.env.NODE_ENV === 'development'
-          ? 'Le document existe en base mais le fichier est absent du dossier backend/uploads/documents. Ré-uploadez le document ou restaurez les fichiers.'
-          : undefined
+        message: 'Fichier non trouvé'
       });
     }
-
-    console.log('✅ Prévisualisation — fichier:', filePath);
-
-    // Déterminer le Content-Type correct
-    let contentType = document.typeMime || 'application/octet-stream';
-    if (contentType === 'application/octet-stream' && document.nom.toLowerCase().endsWith('.pdf')) {
-      contentType = 'application/pdf';
-    }
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(document.nom)}"`);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-
-    if (contentType === 'application/pdf') {
-      res.setHeader('Accept-Ranges', 'bytes');
-    }
-
-    const absPath = path.resolve(filePath);
-    const stream = fs.createReadStream(absPath);
-    stream.on('error', (streamErr) => {
-      console.error('❌ Lecture fichier prévisualisation:', absPath, streamErr.message);
-      if (!res.headersSent) {
-        res.status(500).json({ success: false, message: 'Erreur lecture du fichier' });
-      } else {
-        res.end();
-      }
-    });
-    stream.pipe(res);
+    console.log('✅ Prévisualisation — redirect Cloudinary:', fileUrl);
+    return res.redirect(fileUrl);
   } catch (error) {
     console.error('Erreur lors de la prévisualisation du document:', error);
     if (!res.headersSent) {
@@ -862,35 +826,16 @@ router.get('/:id/download', async (req, res) => {
       });
     }
 
-    const filePath = await resolveDocumentPhysicalPath(document);
-    if (!filePath) {
+    const fileUrl = document.cheminFichier;
+    if (!fileUrl || !fileUrl.startsWith('http')) {
       return res.status(404).json({
         success: false,
         code: 'FILE_NOT_FOUND',
-        message: 'Fichier non trouvé sur le serveur'
+        message: 'Fichier non trouvé'
       });
     }
-
-    let contentType = document.typeMime || 'application/octet-stream';
-    if (contentType === 'application/octet-stream' && document.nom.toLowerCase().endsWith('.pdf')) {
-      contentType = 'application/pdf';
-    }
-
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(document.nom)}"`);
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-
-    const absPath = path.resolve(filePath);
-    const stream = fs.createReadStream(absPath);
-    stream.on('error', (streamErr) => {
-      console.error('❌ Lecture téléchargement:', absPath, streamErr.message);
-      if (!res.headersSent) {
-        res.status(500).json({ success: false, message: 'Erreur lors du téléchargement du fichier' });
-      } else {
-        res.end();
-      }
-    });
-    stream.pipe(res);
+    console.log('✅ Téléchargement — redirect Cloudinary:', fileUrl);
+    return res.redirect(fileUrl);
   } catch (error) {
     console.error('Erreur lors du téléchargement du document:', error);
     res.status(500).json({
@@ -952,14 +897,18 @@ router.delete('/:id', async (req, res) => {
       // Continuer la suppression même si l'ajout à la corbeille échoue
     }
 
-    const filePath = await resolveDocumentPhysicalPath(document);
-    if (filePath && fs.existsSync(filePath)) {
-      try {
-        fs.unlinkSync(filePath);
-      } catch (unlinkErr) {
-        console.warn('⚠️ Suppression fichier disque:', unlinkErr.message);
-      }
-    }
+// Suppression sur Cloudinary
+if (document.cheminFichier && document.cheminFichier.startsWith('http')) {
+  try {
+    const urlParts = document.cheminFichier.split('/');
+    const publicIdWithExt = urlParts.slice(-2).join('/'); // folder/filename
+    const publicId = publicIdWithExt.replace(/\.[^/.]+$/, ''); // sans extension
+    await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
+    console.log('✅ Fichier supprimé sur Cloudinary:', publicId);
+  } catch (cloudErr) {
+    console.warn('⚠️ Suppression Cloudinary échouée:', cloudErr.message);
+  }
+}
 
     // Supprimer le document de la base de données
     await document.deleteOne();

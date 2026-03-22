@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { userAPI, smsPreferencesAPI } from '@/lib/api';
+import { mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
 
@@ -294,24 +295,29 @@ export default function AdminComptePage() {
     setSuccess(null);
 
     try {
+      const merged = mergeProfileFormValuesFromDom(profileData as Record<string, string>, {
+        includeSejour: true,
+        includeAccountFields: true,
+      }) as typeof profileData;
+
       const payload = {
-        firstName: profileData.firstName ?? '',
-        lastName: profileData.lastName ?? '',
-        phone: profileData.phone ?? '',
-        email: profileData.email ?? '',
-        dateNaissance: profileData.dateNaissance || undefined,
-        lieuNaissance: profileData.lieuNaissance ?? '',
-        nationalite: profileData.nationalite ?? '',
-        sexe: profileData.sexe ?? '',
-        numeroEtranger: profileData.numeroEtranger ?? '',
-        numeroTitre: profileData.numeroTitre ?? '',
-        typeTitre: profileData.typeTitre ?? '',
-        dateDelivrance: profileData.dateDelivrance || undefined,
-        dateExpiration: profileData.dateExpiration || undefined,
-        adressePostale: profileData.adressePostale ?? '',
-        ville: profileData.ville ?? '',
-        codePostal: profileData.codePostal ?? '',
-        pays: profileData.pays ?? 'France',
+        firstName: merged.firstName ?? '',
+        lastName: merged.lastName ?? '',
+        phone: merged.phone ?? '',
+        email: merged.email ?? '',
+        dateNaissance: merged.dateNaissance || undefined,
+        lieuNaissance: merged.lieuNaissance ?? '',
+        nationalite: merged.nationalite ?? '',
+        sexe: merged.sexe ?? '',
+        numeroEtranger: merged.numeroEtranger ?? '',
+        numeroTitre: merged.numeroTitre ?? '',
+        typeTitre: merged.typeTitre ?? '',
+        dateDelivrance: merged.dateDelivrance || undefined,
+        dateExpiration: merged.dateExpiration || undefined,
+        adressePostale: merged.adressePostale ?? '',
+        ville: merged.ville ?? '',
+        codePostal: merged.codePostal ?? '',
+        pays: merged.pays ?? 'France',
       };
       const response = await userAPI.updateProfile(payload);
       const data = response?.data;

@@ -1,9 +1,86 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
+
+const avatarDir = path.join(__dirname, '../uploads/avatars');
+if (!fs.existsSync(avatarDir)) {
+  fs.mkdirSync(avatarDir, { recursive: true });
+}
+
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, avatarDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '') || '.jpg';
+    const safe = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext.toLowerCase())
+      ? ext.toLowerCase()
+      : '.jpg';
+    cb(null, `user-${req.user.id}-${Date.now()}${safe}`);
+  },
+});
+
+const uploadProfilePhoto = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+      return cb(new Error('Fichier image requis'));
+    }
+    cb(null, true);
+  },
+});
+
+/** Multer uniquement si multipart (sinon body déjà parsé en JSON) */
+function optionalProfilePhotoUpload(req, res, next) {
+  const ct = req.headers['content-type'] || '';
+  if (ct.includes('multipart/form-data')) {
+    return uploadProfilePhoto.single('photo')(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message || 'Upload de photo invalide',
+        });
+      }
+      next();
+    });
+  }
+  next();
+}
+
+function userToProfilePayload(user) {
+  return {
+    id: user._id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    profilComplete: user.profilComplete || false,
+    smsPreferences: user.smsPreferences || { enabled: true, types: {} },
+    profilePhoto: user.profilePhoto || '',
+    dateNaissance: user.dateNaissance,
+    lieuNaissance: user.lieuNaissance,
+    nationalite: user.nationalite,
+    sexe: user.sexe,
+    numeroEtranger: user.numeroEtranger,
+    numeroTitre: user.numeroTitre,
+    typeTitre: user.typeTitre,
+    dateDelivrance: user.dateDelivrance,
+    dateExpiration: user.dateExpiration,
+    adressePostale: user.adressePostale,
+    ville: user.ville,
+    codePostal: user.codePostal,
+    pays: user.pays,
+    partenaireInfo: user.partenaireInfo || undefined,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
 
 // Convertit une chaîne date (YYYY-MM-DD) ou Date en Date, sinon null
 function parseDateOrNull(value) {
@@ -39,32 +116,7 @@ router.get('/profile', async (req, res) => {
 
       res.json({
         success: true,
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          phone: user.phone,
-          role: user.role,
-          profilComplete: user.profilComplete || false,
-          smsPreferences: user.smsPreferences || { enabled: true, types: {} },
-          dateNaissance: user.dateNaissance,
-          lieuNaissance: user.lieuNaissance,
-          nationalite: user.nationalite,
-          sexe: user.sexe,
-          numeroEtranger: user.numeroEtranger,
-          numeroTitre: user.numeroTitre,
-          typeTitre: user.typeTitre,
-          dateDelivrance: user.dateDelivrance,
-          dateExpiration: user.dateExpiration,
-          adressePostale: user.adressePostale,
-          ville: user.ville,
-          codePostal: user.codePostal,
-          pays: user.pays,
-          partenaireInfo: user.partenaireInfo || undefined,
-          createdAt: user.createdAt,
-          updatedAt: user.updatedAt
-        }
+        user: userToProfilePayload(user),
       });
   } catch (error) {
     console.error('Erreur lors de la récupération du profil:', error);
@@ -81,6 +133,7 @@ router.get('/profile', async (req, res) => {
 // @access  Private
 router.put(
   '/profile',
+  optionalProfilePhotoUpload,
   [
     body('firstName').optional().trim(),
     body('lastName').optional().trim(),
@@ -101,6 +154,7 @@ router.put(
         firstName,
         lastName,
         phone,
+        email,
         dateNaissance,
         lieuNaissance,
         nationalite,
@@ -133,6 +187,26 @@ router.put(
       if (lastName !== undefined && lastName !== null) user.lastName = String(lastName).trim() || user.lastName;
       if (phone !== undefined) user.phone = (phone != null && String(phone).trim()) ? String(phone).trim() : user.phone;
 
+      if (email !== undefined && email !== null) {
+        const nextEmail = String(email).trim().toLowerCase();
+        if (nextEmail === '') {
+          // ne pas vider l'email unique sparse sans logique métier explicite
+        } else if (nextEmail !== (user.email || '').toLowerCase()) {
+          const existingUser = await User.findOne({ email: nextEmail });
+          if (existingUser && String(existingUser._id) !== String(user._id)) {
+            return res.status(400).json({
+              success: false,
+              message: 'Cet email est déjà utilisé par un autre compte',
+            });
+          }
+          user.email = nextEmail;
+        }
+      }
+
+      if (req.file && req.file.filename) {
+        user.profilePhoto = `/uploads/avatars/${req.file.filename}`;
+      }
+
       // Champs optionnels texte : autoriser la mise à jour et la suppression (chaîne vide)
       if (dateNaissance !== undefined) user.dateNaissance = parseDateOrNull(dateNaissance);
       if (lieuNaissance !== undefined) user.lieuNaissance = lieuNaissance != null ? String(lieuNaissance).trim() : '';
@@ -151,10 +225,23 @@ router.put(
       if (ville !== undefined) user.ville = ville != null ? String(ville).trim() : '';
       if (codePostal !== undefined) user.codePostal = codePostal != null ? String(codePostal).trim() : '';
       if (pays !== undefined) user.pays = pays != null ? String(pays).trim() : 'France';
-      if (profilComplete !== undefined) user.profilComplete = Boolean(profilComplete);
-      // smsPreferences géré séparément si besoin
-      if (smsPreferences !== undefined && smsPreferences && typeof smsPreferences === 'object') {
-        user.smsPreferences = { ...(user.smsPreferences || {}), ...smsPreferences };
+      if (profilComplete !== undefined && profilComplete !== null && profilComplete !== '') {
+        const pc = profilComplete;
+        user.profilComplete = pc === true || pc === 'true' || pc === '1' || pc === 1;
+      }
+      // smsPreferences (JSON ou chaîne depuis FormData)
+      if (smsPreferences !== undefined && smsPreferences !== null && smsPreferences !== '') {
+        let sp = smsPreferences;
+        if (typeof sp === 'string') {
+          try {
+            sp = JSON.parse(sp);
+          } catch {
+            sp = null;
+          }
+        }
+        if (sp && typeof sp === 'object') {
+          user.smsPreferences = { ...(user.smsPreferences || {}), ...sp };
+        }
       }
 
       await user.save();
@@ -162,16 +249,7 @@ router.put(
       res.json({
         success: true,
         message: 'Profil mis à jour avec succès',
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          phone: user.phone,
-          role: user.role,
-          profilComplete: user.profilComplete || false,
-          smsPreferences: user.smsPreferences || { enabled: true, types: {} }
-        }
+        user: userToProfilePayload(user),
       });
     } catch (error) {
       console.error('Erreur lors de la mise à jour du profil:', error);

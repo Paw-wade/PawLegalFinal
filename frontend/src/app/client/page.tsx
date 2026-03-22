@@ -10,6 +10,7 @@ import { MessageNotificationModal } from '@/components/MessageNotificationModal'
 import { AppointmentBadgeModal } from '@/components/AppointmentBadgeModal';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notificationsAPI, documentRequestsAPI } from '@/lib/api';
+import { getProfilePhotoAbsoluteUrl } from '@/lib/profilePhoto';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
 
@@ -602,6 +603,7 @@ function ClientDashboardContent() {
   const userName = getUserName();
   const userEmail = getUserEmail();
   const showDashboardSkeleton = isLoading && stats.dossiers === 0 && stats.documents === 0 && stats.rendezVous === 0;
+  const sidebarAvatarUrl = getProfilePhotoAbsoluteUrl(userProfile?.profilePhoto);
 
   if (status === 'loading') {
     return (
@@ -932,11 +934,20 @@ function ClientDashboardContent() {
             <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all lg:sticky lg:top-24 lg:w-72">
               <div className="mb-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center overflow-hidden shrink-0">
+                    {sidebarAvatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={sidebarAvatarUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
                     <span className="text-white font-bold text-lg">
                       {userProfile?.firstName?.[0]?.toUpperCase() || session?.user?.name?.[0]?.toUpperCase() || 'U'}
                       {userProfile?.lastName?.[0]?.toUpperCase() || ''}
                     </span>
+                    )}
                   </div>
                   <div className="flex-1">
                     <h2 className="text-lg font-bold text-foreground">Mon Profil</h2>

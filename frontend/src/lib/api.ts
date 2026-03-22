@@ -291,14 +291,7 @@ export const userAPI = {
     api.get('/user/profile'),
   
   updateProfile: (data: any) => {
-    // Si c'est FormData, ne pas définir Content-Type pour laisser le navigateur le faire
-    if (data instanceof FormData) {
-      return api.put('/user/profile', data, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-    }
+    // FormData : l’intercepteur supprime Content-Type pour que le boundary soit correct
     return api.put('/user/profile', data);
   },
   
@@ -1204,6 +1197,8 @@ export const documentRequestsAPI = {
     message?: string;
     isUrgent?: boolean;
     skipSms?: boolean;
+    /** Nombre total de demandes créées dans le même envoi (1er appel uniquement) — adapte le SMS client */
+    batchDocumentCount?: number;
   }) => {
     return api.post('/document-requests', data);
   },

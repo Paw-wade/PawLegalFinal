@@ -162,11 +162,13 @@ router.post('/init-defaults', async (req, res) => {
       {
         code: 'document_request',
         name: 'Demande de document',
-        description: 'Message envoyé lorsqu\'un document est demandé au client',
-        message: '{{isUrgentText}}Document requis pour votre dossier {{dossierNumero}}. Type: {{documentType}}. Connectez-vous pour envoyer. Ada Papers.',
+        description: 'Message envoyé lorsqu\'un ou plusieurs documents sont demandés au client (bodyLine1 est généré côté serveur : 1 type ou liste multiple)',
+        message: '{{isUrgentText}}{{bodyLine1}} Ada Papers.',
         variables: [
+          { name: 'bodyLine1', description: 'Phrase complète (document unique ou plusieurs)', example: '3 documents vous sont demandés pour le dossier DOS-001. Connectez-vous…' },
           { name: 'dossierNumero', description: 'Numéro du dossier', example: 'DOS-2024-001' },
-          { name: 'documentType', description: 'Type de document demandé', example: 'Passeport' },
+          { name: 'documentType', description: 'Libellé du type (demande unique)', example: 'Passeport' },
+          { name: 'documentsCount', description: 'Nombre de documents demandés dans le lot', example: '3' },
           { name: 'isUrgent', description: 'Indique si la demande est urgente', example: 'true' },
           { name: 'isUrgentText', description: 'Texte "🔴 URGENT: " si urgent, vide sinon', example: '🔴 URGENT: ' }
         ],

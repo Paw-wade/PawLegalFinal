@@ -111,8 +111,8 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
       {/* Sidebar — même design que partenaire */}
       <aside
         className={`
-          w-64 bg-white border-r border-gray-200 h-screen flex flex-col
-          fixed top-0 left-0 z-50
+          w-64 bg-white border-r border-gray-200 flex flex-col
+          fixed top-0 left-0 bottom-0 z-50 lg:bottom-auto lg:h-screen lg:min-h-screen
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
@@ -142,8 +142,8 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
           )}
         </div>
 
-        {/* Navigation */}
-        <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
+        {/* Navigation — scroll ; déconnexion fixée en bas sur mobile */}
+        <nav className="p-4 space-y-2 flex-1 min-h-0 overflow-y-auto">
           {filteredMenuItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -176,8 +176,8 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
             );
           })}
         </nav>
-        {/* Bouton de déconnexion en bas du menu */}
-        <div className="border-t border-gray-200 p-4">
+        {/* Bouton de déconnexion — bandeau bas du tiroir mobile */}
+        <div className="shrink-0 border-t border-gray-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_12px_rgba(0,0,0,0.06)] lg:shadow-none">
           <button
             type="button"
             onClick={async () => {
