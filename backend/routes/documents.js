@@ -264,11 +264,14 @@ cloudinary.config({
 
 const cloudinaryStorage = new CloudinaryStorage({
   cloudinary,
-  params: async (req, file) => ({
-    folder: 'pawlegal/documents',
-    resource_type: 'raw',
-    public_id: `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9]/g, '_')}`,
-  }),
+  params: async (req, file) => {
+    const isImage = file.mimetype.startsWith('image/');
+    return {
+      folder: 'pawlegal/documents',
+      resource_type: isImage ? 'image' : 'raw',
+      public_id: `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9]/g, '_')}`,
+    };
+  },
 });
 
 // Filtre pour accepter seulement certains types de fichiers
@@ -745,8 +748,30 @@ router.get('/:id/preview', async (req, res) => {
         message: 'Fichier non trouvé'
       });
     }
-    console.log('✅ Prévisualisation — redirect Cloudinary:', fileUrl);
-    return res.redirect(fileUrl);
+    
+    // Récupérer le fichier depuis Cloudinary et le streamer avec le bon Content-Type
+    const https = require('https');
+    const http = require('http');
+    const protocol = fileUrl.startsWith('https') ? https : http;
+    
+    let contentType = document.typeMime || 'application/octet-stream';
+    if (!document.typeMime && document.nom.toLowerCase().endsWith('.pdf')) {
+      contentType = 'application/pdf';
+    }
+    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(document.nom)}"`);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    
+    console.log('✅ Prévisualisation — stream Cloudinary:', fileUrl);
+    protocol.get(fileUrl, (stream) => {
+      stream.pipe(res);
+    }).on('error', (err) => {
+      console.error('❌ Erreur stream Cloudinary:', err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'Erreur lecture du fichier' });
+      }
+    });
   } catch (error) {
     console.error('Erreur lors de la prévisualisation du document:', error);
     if (!res.headersSent) {
