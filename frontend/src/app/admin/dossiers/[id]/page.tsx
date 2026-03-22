@@ -63,6 +63,10 @@ export default function AdminDossierDetailPage() {
   const [showDocumentPreviewModal, setShowDocumentPreviewModal] = useState(false);
   const [showStepsModal, setShowStepsModal] = useState(false);
   const [localSteps, setLocalSteps] = useState<any[]>([]);
+  const [editingTitre, setEditingTitre] = useState(false);
+  const [titreEditValue, setTitreEditValue] = useState('');
+  const [savingTitre, setSavingTitre] = useState(false);
+  const [titreEditError, setTitreEditError] = useState<string | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -542,7 +546,91 @@ export default function AdminDossierDetailPage() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                  <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
+                  {editingTitre ? (
+                    <div className="flex flex-col gap-2 w-full min-w-0 sm:max-w-2xl">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          value={titreEditValue}
+                          onChange={(e) => {
+                            setTitreEditValue(e.target.value);
+                            setTitreEditError(null);
+                          }}
+                          className="flex-1 min-w-[12rem] rounded-lg border border-gray-300 px-3 py-2 text-lg font-semibold text-foreground focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                          placeholder="Nom du dossier"
+                          disabled={savingTitre}
+                          maxLength={500}
+                          autoFocus
+                        />
+                        <Button
+                          type="button"
+                          variant="default"
+                          className="shrink-0"
+                          disabled={savingTitre}
+                          onClick={async () => {
+                            const trimmed = titreEditValue.trim();
+                            if (!trimmed) {
+                              setTitreEditError('Le nom du dossier ne peut pas être vide.');
+                              return;
+                            }
+                            setSavingTitre(true);
+                            setTitreEditError(null);
+                            try {
+                              const res = await dossiersAPI.updateDossier(dossierId, { titre: trimmed });
+                              if (res.data?.success && res.data?.dossier) {
+                                setDossier(res.data.dossier);
+                                setLocalSteps(res.data.dossier.etapesSupplementaires || []);
+                                setEditingTitre(false);
+                              } else {
+                                setTitreEditError(res.data?.message || 'Erreur lors de l’enregistrement');
+                              }
+                            } catch (err: any) {
+                              setTitreEditError(err.response?.data?.message || 'Erreur lors de l’enregistrement');
+                            } finally {
+                              setSavingTitre(false);
+                            }
+                          }}
+                        >
+                          {savingTitre ? 'Enregistrement…' : 'Enregistrer'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="shrink-0"
+                          disabled={savingTitre}
+                          onClick={() => {
+                            setEditingTitre(false);
+                            setTitreEditError(null);
+                            setTitreEditValue(dossier.titre || '');
+                          }}
+                        >
+                          Annuler
+                        </Button>
+                      </div>
+                      {titreEditError && (
+                        <p className="text-sm text-red-600">{titreEditError}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTitreEditValue(dossier.titre || '');
+                          setTitreEditError(null);
+                          setEditingTitre(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-orange-300"
+                        title="Renommer le dossier"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                        Renommer
+                      </button>
+                    </>
+                  )}
                   {(dossier.numero || dossier.numeroDossier) && (
                     <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-semibold">
                       N° {dossier.numero || dossier.numeroDossier}

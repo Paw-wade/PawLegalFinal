@@ -45,6 +45,11 @@ const searchFileInUploads = (targetNames = []) => {
   const flat = tryDir(path.join(UPLOADS_ROOT, 'documents'));
   if (flat) return flat;
 
+  if (process.env.UPLOADS_DOCUMENTS_DIR) {
+    const fromEnv = tryDir(path.resolve(process.env.UPLOADS_DOCUMENTS_DIR));
+    if (fromEnv) return fromEnv;
+  }
+
   // 2) Récursif depuis uploads/ (Node 18+)
   try {
     if (!fs.existsSync(UPLOADS_ROOT)) return null;
@@ -72,7 +77,6 @@ const resolveExistingDocumentPath = (storedPath, fileName) => {
   const normalized = rawPath.replace(/[\\/]+/g, path.sep);
   const withoutLeadingSep = normalized.replace(new RegExp(`^\\${path.sep}+`), '');
   const uploadsRelative = withoutLeadingSep.replace(/^uploads[\\/]+documents[\\/]+/i, '');
-  // Chemins type "/uploads/documents/x" ou "uploads\documents\x"
   const asForwardSlash = rawPath.replace(/\\/g, '/').replace(/^\/+/, '');
 
   const candidates = [];
@@ -81,7 +85,9 @@ const resolveExistingDocumentPath = (storedPath, fileName) => {
     if (path.isAbsolute(normalized)) candidates.push(normalized);
     candidates.push(
       path.resolve(BACKEND_ROOT, normalized),
-      path.resolve(BACKEND_ROOT, withoutLeadingSep)
+      path.resolve(BACKEND_ROOT, withoutLeadingSep),
+      path.resolve(process.cwd(), normalized),
+      path.resolve(process.cwd(), withoutLeadingSep)
     );
   }
 
@@ -89,18 +95,25 @@ const resolveExistingDocumentPath = (storedPath, fileName) => {
     const parts = asForwardSlash.split('/').filter(Boolean);
     if (parts.length > 0) {
       candidates.push(path.join(BACKEND_ROOT, ...parts));
+      candidates.push(path.join(process.cwd(), ...parts));
     }
   }
 
-  // Segment relatif sous documents/ (sans repasser par un chemin vide = dossier)
   if (uploadsRelative && uploadsRelative !== '.' && uploadsRelative !== path.sep) {
     candidates.push(path.resolve(BACKEND_ROOT, 'uploads', 'documents', uploadsRelative));
+    candidates.push(path.resolve(process.cwd(), 'uploads', 'documents', uploadsRelative));
   }
   if (filenameOnly) {
     candidates.push(
       path.resolve(BACKEND_ROOT, 'uploads', 'documents', filenameOnly),
-      path.join(UPLOADS_ROOT, 'documents', filenameOnly)
+      path.join(UPLOADS_ROOT, 'documents', filenameOnly),
+      path.join(process.cwd(), 'uploads', 'documents', filenameOnly),
+      path.join(process.cwd(), 'backend', 'uploads', 'documents', filenameOnly)
     );
+  }
+
+  if (process.env.UPLOADS_DOCUMENTS_DIR && filenameOnly) {
+    candidates.push(path.join(path.resolve(process.env.UPLOADS_DOCUMENTS_DIR), filenameOnly));
   }
 
   const unique = [...new Set(candidates.filter(Boolean))];
@@ -109,11 +122,98 @@ const resolveExistingDocumentPath = (storedPath, fileName) => {
     if (isExistingFile(candidate)) return candidate;
   }
 
-  // Fallback: recherche par nom de fichier réel (multer) dans uploads
   const foundByName = searchFileInUploads([fileName, filenameOnly, rawPath ? path.basename(normalized) : '']);
   if (foundByName) return foundByName;
 
   return null;
+};
+
+/**
+ * Fichier introuvable par chemin : retrouver par taille (octets) + proximité de createdAt.
+ */
+const findFileByTailleAndCreatedAt = (document) => {
+  const size = Number(document.taille);
+  if (!Number.isFinite(size) || size <= 0) return null;
+  const t0 = document.createdAt ? new Date(document.createdAt).getTime() : null;
+
+  const scanDirs = new Set([
+    path.join(UPLOADS_ROOT, 'documents'),
+    path.join(process.cwd(), 'uploads', 'documents'),
+    path.join(process.cwd(), 'backend', 'uploads', 'documents'),
+  ]);
+  if (process.env.UPLOADS_DOCUMENTS_DIR) {
+    scanDirs.add(path.resolve(process.env.UPLOADS_DOCUMENTS_DIR));
+  }
+
+  const matches = [];
+  for (const dir of scanDirs) {
+    try {
+      if (!fs.existsSync(dir)) continue;
+      for (const name of fs.readdirSync(dir)) {
+        const full = path.join(dir, name);
+        if (!isExistingFile(full)) continue;
+        const st = fs.statSync(full);
+        if (st.size !== size) continue;
+        const timeDiff = t0 != null ? Math.abs(st.mtimeMs - t0) : 0;
+        matches.push({ full, timeDiff });
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0].full;
+
+  matches.sort((a, b) => a.timeDiff - b.timeDiff);
+  const best = matches[0];
+  if (t0 == null) return null;
+  if (best.timeDiff > 48 * 60 * 60 * 1000) return null;
+  if (matches.length > 1 && Math.abs(matches[1].timeDiff - best.timeDiff) < 3000) {
+    return null;
+  }
+  return best.full;
+};
+
+/**
+ * Résolution complète : chemins multiples, nom d'affichage, puis empreinte taille/date.
+ * Met à jour cheminFichier / nomFichier en base si retrouvé par heuristique.
+ */
+const resolveDocumentPhysicalPath = async (document) => {
+  let filePath = resolveExistingDocumentPath(document.cheminFichier, document.nomFichier);
+  if (filePath) return filePath;
+
+  if (document.nom) {
+    filePath = resolveExistingDocumentPath(null, document.nom);
+    if (filePath) return filePath;
+  }
+
+  filePath = findFileByTailleAndCreatedAt(document);
+  if (!filePath) return null;
+
+  try {
+    const absFile = path.resolve(filePath);
+    const rel = path.relative(BACKEND_ROOT, absFile);
+    const cheminToStore =
+      rel && !rel.startsWith('..') && !path.isAbsolute(rel)
+        ? rel.replace(/\\/g, '/')
+        : absFile.replace(/\\/g, '/');
+    await Document.updateOne(
+      { _id: document._id },
+      {
+        $set: {
+          cheminFichier: cheminToStore,
+          nomFichier: path.basename(absFile),
+        },
+      }
+    );
+    document.cheminFichier = cheminToStore;
+    document.nomFichier = path.basename(absFile);
+    console.log('🔧 Chemin fichier document réparé en base:', String(document._id), '→', cheminToStore);
+  } catch (e) {
+    console.warn('⚠️ Impossible de persister le chemin réparé:', e.message);
+  }
+
+  return filePath;
 };
 
 // Normaliser la catégorie pour éviter les erreurs de validation Mongoose
@@ -639,8 +739,8 @@ router.get('/:id/preview', async (req, res) => {
       });
     }
 
-    // Vérifier que le fichier existe
-    const filePath = resolveExistingDocumentPath(document.cheminFichier, document.nomFichier);
+    // Vérifier que le fichier existe (résolution étendue + réparation auto du chemin en base)
+    const filePath = await resolveDocumentPhysicalPath(document);
     console.log('📁 Prévisualisation — résolu:', filePath || '(null)', '| stocké:', document.cheminFichier, '| nomFichier:', document.nomFichier);
 
     if (!filePath) {
@@ -762,43 +862,35 @@ router.get('/:id/download', async (req, res) => {
       });
     }
 
-    // Vérifier que le fichier existe
-    const filePath = resolveExistingDocumentPath(document.cheminFichier, document.nomFichier);
+    const filePath = await resolveDocumentPhysicalPath(document);
     if (!filePath) {
       return res.status(404).json({
         success: false,
+        code: 'FILE_NOT_FOUND',
         message: 'Fichier non trouvé sur le serveur'
       });
     }
 
-    // Déterminer le Content-Type correct
     let contentType = document.typeMime || 'application/octet-stream';
     if (contentType === 'application/octet-stream' && document.nom.toLowerCase().endsWith('.pdf')) {
       contentType = 'application/pdf';
     }
 
-    // Définir les headers pour le téléchargement
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(document.nom)}"`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    
-    // Envoyer le fichier tel quel (binaire intact)
-    res.sendFile(filePath, {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(document.nom)}"`,
-      }
-    }, (err) => {
-      if (err) {
-        console.error('Erreur lors du téléchargement:', err);
-        if (!res.headersSent) {
-          res.status(500).json({
-            success: false,
-            message: 'Erreur lors du téléchargement du fichier'
-          });
-        }
+
+    const absPath = path.resolve(filePath);
+    const stream = fs.createReadStream(absPath);
+    stream.on('error', (streamErr) => {
+      console.error('❌ Lecture téléchargement:', absPath, streamErr.message);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'Erreur lors du téléchargement du fichier' });
+      } else {
+        res.end();
       }
     });
+    stream.pipe(res);
   } catch (error) {
     console.error('Erreur lors du téléchargement du document:', error);
     res.status(500).json({
@@ -860,10 +952,13 @@ router.delete('/:id', async (req, res) => {
       // Continuer la suppression même si l'ajout à la corbeille échoue
     }
 
-    // Supprimer le fichier du système de fichiers
-    const filePath = resolveExistingDocumentPath(document.cheminFichier, document.nomFichier);
+    const filePath = await resolveDocumentPhysicalPath(document);
     if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+      try {
+        fs.unlinkSync(filePath);
+      } catch (unlinkErr) {
+        console.warn('⚠️ Suppression fichier disque:', unlinkErr.message);
+      }
     }
 
     // Supprimer le document de la base de données
