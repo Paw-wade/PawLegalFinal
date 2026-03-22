@@ -2047,6 +2047,7 @@ router.put(
     // Validation simplifiée : tous les champs sont optionnels
     // Si un champ est fourni, il sera validé, sinon ignoré
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']).withMessage('Catégorie invalide'),
+    body('titre').optional().trim().isLength({ max: 500 }).withMessage('Titre trop long (max 500 caractères)'),
     body('statut').optional().isString().trim().isLength({ max: 200 }).withMessage('Statut invalide'),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente']).withMessage('Priorité invalide')
     // Pas de validation pour les autres champs optionnels
@@ -2146,7 +2147,9 @@ router.put(
       const oldAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
 
       // Appliquer directement les modifications
-      if (titre) dossier.titre = titre;
+      if (titre !== undefined && titre !== null) {
+        dossier.titre = typeof titre === 'string' ? titre.trim() : String(titre).trim();
+      }
       if (description !== undefined) dossier.description = description;
       if (categorie) dossier.categorie = categorie;
       if (type !== undefined) dossier.type = type;

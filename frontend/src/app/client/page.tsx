@@ -9,7 +9,7 @@ import { ReservationBadge } from '@/components/ReservationBadge';
 import { MessageNotificationModal } from '@/components/MessageNotificationModal';
 import { AppointmentBadgeModal } from '@/components/AppointmentBadgeModal';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
-import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notificationsAPI, documentRequestsAPI, forumAPI } from '@/lib/api';
+import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notificationsAPI, documentRequestsAPI } from '@/lib/api';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
 
@@ -49,9 +49,6 @@ function ClientDashboardContent() {
   const [selectedDocumentRequest, setSelectedDocumentRequest] = useState<any>(null);
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState(false);
   const [documentRequestNotification, setDocumentRequestNotification] = useState<any>(null);
-  const [bookmarkedThreads, setBookmarkedThreads] = useState<any[]>([]);
-  const [showBookmarksBar, setShowBookmarksBar] = useState(true);
-  const [bookmarksSignature, setBookmarksSignature] = useState('');
   const [isPersonalInfoOpen, setIsPersonalInfoOpen] = useState(false);
   const [isAdminInfoOpen, setIsAdminInfoOpen] = useState(true);
   const [joursRestantsSidebar, setJoursRestantsSidebar] = useState<number | null>(null);
@@ -66,7 +63,6 @@ function ClientDashboardContent() {
       checkDocumentRequestNotifications();
       loadNotifications();
       loadDocumentRequests();
-      loadForumBookmarks();
     }, 350);
   };
 
@@ -175,71 +171,6 @@ function ClientDashboardContent() {
       console.error('Erreur lors du chargement des notifications:', err);
     }
   };
-
-  const loadForumBookmarks = async () => {
-    try {
-      const res = await forumAPI.getBookmarks();
-      if (res.data?.success) {
-        const bookmarks = res.data.bookmarks || [];
-        const threads = bookmarks
-          .map((b: any) =>
-            b.thread
-              ? {
-                  ...b.thread,
-                  newRepliesCount: b.newRepliesCount ?? 0,
-                }
-              : null
-          )
-          .filter((t: any) => !!t)
-          .slice(0, 10);
-        setBookmarkedThreads(threads);
-      }
-    } catch (err) {
-      console.error('Erreur lors du chargement des signets forum:', err);
-    }
-  };
-
-  const getBookmarksStorageKey = () => {
-    const userId = (session?.user as any)?._id || (session?.user as any)?.id || (session?.user as any)?.email || 'anonymous';
-    return `clientForumBookmarksSeenSignature:${userId}`;
-  };
-
-  const computeBookmarksSignature = (threads: any[]) => {
-    if (!threads || threads.length === 0) return '';
-    return threads
-      .map((t: any) => `${t._id || t.id}:${t.newRepliesCount ?? 0}`)
-      .sort()
-      .join('|');
-  };
-
-  const markBookmarksAsSeen = (signature: string) => {
-    if (typeof window === 'undefined' || !signature) return;
-    try {
-      localStorage.setItem(getBookmarksStorageKey(), signature);
-    } catch (e) {
-      console.warn('Impossible de sauvegarder l’état des signets vus:', e);
-    }
-  };
-
-  useEffect(() => {
-    const signature = computeBookmarksSignature(bookmarkedThreads);
-    setBookmarksSignature(signature);
-
-    if (!signature) {
-      setShowBookmarksBar(false);
-      return;
-    }
-
-    if (typeof window === 'undefined') return;
-    try {
-      const seenSignature = localStorage.getItem(getBookmarksStorageKey()) || '';
-      // Afficher seulement s'il y a une nouveauté depuis la dernière fois où la barre a été vue/fermée.
-      setShowBookmarksBar(signature !== seenSignature);
-    } catch (e) {
-      console.warn('Impossible de lire l’état des signets vus:', e);
-      setShowBookmarksBar(true);
-    }
-  }, [bookmarkedThreads, session]);
 
   const getLastNotificationForDossier = (dossierId: string) => {
     const dossierNotifications = notifications.filter((notif) => {
@@ -793,63 +724,6 @@ function ClientDashboardContent() {
             )}
           </div>
 
-          {/* Barre des discussions mises en signet */}
-          {showBookmarksBar && bookmarkedThreads.length > 0 && (
-            <div className="mt-4 rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-orange-200/70 to-orange-200/70 shadow-sm">
-              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-orange-600 text-xl leading-none">⭐</span>
-                    <span className="text-sm font-semibold text-orange-800 truncate">
-                      Discussions que vous suivez
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      markBookmarksAsSeen(bookmarksSignature);
-                      setShowBookmarksBar(false);
-                    }}
-                    className="text-[11px] text-orange-700 hover:text-orange-900 hover:underline shrink-0"
-                  >
-                    Fermer
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {bookmarkedThreads.map((thread: any) => {
-                    const id = thread._id || thread.id;
-                    const newReplies = thread.newRepliesCount ?? 0;
-                    return (
-                      <Link
-                        key={id}
-                        href={`/forum/${id}`}
-                        className="block"
-                        onClick={() => {
-                          // Considérer la bannière comme "vue" à l'ouverture d'une discussion.
-                          markBookmarksAsSeen(bookmarksSignature);
-                        }}
-                      >
-                        <div className="flex items-center justify-between gap-3 rounded-lg border border-orange-100 bg-orange-50/60 px-3 py-2 hover:border-orange-200 hover:bg-orange-50 transition-colors">
-                          <div className="min-w-0 flex items-center gap-2">
-                            <span className="text-orange-600 text-sm leading-none">⭐</span>
-                            <span className="text-sm font-medium text-orange-900 truncate">
-                              {thread.title}
-                            </span>
-                          </div>
-                          {newReplies > 0 && (
-                            <span className="text-xs font-semibold text-orange-700 whitespace-nowrap">
-                              ({newReplies} nouvelle{newReplies > 1 ? 's' : ''} réponse{newReplies > 1 ? 's' : ''})
-                            </span>
-                          )}
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>

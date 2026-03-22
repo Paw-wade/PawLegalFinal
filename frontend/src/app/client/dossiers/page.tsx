@@ -310,6 +310,8 @@ export default function DossiersPage() {
       }
       setActiveDirectUploadDossierId(null);
       await loadDossierDocuments();
+      // Ouvrir la liste des pièces pour que l’envoi spontané soit visible tout de suite
+      setExpandedDocumentDropdowns((prev) => new Set(prev).add(dossierId));
     } catch (err: any) {
       console.error('Erreur upload direct depuis la liste:', err);
       setDirectUploadError(err.response?.data?.message || err.message || 'Erreur lors du téléversement du document');
@@ -640,61 +642,84 @@ export default function DossiersPage() {
                     <span><span className="font-semibold text-foreground">{documentRequests[dossier._id || dossier.id]?.length || 0}</span> demandes</span>
                   </div>
 
-                  {/* Section Documents demandés — compacte */}
+                  {/* Documents : demandes admin/partenaire + pièces du dossier + ajout libre (toujours visible) */}
                   {(() => {
-                    const dossierRequests = documentRequests[dossier._id || dossier.id] || [];
+                    const dossierIdKey = dossier._id || dossier.id;
+                    const dossierIdStr = dossierIdKey.toString();
+                    const dossierRequests = documentRequests[dossierIdKey] || [];
                     const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
                     const receivedRequests = dossierRequests.filter((r: any) => r.status === 'received' || r.status === 'sent');
-                    const isExpanded = expandedDocumentSections.has(dossier._id || dossier.id);
-                    
-                    if (dossierRequests.length === 0) return null;
-                    
+                    const isExpanded = expandedDocumentSections.has(dossierIdKey);
+                    const hasRequests = dossierRequests.length > 0;
+                    const docs = dossierDocuments[dossierIdStr] || [];
+
+                    const toggleDirectUpload = (e?: { stopPropagation?: () => void }) => {
+                      e?.stopPropagation?.();
+                      setDirectUploadError(null);
+                      if (activeDirectUploadDossierId === dossierIdStr) {
+                        setActiveDirectUploadDossierId(null);
+                      } else {
+                        setActiveDirectUploadDossierId(dossierIdStr);
+                      }
+                    };
+
                     return (
                       <div className="pt-2 border-t border-gray-100 mb-2">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="flex-1 min-w-0 flex items-center justify-between gap-2 py-1.5 px-1 rounded hover:bg-gray-50 transition-colors text-left"
-                            onClick={() => {
-                              const dossierId = dossier._id || dossier.id;
-                              const newExpanded = new Set(expandedDocumentSections);
-                              if (isExpanded) newExpanded.delete(dossierId);
-                              else newExpanded.add(dossierId);
-                              setExpandedDocumentSections(newExpanded);
-                            }}
-                          >
-                            <span className="text-[11px] md:text-sm font-semibold text-foreground">📄 Documents demandés</span>
-                            <span className="text-[11px] md:text-sm text-muted-foreground">
-                              {pendingRequests.length > 0 && <span className="text-orange-600">{pendingRequests.length} attente</span>}
-                              {pendingRequests.length > 0 && receivedRequests.length > 0 && ' · '}
-                              {receivedRequests.length > 0 && <span className="text-green-600">{receivedRequests.length} reçu(s)</span>}
-                            </span>
-                            <span className="text-muted-foreground text-xs">{isExpanded ? '▲' : '▼'}</span>
-                          </button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            title="Ajouter un document"
-                            aria-label="Ajouter un document"
-                            className="h-7 w-7 p-0 text-sm leading-none shadow-none"
-                            onClick={(e: any) => {
-                              e.stopPropagation();
-                              const currentDossierId = (dossier._id || dossier.id).toString();
-                              setDirectUploadError(null);
-                              if (activeDirectUploadDossierId === currentDossierId) {
-                                setActiveDirectUploadDossierId(null);
-                              } else {
-                                setActiveDirectUploadDossierId(currentDossierId);
-                              }
-                            }}
-                          >
-                            +
-                          </Button>
-                        </div>
+                        {hasRequests ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="flex-1 min-w-0 flex items-center justify-between gap-2 py-1.5 px-1 rounded hover:bg-gray-50 transition-colors text-left"
+                              onClick={() => {
+                                const newExpanded = new Set(expandedDocumentSections);
+                                if (isExpanded) newExpanded.delete(dossierIdKey);
+                                else newExpanded.add(dossierIdKey);
+                                setExpandedDocumentSections(newExpanded);
+                              }}
+                            >
+                              <span className="text-[11px] md:text-sm font-semibold text-foreground">📄 Documents demandés</span>
+                              <span className="text-[11px] md:text-sm text-muted-foreground">
+                                {pendingRequests.length > 0 && <span className="text-orange-600">{pendingRequests.length} attente</span>}
+                                {pendingRequests.length > 0 && receivedRequests.length > 0 && ' · '}
+                                {receivedRequests.length > 0 && <span className="text-green-600">{receivedRequests.length} reçu(s)</span>}
+                              </span>
+                              <span className="text-muted-foreground text-xs">{isExpanded ? '▲' : '▼'}</span>
+                            </button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              title="Ajouter un document"
+                              aria-label="Ajouter un document"
+                              className="h-7 w-7 p-0 text-sm leading-none shadow-none"
+                              onClick={toggleDirectUpload}
+                            >
+                              +
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 min-w-0 py-1.5 px-1">
+                              <span className="text-[11px] md:text-sm font-semibold text-foreground">📁 Documents du dossier</span>
+                              <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5">
+                                Pièces jointes et envois spontanés (sans demande préalable)
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              title="Ajouter un document"
+                              aria-label="Ajouter un document"
+                              className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                              onClick={toggleDirectUpload}
+                            >
+                              +
+                            </Button>
+                          </div>
+                        )}
 
-                        {activeDirectUploadDossierId === (dossier._id || dossier.id).toString() && (
+                        {activeDirectUploadDossierId === dossierIdStr && (
                           <form
-                            onSubmit={(e) => handleDirectUploadFromList(e, (dossier._id || dossier.id).toString())}
+                            onSubmit={(e) => handleDirectUploadFromList(e, dossierIdStr)}
                             className="mt-2 p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-2.5"
                           >
                             {directUploadError && <p className="text-xs text-red-600">{directUploadError}</p>}
@@ -770,7 +795,7 @@ export default function DossiersPage() {
                           </form>
                         )}
                         
-                        {isExpanded && (
+                        {hasRequests && isExpanded && (
                           <div className="mt-1.5 space-y-1.5">
                             {dossierRequests.map((request: any) => {
                               const isPending = request.status === 'pending';
@@ -831,11 +856,8 @@ export default function DossiersPage() {
                           </div>
                         )}
 
-                        {(() => {
-                          const dossierId = (dossier._id || dossier.id).toString();
-                          const docs = dossierDocuments[dossierId] || [];
-                          if (docs.length === 0) return null;
-                          const docsExpanded = expandedDocumentDropdowns.has(dossierId);
+                        {docs.length > 0 && (() => {
+                          const docsExpanded = expandedDocumentDropdowns.has(dossierIdStr);
 
                           return (
                             <div className="mt-2 pt-2 border-t border-gray-100">
@@ -844,8 +866,8 @@ export default function DossiersPage() {
                                 className="w-full flex items-center justify-between gap-2 py-1 px-1 rounded hover:bg-gray-50 transition-colors text-left mb-1"
                                 onClick={() => {
                                   const newExpanded = new Set(expandedDocumentDropdowns);
-                                  if (docsExpanded) newExpanded.delete(dossierId);
-                                  else newExpanded.add(dossierId);
+                                  if (docsExpanded) newExpanded.delete(dossierIdStr);
+                                  else newExpanded.add(dossierIdStr);
                                   setExpandedDocumentDropdowns(newExpanded);
                                 }}
                               >
