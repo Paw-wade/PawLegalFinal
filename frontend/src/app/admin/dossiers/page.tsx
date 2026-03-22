@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, userAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI, collaborativeDraftsAPI } from '@/lib/api';
+import { getUserAvatarDisplayUrl } from '@/lib/profilePhoto';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
@@ -1669,12 +1670,36 @@ export default function AdminDossiersPage() {
                                 Réf. {dossier.numero || dossier.numeroDossier}
                               </p>
                             )}
-                            {/* Client / créateur du dossier — toujours visible, même plié */}
-                            <p className="text-xs text-primary font-medium">
-                              Client : {dossier.user && typeof dossier.user === 'object'
-                                ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '—'
-                                : [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ') || dossier.clientEmail || 'Non renseigné'}
-                            </p>
+                            {/* Client / créateur du dossier — toujours visible, même plié (photo profil si inscrit) */}
+                            <div className="flex items-center gap-2 mt-1 min-w-0">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border border-primary/20">
+                                {(() => {
+                                  const av =
+                                    dossier.user && typeof dossier.user === 'object'
+                                      ? getUserAvatarDisplayUrl(dossier.user)
+                                      : null;
+                                  if (av) {
+                                    return (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img src={av} alt="" className="w-full h-full object-cover" />
+                                    );
+                                  }
+                                  return (
+                                    <span className="text-[10px] font-bold text-primary leading-none">
+                                      {dossier.user && typeof dossier.user === 'object'
+                                        ? `${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'
+                                        : `${dossier.clientPrenom?.[0] || ''}${dossier.clientNom?.[0] || ''}`.trim() || '👤'}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                              <p className="text-xs text-primary font-medium min-w-0 flex-1">
+                                Client :{' '}
+                                {dossier.user && typeof dossier.user === 'object'
+                                  ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '—'
+                                  : [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ') || dossier.clientEmail || 'Non renseigné'}
+                              </p>
+                            </div>
                             {/* Résumé compact des infos clés du dossier (plié) */}
                             {!expandedDossiers.has(dossier._id || dossier.id) && (
                               <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
@@ -1853,18 +1878,32 @@ export default function AdminDossiersPage() {
                     <div className="mb-4 pb-4 border-b border-gray-200">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Client</p>
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-gray-100">
-                          {dossier.user && (dossier.user.avatarUrl || dossier.user.photoUrl) ? (
-                            // Photo du client si disponible
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={String(dossier.user.avatarUrl || dossier.user.photoUrl)}
-                              alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Photo client'}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <span className="text-base text-gray-600">👤</span>
-                          )}
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-gray-100 border border-gray-200">
+                          {(() => {
+                            if (!dossier.user) {
+                              return (
+                                <span className="text-sm font-semibold text-gray-600">
+                                  {`${dossier.clientPrenom?.[0] || ''}${dossier.clientNom?.[0] || ''}`.trim() || '👤'}
+                                </span>
+                              );
+                            }
+                            const av = getUserAvatarDisplayUrl(dossier.user);
+                            if (av) {
+                              return (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={av}
+                                  alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Photo client'}
+                                  className="w-full h-full object-cover"
+                                />
+                              );
+                            }
+                            return (
+                              <span className="text-sm font-semibold text-gray-600">
+                                {`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <div className="flex-1 min-w-0">
                           {dossier.user ? (
@@ -2336,23 +2375,33 @@ export default function AdminDossiersPage() {
                       );
                     })()}
 
-                    {/* Section Documents demandés - Style identique au client */}
+                    {/* Section Documents demandés + pièces envoyées spontanément par le client (sans demande préalable) */}
                     {(() => {
-                      const dossierRequests = documentRequests[dossier._id || dossier.id] || [];
+                      const dossierId = dossier._id || dossier.id;
+                      const dossierRequests = documentRequests[dossierId] || [];
+                      const dossierDocsList = dossierDocuments[dossierId] || [];
+                      const linkedDocIds = new Set(
+                        dossierRequests
+                          .filter((r: any) => r.document)
+                          .map((r: any) => String(r.document._id || r.document))
+                      );
+                      const spontaneousDocs = dossierDocsList.filter(
+                        (doc: any) => !linkedDocIds.has(String(doc._id || doc.id))
+                      );
                       const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
                       const receivedRequests = dossierRequests.filter((r: any) => r.status === 'received' || r.status === 'sent');
-                      const isExpanded = expandedDocumentSections.has(dossier._id || dossier.id);
-                      
-                      if (dossierRequests.length === 0) {
-                        return null; // Ne rien afficher s'il n'y a pas de demandes
+                      const isExpanded = expandedDocumentSections.has(dossierId);
+                      const receivedPiecesCount = receivedRequests.length + spontaneousDocs.length;
+
+                      if (dossierRequests.length === 0 && spontaneousDocs.length === 0) {
+                        return null;
                       }
-                      
+
                       return (
                         <div className="pt-3 border-t border-gray-200 mb-3">
                           <div 
                             className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-md p-2 -m-2 transition-colors"
                             onClick={() => {
-                              const dossierId = dossier._id || dossier.id;
                               const newExpanded = new Set(expandedDocumentSections);
                               if (isExpanded) {
                                 newExpanded.delete(dossierId);
@@ -2372,10 +2421,10 @@ export default function AdminDossiersPage() {
                                       {pendingRequests.length} en attente
                                     </span>
                                   )}
-                                  {pendingRequests.length > 0 && receivedRequests.length > 0 && ' • '}
-                                  {receivedRequests.length > 0 && (
+                                  {pendingRequests.length > 0 && receivedPiecesCount > 0 && ' • '}
+                                  {receivedPiecesCount > 0 && (
                                     <span className="text-green-600 font-medium">
-                                      {receivedRequests.length} reçu{receivedRequests.length > 1 ? 's' : ''}
+                                      {receivedPiecesCount} reçu{receivedPiecesCount > 1 ? 's' : ''}
                                     </span>
                                   )}
                                 </p>
@@ -2510,6 +2559,79 @@ export default function AdminDossiersPage() {
                                   </div>
                                 );
                               })}
+                              {spontaneousDocs.map((doc: any) => (
+                                <div
+                                  key={`spontaneous-${doc._id || doc.id}`}
+                                  className="border rounded-lg p-3 bg-green-50/50 border-green-200"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                        <span className="text-lg flex-shrink-0">✅</span>
+                                        <div className="flex-1 min-w-0">
+                                          <h5 className="font-semibold text-sm truncate text-foreground">
+                                            {doc.nom || 'Document'}
+                                          </h5>
+                                        </div>
+                                        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-semibold flex-shrink-0">
+                                          Sans demande préalable
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 bg-green-100 text-green-800">
+                                          Reçu
+                                        </span>
+                                      </div>
+                                      {doc.description && (
+                                        <p className="text-xs text-muted-foreground mb-2 ml-7 line-clamp-2">
+                                          {doc.description}
+                                        </p>
+                                      )}
+                                      <div className="flex items-center gap-3 text-xs text-muted-foreground ml-7">
+                                        <span>
+                                          📅 Envoyé le{' '}
+                                          {new Date(doc.createdAt || doc.updatedAt).toLocaleDateString('fr-FR')}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2 mt-3 ml-7">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedDocumentForPreview(doc);
+                                            setShowDocumentPreviewModal(true);
+                                          }}
+                                          className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-xs font-medium transition-colors"
+                                        >
+                                          👁️ Voir
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            try {
+                                              const response = await documentsAPI.downloadDocument(doc._id || doc.id);
+                                              const blob = new Blob([response.data]);
+                                              const url = window.URL.createObjectURL(blob);
+                                              const link = document.createElement('a');
+                                              link.href = url;
+                                              link.download = doc.nom;
+                                              document.body.appendChild(link);
+                                              link.click();
+                                              document.body.removeChild(link);
+                                              window.URL.revokeObjectURL(url);
+                                            } catch (err) {
+                                              console.error('Erreur lors du téléchargement:', err);
+                                              alert('Erreur lors du téléchargement du document');
+                                            }
+                                          }}
+                                          className="px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded text-xs font-medium transition-colors"
+                                        >
+                                          ⬇️ Télécharger
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -2983,8 +3105,10 @@ export default function AdminDossiersPage() {
                       documentTypeLabel: documentTypeLabel,
                       message: documentRequestData.message,
                       isUrgent: documentRequestData.isUrgent,
-                      // Une demande multiple doit produire un seul SMS client.
-                      skipSms: index > 0
+                      // Une demande multiple = un seul SMS, avec le nombre total de pièces demandées.
+                      skipSms: index > 0,
+                      batchDocumentCount:
+                        index === 0 ? documentRequestData.selectedDocumentTypes.length : undefined
                     });
                     if (resp?.data?.success) {
                       successCount += 1;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { authAPI } from '@/lib/api';
@@ -64,8 +64,11 @@ function Label({ className = '', children, ...props }: any) {
   );
 }
 
+const REDIRECT_DELAY_MS = 2600;
+
 export default function SignupPage() {
   const router = useRouter();
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -77,6 +80,14 @@ export default function SignupPage() {
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
 
   const validateField = (name: string, value: string) => {
     setFieldErrors(prev => {
@@ -158,8 +169,16 @@ export default function SignupPage() {
 
       if (response.data.success) {
         setError(null);
-        // Rediriger directement vers l'accueil après création du compte
-        router.push('/');
+        setSuccess(
+          'Vous recevrez un SMS avec votre mot de passe temporaire sous peu. Redirection automatique vers l’accueil…'
+        );
+        if (redirectTimerRef.current) {
+          clearTimeout(redirectTimerRef.current);
+        }
+        redirectTimerRef.current = setTimeout(() => {
+          redirectTimerRef.current = null;
+          router.push('/');
+        }, REDIRECT_DELAY_MS);
       }
     } catch (err: any) {
       console.error('Erreur lors de la création du compte:', err);
@@ -260,9 +279,25 @@ export default function SignupPage() {
                 </div>
               )}
 
-              {/* Message de succès supprimé : on redirige directement vers l'accueil */}
+              {success && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mb-6 p-4 bg-emerald-50 border border-emerald-200 border-l-4 border-l-emerald-500 rounded-lg shadow-sm animate-in fade-in duration-300"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl leading-none" aria-hidden>
+                      ✓
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-900">Compte créé avec succès</p>
+                      <p className="text-sm text-emerald-800 mt-1">{success}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmit} className="space-y-5" aria-busy={isLoading || !!success}>
                   <div className="space-y-5">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -276,6 +311,7 @@ export default function SignupPage() {
                           onBlur={(e) => validateField('firstName', e.target.value)}
                           placeholder="Votre prénom"
                           autoComplete="given-name"
+                          disabled={!!success}
                           className={fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}
                         />
                         {fieldErrors.firstName && (
@@ -297,6 +333,7 @@ export default function SignupPage() {
                           onBlur={(e) => validateField('lastName', e.target.value)}
                           placeholder="Votre nom"
                           autoComplete="family-name"
+                          disabled={!!success}
                           className={fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}
                         />
                         {fieldErrors.lastName && (
@@ -320,6 +357,7 @@ export default function SignupPage() {
                         placeholder="votre.email@exemple.com"
                         autoComplete="email"
                         required
+                        disabled={!!success}
                       />
                     </div>
 
@@ -334,6 +372,7 @@ export default function SignupPage() {
                           onBlur={(e) => validateField('phone', e.target.value)}
                           placeholder="07 68 03 33 58"
                           autoComplete="tel"
+                          disabled={!!success}
                           className={fieldErrors.phone ? 'border-red-500 focus:border-red-500' : ''}
                         />
                         {fieldErrors.phone && (
@@ -350,9 +389,14 @@ export default function SignupPage() {
                       <Button
                         type="submit"
                         className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                        disabled={isLoading}
+                        disabled={isLoading || !!success}
                       >
-                        {isLoading ? (
+                        {success ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <span className="animate-pulse">✓</span>
+                            <span>Redirection vers l&apos;accueil…</span>
+                          </span>
+                        ) : isLoading ? (
                           <span className="flex items-center gap-2">
                             <span className="animate-spin">⏳</span>
                             <span>Envoi en cours...</span>

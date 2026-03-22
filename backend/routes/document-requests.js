@@ -24,7 +24,8 @@ router.post(
     body('documentTypeLabel').notEmpty().withMessage('Le libellé du type de document est requis'),
     body('message').optional().trim(),
     body('isUrgent').optional().isBoolean(),
-    body('skipSms').optional().isBoolean()
+    body('skipSms').optional().isBoolean(),
+    body('batchDocumentCount').optional().isInt({ min: 1 }).withMessage('batchDocumentCount invalide')
   ],
   async (req, res) => {
     try {
@@ -37,7 +38,7 @@ router.post(
         });
       }
 
-      const { dossierId, documentType, documentTypeLabel, message, isUrgent, skipSms } = req.body;
+      const { dossierId, documentType, documentTypeLabel, message, isUrgent, skipSms, batchDocumentCount } = req.body;
 
       // Valider que documentType est dans l'enum autorisé
       const allowedDocumentTypes = ['identite', 'titre_sejour', 'contrat', 'facture', 'passeport', 'justificatif_domicile', 'avis_imposition', 'autre'];
@@ -285,12 +286,25 @@ router.post(
       // Envoyer un SMS si configuré et non explicitement ignoré
       if (clientUser.phone && !skipSms) {
         try {
+          const dossierRef = dossier.numero || dossier._id.toString();
+          const batchTotal = Math.max(
+            1,
+            Number.parseInt(String(batchDocumentCount), 10) || 1
+          );
+          const isMultiple = batchTotal > 1;
+          const bodyLine1 = isMultiple
+            ? `${batchTotal} documents vous sont demandés pour le dossier ${dossierRef}. Connectez-vous à votre espace client Ada Papers pour voir la liste complète et déposer vos pièces.`
+            : `Un document vous est demandé : ${documentTypeLabel}. Dossier ${dossierRef}. Connectez-vous à votre espace client Ada Papers pour le déposer.`;
+
           await sendNotificationSMS(
             clientUser.phone,
             'document_request',
             {
-              dossierNumero: dossier.numero || dossier._id.toString(),
+              dossierNumero: dossierRef,
               documentType: documentTypeLabel,
+              documentsCount: String(batchTotal),
+              isMultiple: isMultiple ? '1' : '',
+              bodyLine1,
               isUrgent: isUrgent || false,
               isUrgentText: isUrgent ? '🔴 URGENT: ' : ''
             },

@@ -7,6 +7,7 @@ import { userAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
 import { useAutoFillDetection, getRealInputValues } from '@/hooks/useAutoFillDetection';
+import { getProfilePhotoAbsoluteUrl, mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 
 // Composants simplifiés
 function Button({ children, variant = 'default', className = '', disabled = false, type = 'button', ...props }: any) {
@@ -103,7 +104,10 @@ export default function CompleteProfilePage() {
   const villeInputRef = useRef<HTMLInputElement>(null);
   const codePostalInputRef = useRef<HTMLInputElement>(null);
   const paysInputRef = useRef<HTMLInputElement>(null);
+  const typeTitreInputRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLDivElement | null>(null);
+  /** Ne pas écraser l’aperçu si l’utilisateur a déjà choisi un fichier local */
+  const userPickedPhotoRef = useRef(false);
 
   // Détecter l'auto-remplissage du navigateur
   useAutoFillDetection({
@@ -115,6 +119,7 @@ export default function CompleteProfilePage() {
       ville: villeInputRef,
       codePostal: codePostalInputRef,
       pays: paysInputRef,
+      typeTitre: typeTitreInputRef,
     },
     formData,
     setFormData: (updater) => setFormData(updater as React.SetStateAction<typeof formData>),
@@ -161,46 +166,44 @@ export default function CompleteProfilePage() {
             loadExistingProfile(res.data.user);
           }
         }
-        setIsChecking(false);
-      }).catch(() => {
-      setIsChecking(false);
-      });
+      }).catch(() => {})
+      .finally(() => setIsChecking(false));
       return;
     }
 
-    // Si on a une session, permettre l'accès au formulaire même si le profil est complété
-    // (pour permettre la modification)
+    // Si on a une session, attendre GET /profile avant d’afficher le formulaire (données à jour + photo)
     if (session) {
-      const role = (session.user as any)?.role || 'client';
-      setUserRole(role);
-      
-      // Charger les données existantes depuis l'API pour avoir toutes les données
-      // Permettre la modification même si le profil est déjà complété
-      userAPI.getProfile().then(res => {
-        if (res.data.success && res.data.user) {
-          // Vérifier le délai de 7 jours
-          if (userRole !== 'admin' && userRole !== 'superadmin' && res.data.user.createdAt) {
-            const daysSinceCreation = Math.floor((Date.now() - new Date(res.data.user.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-            const remaining = 7 - daysSinceCreation;
-            setDaysRemaining(remaining);
-            setIsExpired(remaining < 0);
+      const roleFromSession = (session.user as any)?.role || 'client';
+      setUserRole(roleFromSession);
+
+      userAPI.getProfile()
+        .then((res) => {
+          if (res.data.success && res.data.user) {
+            const apiUser = res.data.user;
+            const r = apiUser.role || roleFromSession;
+            setUserRole(r);
+            if (r !== 'admin' && r !== 'superadmin' && apiUser.createdAt) {
+              const daysSinceCreation = Math.floor(
+                (Date.now() - new Date(apiUser.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+              );
+              const remaining = 7 - daysSinceCreation;
+              setDaysRemaining(remaining);
+              setIsExpired(remaining < 0);
+            }
+            loadExistingProfile(apiUser);
           }
-          loadExistingProfile(res.data.user);
-        }
-      }).catch(() => {
-        // Si erreur, utiliser les données de session
-        loadExistingProfile((session.user as any));
-      });
-      
-      // Vérifier le paramètre expired dans l'URL
+        })
+        .catch(() => {
+          loadExistingProfile(session.user as any);
+        })
+        .finally(() => setIsChecking(false));
+
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('expired') === 'true') {
           setIsExpired(true);
         }
       }
-      
-      setIsChecking(false);
       return;
     }
 
@@ -225,13 +228,15 @@ export default function CompleteProfilePage() {
       dateDelivrance: formatDate(userData.dateDelivrance),
       dateExpiration: formatDate(userData.dateExpiration),
     }));
+    if (!userPickedPhotoRef.current) {
+      const abs = getProfilePhotoAbsoluteUrl(userData?.profilePhoto);
+      setPhotoPreview(abs);
+    }
   };
 
   const handleChange = (e: any) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -247,6 +252,7 @@ export default function CompleteProfilePage() {
         setError('Veuillez sélectionner une image');
         return;
       }
+      userPickedPhotoRef.current = true;
       setProfilePhoto(file);
       // Créer un aperçu
       const reader = new FileReader();
@@ -274,20 +280,14 @@ export default function CompleteProfilePage() {
     };
     
     const realValues = getRealInputValues(inputRefs, formData);
+    let dataToSend = { ...formData, ...realValues };
+    dataToSend = mergeProfileFormValuesFromDom(dataToSend, {
+      includeSejour: userRole === 'client',
+      includeAccountFields: false,
+    });
 
-    // Pour la date, chercher l'input date natif dans le composant DateInput via le DOM (uniquement pour les clients)
-    if (userRole === 'client') {
-      const dateInputNative = document.querySelector('#dateNaissance[type="date"]') as HTMLInputElement;
-      if (dateInputNative && dateInputNative.value !== formData.dateNaissance) {
-        realValues.dateNaissance = dateInputNative.value;
-      }
-    }
-
-    // Mettre à jour l'état avec les valeurs réelles (fusion pour ne pas perdre les champs sans ref)
-    setFormData(prev => ({ ...prev, ...realValues }));
-
-    // Données à envoyer : fusion realValues + formData (formData a les champs à jour, dont dates)
-    const dataToSend = { ...formData, ...realValues };
+    // Mettre à jour l'état pour le prochain rendu
+    setFormData((prev) => ({ ...prev, ...dataToSend }));
 
     // Pour les clients, les informations de séjour sont obligatoires
     if (userRole === 'client') {
@@ -609,6 +609,7 @@ export default function CompleteProfilePage() {
                       <div className="space-y-2">
                         <Label htmlFor="typeTitre">Type de titre <span className="text-destructive">*</span></Label>
                         <Input
+                          ref={typeTitreInputRef}
                           id="typeTitre"
                           name="typeTitre"
                           value={formData.typeTitre}

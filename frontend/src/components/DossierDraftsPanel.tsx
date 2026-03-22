@@ -52,6 +52,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [permissionsError, setPermissionsError] = useState<string | null>(null);
   const [currentUserIsAdmin, setCurrentUserIsAdmin] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const selectedDraft = drafts.find((d) => d._id === selectedId) || null;
 
@@ -70,6 +71,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
             setSelectedId(first._id);
             setCurrentTitle(first.title || '');
             setCurrentContent(typeof first.content === 'string' ? first.content : first.content || '');
+            setHasUnsavedChanges(false);
           }
         } else {
           setError('Impossible de charger les documents en préparation.');
@@ -87,51 +89,56 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
     }
   }, [dossierId]);
 
-  useEffect(() => {
-    if (!selectedDraft) return;
-
-    const handler = setTimeout(async () => {
-      try {
-        setIsSaving(true);
-        await collaborativeDraftsAPI.updateDraft(selectedDraft._id, {
-          title: currentTitle,
-          content: currentContent,
-        });
-
-        setDrafts((prev) =>
-          prev.map((d) =>
-            d._id === selectedDraft._id
-              ? {
-                  ...d,
-                  title: currentTitle,
-                  content: currentContent,
-                }
-              : d
-          )
-        );
-
-        const now = new Date();
-        setLastSavedAt(
-          now.toLocaleTimeString('fr-FR', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-        );
-      } catch (e) {
-        console.error('Erreur lors de la sauvegarde du brouillon:', e);
-      } finally {
-        setIsSaving(false);
-      }
-    }, 1500);
-
-    return () => clearTimeout(handler);
-  }, [currentTitle, currentContent, selectedDraft?._id]);
+  const handleSaveDraft = async () => {
+    if (!selectedDraft || !selectedDraft.canEdit) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      await collaborativeDraftsAPI.updateDraft(selectedDraft._id, {
+        title: currentTitle.trim() || selectedDraft.title || 'Sans titre',
+        content: currentContent,
+      });
+      setDrafts((prev) =>
+        prev.map((d) =>
+          d._id === selectedDraft._id
+            ? {
+                ...d,
+                title: currentTitle.trim() || d.title,
+                content: currentContent,
+                updatedAt: new Date().toISOString(),
+              }
+            : d
+        )
+      );
+      const now = new Date();
+      setLastSavedAt(
+        now.toLocaleTimeString('fr-FR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      );
+      setHasUnsavedChanges(false);
+    } catch (e: any) {
+      console.error('Erreur lors de la sauvegarde du brouillon:', e);
+      setError(e.response?.data?.message || 'Impossible d’enregistrer le document.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleSelectDraft = (draft: Draft) => {
+    if (draft._id === selectedId) return;
+    if (hasUnsavedChanges) {
+      const ok = window.confirm(
+        'Vous avez des modifications non enregistrées. Les ignorer et changer de document ?'
+      );
+      if (!ok) return;
+    }
     setSelectedId(draft._id);
     setCurrentTitle(draft.title || '');
     setCurrentContent(typeof draft.content === 'string' ? draft.content : draft.content || '');
     setLastSavedAt(null);
+    setHasUnsavedChanges(false);
   };
 
   const handleOpenCreateModal = () => {
@@ -210,7 +217,14 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
       });
       const response = await collaborativeDraftsAPI.getDossierDrafts(dossierId);
       if (response.data.success) {
-        setDrafts(response.data.drafts || []);
+        const list: Draft[] = response.data.drafts || [];
+        setDrafts(list);
+        const updated = list.find((d) => d._id === selectedDraft._id);
+        if (updated) {
+          setCurrentTitle(updated.title || '');
+          setCurrentContent(typeof updated.content === 'string' ? updated.content : updated.content || '');
+          setHasUnsavedChanges(false);
+        }
       }
       handleClosePermissionsModal();
     } catch (e: any) {
@@ -350,7 +364,10 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
                   <input
                     type="text"
                     value={currentTitle}
-                    onChange={(e) => setCurrentTitle(e.target.value)}
+                    onChange={(e) => {
+                      setCurrentTitle(e.target.value);
+                      if (selectedDraft.canEdit) setHasUnsavedChanges(true);
+                    }}
                     disabled={!selectedDraft.canEdit}
                     className="flex-1 min-w-[140px] rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-gray-50 disabled:text-gray-400"
                     placeholder="Titre du document"
@@ -381,20 +398,38 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
                     <span aria-hidden>🔐</span>
                     Autorisations
                   </button>
+                  {selectedDraft.canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveDraft()}
+                      disabled={isSaving}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 disabled:opacity-60"
+                    >
+                      {isSaving ? 'Enregistrement…' : 'Enregistrer le document'}
+                    </button>
+                  )}
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-gray-500">
+                <div className="flex items-center justify-between text-[11px] text-gray-500 flex-wrap gap-2">
                   <span>
-                    {selectedDraft.canEdit
-                      ? 'Les modifications sont enregistrées automatiquement.'
-                      : 'Lecture seule - vous ne pouvez pas modifier ce document.'}
+                    {selectedDraft.canEdit ? (
+                      <>
+                        {hasUnsavedChanges ? (
+                          <span className="text-amber-700 font-medium">Modifications non enregistrées — cliquez sur « Enregistrer le document ».</span>
+                        ) : (
+                          <span>Utilisez le bouton Enregistrer pour sauvegarder vos changements.</span>
+                        )}
+                      </>
+                    ) : (
+                      'Lecture seule — vous ne pouvez pas modifier ce document.'
+                    )}
                   </span>
                   <span>
                     {isSaving
                       ? 'Enregistrement...'
                       : lastSavedAt
-                      ? `Enregistré à ${lastSavedAt}`
+                      ? `Dernier enregistrement : ${lastSavedAt}`
                       : selectedDraft.updatedAt
-                      ? `Dernière sauvegarde: ${new Date(selectedDraft.updatedAt).toLocaleTimeString('fr-FR', {
+                      ? `Dernière sauvegarde serveur : ${new Date(selectedDraft.updatedAt).toLocaleTimeString('fr-FR', {
                           hour: '2-digit',
                           minute: '2-digit',
                         })}`
@@ -406,7 +441,9 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
                   onChange={(val) => {
                     if (!selectedDraft.canEdit) return;
                     setCurrentContent(val);
+                    setHasUnsavedChanges(true);
                   }}
+                  readOnly={!selectedDraft.canEdit}
                   placeholder="Saisissez ici le contenu du document (brouillon interne)..."
                   className="mt-1 w-full"
                 />

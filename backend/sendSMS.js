@@ -225,7 +225,14 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
     if (template) {
       templateCode = template.code;
       templateName = template.name;
-      message = fillTemplate(template.message, data);
+      const batchCount = Number(data.documentsCount) || 1;
+      const isMultiDocRequest =
+        type === 'document_request' && data.bodyLine1 && batchCount > 1;
+      if (isMultiDocRequest && !template.message.includes('{{bodyLine1}}')) {
+        message = fillTemplate('{{isUrgentText}}{{bodyLine1}} Ada Papers.', data);
+      } else {
+        message = fillTemplate(template.message, data);
+      }
     } else {
       // Fallback sur les messages par défaut si aucun template trouvé
       const defaultMessages = {
@@ -237,7 +244,7 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
         dossier_updated: `Votre dossier "{{dossierTitle}}" a été mis à jour. Statut: {{statut}}. Ada Papers.`,
         dossier_status_changed: `Votre dossier "{{dossierTitle}}" a changé de statut: {{statut}}. Ada Papers.`,
         document_uploaded: `Un nouveau document a été ajouté à votre dossier "{{dossierTitle}}". Ada Papers.`,
-        document_request: `{{isUrgentText}}Document requis pour votre dossier {{dossierNumero}}. Type: {{documentType}}. Connectez-vous pour envoyer. Ada Papers.`,
+        document_request: `{{isUrgentText}}{{bodyLine1}} Ada Papers.`,
         document_received: `Document "{{documentName}}" reçu pour le dossier {{dossierNumero}}. Ada Papers.`,
         message_received: `Vous avez reçu un nouveau message de {{senderName}}. Connectez-vous pour le consulter. Ada Papers.`,
         task_assigned: `Une nouvelle tâche vous a été assignée: {{taskTitle}}. Ada Papers.`,

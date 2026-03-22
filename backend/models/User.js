@@ -118,6 +118,12 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: 'France'
   },
+  /** URL relative servie sous /uploads/... (ex: /uploads/avatars/user-xxx.jpg) */
+  profilePhoto: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   isActive: {
     type: Boolean,
     default: true

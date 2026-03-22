@@ -167,8 +167,7 @@ export default function ClientTarificationPage() {
             <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 mb-8 text-sm text-amber-950">
               <p className="font-semibold mb-1">💡 La formule Premium est la plus choisie par nos clients</p>
               <p className="text-amber-900/90">
-                Elle couvre la délégation complète de votre demande de titre de séjour, avec préparation du dossier,
-                relances et suivi renforcé. Comparez les deux formules ci-dessous et sélectionnez celle qui vous convient.
+                Elle couvre la délégation complète de votre demande. La Plateforme vérifie les pièces, introduit la demande, en assure le suivi et les échanges avec l'administion, fait toutes démarches nécessaires à la satisfaction rapide de la demande.
               </p>
             </div>
 
@@ -217,7 +216,7 @@ export default function ClientTarificationPage() {
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Paiement</p>
-                      <p className="font-medium text-gray-900">Possibilité de payer en deux fois</p>
+                      <p className="font-medium text-gray-900">Possibilité de payer en plusieurs fois</p>
                     </div>
                   </div>
 

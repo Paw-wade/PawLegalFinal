@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, userAPI } from '@/lib/api';
+import { getUserAvatarDisplayUrl } from '@/lib/profilePhoto';
 import { SUGGESTED_STEPS_BY_CATEGORY, DossierCategorie } from '@/lib/dossierStepsConfig';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -901,7 +902,40 @@ export default function AdminDossierDetailPage() {
 
         {/* Coordonnées client complètes */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4">👤 Coordonnées Client</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6 pb-4 border-b border-gray-100">
+            {dossier.user ? (
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border-2 border-primary/20">
+                  {(() => {
+                    const av = getUserAvatarDisplayUrl(dossier.user);
+                    if (av) {
+                      return (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={av}
+                          alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Client'}
+                          className="w-full h-full object-cover"
+                        />
+                      );
+                    }
+                    return (
+                      <span className="text-xl font-bold text-primary">
+                        {`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold">👤 Coordonnées Client</h2>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {[dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <h2 className="text-xl font-bold">👤 Coordonnées Client</h2>
+            )}
+          </div>
           {dossier.user ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>

@@ -14,8 +14,40 @@ import {
   Bell,
   Calculator,
   User,
-  CircleDollarSign,
 } from 'lucide-react';
+
+/** Icône cercle + € (équivalent visuel à CircleDollarSign pour la tarification en euros) */
+function CircleEuroIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="10" />
+      <text
+        x="12"
+        y="16.5"
+        textAnchor="middle"
+        fill="currentColor"
+        stroke="none"
+        fontSize="12"
+        fontWeight="600"
+        fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif"
+      >
+        €
+      </text>
+    </svg>
+  );
+}
 
 interface SidebarProps {
   isOpen: boolean;
@@ -32,7 +64,7 @@ interface MenuItem {
 const clientMenuItems: MenuItem[] = [
   { href: '/client', label: 'Tableau de bord', icon: LayoutDashboard },
   { href: '/client/dossiers', label: 'Mes dossiers', icon: FolderOpen },
-  { href: '/client/tarification', label: 'Tarification', icon: CircleDollarSign },
+  { href: '/client/tarification', label: 'Tarification', icon: CircleEuroIcon },
   { href: '/client/documents', label: 'Documents', icon: FileText },
   { href: '/client/rendez-vous', label: 'Rendez-vous', icon: Calendar },
   { href: '/client/messages', label: 'Messages', icon: MessageSquare },
@@ -125,11 +157,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}
       <aside
         className={`
-          w-[min(16rem,85vw)] max-w-64 bg-white border-r border-gray-200 min-h-screen min-h-[100dvh] flex flex-col
-          fixed top-0 left-0 z-50 pt-[env(safe-area-inset-top,0)]
+          w-[min(16rem,85vw)] max-w-64 bg-white border-r border-gray-200 flex flex-col
+          fixed top-0 left-0 z-50 bottom-0 lg:bottom-auto lg:h-screen lg:min-h-screen
+          pt-[env(safe-area-inset-top,0)] lg:pt-0
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:translate-x-0 lg:pt-0
+          lg:translate-x-0
         `}
       >
         <div className="h-14 lg:h-16 shrink-0 flex items-center justify-between px-4 border-b border-gray-200">
@@ -153,8 +186,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
         </div>
 
-        {/* Navigation — cibles tactiles 48px sur mobile */}
-        <nav className="p-3 sm:p-4 space-y-1 flex-1 overflow-y-auto overflow-x-hidden pb-[env(safe-area-inset-bottom,0)]">
+        {/* Navigation — scroll seul ; déconnexion reste fixée en bas du tiroir mobile */}
+        <nav className="p-3 sm:p-4 space-y-1 flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           {clientMenuItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -192,8 +225,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             );
           })}
         </nav>
-        {/* Bouton de déconnexion en bas du menu (mobile et desktop) */}
-        <div className="border-t border-gray-200 p-3 sm:p-4">
+        {/* Bouton de déconnexion — toujours visible en bas du menu (tiroir mobile = bandeau fixe) */}
+        <div className="shrink-0 border-t border-gray-200 bg-white p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_12px_rgba(0,0,0,0.06)] lg:shadow-none">
           <button
             type="button"
             onClick={async () => {

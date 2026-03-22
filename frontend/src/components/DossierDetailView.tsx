@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef } from 'react';
+import { getUserAvatarDisplayUrl } from '@/lib/profilePhoto';
 import Link from 'next/link';
 import { getStatutLabel, getStatutColor, getPrioriteColor, getPrioriteLabel } from '@/lib/dossierUtils';
 
@@ -293,9 +294,40 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
 
         {/* Informations client complètes */}
         <div className="section mb-6">
-          <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
-            Coordonnées Client
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4 text-foreground border-b pb-4">
+            {dossier.user ? (
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border-2 border-primary/20">
+                  {(() => {
+                    const av = getUserAvatarDisplayUrl(dossier.user);
+                    if (av) {
+                      return (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={av}
+                          alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Client'}
+                          className="w-full h-full object-cover"
+                        />
+                      );
+                    }
+                    return (
+                      <span className="text-lg font-bold text-primary">
+                        {`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold">Coordonnées Client</h2>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {[dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <h2 className="text-xl font-bold">Coordonnées Client</h2>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-4">
             {dossier.user ? (
               <>

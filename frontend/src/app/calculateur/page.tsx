@@ -7,6 +7,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
 import { userAPI } from '@/lib/api';
+import { getProfilePhotoAbsoluteUrl } from '@/lib/profilePhoto';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import jsPDF from 'jspdf';
 
@@ -607,7 +608,10 @@ export default function CalculateurPage() {
   const [dateErrors, setDateErrors] = useState<{ [key: string]: string }>({});
 
   const [calculs, setCalculs] = useState<any>(null);
-  
+  /** Bloc bleu « Situation de votre titre de séjour » : replié quand saisie complète + résultats (R.431-5) visibles */
+  const [isSituationTitreBlocExpanded, setIsSituationTitreBlocExpanded] = useState(true);
+  const situationTitreBothPrevRef = useRef(false);
+
   // Référence pour suivre la valeur précédente de dateFinValiditeTitreActuel
   const prevDateFinValiditeRef = useRef<string>('');
   // Référence pour scroll vers la timeline "absence de réponse" quand elle s'affiche
@@ -617,6 +621,29 @@ export default function CalculateurPage() {
     calculerDelais();
     validateDates();
   }, [formData]);
+
+  // Replier automatiquement le formulaire « titre de séjour » dès que type + date sont saisis (résultats affichés en dessous)
+  useEffect(() => {
+    if (formData.situation !== 'demande') {
+      situationTitreBothPrevRef.current = false;
+      return;
+    }
+    const d = formData.dateFinValiditeTitreDemande;
+    const t = formData.typeTitreDemande;
+    const dateOk = !!(d && !isNaN(new Date(d).getTime()));
+    const both = !!(t && dateOk);
+
+    if (!both) {
+      setIsSituationTitreBlocExpanded(true);
+      situationTitreBothPrevRef.current = false;
+      return;
+    }
+
+    if (!situationTitreBothPrevRef.current) {
+      setIsSituationTitreBlocExpanded(false);
+    }
+    situationTitreBothPrevRef.current = true;
+  }, [formData.situation, formData.dateFinValiditeTitreDemande, formData.typeTitreDemande]);
 
   // Réinitialiser les champs de renouvellement quand la date de fin de validité change
   useEffect(() => {
@@ -1886,6 +1913,8 @@ export default function CalculateurPage() {
     );
   }
 
+  const calculateurAvatarUrl = getProfilePhotoAbsoluteUrl(userProfile?.profilePhoto);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header variant="home" />
@@ -1904,11 +1933,20 @@ export default function CalculateurPage() {
               {/* En-tête avec avatar et nom */}
               <div className="mb-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center overflow-hidden shrink-0">
+                    {calculateurAvatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={calculateurAvatarUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
                     <span className="text-white font-bold text-lg">
                       {userProfile?.firstName?.[0]?.toUpperCase() || session?.user?.name?.[0]?.toUpperCase() || 'U'}
                       {userProfile?.lastName?.[0]?.toUpperCase() || ''}
                     </span>
+                    )}
                 </div>
                   <div className="flex-1">
                     <h2 className="text-lg font-bold text-foreground">Mon Profil</h2>
@@ -2294,6 +2332,8 @@ export default function CalculateurPage() {
                           dateDecision: ''
                         });
                         setCalculs(null);
+                        setIsSituationTitreBlocExpanded(true);
+                        situationTitreBothPrevRef.current = false;
                       }}
                       className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
                         formData.situation === 'demande'
@@ -2331,6 +2371,8 @@ export default function CalculateurPage() {
                           actionApresRapo: ''
                         });
                         setCalculs(null);
+                        setIsSituationTitreBlocExpanded(true);
+                        situationTitreBothPrevRef.current = false;
                       }}
                       className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
                         formData.situation === 'contentieux_visa'
@@ -2347,6 +2389,39 @@ export default function CalculateurPage() {
                 {/* Champs pour Demande de titre de séjour et recours (doc calculateur-delais-titres-sejour.md) */}
                 {formData.situation === 'demande' && (
                   <div className="space-y-4 pt-3 border-t">
+                    {!isSituationTitreBlocExpanded &&
+                    formData.typeTitreDemande &&
+                    formData.dateFinValiditeTitreDemande &&
+                    !isNaN(new Date(formData.dateFinValiditeTitreDemande).getTime()) ? (
+                      <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/80 via-white to-blue-50/40 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="min-w-0 space-y-1">
+                          <h3 className="text-sm font-semibold text-blue-900">Situation de votre titre de séjour</h3>
+                          <p className="text-sm text-blue-800/95">
+                            <span className="font-medium">
+                              {titresSejourDemande.find((x) => x.value === formData.typeTitreDemande)?.label ||
+                                formData.typeTitreDemande}
+                            </span>
+                            <span className="text-blue-700">
+                              {' · '}
+                              Fin de validité :{' '}
+                              <strong>{formatDateCourte(new Date(formData.dateFinValiditeTitreDemande))}</strong>
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-blue-700/90">
+                            Les analyses (période R.431-5, etc.) sont affichées ci-dessous. Déplier pour modifier.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsSituationTitreBlocExpanded(true)}
+                          className="text-xs shrink-0 border-blue-300 text-blue-900 hover:bg-blue-100"
+                        >
+                          Modifier la saisie
+                        </Button>
+                      </div>
+                    ) : (
                     <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/80 via-white to-blue-50/40 p-4 space-y-4">
                       <h3 className="text-sm font-semibold text-blue-900">
                         Situation de votre titre de séjour
@@ -2433,6 +2508,8 @@ export default function CalculateurPage() {
                               dateNotificationRefusDemande: '',
                             });
                             setCalculs(null);
+                            setIsSituationTitreBlocExpanded(true);
+                            situationTitreBothPrevRef.current = false;
                           }}
                           className="text-xs text-blue-800 border-blue-300 hover:bg-blue-100 hover:border-blue-400"
                         >
@@ -2440,6 +2517,7 @@ export default function CalculateurPage() {
                         </Button>
                       </div>
                     </div>
+                    )}
 
                     {/* 1. Période d'introduction de la demande (R.431-5 CESEDA) — doc §29-45 */}
                     {formData.dateFinValiditeTitreDemande && (() => {
@@ -2816,60 +2894,9 @@ export default function CalculateurPage() {
 
               </form>
 
-              {/* Affichage des résultats du calcul (visible avec ou sans connexion) */}
-              {calculs && (
+              {/* Résultats sous le formulaire : pas de doublon R.431-5 (déjà affiché dans le bloc « Situation de votre titre de séjour ») */}
+              {calculs && calculs.type !== 'demande_periode' && (
                 <div className="mt-6 pt-6 border-t border-gray-200">
-                  {/* Résultats pour Demande (période R.431-5) */}
-                  {calculs.type === 'demande_periode' && (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                        <span className="h-px flex-1 bg-gray-200" />
-                        <span>Période d'introduction de la demande (art. R.431-5 CESEDA)</span>
-                        <span className="h-px flex-1 bg-gray-200" />
-                      </div>
-                      {calculs.avantPeriode && (
-                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 flex gap-3 items-start">
-                          <span className="text-lg">ℹ️</span>
-                          <div className="space-y-1 text-sm">
-                            <p className="font-semibold text-blue-900">La période de renouvellement n'est pas encore ouverte.</p>
-                            <p className="text-blue-800">
-                              Période d'ouverture : du <strong>{formatDateCourte(calculs.debutPeriode)}</strong> au <strong>{formatDateCourte(calculs.finPeriode)}</strong> (entre quatre mois et deux mois avant la date de fin de validité du titre ou du visa).
-                            </p>
-                            <p className="text-xs text-blue-700">Référence : article R.431-5 du CESEDA.</p>
-                          </div>
-                        </div>
-                      )}
-                      {calculs.dansPeriode && (
-                        <div className="rounded-lg border border-green-200 bg-green-50 p-4 flex gap-3 items-start">
-                          <span className="text-lg">✅</span>
-                          <div className="space-y-1 text-sm">
-                            <p className="font-semibold text-green-900">La période de renouvellement est ouverte.</p>
-                            <p className="text-green-800">
-                              Le renouvellement (ou la première demande) doit être effectué entre quatre mois et deux mois avant la date de fin de validité, soit du{' '}
-                              <strong>{formatDateCourte(calculs.debutPeriode)}</strong> au <strong>{formatDateCourte(calculs.finPeriode)}</strong>.
-                            </p>
-                            <p className="text-green-800">
-                              Il reste <strong>{calculs.joursRestantsAvantZone2Mois} jour{calculs.joursRestantsAvantZone2Mois > 1 ? 's' : ''}</strong> avant d'entrer dans la zone des 2 mois (fin de la période légale de dépôt).
-                            </p>
-                            <p className="text-xs text-green-700">Référence : article R.431-5 du CESEDA.</p>
-                          </div>
-                        </div>
-                      )}
-                      {calculs.apresPeriode && (
-                        <div className="rounded-lg border border-red-200 bg-red-50 p-4 flex gap-3 items-start">
-                          <span className="text-lg">⚠️</span>
-                          <div className="space-y-1 text-sm">
-                            <p className="font-semibold text-red-900">La période légale de dépôt est dépassée.</p>
-                            <p className="text-red-800">
-                              L'étranger devra payer un visa de régularisation de 180 euros qui doit être acquitté, sauf cas de force majeure ou présentation d'un visa en cours de validité.
-                            </p>
-                            <p className="text-xs text-red-700">Référence : article R.431-5 du CESEDA.</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {/* Résultats pour recours contre refus de visa */}
                   {calculs.type === 'contentieux_visa' && (
                     <div className="space-y-4">
