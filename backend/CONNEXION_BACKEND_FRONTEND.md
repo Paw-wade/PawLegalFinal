@@ -105,21 +105,17 @@ const result = await api.post('/auth/register', {
 
 ## 🔧 Configuration CORS
 
-Le backend est configuré pour accepter les requêtes du frontend :
+Le backend accepte **plusieurs origines** via `FRONTEND_URL` (liste séparée par des **virgules**, sans espace superflu) :
 
-```javascript
-// server.js
-app.use(cors()); // Autorise toutes les origines en développement
+```bash
+# Exemple Render / production
+FRONTEND_URL=https://www.adapapers.fr,https://adapapers.fr,https://adapapers.vercel.app
 ```
 
-Pour la production, configurez CORS pour autoriser uniquement votre domaine :
+- La **première** URL sert aussi de base pour les liens dans les e-mails (reset mot de passe), sauf si vous définissez **`PUBLIC_APP_URL`** (URL canonique unique pour les mails).
+- Variable alternative : **`CORS_ORIGINS`** (si `FRONTEND_URL` n’est pas défini).
 
-```javascript
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
-```
+En local, la valeur par défaut inclut `http://localhost:3000` et `http://localhost:3004`.
 
 ## 📝 Endpoints Disponibles
 

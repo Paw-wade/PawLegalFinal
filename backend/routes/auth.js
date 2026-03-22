@@ -6,6 +6,7 @@ const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
 const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 
 const router = express.Router();
 // Générer un token JWT
@@ -287,7 +288,7 @@ router.post(
       user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
       await user.save();
 
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3004';
+      const frontendUrl = getPrimaryFrontendUrl();
       const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
 
       // Préparer le contenu de l'email

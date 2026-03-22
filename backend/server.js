@@ -4,17 +4,29 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const morgan = require('morgan');
 const path = require('path');
+const { getFrontendOriginsList } = require('./utils/frontendOrigins');
 
 // Charger les variables d'environnement
 dotenv.config();
 
 const app = express();
 
-// Middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3004',
-  credentials: true
-}));
+// Middleware — FRONTEND_URL = liste séparée par virgules (une seule valeur dans Access-Control-Allow-Origin par réponse)
+const allowedOrigins = getFrontendOriginsList();
+console.log('✅ CORS — origines autorisées:', allowedOrigins.join(', ') || '(aucune)');
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      console.warn('🚫 CORS bloqué pour:', origin, '| autorisées:', allowedOrigins.join(', '));
+      return callback(null, false);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
