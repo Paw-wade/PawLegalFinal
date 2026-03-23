@@ -467,14 +467,14 @@ export default function AdminDossierRecapPage() {
             </section>
           )}
           
-          {/* Explication du dossier (Compléments au récit) */}
+          {/* Complément d'information */}
           <section className="mb-8">
             <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">
               <MessageSquarePlus className="w-6 h-6 text-primary" />
-              Explication du dossier
+              Complément d'information
             </h2>
             <p className="text-sm text-gray-600 mb-4">
-              Les explications ajoutées ici sont visibles par toutes les personnes ayant accès au dossier et apparaissent sur le PDF téléchargé.
+              Les compléments ajoutés ici sont visibles par toutes les personnes ayant accès au dossier et apparaissent sur le PDF téléchargé.
             </p>
             {(recap.complementsRecit && recap.complementsRecit.length > 0) && (
               <div className="space-y-4 mb-6">

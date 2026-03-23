@@ -119,6 +119,11 @@ export default function DossiersPage() {
   });
   const [directUploadError, setDirectUploadError] = useState<string | null>(null);
   const [directUploading, setDirectUploading] = useState(false);
+  const [activeQuickComplementDossierId, setActiveQuickComplementDossierId] = useState<string | null>(null);
+  const [quickComplementId, setQuickComplementId] = useState<string | null>(null);
+  const [quickComplementText, setQuickComplementText] = useState('');
+  const [quickComplementSaving, setQuickComplementSaving] = useState(false);
+  const [quickComplementError, setQuickComplementError] = useState<string | null>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -317,6 +322,57 @@ export default function DossiersPage() {
       setDirectUploadError(err.response?.data?.message || err.message || 'Erreur lors du téléversement du document');
     } finally {
       setDirectUploading(false);
+    }
+  };
+
+  const openQuickComplementEditor = (dossier: any) => {
+    const dossierId = (dossier?._id || dossier?.id || '').toString();
+    if (!/^[a-f0-9]{24}$/i.test(dossierId)) {
+      alert('Identifiant dossier invalide.');
+      return;
+    }
+
+    if (activeQuickComplementDossierId === dossierId) {
+      setActiveQuickComplementDossierId(null);
+      setQuickComplementId(null);
+      setQuickComplementText('');
+      setQuickComplementError(null);
+      return;
+    }
+
+    const complements = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit : [];
+    const lastComplement = complements.length > 0 ? complements[complements.length - 1] : null;
+    setActiveQuickComplementDossierId(dossierId);
+    setQuickComplementId(lastComplement?._id || lastComplement?.id || null);
+    setQuickComplementText(lastComplement?.text || '');
+    setQuickComplementError(null);
+  };
+
+  const saveQuickComplement = async (e: React.FormEvent, dossierId: string) => {
+    e.preventDefault();
+    const text = quickComplementText.trim();
+    if (!text) {
+      setQuickComplementError('Le complément ne peut pas être vide.');
+      return;
+    }
+
+    setQuickComplementSaving(true);
+    setQuickComplementError(null);
+    try {
+      if (quickComplementId) {
+        await dossiersAPI.updateRecapComplement(dossierId, quickComplementId, text);
+      } else {
+        await dossiersAPI.addRecapComplement(dossierId, text);
+      }
+      await loadDossiers();
+      setActiveQuickComplementDossierId(null);
+      setQuickComplementId(null);
+      setQuickComplementText('');
+    } catch (err: any) {
+      console.error('Erreur édition rapide du complément:', err);
+      setQuickComplementError(err.response?.data?.message || 'Erreur lors de l’enregistrement du complément.');
+    } finally {
+      setQuickComplementSaving(false);
     }
   };
 
@@ -695,6 +751,19 @@ export default function DossiersPage() {
                             >
                               +
                             </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              title="Ajouter une info importante"
+                              aria-label="Ajouter une info importante"
+                              className="h-7 w-7 p-0 text-sm leading-none shadow-none"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openQuickComplementEditor(dossier);
+                              }}
+                            >
+                              ℹ️
+                            </Button>
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
@@ -713,6 +782,19 @@ export default function DossiersPage() {
                               onClick={toggleDirectUpload}
                             >
                               +
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              title="Ajouter une info importante"
+                              aria-label="Ajouter une info importante"
+                              className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openQuickComplementEditor(dossier);
+                              }}
+                            >
+                              ℹ️
                             </Button>
                           </div>
                         )}
@@ -790,6 +872,46 @@ export default function DossiersPage() {
                                 disabled={directUploading}
                               >
                                 {directUploading ? 'Envoi...' : 'Envoyer'}
+                              </Button>
+                            </div>
+                          </form>
+                        )}
+
+                        {activeQuickComplementDossierId === dossierIdStr && (
+                          <form
+                            onSubmit={(e) => saveQuickComplement(e, dossierIdStr)}
+                            className="mt-2 p-3 rounded-lg border border-amber-200 bg-amber-50/60 space-y-2.5"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <label className="text-[11px] md:text-sm font-medium">Complément d&apos;information</label>
+                            <textarea
+                              value={quickComplementText}
+                              onChange={(e) => setQuickComplementText(e.target.value)}
+                              className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm min-h-[72px]"
+                              placeholder="Ajouter un complément utile au dossier..."
+                            />
+                            {quickComplementError && <p className="text-xs text-red-600">{quickComplementError}</p>}
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
+                                onClick={() => {
+                                  setActiveQuickComplementDossierId(null);
+                                  setQuickComplementId(null);
+                                  setQuickComplementText('');
+                                  setQuickComplementError(null);
+                                }}
+                                disabled={quickComplementSaving}
+                              >
+                                Annuler
+                              </Button>
+                              <Button
+                                type="submit"
+                                className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
+                                disabled={quickComplementSaving}
+                              >
+                                {quickComplementSaving ? 'Enregistrement...' : 'Enregistrer'}
                               </Button>
                             </div>
                           </form>

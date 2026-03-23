@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -347,6 +347,20 @@ export default function AdminDossiersPage() {
   const [expandedDossierDocumentDropdowns, setExpandedDossierDocumentDropdowns] = useState<Set<string>>(new Set());
   const [dossierTasks, setDossierTasks] = useState<Record<string, any[]>>({});
   const [dossierDrafts, setDossierDrafts] = useState<Record<string, any[]>>({});
+  const [activeDirectUploadDossierId, setActiveDirectUploadDossierId] = useState<string | null>(null);
+  const [directUploadData, setDirectUploadData] = useState({
+    nom: '',
+    description: '',
+    categorie: 'autre'
+  });
+  const [directUploadError, setDirectUploadError] = useState<string | null>(null);
+  const [directUploading, setDirectUploading] = useState(false);
+  const [activeQuickComplementDossierId, setActiveQuickComplementDossierId] = useState<string | null>(null);
+  const [quickComplementId, setQuickComplementId] = useState<string | null>(null);
+  const [quickComplementText, setQuickComplementText] = useState('');
+  const [quickComplementSaving, setQuickComplementSaving] = useState(false);
+  const [quickComplementError, setQuickComplementError] = useState<string | null>(null);
+  const directFileInputRef = useRef<HTMLInputElement | null>(null);
   const [expandedTaskSections, setExpandedTaskSections] = useState<Set<string>>(new Set());
   const [showTaskFormForDossier, setShowTaskFormForDossier] = useState<string | null>(null);
   const [taskFormData, setTaskFormData] = useState<{ titre: string; description: string; priorite: string; assignedTo: string[] }>({
@@ -537,6 +551,115 @@ export default function AdminDossiersPage() {
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des documents des dossiers:', err);
+    }
+  };
+
+  const handleDirectUploadFromList = async (e: React.FormEvent, dossierId: string) => {
+    e.preventDefault();
+    setDirectUploadError(null);
+
+    if (!/^[a-f0-9]{24}$/i.test(dossierId)) {
+      setDirectUploadError('Impossible d\'associer le document au dossier (identifiant invalide).');
+      return;
+    }
+
+    if (!directFileInputRef.current?.files?.[0]) {
+      setDirectUploadError('Veuillez sélectionner un fichier');
+      return;
+    }
+    if (!directUploadData.nom.trim()) {
+      setDirectUploadError('Veuillez saisir un nom de document');
+      return;
+    }
+
+    setDirectUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('document', directFileInputRef.current.files[0]);
+      formData.append('nom', directUploadData.nom.trim());
+      formData.append('description', directUploadData.description.trim());
+      formData.append('categorie', directUploadData.categorie);
+      formData.append('dossierId', dossierId);
+
+      const response = await documentsAPI.uploadDocument(formData);
+      if (!response?.data?.success) {
+        throw new Error(response?.data?.message || 'Erreur lors du téléversement du document');
+      }
+
+      const createdDoc = response.data.document;
+      if (createdDoc) {
+        setDossierDocuments((prev) => {
+          const current = prev[dossierId] || [];
+          return {
+            ...prev,
+            [dossierId]: [createdDoc, ...current]
+          };
+        });
+      }
+
+      setDirectUploadData({ nom: '', description: '', categorie: 'autre' });
+      if (directFileInputRef.current) {
+        directFileInputRef.current.value = '';
+      }
+      setActiveDirectUploadDossierId(null);
+      await loadDossierDocuments();
+      setExpandedDocumentSections((prev) => new Set(prev).add(dossierId));
+    } catch (err: any) {
+      console.error('Erreur upload direct depuis la liste (admin):', err);
+      setDirectUploadError(err.response?.data?.message || err.message || 'Erreur lors du téléversement du document');
+    } finally {
+      setDirectUploading(false);
+    }
+  };
+
+  const openQuickComplementEditor = (dossier: any) => {
+    const dossierId = (dossier?._id || dossier?.id || '').toString();
+    if (!/^[a-f0-9]{24}$/i.test(dossierId)) {
+      alert('Identifiant dossier invalide.');
+      return;
+    }
+
+    if (activeQuickComplementDossierId === dossierId) {
+      setActiveQuickComplementDossierId(null);
+      setQuickComplementId(null);
+      setQuickComplementText('');
+      setQuickComplementError(null);
+      return;
+    }
+
+    const complements = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit : [];
+    const lastComplement = complements.length > 0 ? complements[complements.length - 1] : null;
+    setActiveQuickComplementDossierId(dossierId);
+    setQuickComplementId(lastComplement?._id || lastComplement?.id || null);
+    setQuickComplementText(lastComplement?.text || '');
+    setQuickComplementError(null);
+  };
+
+  const saveQuickComplement = async (e: React.FormEvent, dossierId: string) => {
+    e.preventDefault();
+    const text = quickComplementText.trim();
+    if (!text) {
+      setQuickComplementError('Le complément ne peut pas être vide.');
+      return;
+    }
+
+    setQuickComplementSaving(true);
+    setQuickComplementError(null);
+    try {
+      if (quickComplementId) {
+        await dossiersAPI.updateRecapComplement(dossierId, quickComplementId, text);
+      } else {
+        await dossiersAPI.addRecapComplement(dossierId, text);
+      }
+      await loadDossiers();
+      setActiveQuickComplementDossierId(null);
+      setQuickComplementId(null);
+      setQuickComplementText('');
+    } catch (err: any) {
+      console.error('Erreur édition rapide du complément (admin):', err);
+      setQuickComplementError(err.response?.data?.message || 'Erreur lors de l’enregistrement du complément.');
+    } finally {
+      setQuickComplementSaving(false);
     }
   };
 
@@ -2393,9 +2516,15 @@ export default function AdminDossiersPage() {
                       const isExpanded = expandedDocumentSections.has(dossierId);
                       const receivedPiecesCount = receivedRequests.length + spontaneousDocs.length;
 
-                      if (dossierRequests.length === 0 && spontaneousDocs.length === 0) {
-                        return null;
-                      }
+                      const toggleDirectUpload = (e?: { stopPropagation?: () => void }) => {
+                        e?.stopPropagation?.();
+                        setDirectUploadError(null);
+                        if (activeDirectUploadDossierId === dossierId) {
+                          setActiveDirectUploadDossierId(null);
+                        } else {
+                          setActiveDirectUploadDossierId(dossierId);
+                        }
+                      };
 
                       return (
                         <div className="pt-3 border-t border-gray-200 mb-3">
@@ -2430,8 +2559,152 @@ export default function AdminDossiersPage() {
                                 </p>
                               </div>
                             </div>
-                            <span className="text-muted-foreground text-sm">{isExpanded ? '▲' : '▼'}</span>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                title="Ajouter un document"
+                                aria-label="Ajouter un document"
+                                className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                                onClick={toggleDirectUpload}
+                              >
+                                +
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                title="Ajouter une info importante"
+                                aria-label="Ajouter une info importante"
+                                className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openQuickComplementEditor(dossier);
+                                }}
+                              >
+                                ℹ️
+                              </Button>
+                              <span className="text-muted-foreground text-sm">{isExpanded ? '▲' : '▼'}</span>
+                            </div>
                           </div>
+
+                          {activeDirectUploadDossierId === dossierId && (
+                            <form
+                              onSubmit={(e) => handleDirectUploadFromList(e, dossierId)}
+                              className="mt-3 p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-2.5"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {directUploadError && <p className="text-xs text-red-600">{directUploadError}</p>}
+                              <div>
+                                <label className="text-[11px] md:text-sm font-medium">Fichier *</label>
+                                <input
+                                  ref={directFileInputRef}
+                                  type="file"
+                                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                                  className="mt-1 w-full text-xs md:text-sm"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file && !directUploadData.nom.trim()) {
+                                      setDirectUploadData((prev) => ({ ...prev, nom: file.name }));
+                                    }
+                                  }}
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] md:text-sm font-medium">Nom du document *</label>
+                                <input
+                                  type="text"
+                                  value={directUploadData.nom}
+                                  onChange={(e) => setDirectUploadData((prev) => ({ ...prev, nom: e.target.value }))}
+                                  className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] md:text-sm font-medium">Catégorie</label>
+                                <select
+                                  value={directUploadData.categorie}
+                                  onChange={(e) => setDirectUploadData((prev) => ({ ...prev, categorie: e.target.value }))}
+                                  className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm"
+                                >
+                                  <option value="identite">Identité</option>
+                                  <option value="titre_sejour">Titre de séjour</option>
+                                  <option value="contrat">Contrat</option>
+                                  <option value="facture">Facture</option>
+                                  <option value="autre">Autre</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[11px] md:text-sm font-medium">Description</label>
+                                <textarea
+                                  value={directUploadData.description}
+                                  onChange={(e) => setDirectUploadData((prev) => ({ ...prev, description: e.target.value }))}
+                                  className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm min-h-[56px]"
+                                />
+                              </div>
+                              <div className="flex justify-end gap-2 pt-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
+                                  onClick={() => {
+                                    setActiveDirectUploadDossierId(null);
+                                    setDirectUploadError(null);
+                                  }}
+                                  disabled={directUploading}
+                                >
+                                  Annuler
+                                </Button>
+                                <Button
+                                  type="submit"
+                                  className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
+                                  disabled={directUploading}
+                                >
+                                  {directUploading ? 'Envoi...' : 'Envoyer'}
+                                </Button>
+                              </div>
+                            </form>
+                          )}
+
+                          {activeQuickComplementDossierId === dossierId && (
+                            <form
+                              onSubmit={(e) => saveQuickComplement(e, dossierId)}
+                              className="mt-3 p-3 rounded-lg border border-amber-200 bg-amber-50/60 space-y-2.5"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <label className="text-[11px] md:text-sm font-medium">Complément d&apos;information</label>
+                              <textarea
+                                value={quickComplementText}
+                                onChange={(e) => setQuickComplementText(e.target.value)}
+                                className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm min-h-[72px]"
+                                placeholder="Ajouter un complément utile au dossier..."
+                              />
+                              {quickComplementError && <p className="text-xs text-red-600">{quickComplementError}</p>}
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
+                                  onClick={() => {
+                                    setActiveQuickComplementDossierId(null);
+                                    setQuickComplementId(null);
+                                    setQuickComplementText('');
+                                    setQuickComplementError(null);
+                                  }}
+                                  disabled={quickComplementSaving}
+                                >
+                                  Annuler
+                                </Button>
+                                <Button
+                                  type="submit"
+                                  className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
+                                  disabled={quickComplementSaving}
+                                >
+                                  {quickComplementSaving ? 'Enregistrement...' : 'Enregistrer'}
+                                </Button>
+                              </div>
+                            </form>
+                          )}
                           
                           {isExpanded && (
                             <div className="mt-3 space-y-3">
