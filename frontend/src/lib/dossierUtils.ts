@@ -248,6 +248,16 @@ export const getNextAction = (statut: string): string | null => {
   return actionsMap[statut] || null;
 };
 
+/**
+ * Statuts proposés dans le formulaire partenaire (création / modification) : les 3 premières étapes du workflow.
+ * @see ALL_DOSSIER_STEPS
+ */
+export const PARTENAIRE_FORM_STATUT_VALUES = ['recu', 'en_attente_onboarding', 'accepte'] as const;
+
+export function isPartenaireFormStatutValue(statut: string): boolean {
+  return (PARTENAIRE_FORM_STATUT_VALUES as readonly string[]).includes(statut);
+}
+
 // Toutes les étapes possibles du dossier dans l'ordre chronologique
 const ALL_DOSSIER_STEPS = [
   { key: 'recu', label: 'Reçu', order: 1 },

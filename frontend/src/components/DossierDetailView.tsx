@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { getUserAvatarDisplayUrl } from '@/lib/profilePhoto';
 import Link from 'next/link';
 import { getStatutLabel, getStatutColor, getPrioriteColor, getPrioriteLabel } from '@/lib/dossierUtils';
@@ -41,6 +41,16 @@ interface DossierDetailViewProps {
 
 export function DossierDetailView({ dossier, variant = 'client' }: DossierDetailViewProps) {
   const componentRef = useRef<HTMLDivElement>(null);
+
+  /** Depuis la liste dossiers : lien avec #fiche-client pour cibler la section contact */
+  useEffect(() => {
+    if (typeof window === 'undefined' || !dossier) return;
+    if (window.location.hash !== '#fiche-client') return;
+    const t = window.setTimeout(() => {
+      document.getElementById('fiche-client')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 200);
+    return () => window.clearTimeout(t);
+  }, [dossier?._id, dossier?.id]);
 
   const formatDate = (date: string | Date | null | undefined) => {
     if (!date) return 'N/A';
@@ -292,8 +302,8 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
           </div>
         </div>
 
-        {/* Informations client complètes */}
-        <div className="section mb-6">
+        {/* Informations client complètes — ancre #fiche-client (liste dossiers → fiche contact) */}
+        <div id="fiche-client" className="section mb-6 scroll-mt-20">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4 text-foreground border-b pb-4">
             {dossier.user ? (
               <div className="flex items-center gap-4 min-w-0">

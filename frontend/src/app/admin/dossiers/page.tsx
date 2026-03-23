@@ -807,12 +807,17 @@ export default function AdminDossiersPage() {
     setError(null);
 
     try {
-      const dossierData: any = {
-        // Tous les champs sont optionnels côté backend.
-        // On n'envoie que les valeurs réellement renseignées.
-      };
+      const titreTrim = (formData.titre || '').trim();
+      if (!titreTrim) {
+        setError('Veuillez indiquer le nom du dossier.');
+        setIsLoading(false);
+        return;
+      }
 
-      if (formData.titre) dossierData.titre = formData.titre;
+      const dossierData: any = {
+        // Nom du dossier (obligatoire à la création)
+        titre: titreTrim,
+      };
       if (formData.description) dossierData.description = formData.description;
       if (formData.categorie) dossierData.categorie = formData.categorie;
       if (formData.type) dossierData.type = formData.type;
@@ -910,8 +915,15 @@ export default function AdminDossiersPage() {
     setError(null);
 
     try {
+      const titreTrim = (formData.titre || '').trim();
+      if (!titreTrim) {
+        setError('Veuillez indiquer le nom du dossier.');
+        setIsLoading(false);
+        return;
+      }
+
       const updateData: any = {
-        titre: formData.titre,
+        titre: titreTrim,
         description: formData.description,
         categorie: formData.categorie,
         type: formData.type,
@@ -1289,12 +1301,13 @@ export default function AdminDossiersPage() {
                 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="titre">Titre du dossier</Label>
+                    <Label htmlFor="titre">Nom du dossier {!editingDossier && '*'}</Label>
                     <Input
                       id="titre"
                       value={formData.titre}
                       onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
                       className="mt-1"
+                      required={!editingDossier}
                       placeholder="Ex: Demande de titre de séjour"
                     />
                   </div>

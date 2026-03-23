@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI, collaborativeDraftsAPI } from '@/lib/api';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, PARTENAIRE_FORM_STATUT_VALUES, isPartenaireFormStatutValue } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -269,7 +269,7 @@ export default function PartenaireDossiersPage() {
     description: '',
     categorie: '',
     type: '',
-    statut: 'en_attente',
+    statut: 'recu',
     priorite: 'normale',
     dateEcheance: getTodayDate(),
     notes: '',
@@ -739,8 +739,15 @@ export default function PartenaireDossiersPage() {
         return;
       }
 
+      const titreTrim = (formData.titre || '').trim();
+      if (!titreTrim) {
+        setError('Veuillez indiquer le nom du dossier.');
+        setIsLoading(false);
+        return;
+      }
+
       const dossierData: any = {
-        titre: formData.titre,
+        titre: titreTrim,
         description: formData.description,
         categorie: formData.categorie,
         type: formData.type,
@@ -829,7 +836,7 @@ export default function PartenaireDossiersPage() {
       description: dossier.description || '',
       categorie: dossier.categorie || '',
       type: dossier.type || '',
-      statut: dossier.statut || 'en_attente',
+      statut: dossier.statut || 'recu',
       priorite: dossier.priorite || 'normale',
       dateEcheance: dossier.dateEcheance ? new Date(dossier.dateEcheance).toISOString().split('T')[0] : '',
       notes: dossier.notes || '',
@@ -847,8 +854,15 @@ export default function PartenaireDossiersPage() {
     setError(null);
 
     try {
+      const titreTrim = (formData.titre || '').trim();
+      if (!titreTrim) {
+        setError('Veuillez indiquer le nom du dossier.');
+        setIsLoading(false);
+        return;
+      }
+
       const updateData: any = {
-        titre: formData.titre,
+        titre: titreTrim,
         description: formData.description,
         categorie: formData.categorie,
         type: formData.type,
@@ -1222,7 +1236,7 @@ export default function PartenaireDossiersPage() {
                 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="titre">Titre du dossier {!editingDossier && '*'}</Label>
+                    <Label htmlFor="titre">Nom du dossier {!editingDossier && '*'}</Label>
                     <Input
                       id="titre"
                       value={formData.titre}
@@ -1292,25 +1306,18 @@ export default function PartenaireDossiersPage() {
                         onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                       >
-                        <option value="recu">Reçu</option>
-                        <option value="accepte">Accepté</option>
-                        <option value="refuse">Refusé</option>
-                        <option value="en_attente_onboarding">En attente d'onboarding (RDV)</option>
-                        <option value="en_cours_instruction">En cours d'instruction (constitution dossier)</option>
-                        <option value="pieces_manquantes">Pièces manquantes (relance client)</option>
-                        <option value="dossier_complet">Dossier Complet</option>
-                        <option value="depose">Déposé</option>
-                        <option value="reception_confirmee">Réception confirmée</option>
-                        <option value="complement_demande">Complément demandé (avec date limite)</option>
-                        <option value="decision_defavorable">Décision défavorable</option>
-                        <option value="communication_motifs">Communication des Motifs</option>
-                        <option value="recours_preparation">Recours en préparation</option>
-                        <option value="refere_mesures_utiles">Référé Mesures Utiles</option>
-                        <option value="refere_suspension_rep">Référé suspension et REP</option>
-                        <option value="gain_cause">Gain de cause</option>
-                        <option value="rejet">Rejet</option>
-                        <option value="decision_favorable">Décision favorable</option>
-                        <option value="autre">Autre (statut non prévu)</option>
+                        {editingDossier &&
+                          formData.statut &&
+                          !isPartenaireFormStatutValue(formData.statut) && (
+                            <option value={formData.statut}>
+                              {getStatutLabel(formData.statut)} (statut actuel)
+                            </option>
+                          )}
+                        {PARTENAIRE_FORM_STATUT_VALUES.map((value) => (
+                          <option key={value} value={value}>
+                            {getStatutLabel(value)}
+                          </option>
+                        ))}
                       </select>
                       <p className="text-xs text-muted-foreground mt-1">
                         📋 <strong>Fonction :</strong> Indique l'état d'avancement du dossier dans le processus administratif. 
@@ -1794,7 +1801,13 @@ export default function PartenaireDossiersPage() {
                     {/* Client */}
                     <div className="mb-4 pb-4 border-b border-gray-200">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Client</p>
-                      <div className="flex items-center gap-3">
+                      <Link
+                        href={`/partenaire/dossiers/${dossier._id || dossier.id}#fiche-client`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-3 rounded-lg -m-1 p-1 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                        title="Ouvrir la fiche contact du client"
+                        aria-label="Ouvrir la fiche contact du client"
+                      >
                         <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-gray-100">
                           {dossier.user && (dossier.user.avatarUrl || dossier.user.photoUrl) ? (
                             // Photo du client si disponible
@@ -1826,7 +1839,7 @@ export default function PartenaireDossiersPage() {
                             </>
                           )}
                         </div>
-                      </div>
+                      </Link>
                     </div>
 
                     {/* Avancement du dossier */}
