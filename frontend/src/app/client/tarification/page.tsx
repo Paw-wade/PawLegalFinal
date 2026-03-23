@@ -112,7 +112,7 @@ export default function ClientTarificationPage() {
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Tarification</h1>
           <p className="text-gray-600 max-w-2xl leading-relaxed">
             Choisissez la formule adaptée à votre dossier. Le paiement peut être effectué{' '}
-            <strong>en deux fois</strong> (échelonnement sur demande).
+            <strong>en plusieurs fois</strong> (sur demande).
           </p>
         </div>
 

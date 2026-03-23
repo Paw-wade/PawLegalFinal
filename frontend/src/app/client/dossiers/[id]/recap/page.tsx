@@ -229,11 +229,11 @@ export default function ClientDossierRecapPage() {
             )}
           </section>
           
-          {/* Compléments au récit */}
+          {/* Complément d'information */}
           <section className="mb-8">
             <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">
               <MessageSquarePlus className="w-6 h-6 text-primary" />
-              Compléments au récit
+              Complément d'information
             </h2>
             <p className="text-sm text-gray-600 mb-4">
               Les compléments ajoutés ici sont visibles par toutes les personnes ayant accès au dossier et apparaissent sur le PDF téléchargé.
@@ -365,11 +365,11 @@ export default function ClientDossierRecapPage() {
             </section>
           )}
           
-          {/* Compléments au récit */}
+          {/* Complément d'information */}
           <section className="mb-8">
             <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">
               <MessageSquarePlus className="w-6 h-6 text-primary" />
-              Compléments au récit
+              Complément d'information
             </h2>
             <p className="text-sm text-gray-600 mb-4">
               Les compléments ajoutés ici sont visibles par toutes les personnes ayant accès au dossier et apparaissent sur le PDF téléchargé.
