@@ -138,8 +138,8 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
         }
       );
       
-      // SMS si téléphone disponible
-      if (userInfo.user && userInfo.user.phone) {
+      // SMS si téléphone disponible (ex. renommage du dossier seul → pas de SMS)
+      if (!changes.skipSms && userInfo.user && userInfo.user.phone) {
         try {
           const formattedPhone = formatPhoneNumber(userInfo.user.phone);
           if (formattedPhone) {
@@ -2146,6 +2146,20 @@ router.put(
       const oldStatut = dossier.statut;
       const oldAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
 
+      const dossierSnapshotBeforeUpdate = {
+        titre: (dossier.titre || '').trim(),
+        description: dossier.description == null ? '' : String(dossier.description),
+        categorie: dossier.categorie || '',
+        type: dossier.type == null ? '' : String(dossier.type),
+        statut: dossier.statut || '',
+        priorite: dossier.priorite || '',
+        notes: dossier.notes == null ? '' : String(dossier.notes),
+        motifRefus: dossier.motifRefus == null ? '' : String(dossier.motifRefus),
+        assignedTo: dossier.assignedTo ? dossier.assignedTo.toString() : null,
+        dateEcheanceMs: dossier.dateEcheance ? new Date(dossier.dateEcheance).getTime() : null,
+        etapesJson: JSON.stringify(dossier.etapesSupplementaires || [])
+      };
+
       // Appliquer directement les modifications
       if (titre !== undefined && titre !== null) {
         dossier.titre = typeof titre === 'string' ? titre.trim() : String(titre).trim();
@@ -2209,6 +2223,33 @@ router.put(
         }
       }
 
+      const dossierSnapshotAfterUpdate = {
+        titre: (dossier.titre || '').trim(),
+        description: dossier.description == null ? '' : String(dossier.description),
+        categorie: dossier.categorie || '',
+        type: dossier.type == null ? '' : String(dossier.type),
+        statut: dossier.statut || '',
+        priorite: dossier.priorite || '',
+        notes: dossier.notes == null ? '' : String(dossier.notes),
+        motifRefus: dossier.motifRefus == null ? '' : String(dossier.motifRefus),
+        assignedTo: dossier.assignedTo ? dossier.assignedTo.toString() : null,
+        dateEcheanceMs: dossier.dateEcheance ? new Date(dossier.dateEcheance).getTime() : null,
+        etapesJson: JSON.stringify(dossier.etapesSupplementaires || [])
+      };
+
+      const onlyTitreRenamed =
+        dossierSnapshotBeforeUpdate.titre !== dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.assignedTo === dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
+        dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson;
+
       await dossier.save();
 
       // Recharger le dossier avec les données peuplées pour les notifications
@@ -2221,7 +2262,8 @@ router.put(
         oldStatut,
         newStatut: statut,
         oldAssignedTo,
-        newAssignedTo: assignedTo
+        newAssignedTo: assignedTo,
+        skipSms: onlyTitreRenamed
       });
 
       // Pour les admins, créer aussi des notifications spécifiques au client (logique existante)
