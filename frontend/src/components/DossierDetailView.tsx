@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect } from 'react';
-import { getUserAvatarDisplayUrl } from '@/lib/profilePhoto';
+import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import Link from 'next/link';
 import { getStatutLabel, getStatutColor, getPrioriteColor, getPrioriteLabel } from '@/lib/dossierUtils';
 
@@ -308,24 +308,15 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
             {dossier.user ? (
               <div className="flex items-center gap-4 min-w-0">
                 <div className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border-2 border-primary/20">
-                  {(() => {
-                    const av = getUserAvatarDisplayUrl(dossier.user);
-                    if (av) {
-                      return (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={av}
-                          alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Client'}
-                          className="w-full h-full object-cover"
-                        />
-                      );
-                    }
-                    return (
+                  <UserAvatarDisplay
+                    user={dossier.user}
+                    alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Client'}
+                    fallback={
                       <span className="text-lg font-bold text-primary">
                         {`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'}
                       </span>
-                    );
-                  })()}
+                    }
+                  />
                 </div>
                 <div className="min-w-0">
                   <h2 className="text-xl font-bold">Coordonnées Client</h2>

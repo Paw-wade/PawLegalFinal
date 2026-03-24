@@ -36,6 +36,10 @@ function sanitizeDossierForPartenaire(dossier) {
   delete o.formuleTarifaire;
   delete o.formuleTarifaireChoisieAt;
   delete o.formuleTarifaireReminderSent;
+  delete o.fraisExoneres;
+  delete o.fraisExoneresAt;
+  delete o.fraisExoneresBy;
+  delete o.fraisExoneresMotif;
   return o;
 }
 
@@ -2140,7 +2144,9 @@ router.put(
         assignedTo,
         motifRefus,
         notificationMessage,
-        etapesSupplementaires: bodyEtapesSupplementaires
+        etapesSupplementaires: bodyEtapesSupplementaires,
+        fraisExoneres,
+        fraisExoneresMotif: bodyFraisExoneresMotif
       } = req.body;
 
       const oldStatut = dossier.statut;
@@ -2198,6 +2204,42 @@ router.put(
           addedAt: e.addedAt ? new Date(e.addedAt) : new Date(),
           addedBy: e.addedBy || req.user.id
         }));
+      }
+
+      // Exonération des frais (admin / superadmin uniquement)
+      let fraisExoneresJustGranted = false;
+      if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+        const wasFraisExoneresBefore = !!dossier.fraisExoneres;
+        if (fraisExoneres !== undefined && fraisExoneres !== null) {
+          const truthy =
+            fraisExoneres === true ||
+            fraisExoneres === 'true' ||
+            fraisExoneres === 1 ||
+            fraisExoneres === '1';
+          const falsy =
+            fraisExoneres === false ||
+            fraisExoneres === 'false' ||
+            fraisExoneres === 0 ||
+            fraisExoneres === '0';
+          if (truthy) {
+            dossier.fraisExoneres = true;
+            dossier.fraisExoneresAt = new Date();
+            dossier.fraisExoneresBy = req.user.id;
+            if (bodyFraisExoneresMotif !== undefined && bodyFraisExoneresMotif !== null) {
+              const m = String(bodyFraisExoneresMotif).trim();
+              dossier.fraisExoneresMotif = m ? m.slice(0, 500) : undefined;
+            }
+            fraisExoneresJustGranted = !wasFraisExoneresBefore;
+          } else if (falsy) {
+            dossier.fraisExoneres = false;
+            dossier.fraisExoneresAt = undefined;
+            dossier.fraisExoneresBy = undefined;
+            dossier.fraisExoneresMotif = undefined;
+          }
+        } else if (bodyFraisExoneresMotif !== undefined && dossier.fraisExoneres) {
+          const m = String(bodyFraisExoneresMotif || '').trim();
+          dossier.fraisExoneresMotif = m ? m.slice(0, 500) : undefined;
+        }
       }
 
       // Gérer l'assignation
@@ -2353,6 +2395,71 @@ router.put(
         }
       }
 
+      // Client informé lors d'une nouvelle exonération des frais de tarification
+      if (
+        fraisExoneresJustGranted &&
+        (req.user.role === 'admin' || req.user.role === 'superadmin')
+      ) {
+        try {
+          let userIdExo = null;
+          if (dossierForNotification.user) {
+            userIdExo = dossierForNotification.user._id
+              ? dossierForNotification.user._id.toString()
+              : dossierForNotification.user.toString();
+          } else if (dossierForNotification.clientEmail) {
+            const u = await User.findOne({
+              email: String(dossierForNotification.clientEmail).toLowerCase()
+            });
+            if (u) userIdExo = u._id.toString();
+          }
+          if (userIdExo) {
+            const dossierTitle =
+              dossierForNotification.titre ||
+              dossierForNotification.numero ||
+              'votre dossier';
+            const motif =
+              dossierForNotification.fraisExoneresMotif &&
+              String(dossierForNotification.fraisExoneresMotif).trim();
+            const baseMsg =
+              `Bonne nouvelle : vous êtes exonéré(e) des frais de tarification (Standard / Premium) pour le dossier « ${dossierTitle} ». Aucune formule n’est à sélectionner dans l’espace Tarification.`;
+            const messageExo = motif
+              ? `${baseMsg} Précision de l’équipe : ${motif}`
+              : baseMsg;
+            await createNotification(
+              userIdExo,
+              'frais_tarification_exoneres',
+              'Frais de tarification exonérés',
+              messageExo,
+              '/client/tarification',
+              {
+                dossierId: dossierForNotification._id.toString(),
+                ...(motif ? { fraisExoneresMotif: motif.slice(0, 200) } : {})
+              }
+            );
+            const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+            const phoneUser = await User.findById(userIdExo).select('phone');
+            if (phoneUser?.phone) {
+              const formattedPhone = formatPhoneNumber(phoneUser.phone);
+              if (formattedPhone) {
+                await sendNotificationSMS(
+                  formattedPhone,
+                  'frais_tarification_exoneres',
+                  { dossierTitle },
+                  {
+                    userId: userIdExo,
+                    skipPreferences: true,
+                    context: 'dossier',
+                    contextId: dossierForNotification._id.toString()
+                  }
+                );
+              }
+            }
+          }
+        } catch (exoErr) {
+          console.error('⚠️ Notification exonération frais non envoyée:', exoErr);
+        }
+      }
+
       // Rappel choix formule tarifaire : passage dans le filtre admin « En cours » sans formule choisie
       if (req.user.role === 'admin' || req.user.role === 'superadmin') {
         try {
@@ -2376,7 +2483,8 @@ router.put(
               nowIn &&
               dossierForNotification.user &&
               !dossier.formuleTarifaire &&
-              !dossier.formuleTarifaireReminderSent
+              !dossier.formuleTarifaireReminderSent &&
+              !dossier.fraisExoneres
             ) {
               const clientUserId = dossierForNotification.user._id
                 ? dossierForNotification.user._id.toString()
