@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { messagesAPI, notificationsAPI, dossiersAPI } from '@/lib/api';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -90,6 +91,7 @@ export default function AdminMessagesPage() {
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
   const [selectedExpediteurId, setSelectedExpediteurId] = useState<string>('');
   const [selectedDestinataireId, setSelectedDestinataireId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   // Lire les paramètres de l'URL pour filtrer par dossier
   useEffect(() => {
@@ -321,7 +323,7 @@ export default function AdminMessagesPage() {
 
       const response = await messagesAPI.sendMessage(formDataToSend);
       if (response.data.success) {
-        alert('Message envoyé avec succès !');
+        setToast({ message: '✅ Message envoyé avec succès.', type: 'success' });
         setShowComposeModal(false);
         setFormData({ sujet: '', contenu: '', destinataire: '', copie: [] });
         setAttachments([]);
@@ -348,7 +350,7 @@ export default function AdminMessagesPage() {
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
       console.error('Erreur lors du téléchargement:', err);
-      alert('Erreur lors du téléchargement de la pièce jointe');
+      setToast({ message: 'Erreur lors du téléchargement de la pièce jointe', type: 'error' });
     }
   };
 
@@ -499,7 +501,7 @@ export default function AdminMessagesPage() {
       setSelectedMessages(new Set());
     } catch (err: any) {
       console.error('Erreur lors de la suppression batch:', err);
-      alert('Erreur lors de la suppression des messages');
+      setToast({ message: 'Erreur lors de la suppression des messages', type: 'error' });
     }
   };
 
@@ -513,7 +515,7 @@ export default function AdminMessagesPage() {
       }
     } catch (err: any) {
       console.error('Erreur lors de la suppression:', err);
-      alert('Erreur lors de la suppression du message');
+      setToast({ message: 'Erreur lors de la suppression du message', type: 'error' });
     }
   };
 
@@ -1719,7 +1721,7 @@ export default function AdminMessagesPage() {
 
                   const response = await messagesAPI.sendMessage(formDataToSend);
                   if (response.data.success) {
-                    alert('Réponse envoyée avec succès !');
+                    setToast({ message: '✅ Réponse envoyée avec succès.', type: 'success' });
                     setShowReplyModal(false);
                     setReplyToMessage(null);
                     setReplyData({ sujet: '', contenu: '', destinataire: '', copie: [] });
@@ -1833,6 +1835,9 @@ export default function AdminMessagesPage() {
           </div>
         )}
       </main>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

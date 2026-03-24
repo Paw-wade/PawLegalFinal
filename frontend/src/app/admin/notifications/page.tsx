@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { notificationsAPI } from '@/lib/api';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -32,6 +33,7 @@ export default function AdminNotificationsPage() {
   const [filter, setFilter] = useState<'all' | 'unread'>('unread');
   const [categoryFilter, setCategoryFilter] = useState<'all' | NotificationCategoryKey>('all');
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   // Lire le dossierId depuis l'URL pour filtrer les notifications liées à un dossier
   useEffect(() => {
@@ -96,9 +98,11 @@ export default function AdminNotificationsPage() {
       const response = await notificationsAPI.markAsRead(id);
       if (response.data.success) {
         await loadNotifications();
+        setToast({ message: '✅ Notification marquée comme lue.', type: 'success' });
       }
     } catch (err: any) {
       console.error('Erreur lors de la mise à jour de la notification:', err);
+      setToast({ message: 'Erreur lors de la mise à jour de la notification.', type: 'error' });
     }
   };
 
@@ -107,9 +111,11 @@ export default function AdminNotificationsPage() {
       const response = await notificationsAPI.markAllAsRead();
       if (response.data.success) {
         await loadNotifications();
+        setToast({ message: '✅ Toutes les notifications ont été marquées comme lues.', type: 'success' });
       }
     } catch (err: any) {
       console.error('Erreur lors de la mise à jour des notifications:', err);
+      setToast({ message: 'Erreur lors de la mise à jour des notifications.', type: 'error' });
     }
   };
 
@@ -118,9 +124,11 @@ export default function AdminNotificationsPage() {
       const response = await notificationsAPI.deleteNotification(id);
       if (response.data.success) {
         await loadNotifications();
+        setToast({ message: '✅ Notification supprimée avec succès.', type: 'success' });
       }
     } catch (err: any) {
       console.error('Erreur lors de la suppression de la notification:', err);
+      setToast({ message: 'Erreur lors de la suppression de la notification.', type: 'error' });
     }
   };
 
@@ -462,6 +470,9 @@ export default function AdminNotificationsPage() {
           </div>
         )}
       </main>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

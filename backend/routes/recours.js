@@ -254,6 +254,39 @@ router.patch('/recours/templates/:id/share', async (req, res) => {
   }
 });
 
+// DELETE /recours/templates/:id - supprimer un modèle de recours
+router.delete('/recours/templates/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user || !isAdmin(user)) {
+      return res.status(403).json({ success: false, message: 'Accès refusé' });
+    }
+
+    const { id } = req.params;
+    const template = await RecoursTemplate.findById(id);
+    if (!template) {
+      return res.status(404).json({ success: false, message: 'Modèle de recours introuvable' });
+    }
+
+    // Les admins/superadmins peuvent supprimer; les autres rôles admin étendus seulement leurs modèles
+    if (!isSuperadmin(user) && user.role !== 'admin') {
+      const creatorId = String(template.createdBy || '');
+      if (creatorId !== String(user._id)) {
+        return res.status(403).json({
+          success: false,
+          message: "Vous ne pouvez supprimer que les modèles que vous avez créés",
+        });
+      }
+    }
+
+    await template.deleteOne();
+    return res.json({ success: true, message: 'Modèle supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de la suppression du modèle de recours:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // POST /recours/templates/:id/send-to-dossier - créer un document en préparation à partir d'un modèle
 router.post('/recours/templates/:id/send-to-dossier', async (req, res) => {
   try {

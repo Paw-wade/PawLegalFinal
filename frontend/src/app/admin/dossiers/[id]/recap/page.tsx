@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { dossiersAPI } from '@/lib/api';
 import { ArrowLeft, FileText, Download, Calendar, User, FileCheck, MessageSquare, CheckCircle, Clock, MessageSquarePlus, Pencil, Trash2 } from 'lucide-react';
 import Link from 'next/link';
+import { Toast } from '@/components/Toast';
 
 export default function AdminDossierRecapPage() {
   const params = useParams();
@@ -21,6 +22,7 @@ export default function AdminDossierRecapPage() {
   const [editingText, setEditingText] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentUserIdFromApi, setCurrentUserIdFromApi] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   
   useEffect(() => {
     if (dossierId) {
@@ -58,7 +60,7 @@ export default function AdminDossierRecapPage() {
       setNewComplementText('');
       await loadRecap();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Erreur lors de l\'ajout du complément');
+      setToast({ message: err.response?.data?.message || 'Erreur lors de l\'ajout du complément', type: 'error' });
     } finally {
       setAddingComplement(false);
     }
@@ -73,7 +75,7 @@ export default function AdminDossierRecapPage() {
       setEditingText('');
       await loadRecap();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Erreur lors de la modification');
+      setToast({ message: err.response?.data?.message || 'Erreur lors de la modification', type: 'error' });
     }
   };
 
@@ -84,7 +86,7 @@ export default function AdminDossierRecapPage() {
       await dossiersAPI.deleteRecapComplement(dossierId, complementId);
       await loadRecap();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Erreur lors de la suppression');
+      setToast({ message: err.response?.data?.message || 'Erreur lors de la suppression', type: 'error' });
     } finally {
       setDeletingId(null);
     }
@@ -105,7 +107,7 @@ export default function AdminDossierRecapPage() {
       window.URL.revokeObjectURL(url);
     } catch (error: any) {
       console.error('Erreur lors du téléchargement du PDF:', error);
-      alert(error.response?.data?.message || 'Erreur lors du téléchargement du PDF');
+      setToast({ message: error.response?.data?.message || 'Erreur lors du téléchargement du PDF', type: 'error' });
     } finally {
       setDownloadingPDF(false);
     }
@@ -581,6 +583,9 @@ export default function AdminDossierRecapPage() {
           )}
         </div>
       </div>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

@@ -81,7 +81,12 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
       if (res.data?.success && typeof res.data.count === 'number') {
         setForumUnreadCount(res.data.count);
       }
-    } catch (err) {
+    } catch (err: any) {
+      // Endpoint optionnel selon versions backend: ignorer le 404 proprement.
+      if (err?.response?.status === 404 || err?.isForumUnreadCountNotFound) {
+        setForumUnreadCount(0);
+        return;
+      }
       console.error('Erreur lors du chargement du nombre de nouvelles discussions forum (admin):', err);
     }
   }, []);

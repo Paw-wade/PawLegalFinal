@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ReservationWidget } from '@/components/ReservationWidget';
 import { appointmentsAPI, userAPI, dossiersAPI } from '@/lib/api';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -53,6 +54,7 @@ function RendezVousPageContent() {
     type: '',
     priorite: 'normale'
   });
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -211,7 +213,7 @@ function RendezVousPageContent() {
           description: '',
           notes: ''
         });
-        alert('Rendez-vous modifié avec succès ! Vous recevrez une notification.');
+        setToast({ message: '✅ Rendez-vous modifié avec succès.', type: 'success' });
       } else {
         setError(response.data.message || 'Erreur lors de la modification du rendez-vous');
       }
@@ -300,7 +302,7 @@ function RendezVousPageContent() {
           type: '',
           priorite: 'normale'
         });
-        alert('Dossier créé avec succès ! Vous pouvez le consulter dans la section "Mes Dossiers".');
+        setToast({ message: '✅ Dossier créé avec succès.', type: 'success' });
         // Optionnel : rediriger vers les dossiers
         // router.push('/client/dossiers');
       } else {
@@ -766,6 +768,9 @@ function RendezVousPageContent() {
             </div>
           </div>
         </div>
+      )}
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { dossiersAPI, documentsAPI } from '@/lib/api';
 import { ArrowLeft, FileText, Download, Eye, User } from 'lucide-react';
 import Link from 'next/link';
 import { DocumentPreview } from '@/components/DocumentPreview';
+import { Toast } from '@/components/Toast';
 
 export default function AdminDossierDocumentsPage() {
   const params = useParams();
@@ -16,6 +17,7 @@ export default function AdminDossierDocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDocument, setSelectedDocument] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   
   useEffect(() => {
     if (dossierId) {
@@ -75,7 +77,7 @@ export default function AdminDossierDocumentsPage() {
       window.URL.revokeObjectURL(url);
     } catch (error: any) {
       console.error('Erreur lors du téléchargement:', error);
-      alert(error.response?.data?.message || 'Erreur lors du téléchargement du document');
+      setToast({ message: error.response?.data?.message || 'Erreur lors du téléchargement du document', type: 'error' });
     }
   };
   
@@ -222,6 +224,9 @@ export default function AdminDossierDocumentsPage() {
               setSelectedDocument(null);
             }}
           />
+        )}
+        {toast && (
+          <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
         )}
       </div>
     </div>

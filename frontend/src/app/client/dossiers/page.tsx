@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { dossiersAPI, notificationsAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
+import { Toast } from '@/components/Toast';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 
 // Mapping des catégories pour l'affichage
@@ -124,6 +125,7 @@ export default function DossiersPage() {
   const [quickComplementText, setQuickComplementText] = useState('');
   const [quickComplementSaving, setQuickComplementSaving] = useState(false);
   const [quickComplementError, setQuickComplementError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -317,12 +319,44 @@ export default function DossiersPage() {
       await loadDossierDocuments();
       // Ouvrir la liste des pièces pour que l’envoi spontané soit visible tout de suite
       setExpandedDocumentDropdowns((prev) => new Set(prev).add(dossierId));
+      setToast({ message: '✅ Document ajouté avec succès au dossier.', type: 'success' });
     } catch (err: any) {
       console.error('Erreur upload direct depuis la liste:', err);
       setDirectUploadError(err.response?.data?.message || err.message || 'Erreur lors du téléversement du document');
+      setToast({ message: err.response?.data?.message || err.message || 'Erreur lors du téléversement du document', type: 'error' });
     } finally {
       setDirectUploading(false);
     }
+  };
+
+  const getLastComplementTimestamp = (dossier: any): number => {
+    const complements = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit : [];
+    if (complements.length === 0) return 0;
+    const lastComplement = complements[complements.length - 1];
+    const rawDate = lastComplement?.updatedAt || lastComplement?.createdAt;
+    const ts = rawDate ? new Date(rawDate).getTime() : 0;
+    return Number.isFinite(ts) ? ts : 0;
+  };
+
+  const getComplementSeenStorageKey = (dossierId: string) => `dossierComplementSeen:client:${dossierId}`;
+
+  const hasUnseenComplement = (dossier: any): boolean => {
+    if (typeof window === 'undefined') return false;
+    const dossierId = (dossier?._id || dossier?.id || '').toString();
+    if (!dossierId) return false;
+    const lastTs = getLastComplementTimestamp(dossier);
+    if (!lastTs) return false;
+    const seenTs = Number(localStorage.getItem(getComplementSeenStorageKey(dossierId)) || '0');
+    return lastTs > seenTs;
+  };
+
+  const markComplementAsSeen = (dossier: any) => {
+    if (typeof window === 'undefined') return;
+    const dossierId = (dossier?._id || dossier?.id || '').toString();
+    if (!dossierId) return;
+    const lastTs = getLastComplementTimestamp(dossier);
+    if (!lastTs) return;
+    localStorage.setItem(getComplementSeenStorageKey(dossierId), String(lastTs));
   };
 
   const openQuickComplementEditor = (dossier: any) => {
@@ -340,6 +374,7 @@ export default function DossiersPage() {
       return;
     }
 
+    markComplementAsSeen(dossier);
     const complements = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit : [];
     const lastComplement = complements.length > 0 ? complements[complements.length - 1] : null;
     setActiveQuickComplementDossierId(dossierId);
@@ -368,9 +403,11 @@ export default function DossiersPage() {
       setActiveQuickComplementDossierId(null);
       setQuickComplementId(null);
       setQuickComplementText('');
+      setToast({ message: '✅ Information importante enregistrée avec succès.', type: 'success' });
     } catch (err: any) {
       console.error('Erreur édition rapide du complément:', err);
       setQuickComplementError(err.response?.data?.message || 'Erreur lors de l’enregistrement du complément.');
+      setToast({ message: err.response?.data?.message || 'Erreur lors de l’enregistrement du complément.', type: 'error' });
     } finally {
       setQuickComplementSaving(false);
     }
@@ -756,13 +793,16 @@ export default function DossiersPage() {
                               variant="outline"
                               title="Ajouter une info importante"
                               aria-label="Ajouter une info importante"
-                              className="h-7 w-7 p-0 text-sm leading-none shadow-none"
+                              className="relative h-7 w-7 p-0 text-sm leading-none shadow-none"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openQuickComplementEditor(dossier);
                               }}
                             >
                               ℹ️
+                              {hasUnseenComplement(dossier) && (
+                                <span className="absolute -top-1 -right-1 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                              )}
                             </Button>
                           </div>
                         ) : (
@@ -788,13 +828,16 @@ export default function DossiersPage() {
                               variant="outline"
                               title="Ajouter une info importante"
                               aria-label="Ajouter une info importante"
-                              className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                              className="relative h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openQuickComplementEditor(dossier);
                               }}
                             >
                               ℹ️
+                              {hasUnseenComplement(dossier) && (
+                                <span className="absolute -top-1 -right-1 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                              )}
                             </Button>
                           </div>
                         )}
@@ -1169,6 +1212,13 @@ export default function DossiersPage() {
           document={selectedDocumentForPreview}
           isOpen={!!selectedDocumentForPreview}
           onClose={() => setSelectedDocumentForPreview(null)}
+        />
+      )}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
         />
       )}
     </div>
