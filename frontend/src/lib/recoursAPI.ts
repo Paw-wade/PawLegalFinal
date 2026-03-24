@@ -6,6 +6,7 @@ export const recoursAPI = {
   getTemplates: (params?: { typeId?: string }) =>
     api.get('/recours/templates', { params }),
   createTemplate: (data: any) => api.post('/recours/templates', data),
+  deleteTemplate: (id: string) => api.delete(`/recours/templates/${id}`),
   updateTemplateShare: (id: string, data: any) =>
     api.patch(`/recours/templates/${id}/share`, data),
   sendTemplateToDossier: (id: string, data: { dossierId: string }) =>

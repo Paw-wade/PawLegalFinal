@@ -40,25 +40,27 @@ export function Toast({ message, type = 'success', duration = 3000, onClose }: T
   };
 
   return (
-    <div
-      className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border-l-4 flex items-center gap-3 min-w-[300px] max-w-[500px] animate-in slide-in-from-top-5 fade-in duration-300 ${
-        typeStyles[type]
-      }`}
-    >
-      <span className="text-xl">{icons[type]}</span>
-      <p className="flex-1 text-sm font-medium">{message}</p>
-      <button
-        onClick={() => {
-          setIsVisible(false);
-          setTimeout(() => {
-            onClose?.();
-          }, 300);
-        }}
-        className="text-white/80 hover:text-white text-xl leading-none transition-colors"
-        aria-label="Fermer"
+    <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none p-4">
+      <div
+        className={`pointer-events-auto px-4 py-3 rounded-lg shadow-lg border-l-4 flex items-center gap-3 min-w-[300px] max-w-[500px] animate-in zoom-in-95 fade-in duration-300 ${
+          typeStyles[type]
+        }`}
       >
-        ×
-      </button>
+        <span className="text-xl">{icons[type]}</span>
+        <p className="flex-1 text-sm font-medium">{message}</p>
+        <button
+          onClick={() => {
+            setIsVisible(false);
+            setTimeout(() => {
+              onClose?.();
+            }, 300);
+          }}
+          className="text-white/80 hover:text-white text-xl leading-none transition-colors"
+          aria-label="Fermer"
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }

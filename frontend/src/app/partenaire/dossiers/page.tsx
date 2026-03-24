@@ -9,6 +9,7 @@ import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, c
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -315,6 +316,7 @@ export default function PartenaireDossiersPage() {
   const [quickComplementText, setQuickComplementText] = useState('');
   const [quickComplementSaving, setQuickComplementSaving] = useState(false);
   const [quickComplementError, setQuickComplementError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   const directFileInputRef = useRef<HTMLInputElement | null>(null);
   const [expandedTaskSections, setExpandedTaskSections] = useState<Set<string>>(new Set());
   const [showTaskFormForDossier, setShowTaskFormForDossier] = useState<string | null>(null);
@@ -558,12 +560,44 @@ export default function PartenaireDossiersPage() {
       setActiveDirectUploadDossierId(null);
       await loadDossierDocuments();
       setExpandedDocumentSections((prev) => new Set(prev).add(dossierId));
+      setToast({ message: '✅ Document ajouté avec succès au dossier.', type: 'success' });
     } catch (err: any) {
       console.error('Erreur upload direct depuis la liste (partenaire):', err);
       setDirectUploadError(err.response?.data?.message || err.message || 'Erreur lors du téléversement du document');
+      setToast({ message: err.response?.data?.message || err.message || 'Erreur lors du téléversement du document', type: 'error' });
     } finally {
       setDirectUploading(false);
     }
+  };
+
+  const getLastComplementTimestamp = (dossier: any): number => {
+    const complements = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit : [];
+    if (complements.length === 0) return 0;
+    const lastComplement = complements[complements.length - 1];
+    const rawDate = lastComplement?.updatedAt || lastComplement?.createdAt;
+    const ts = rawDate ? new Date(rawDate).getTime() : 0;
+    return Number.isFinite(ts) ? ts : 0;
+  };
+
+  const getComplementSeenStorageKey = (dossierId: string) => `dossierComplementSeen:partenaire:${dossierId}`;
+
+  const hasUnseenComplement = (dossier: any): boolean => {
+    if (typeof window === 'undefined') return false;
+    const dossierId = (dossier?._id || dossier?.id || '').toString();
+    if (!dossierId) return false;
+    const lastTs = getLastComplementTimestamp(dossier);
+    if (!lastTs) return false;
+    const seenTs = Number(localStorage.getItem(getComplementSeenStorageKey(dossierId)) || '0');
+    return lastTs > seenTs;
+  };
+
+  const markComplementAsSeen = (dossier: any) => {
+    if (typeof window === 'undefined') return;
+    const dossierId = (dossier?._id || dossier?.id || '').toString();
+    if (!dossierId) return;
+    const lastTs = getLastComplementTimestamp(dossier);
+    if (!lastTs) return;
+    localStorage.setItem(getComplementSeenStorageKey(dossierId), String(lastTs));
   };
 
   const openQuickComplementEditor = (dossier: any) => {
@@ -581,6 +615,7 @@ export default function PartenaireDossiersPage() {
       return;
     }
 
+    markComplementAsSeen(dossier);
     const complements = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit : [];
     const lastComplement = complements.length > 0 ? complements[complements.length - 1] : null;
     setActiveQuickComplementDossierId(dossierId);
@@ -609,9 +644,11 @@ export default function PartenaireDossiersPage() {
       setActiveQuickComplementDossierId(null);
       setQuickComplementId(null);
       setQuickComplementText('');
+      setToast({ message: '✅ Information importante enregistrée avec succès.', type: 'success' });
     } catch (err: any) {
       console.error('Erreur édition rapide du complément (partenaire):', err);
       setQuickComplementError(err.response?.data?.message || 'Erreur lors de l’enregistrement du complément.');
+      setToast({ message: err.response?.data?.message || 'Erreur lors de l’enregistrement du complément.', type: 'error' });
     } finally {
       setQuickComplementSaving(false);
     }
@@ -2277,13 +2314,16 @@ export default function PartenaireDossiersPage() {
                                 variant="outline"
                                 title="Ajouter une info importante"
                                 aria-label="Ajouter une info importante"
-                                className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                                className="relative h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openQuickComplementEditor(dossier);
                                 }}
                               >
                                 ℹ️
+                                {hasUnseenComplement(dossier) && (
+                                  <span className="absolute -top-1 -right-1 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                                )}
                               </Button>
                               <span className="text-muted-foreground text-sm">{isExpanded ? '▲' : '▼'}</span>
                             </div>
@@ -3337,6 +3377,13 @@ export default function PartenaireDossiersPage() {
             setShowDocumentPreviewModal(false);
             setSelectedDocumentForPreview(null);
           }}
+        />
+      )}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
         />
       )}
     </div>

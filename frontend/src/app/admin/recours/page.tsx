@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { recoursAPI } from '@/lib/recoursAPI';
 import { dossiersAPI, documentsAPI } from '@/lib/api';
+import { Toast } from '@/components/Toast';
 
 type RecoursType = {
   _id: string;
@@ -61,13 +62,16 @@ export default function RecoursDirectoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState<string | null>(null);
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
   const [dossierIdForSend, setDossierIdForSend] = useState<string>('');
+  const [dossiersForSend, setDossiersForSend] = useState<any[]>([]);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [templateTitle, setTemplateTitle] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -81,7 +85,20 @@ export default function RecoursDirectoryPage() {
       return;
     }
     loadTypes();
+    loadDossiersForSend();
   }, [session, status, router]);
+
+  const loadDossiersForSend = async () => {
+    try {
+      const res = await dossiersAPI.getAllDossiers();
+      if (res.data?.success) {
+        setDossiersForSend(res.data.dossiers || []);
+      }
+    } catch (e) {
+      console.error('Erreur loadDossiersForSend:', e);
+      setDossiersForSend([]);
+    }
+  };
 
   const loadTypes = async () => {
     setIsLoading(true);
@@ -130,44 +147,101 @@ export default function RecoursDirectoryPage() {
   };
 
   const handleSendToDossier = async (templateId: string) => {
-    if (!dossierIdForSend) {
+    const rawInput = dossierIdForSend.trim();
+    if (!rawInput) {
       alert('Veuillez saisir un numéro ou un ID de dossier.');
       return;
     }
     setIsSending(templateId);
     try {
       // Permettre la recherche par numéro de dossier ou id
-      let dossierId = dossierIdForSend.trim();
+      let dossierId = rawInput;
+      const selectedByDisplay = dossiersForSend.find((d: any) => {
+        const id = String(d._id || d.id || '');
+        const numero = String(d.numero || d.numeroDossier || '').trim();
+        const titre = String(d.titre || 'Sans titre').trim();
+        const display = numero ? `${numero} - ${titre}` : `${id} - ${titre}`;
+        return display === rawInput;
+      });
+      if (selectedByDisplay) {
+        dossierId = String(selectedByDisplay._id || selectedByDisplay.id || dossierId);
+      }
       if (!dossierId.match(/^[0-9a-fA-F]{24}$/)) {
-        // tenter de récupérer par numéro de dossier
+        // tenter de récupérer par numéro de dossier (vue admin: tous les dossiers)
         try {
-          const res = await dossiersAPI.getMyDossiers();
+          const res = await dossiersAPI.getAllDossiers({ search: dossierId });
           const dossiers = res.data?.dossiers || [];
           const match = dossiers.find(
             (d: any) =>
-              d.numero === dossierId ||
-              d.numeroDossier === dossierId
+              String(d.numero || '').trim().toLowerCase() === dossierId.toLowerCase() ||
+              String(d.numeroDossier || '').trim().toLowerCase() === dossierId.toLowerCase() ||
+              `${String(d.numero || d.numeroDossier || '').trim()} - ${String(d.titre || 'Sans titre').trim()}`.toLowerCase() === dossierId.toLowerCase() ||
+              String(d._id || d.id || '') === dossierId
           );
           if (match) {
             dossierId = match._id || match.id;
+          } else {
+            alert("Dossier introuvable. Vérifiez l'ID ou le numéro saisi.");
+            return;
           }
         } catch {
-          // ignorer, on essaiera quand même avec la valeur brute
+          // en cas d'échec du endpoint admin, tentative fallback
+          try {
+            const fallback = await dossiersAPI.getMyDossiers();
+            const dossiers = fallback.data?.dossiers || [];
+            const match = dossiers.find(
+              (d: any) =>
+                String(d.numero || '').trim().toLowerCase() === dossierId.toLowerCase() ||
+                String(d.numeroDossier || '').trim().toLowerCase() === dossierId.toLowerCase() ||
+                `${String(d.numero || d.numeroDossier || '').trim()} - ${String(d.titre || 'Sans titre').trim()}`.toLowerCase() === dossierId.toLowerCase() ||
+                String(d._id || d.id || '') === dossierId
+            );
+            if (match) {
+              dossierId = match._id || match.id;
+            } else {
+              alert("Dossier introuvable. Vérifiez l'ID ou le numéro saisi.");
+              return;
+            }
+          } catch {
+            alert("Impossible de rechercher le dossier pour l'instant. Réessayez.");
+            return;
+          }
         }
       }
 
       const res = await recoursAPI.sendTemplateToDossier(templateId, { dossierId });
       if (res.data?.success) {
-        alert('Modèle envoyé comme document en préparation sur le dossier.');
+        setToast({ message: '✅ Modèle envoyé avec succès vers le dossier.', type: 'success' });
         setDossierIdForSend('');
       } else {
-        alert(res.data?.message || "Erreur lors de l'envoi vers le dossier");
+        setToast({ message: res.data?.message || "Erreur lors de l'envoi vers le dossier", type: 'error' });
       }
     } catch (e: any) {
       console.error('Erreur handleSendToDossier:', e);
-      alert(e.response?.data?.message || "Erreur lors de l'envoi vers le dossier");
+      setToast({ message: e.response?.data?.message || "Erreur lors de l'envoi vers le dossier", type: 'error' });
     } finally {
       setIsSending(null);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string, title: string) => {
+    const ok = window.confirm(`Supprimer définitivement le modèle "${title}" ?`);
+    if (!ok) return;
+
+    setDeletingTemplateId(templateId);
+    try {
+      const res = await recoursAPI.deleteTemplate(templateId);
+      if (res.data?.success) {
+        await loadTemplates(selectedTypeId);
+        setToast({ message: '✅ Modèle supprimé avec succès.', type: 'success' });
+      } else {
+        setToast({ message: res.data?.message || 'Erreur lors de la suppression du modèle', type: 'error' });
+      }
+    } catch (e: any) {
+      console.error('Erreur suppression modèle recours:', e);
+      setToast({ message: e.response?.data?.message || 'Erreur lors de la suppression du modèle', type: 'error' });
+    } finally {
+      setDeletingTemplateId(null);
     }
   };
 
@@ -265,9 +339,19 @@ export default function RecoursDirectoryPage() {
                     type="text"
                     value={dossierIdForSend}
                     onChange={(e) => setDossierIdForSend(e.target.value)}
-                    placeholder="ID ou N° de dossier pour l'envoi"
+                    placeholder="Choisir un dossier (N° - Titre) ou saisir un ID"
                     className="w-full sm:w-64 border rounded-md px-3 py-1.5 text-sm"
+                    list="recours-dossiers-list"
                   />
+                  <datalist id="recours-dossiers-list">
+                    {dossiersForSend.map((d: any) => {
+                      const id = String(d._id || d.id || '');
+                      const numero = String(d.numero || d.numeroDossier || '').trim();
+                      const titre = String(d.titre || 'Sans titre').trim();
+                      const display = numero ? `${numero} - ${titre}` : `${id} - ${titre}`;
+                      return <option key={id} value={display} />;
+                    })}
+                  </datalist>
                 </div>
               </div>
 
@@ -393,9 +477,11 @@ export default function RecoursDirectoryPage() {
                           setSelectedFile(null);
                           setTemplateTitle('');
                           setTemplateDescription('');
+                          setToast({ message: '✅ Modèle de recours enregistré avec succès.', type: 'success' });
                         } catch (e: any) {
                           console.error('Erreur upload modèle recours:', e);
                           setUploadError(e.response?.data?.message || e.message || 'Erreur lors de la création du modèle');
+                          setToast({ message: e.response?.data?.message || e.message || 'Erreur lors de la création du modèle', type: 'error' });
                         } finally {
                           setUploading(false);
                         }
@@ -454,10 +540,20 @@ export default function RecoursDirectoryPage() {
                         <button
                           type="button"
                           onClick={() => handleSendToDossier(tpl._id)}
-                          disabled={isSending === tpl._id}
+                          disabled={isSending === tpl._id || !dossierIdForSend.trim()}
                           className="px-3 py-1.5 text-xs rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                          title={!dossierIdForSend.trim() ? "Saisissez d'abord un ID ou N° de dossier" : 'Envoyer le modèle vers le dossier'}
                         >
                           {isSending === tpl._id ? 'Envoi...' : '📤 Envoyer vers un dossier'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTemplate(tpl._id, tpl.title)}
+                          disabled={deletingTemplateId === tpl._id}
+                          className="px-3 py-1.5 text-xs rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+                          title="Supprimer ce modèle"
+                        >
+                          {deletingTemplateId === tpl._id ? 'Suppression...' : '🗑️ Supprimer'}
                         </button>
                       </div>
                     </div>
@@ -468,6 +564,13 @@ export default function RecoursDirectoryPage() {
           </div>
         </div>
       </main>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

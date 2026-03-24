@@ -13,6 +13,7 @@ import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notif
 import { getProfilePhotoAbsoluteUrl } from '@/lib/profilePhoto';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
+const IS_DEV = process.env.NODE_ENV === 'development';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -57,14 +58,12 @@ function ClientDashboardContent() {
   const [minutesRestantes, setMinutesRestantes] = useState(0);
   const [secondesRestantes, setSecondesRestantes] = useState(0);
 
-  // Charger les blocs secondaires en différé pour accélérer l'affichage initial mobile
+  // Charger les blocs secondaires sans délai artificiel pour limiter la latence perçue.
   const loadDeferredDashboardData = () => {
-    setTimeout(() => {
-      checkUnreadMessages();
-      checkDocumentRequestNotifications();
-      loadNotifications();
-      loadDocumentRequests();
-    }, 350);
+    checkUnreadMessages();
+    checkDocumentRequestNotifications();
+    loadNotifications();
+    loadDocumentRequests();
   };
 
   // Textes CMS pour le header du dashboard client
@@ -106,7 +105,7 @@ function ClientDashboardContent() {
         const accessToken = (session.user as any).accessToken;
         if (!localStorage.getItem('token')) {
           localStorage.setItem('token', accessToken);
-          console.log('🔑 Token stocké dans localStorage depuis la session');
+          if (IS_DEV) console.log('🔑 Token stocké dans localStorage depuis la session');
         }
       }
 
@@ -136,14 +135,14 @@ function ClientDashboardContent() {
       
       // Si admin, rediriger vers l'espace admin
       if (isAdmin) {
-        console.log('🚫 Admin tentant d\'accéder à la vue client - redirection vers /admin');
+        if (IS_DEV) console.log('🚫 Admin tentant d\'accéder à la vue client - redirection vers /admin');
         router.push('/admin');
         return;
       }
 
       // Si partenaire, rediriger vers l'espace partenaire
       if (isPartenaire) {
-        console.log('🚫 Partenaire tentant d\'accéder à la vue client - redirection vers /partenaire');
+        if (IS_DEV) console.log('🚫 Partenaire tentant d\'accéder à la vue client - redirection vers /partenaire');
         router.push('/partenaire');
         return;
       }
@@ -336,7 +335,7 @@ function ClientDashboardContent() {
       if (!documentRequestsResponse.data.success || 
           !documentRequestsResponse.data.documentRequests || 
           documentRequestsResponse.data.documentRequests.length === 0) {
-        console.log('ℹ️ Aucune demande de document en attente trouvée');
+        if (IS_DEV) console.log('ℹ️ Aucune demande de document en attente trouvée');
         return;
       }
 
@@ -345,7 +344,7 @@ function ClientDashboardContent() {
       
       // Vérifier que la demande existe vraiment et est bien en attente
       if (!latestRequest || latestRequest.status !== 'pending') {
-        console.log('ℹ️ La demande de document n\'est plus en attente');
+        if (IS_DEV) console.log('ℹ️ La demande de document n\'est plus en attente');
         return;
       }
 
@@ -380,14 +379,14 @@ function ClientDashboardContent() {
               isUrgent: latestRequest.isUrgent,
             }
           };
-          console.log('✅ Demande de document valide trouvée, affichage du modal');
+          if (IS_DEV) console.log('✅ Demande de document valide trouvée, affichage du modal');
           setDocumentRequestNotification(enrichedNotification);
           setShowDocumentRequestModal(true);
         } else {
-          console.log('ℹ️ Aucune notification non lue correspondante trouvée pour la demande');
+          if (IS_DEV) console.log('ℹ️ Aucune notification non lue correspondante trouvée pour la demande');
         }
       } else {
-        console.log('ℹ️ Aucune notification de type document_request trouvée');
+        if (IS_DEV) console.log('ℹ️ Aucune notification de type document_request trouvée');
       }
     } catch (error) {
       console.error('❌ Erreur lors de la vérification des notifications de demandes de documents:', error);
@@ -474,14 +473,14 @@ function ClientDashboardContent() {
     setIsLoading(true);
     try {
 
-      console.log('📊 Chargement des statistiques pour l\'utilisateur:', session?.user?.email);
+      if (IS_DEV) console.log('📊 Chargement des statistiques pour l\'utilisateur:', session?.user?.email);
       
       // Vérifier que le token est disponible
       if (typeof window !== 'undefined') {
         const token = localStorage.getItem('token') || sessionStorage.getItem('token');
         if (!token && session && (session.user as any)?.accessToken) {
           localStorage.setItem('token', (session.user as any).accessToken);
-          console.log('🔑 Token stocké dans localStorage depuis la session');
+          if (IS_DEV) console.log('🔑 Token stocké dans localStorage depuis la session');
         }
       }
 

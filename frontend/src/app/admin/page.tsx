@@ -194,15 +194,15 @@ export default function AdminDashboardPage() {
         .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
       const latestDossier = dossiers
-        .filter((d: any) => !!(d?.createdAt || d?.updatedAt))
+        .filter((d: any) => !!d?.createdAt)
         .sort((a: any, b: any) => {
-          const aTime = new Date(a.createdAt || a.updatedAt).getTime();
-          const bTime = new Date(b.createdAt || b.updatedAt).getTime();
+          const aTime = new Date(a.createdAt).getTime();
+          const bTime = new Date(b.createdAt).getTime();
           return bTime - aTime;
         })[0];
 
       const userSig = latestUser ? `u:${latestUser._id || latestUser.id}:${latestUser.createdAt}` : '';
-      const dossierSig = latestDossier ? `d:${latestDossier._id || latestDossier.id}:${latestDossier.createdAt || latestDossier.updatedAt}` : '';
+      const dossierSig = latestDossier ? `d:${latestDossier._id || latestDossier.id}:${latestDossier.createdAt}` : '';
       const signature = `${userSig}|${dossierSig}`;
 
       const storageKey = buildNoticeStorageKey();

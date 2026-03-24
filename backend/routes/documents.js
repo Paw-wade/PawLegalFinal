@@ -256,43 +256,49 @@ const normalizeCategorie = (rawCategorie) => {
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const hasCloudinaryConfig =
+  !!process.env.CLOUDINARY_CLOUD_NAME &&
+  !!process.env.CLOUDINARY_API_KEY &&
+  !!process.env.CLOUDINARY_API_SECRET;
 
-const cloudinaryStorage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => {
-    const isImage = file.mimetype.startsWith('image/');
-    return {
-      folder: 'pawlegal/documents',
-      resource_type: isImage ? 'image' : 'raw',
-      public_id: `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9]/g, '_')}`,
-    };
-  },
-});
+if (hasCloudinaryConfig) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
 
-// Filtre pour accepter seulement certains types de fichiers
+const localDocumentsDir = path.join(UPLOADS_ROOT, 'documents');
+if (!fs.existsSync(localDocumentsDir)) {
+  fs.mkdirSync(localDocumentsDir, { recursive: true });
+}
+
+const cloudinaryStorage = hasCloudinaryConfig
+  ? new CloudinaryStorage({
+      cloudinary,
+      params: async (req, file) => {
+        const isImage = (file.mimetype || '').startsWith('image/');
+        return {
+          folder: 'pawlegal/documents',
+          resource_type: isImage ? 'image' : 'raw',
+          public_id: `${Date.now()}-${(file.originalname || 'document').replace(/[^a-zA-Z0-9]/g, '_')}`,
+        };
+      },
+    })
+  : multer.diskStorage({
+      destination: (req, file, cb) => cb(null, localDocumentsDir),
+      filename: (req, file, cb) => {
+        const safeName = (file.originalname || 'document')
+          .replace(/[^a-zA-Z0-9._-]/g, '_')
+          .replace(/_+/g, '_');
+        cb(null, `${Date.now()}-${safeName}`);
+      },
+    });
+
+// Filtre permissif: accepter tous les types de fichiers
 const fileFilter = (req, file, cb) => {
-  // Types de fichiers autorisés
-  const allowedTypes = [
-    'application/pdf',
-    'image/jpeg',
-    'image/png',
-    'image/jpg',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  ];
-
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Type de fichier non autorisé. Types acceptés: PDF, images (JPG, PNG), Word, Excel'), false);
-  }
+  cb(null, true);
 };
 
 const upload = multer({
@@ -739,39 +745,44 @@ router.get('/:id/preview', async (req, res) => {
       });
     }
 
-    // Vérifier que le fichier existe (résolution étendue + réparation auto du chemin en base)
+    // Gérer Cloudinary (URL http/https) ET stockage local (chemin disque)
     const fileUrl = document.cheminFichier;
-    if (!fileUrl || !fileUrl.startsWith('http')) {
+    let contentType = document.typeMime || 'application/octet-stream';
+    if (!document.typeMime && (document.nom || '').toLowerCase().endsWith('.pdf')) {
+      contentType = 'application/pdf';
+    }
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(document.nom)}"`);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+
+    if (fileUrl && fileUrl.startsWith('http')) {
+      // Récupérer le fichier depuis Cloudinary et le streamer
+      const https = require('https');
+      const http = require('http');
+      const protocol = fileUrl.startsWith('https') ? https : http;
+      console.log('✅ Prévisualisation — stream Cloudinary:', fileUrl);
+      protocol.get(fileUrl, (stream) => {
+        stream.pipe(res);
+      }).on('error', (err) => {
+        console.error('❌ Erreur stream Cloudinary:', err.message);
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, message: 'Erreur lecture du fichier' });
+        }
+      });
+      return;
+    }
+
+    // Fichier local
+    const localPath = await resolveDocumentPhysicalPath(document);
+    if (!localPath) {
       return res.status(404).json({
         success: false,
         code: 'FILE_NOT_FOUND',
         message: 'Fichier non trouvé'
       });
     }
-    
-    // Récupérer le fichier depuis Cloudinary et le streamer avec le bon Content-Type
-    const https = require('https');
-    const http = require('http');
-    const protocol = fileUrl.startsWith('https') ? https : http;
-    
-    let contentType = document.typeMime || 'application/octet-stream';
-    if (!document.typeMime && document.nom.toLowerCase().endsWith('.pdf')) {
-      contentType = 'application/pdf';
-    }
-    
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(document.nom)}"`);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    
-    console.log('✅ Prévisualisation — stream Cloudinary:', fileUrl);
-    protocol.get(fileUrl, (stream) => {
-      stream.pipe(res);
-    }).on('error', (err) => {
-      console.error('❌ Erreur stream Cloudinary:', err.message);
-      if (!res.headersSent) {
-        res.status(500).json({ success: false, message: 'Erreur lecture du fichier' });
-      }
-    });
+    console.log('✅ Prévisualisation — fichier local:', localPath);
+    return res.sendFile(localPath);
   } catch (error) {
     console.error('Erreur lors de la prévisualisation du document:', error);
     if (!res.headersSent) {
@@ -852,15 +863,22 @@ router.get('/:id/download', async (req, res) => {
     }
 
     const fileUrl = document.cheminFichier;
-    if (!fileUrl || !fileUrl.startsWith('http')) {
+    if (fileUrl && fileUrl.startsWith('http')) {
+      console.log('✅ Téléchargement — redirect Cloudinary:', fileUrl);
+      return res.redirect(fileUrl);
+    }
+
+    const localPath = await resolveDocumentPhysicalPath(document);
+    if (!localPath) {
       return res.status(404).json({
         success: false,
         code: 'FILE_NOT_FOUND',
         message: 'Fichier non trouvé'
       });
     }
-    console.log('✅ Téléchargement — redirect Cloudinary:', fileUrl);
-    return res.redirect(fileUrl);
+
+    console.log('✅ Téléchargement — fichier local:', localPath);
+    return res.download(localPath, document.nom || document.nomFichier || 'document');
   } catch (error) {
     console.error('Erreur lors du téléchargement du document:', error);
     res.status(500).json({

@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { messagesAPI, dossiersAPI } from '@/lib/api';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -81,6 +82,7 @@ export default function PartenaireMessagesPage() {
   const [isReplying, setIsReplying] = useState(false);
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   // Gérer les query params pour pré-sélectionner le dossier et ouvrir le modal
   useEffect(() => {
@@ -165,7 +167,7 @@ export default function PartenaireMessagesPage() {
 
       const response = await messagesAPI.sendMessage(formDataToSend);
       if (response.data.success) {
-        alert('Message envoyé avec succès à tous les administrateurs !');
+        setToast({ message: '✅ Message envoyé avec succès.', type: 'success' });
         setShowComposeModal(false);
         setFormData({ sujet: '', contenu: '' });
         setAttachments([]);
@@ -192,7 +194,7 @@ export default function PartenaireMessagesPage() {
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
       console.error('Erreur lors du téléchargement:', err);
-      alert('Erreur lors du téléchargement de la pièce jointe');
+      setToast({ message: 'Erreur lors du téléchargement de la pièce jointe', type: 'error' });
     }
   };
 
@@ -242,7 +244,7 @@ export default function PartenaireMessagesPage() {
 
       const response = await messagesAPI.sendMessage(formDataToSend);
       if (response.data.success) {
-        alert('Réponse envoyée avec succès à tous les administrateurs !');
+        setToast({ message: '✅ Réponse envoyée avec succès.', type: 'success' });
         setShowReplyModal(false);
         setReplyData({ sujet: '', contenu: '' });
         setReplyAttachments([]);
@@ -365,7 +367,7 @@ export default function PartenaireMessagesPage() {
       console.error('Erreur lors de la suppression batch:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression des messages';
       setError(errorMessage);
-      alert(`Erreur: ${errorMessage}`);
+      setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
     }
   };
 
@@ -382,7 +384,7 @@ export default function PartenaireMessagesPage() {
       console.error('Erreur lors de la suppression:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression du message';
       setError(errorMessage);
-      alert(`Erreur: ${errorMessage}`);
+      setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
     }
   };
 
@@ -762,7 +764,7 @@ export default function PartenaireMessagesPage() {
                     onChange={(e) => {
                       const files = Array.from(e.target.files || []) as File[];
                       if (files.length > 5) {
-                        alert('Maximum 5 fichiers autorisés');
+                        setToast({ message: 'Maximum 5 fichiers autorisés', type: 'warning' });
                         return;
                       }
                       setAttachments(files);
@@ -938,7 +940,7 @@ export default function PartenaireMessagesPage() {
                     onChange={(e) => {
                       const files = Array.from(e.target.files || []) as File[];
                       if (files.length > 5) {
-                        alert('Maximum 5 fichiers autorisés');
+                        setToast({ message: 'Maximum 5 fichiers autorisés', type: 'warning' });
                         return;
                       }
                       setReplyAttachments(files);
@@ -984,6 +986,9 @@ export default function PartenaireMessagesPage() {
         </div>
       )}
       </main>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

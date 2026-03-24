@@ -6,6 +6,7 @@ import { documentsAPI, dossiersAPI } from '@/lib/api';
 import { FileText, Download, Folder, User, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { DocumentPreview } from '@/components/DocumentPreview';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -36,6 +37,7 @@ export default function PartenaireDocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [previewDocument, setPreviewDocument] = useState<any | null>(null);
   const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   
   // Fonction pour convertir en string de manière sécurisée
   const safeString = (value: any): string => {
@@ -155,7 +157,7 @@ export default function PartenaireDocumentsPage() {
       window.URL.revokeObjectURL(url);
     } catch (error: any) {
       console.error('Erreur lors du téléchargement:', error);
-      alert(error.response?.data?.message || 'Erreur lors du téléchargement du document');
+      setToast({ message: error.response?.data?.message || 'Erreur lors du téléchargement du document', type: 'error' });
     }
   };
 
@@ -342,6 +344,9 @@ export default function PartenaireDocumentsPage() {
             isOpen={!!previewDocument}
             onClose={() => setPreviewDocument(null)}
           />
+        )}
+        {toast && (
+          <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
         )}
       </main>
     </div>

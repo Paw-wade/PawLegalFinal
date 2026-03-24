@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { appointmentsAPI, dossiersAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import { Toast } from '@/components/ui/Toast';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -1061,9 +1062,11 @@ export default function AdminRendezVousPage() {
             )}
 
             {success && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                <p className="text-sm text-green-600">{success}</p>
-              </div>
+              <Toast
+                message={success}
+                visible={!!success}
+                onClose={() => setSuccess(null)}
+              />
             )}
 
             <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">

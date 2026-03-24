@@ -5,6 +5,7 @@ import { notificationsAPI } from '@/lib/api';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Toast } from '@/components/Toast';
 
 export default function PartenaireNotificationsPage() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -12,6 +13,7 @@ export default function PartenaireNotificationsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   
   // Fonction pour convertir en string de manière sécurisée
   const safeString = (value: any): string => {
@@ -56,8 +58,10 @@ export default function PartenaireNotificationsPage() {
       setLoading(true);
       await notificationsAPI.deleteAllNotifications();
       setNotifications([]);
+      setToast({ message: '✅ Toutes les notifications ont été supprimées.', type: 'success' });
     } catch (error) {
       console.error('Erreur lors de la suppression des notifications:', error);
+      setToast({ message: 'Erreur lors de la suppression des notifications', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -72,8 +76,10 @@ export default function PartenaireNotificationsPage() {
     try {
       await notificationsAPI.markAsRead(notifId);
       await loadNotifications();
+      setToast({ message: '✅ Notification marquée comme lue.', type: 'success' });
     } catch (error) {
       console.error('Erreur lors du marquage notification comme lue:', error);
+      setToast({ message: 'Erreur lors du marquage de la notification comme lue', type: 'error' });
     }
 
     if (notifLien && notifLien !== '#') {
@@ -201,6 +207,9 @@ export default function PartenaireNotificationsPage() {
         </div>
         );
       })()}
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

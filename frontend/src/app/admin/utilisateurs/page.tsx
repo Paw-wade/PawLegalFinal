@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { userAPI } from '@/lib/api';
 import { UserPermissionsModal } from '@/components/admin/UserPermissionsModal';
 import jsPDF from 'jspdf';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import { Toast } from '@/components/ui/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -326,9 +327,11 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                 </div>
               )}
               {success && (
-                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                  <p className="text-sm text-green-600">{success}</p>
-                </div>
+                <Toast
+                  message={success}
+                  visible={!!success}
+                  onClose={() => setSuccess(null)}
+                />
               )}
 
               {!isEditing ? (
@@ -705,6 +708,7 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
 export default function AdminUtilisateursPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [utilisateurs, setUtilisateurs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -754,6 +758,15 @@ export default function AdminUtilisateursPage() {
       loadExpirations();
     }
   }, [session, status]);
+
+  useEffect(() => {
+    const userIdFromQuery = searchParams.get('userId');
+    if (!userIdFromQuery) return;
+    if (status !== 'authenticated') return;
+
+    setSelectedUserId(userIdFromQuery);
+    setIsModalOpen(true);
+  }, [searchParams, status]);
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -895,9 +908,11 @@ export default function AdminUtilisateursPage() {
             </div>
           )}
           {success && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-              <p className="text-sm text-green-600">{success}</p>
-            </div>
+            <Toast
+              message={success}
+              visible={!!success}
+              onClose={() => setSuccess(null)}
+            />
           )}
 
           <div className="mb-8">
@@ -1379,6 +1394,9 @@ export default function AdminUtilisateursPage() {
         onClose={() => {
           setIsModalOpen(false);
           setSelectedUserId(null);
+          if (searchParams.get('userId')) {
+            router.replace('/admin/utilisateurs');
+          }
         }}
         userId={selectedUserId}
         onUpdate={loadUsers}

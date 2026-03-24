@@ -2,6 +2,11 @@ import axios from 'axios';
 
 // URL de base de l'API backend
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
+const IS_DEV = process.env.NODE_ENV === 'development';
+const TOKEN_CACHE_TTL_MS = 10000;
+let cachedToken: string | null = null;
+let cachedTokenAt = 0;
+let pendingTokenPromise: Promise<string | null> | null = null;
 
 // Créer une instance axios avec la configuration par défaut
 const api = axios.create({
@@ -24,25 +29,36 @@ export function getApiBaseUrl(): string {
 // Fonction utilitaire pour récupérer le token (NextAuth + localStorage + session)
 export const getAuthToken = async (): Promise<string | null> => {
   if (typeof window === 'undefined') return null;
+  const now = Date.now();
 
-  // 1. Essayer localStorage
-  let token = localStorage.getItem('token');
-  if (token) {
-    // Log désactivé pour réduire le bruit dans la console
-    // console.log('🔑 Token trouvé dans localStorage');
-    return token;
+  if (cachedToken && now - cachedTokenAt < TOKEN_CACHE_TTL_MS) {
+    return cachedToken;
+  }
+  if (pendingTokenPromise) {
+    return pendingTokenPromise;
   }
 
-  // 2. Essayer sessionStorage
-  token = sessionStorage.getItem('token');
-  if (token) {
-    console.log('🔑 Token trouvé dans sessionStorage');
-    localStorage.setItem('token', token); // Migrer vers localStorage
-    return token;
-  }
+  pendingTokenPromise = (async () => {
+    const resolvedAt = Date.now();
 
-  // 3. Essayer de récupérer depuis NextAuth (seulement côté client)
-  if (typeof window !== 'undefined') {
+    // 1. Essayer localStorage
+    let token = localStorage.getItem('token');
+    if (token) {
+      cachedToken = token;
+      cachedTokenAt = resolvedAt;
+      return token;
+    }
+
+    // 2. Essayer sessionStorage
+    token = sessionStorage.getItem('token');
+    if (token) {
+      localStorage.setItem('token', token); // Migrer vers localStorage
+      cachedToken = token;
+      cachedTokenAt = resolvedAt;
+      return token;
+    }
+
+    // 3. Essayer de récupérer depuis NextAuth (seulement côté client)
     try {
       const { getSession } = await import('next-auth/react');
       const session = await getSession();
@@ -50,13 +66,15 @@ export const getAuthToken = async (): Promise<string | null> => {
         token = (session.user as any).accessToken;
         if (token) {
           localStorage.setItem('token', token);
-          console.log('🔑 Token récupéré de NextAuth et stocké dans localStorage');
+          cachedToken = token;
+          cachedTokenAt = Date.now();
+          if (IS_DEV) console.log('🔑 Token récupéré de NextAuth et stocké dans localStorage');
           return token;
         }
       }
     } catch (error) {
       // Ne pas afficher d'avertissement pour les erreurs NextAuth normales
-      if (error && typeof error === 'object' && 'message' in error && !error.message?.includes('NEXT_REDIRECT')) {
+      if (IS_DEV && error && typeof error === 'object' && 'message' in error && !error.message?.includes('NEXT_REDIRECT')) {
         console.warn('⚠️ Impossible de récupérer la session NextAuth:', error);
       }
     }
@@ -71,24 +89,34 @@ export const getAuthToken = async (): Promise<string | null> => {
           token = sessionData.accessToken;
           if (token) {
             localStorage.setItem('token', token);
-            console.log('🔑 Token récupéré depuis /api/auth/session');
+            cachedToken = token;
+            cachedTokenAt = Date.now();
+            if (IS_DEV) console.log('🔑 Token récupéré depuis /api/auth/session');
             return token;
           }
         }
       }
     } catch (error) {
       // Ne pas afficher d'avertissement pour les erreurs de fetch normales
-      if (error && typeof error === 'object' && 'message' in error) {
+      if (IS_DEV && error && typeof error === 'object' && 'message' in error) {
         console.warn('⚠️ Impossible de récupérer le token depuis /api/auth/session:', error);
       }
     }
-  }
 
-  // Ne pas afficher d'avertissement si on est côté serveur ou si c'est une route publique
-  if (typeof window !== 'undefined') {
-    console.warn('⚠️ Aucun token trouvé');
+    // Ne pas afficher d'avertissement en production
+    if (IS_DEV) {
+      console.warn('⚠️ Aucun token trouvé');
+    }
+    cachedToken = null;
+    cachedTokenAt = Date.now();
+    return null;
+  })();
+
+  try {
+    return await pendingTokenPromise;
+  } finally {
+    pendingTokenPromise = null;
   }
-  return null;
 };
 
 /** @deprecated alias */
@@ -100,7 +128,9 @@ api.interceptors.request.use(
     // Si la requête contient un FormData, supprimer le Content-Type pour que le navigateur le définisse avec le boundary
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
-      console.log('📤 FormData détecté, Content-Type supprimé pour laisser le navigateur le définir');
+      if (IS_DEV) {
+        console.log('📤 FormData détecté, Content-Type supprimé pour laisser le navigateur le définir');
+      }
     }
     
     if (typeof window !== 'undefined') {
@@ -146,12 +176,6 @@ api.interceptors.request.use(
 // Intercepteur pour gérer les erreurs de réponse
 api.interceptors.response.use(
   (response) => {
-    // Log des réponses réussies pour le débogage
-    if (response.config?.url?.includes('/dossiers') || response.config?.url?.includes('/appointments')) {
-      console.log('✅ Réponse API reçue pour:', response.config.url);
-      console.log('✅ Status:', response.status);
-      console.log('✅ Data:', response.data);
-    }
     return response;
   },
   (error) => {
