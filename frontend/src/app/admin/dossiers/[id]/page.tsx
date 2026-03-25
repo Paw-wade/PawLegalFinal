@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, userAPI } from '@/lib/api';
-import { getUserAvatarDisplayUrl } from '@/lib/profilePhoto';
+import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import { SUGGESTED_STEPS_BY_CATEGORY, DossierCategorie } from '@/lib/dossierStepsConfig';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -906,24 +906,15 @@ export default function AdminDossierDetailPage() {
             {dossier.user ? (
               <div className="flex items-center gap-4 min-w-0">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border-2 border-primary/20">
-                  {(() => {
-                    const av = getUserAvatarDisplayUrl(dossier.user);
-                    if (av) {
-                      return (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={av}
-                          alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Client'}
-                          className="w-full h-full object-cover"
-                        />
-                      );
-                    }
-                    return (
+                  <UserAvatarDisplay
+                    user={dossier.user}
+                    alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Client'}
+                    fallback={
                       <span className="text-xl font-bold text-primary">
                         {`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'}
                       </span>
-                    );
-                  })()}
+                    }
+                  />
                 </div>
                 <div className="min-w-0">
                   <h2 className="text-xl font-bold">👤 Coordonnées Client</h2>

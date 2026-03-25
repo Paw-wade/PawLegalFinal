@@ -54,6 +54,7 @@ export default function ClientTarificationPage() {
 
   const selectedDossier = dossiers.find((d) => (d._id || d.id) === selectedDossierId);
   const currentFormule = selectedDossier?.formuleTarifaire as TarifFormuleId | undefined;
+  const fraisExoneresPourDossier = !!selectedDossier?.fraisExoneres;
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -63,6 +64,10 @@ export default function ClientTarificationPage() {
   const handleChoose = async (formule: TarifFormuleId) => {
     if (!selectedDossierId) {
       showToast('Sélectionnez un dossier.');
+      return;
+    }
+    if (fraisExoneresPourDossier) {
+      showToast('Les frais de ce dossier ont été exonérés : aucun choix de formule n’est nécessaire.');
       return;
     }
     setSaving(true);
@@ -144,23 +149,32 @@ export default function ClientTarificationPage() {
                   );
                 })}
               </select>
-              {currentFormule && (
-                <p className="mt-3 text-sm text-green-800 font-medium">
-                  Formule actuellement enregistrée pour ce dossier :{' '}
-                  <span className="uppercase">{currentFormule === 'premium' ? 'Premium' : 'Standard'}</span>
-                  {selectedDossier?.formuleTarifaireChoisieAt && (
-                    <span className="text-gray-600 font-normal">
-                      {' '}
-                      (le{' '}
-                      {new Date(selectedDossier.formuleTarifaireChoisieAt).toLocaleDateString('fr-FR', {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                      })}
-                      )
-                    </span>
-                  )}
-                </p>
+              {fraisExoneresPourDossier ? (
+                <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
+                  <p className="font-semibold">Frais exonérés pour ce dossier</p>
+                  <p className="text-emerald-800/90 mt-1">
+                    L’administration n’attend pas de choix de formule tarifaire. Vous pouvez ignorer cette page pour ce dossier.
+                  </p>
+                </div>
+              ) : (
+                currentFormule && (
+                  <p className="mt-3 text-sm text-green-800 font-medium">
+                    Formule actuellement enregistrée pour ce dossier :{' '}
+                    <span className="uppercase">{currentFormule === 'premium' ? 'Premium' : 'Standard'}</span>
+                    {selectedDossier?.formuleTarifaireChoisieAt && (
+                      <span className="text-gray-600 font-normal">
+                        {' '}
+                        (le{' '}
+                        {new Date(selectedDossier.formuleTarifaireChoisieAt).toLocaleDateString('fr-FR', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                        )
+                      </span>
+                    )}
+                  </p>
+                )
               )}
             </div>
 
@@ -179,6 +193,7 @@ export default function ClientTarificationPage() {
                     type="button"
                     onClick={() => setSelectedIndex(index)}
                     onMouseEnter={() => setSelectedIndex(index)}
+                    disabled={fraisExoneresPourDossier}
                     className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
                       selectedIndex === index
                         ? 'bg-white border border-orange-400 text-orange-700 font-semibold shadow-sm'
@@ -235,7 +250,7 @@ export default function ClientTarificationPage() {
                     <Button
                       size="lg"
                       className="min-w-[200px] bg-orange-600 hover:bg-orange-700 text-white"
-                      disabled={saving || !selectedDossierId}
+                      disabled={saving || !selectedDossierId || fraisExoneresPourDossier}
                       onClick={() => handleChoose(current.id)}
                     >
                       {saving ? 'Enregistrement…' : `Choisir ${current.title}`}

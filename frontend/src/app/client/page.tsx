@@ -10,7 +10,7 @@ import { MessageNotificationModal } from '@/components/MessageNotificationModal'
 import { AppointmentBadgeModal } from '@/components/AppointmentBadgeModal';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notificationsAPI, documentRequestsAPI } from '@/lib/api';
-import { getProfilePhotoAbsoluteUrl } from '@/lib/profilePhoto';
+import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
 const IS_DEV = process.env.NODE_ENV === 'development';
@@ -602,8 +602,6 @@ function ClientDashboardContent() {
   const userName = getUserName();
   const userEmail = getUserEmail();
   const showDashboardSkeleton = isLoading && stats.dossiers === 0 && stats.documents === 0 && stats.rendezVous === 0;
-  const sidebarAvatarUrl = getProfilePhotoAbsoluteUrl(userProfile?.profilePhoto);
-
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -934,19 +932,24 @@ function ClientDashboardContent() {
               <div className="mb-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center overflow-hidden shrink-0">
-                    {sidebarAvatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={sidebarAvatarUrl}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                    <span className="text-white font-bold text-lg">
-                      {userProfile?.firstName?.[0]?.toUpperCase() || session?.user?.name?.[0]?.toUpperCase() || 'U'}
-                      {userProfile?.lastName?.[0]?.toUpperCase() || ''}
-                    </span>
-                    )}
+                    <UserAvatarDisplay
+                      user={
+                        userProfile && typeof userProfile === 'object'
+                          ? {
+                              profilePhoto: userProfile.profilePhoto,
+                              firstName: userProfile.firstName,
+                              lastName: userProfile.lastName,
+                            }
+                          : null
+                      }
+                      alt=""
+                      fallback={
+                        <span className="text-white font-bold text-lg">
+                          {userProfile?.firstName?.[0]?.toUpperCase() || session?.user?.name?.[0]?.toUpperCase() || 'U'}
+                          {userProfile?.lastName?.[0]?.toUpperCase() || ''}
+                        </span>
+                      }
+                    />
                   </div>
                   <div className="flex-1">
                     <h2 className="text-lg font-bold text-foreground">Mon Profil</h2>

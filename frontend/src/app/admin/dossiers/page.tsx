@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, userAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI, collaborativeDraftsAPI } from '@/lib/api';
-import { getUserAvatarDisplayUrl } from '@/lib/profilePhoto';
+import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
@@ -286,6 +286,8 @@ export default function AdminDossiersPage() {
   const [motifRefus, setMotifRefus] = useState('');
   const [showStatutModal, setShowStatutModal] = useState<{ dossierId: string; dossierTitre: string; currentStatut: string; newStatut: string } | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
+  const [exonererFraisTarification, setExonererFraisTarification] = useState(false);
+  const [fraisExoneresMotifInput, setFraisExoneresMotifInput] = useState('');
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'pending' | 'in_progress' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
   >('all');
@@ -1038,6 +1040,8 @@ export default function AdminDossiersPage() {
         newStatut
       });
       setNotificationMessage(''); // Réinitialiser le message
+      setExonererFraisTarification(false);
+      setFraisExoneresMotifInput('');
     }
   };
 
@@ -1056,6 +1060,13 @@ export default function AdminDossiersPage() {
       if (notificationMessage && notificationMessage.trim()) {
         updateData.notificationMessage = notificationMessage.trim();
       }
+
+      if (exonererFraisTarification && showStatutModal.newStatut === 'en_cours') {
+        updateData.fraisExoneres = true;
+        if (fraisExoneresMotifInput.trim()) {
+          updateData.fraisExoneresMotif = fraisExoneresMotifInput.trim();
+        }
+      }
       
       console.log('📤 Envoi de la mise à jour:', JSON.stringify(updateData, null, 2));
       console.log('📤 Statut:', showStatutModal.newStatut);
@@ -1066,6 +1077,8 @@ export default function AdminDossiersPage() {
         await loadDossiers();
         setShowStatutModal(null);
         setNotificationMessage('');
+        setExonererFraisTarification(false);
+        setFraisExoneresMotifInput('');
       }
     } catch (err: any) {
       console.error('Erreur lors du changement de statut:', err);
@@ -1846,25 +1859,17 @@ export default function AdminDossiersPage() {
                             {/* Client / créateur du dossier — toujours visible, même plié (photo profil si inscrit) */}
                             <div className="flex items-center gap-2 mt-1 min-w-0">
                               <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border border-primary/20">
-                                {(() => {
-                                  const av =
-                                    dossier.user && typeof dossier.user === 'object'
-                                      ? getUserAvatarDisplayUrl(dossier.user)
-                                      : null;
-                                  if (av) {
-                                    return (
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      <img src={av} alt="" className="w-full h-full object-cover" />
-                                    );
-                                  }
-                                  return (
+                                <UserAvatarDisplay
+                                  user={dossier.user && typeof dossier.user === 'object' ? dossier.user : null}
+                                  alt=""
+                                  fallback={
                                     <span className="text-[10px] font-bold text-primary leading-none">
                                       {dossier.user && typeof dossier.user === 'object'
                                         ? `${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'
                                         : `${dossier.clientPrenom?.[0] || ''}${dossier.clientNom?.[0] || ''}`.trim() || '👤'}
                                     </span>
-                                  );
-                                })()}
+                                  }
+                                />
                               </div>
                               <p className="text-xs text-primary font-medium min-w-0 flex-1">
                                 Client :{' '}
@@ -1971,7 +1976,14 @@ export default function AdminDossiersPage() {
                               {dossier.priorite}
                             </span>
                           )}
-                          {dossier.formuleTarifaire ? (
+                          {dossier.fraisExoneres ? (
+                            <span
+                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-100 text-emerald-900 border border-emerald-200"
+                              title={dossier.fraisExoneresMotif ? String(dossier.fraisExoneresMotif) : 'Aucune formule requise — frais exonérés'}
+                            >
+                              Frais exonérés
+                            </span>
+                          ) : dossier.formuleTarifaire ? (
                             <span
                               className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${
                                 dossier.formuleTarifaire === 'premium'
@@ -2047,62 +2059,26 @@ export default function AdminDossiersPage() {
                     {/* Contenu détaillé (affiché uniquement si le dossier est déplié) */}
                     {expandedDossiers.has(dossier._id || dossier.id) && (
                       <>
-                    {/* Client */}
-                    <div
-                      className={`mb-4 pb-4 border-b border-gray-200 rounded-md transition-colors ${
-                        dossier.user ? 'cursor-pointer hover:bg-gray-50' : ''
-                      }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const userId = dossier.user?._id || dossier.user?.id;
-                        if (userId) {
-                          router.push(`/admin/utilisateurs?userId=${encodeURIComponent(String(userId))}`);
-                        }
-                      }}
-                      role={dossier.user ? 'button' : undefined}
-                      tabIndex={dossier.user ? 0 : -1}
-                      onKeyDown={(e) => {
-                        if (!dossier.user) return;
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const userId = dossier.user?._id || dossier.user?.id;
-                          if (userId) {
-                            router.push(`/admin/utilisateurs?userId=${encodeURIComponent(String(userId))}`);
-                          }
-                        }
-                      }}
-                      aria-label={dossier.user ? 'Ouvrir le profil utilisateur' : undefined}
-                      title={dossier.user ? 'Ouvrir le profil utilisateur' : undefined}
-                    >
+                    {/* Client — informations affichées dans la vue simplifiée (sans redirection vers Utilisateurs) */}
+                    <div className="mb-4 pb-4 border-b border-gray-200 rounded-md">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Client</p>
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-gray-100 border border-gray-200">
-                          {(() => {
-                            if (!dossier.user) {
-                              return (
+                          {!dossier.user ? (
+                            <span className="text-sm font-semibold text-gray-600">
+                              {`${dossier.clientPrenom?.[0] || ''}${dossier.clientNom?.[0] || ''}`.trim() || '👤'}
+                            </span>
+                          ) : (
+                            <UserAvatarDisplay
+                              user={dossier.user}
+                              alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Photo client'}
+                              fallback={
                                 <span className="text-sm font-semibold text-gray-600">
-                                  {`${dossier.clientPrenom?.[0] || ''}${dossier.clientNom?.[0] || ''}`.trim() || '👤'}
+                                  {`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'}
                                 </span>
-                              );
-                            }
-                            const av = getUserAvatarDisplayUrl(dossier.user);
-                            if (av) {
-                              return (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={av}
-                                  alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Photo client'}
-                                  className="w-full h-full object-cover"
-                                />
-                              );
-                            }
-                            return (
-                              <span className="text-sm font-semibold text-gray-600">
-                                {`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'}
-                              </span>
-                            );
-                          })()}
+                              }
+                            />
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           {dossier.user ? (
@@ -2145,50 +2121,55 @@ export default function AdminDossiersPage() {
                             </p>
                           ) : (
                             <>
-                              <div className="w-full rounded-full h-2 overflow-hidden flex ring-1 ring-gray-200 bg-gray-100">
-                                {editedEtapes.map((step, index) => {
-                                  const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
-                                  const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
-                                  const fillClass = isCompleted
-                                    ? 'bg-green-500'
-                                    : isCurrent
-                                      ? 'bg-blue-500'
-                                      : 'bg-gray-300';
-                                  return (
-                                    <div
-                                      key={step.id + String(index)}
-                                      className="h-2 flex-1 min-w-0 border-r border-white/60 last:border-r-0"
-                                      title={step.label}
-                                    >
-                                      <div className={`h-full w-full ${fillClass}`} />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              <div className="mt-1.5 flex items-start gap-0.5 justify-between">
-                                {editedEtapes.map((step, index) => {
-                                  const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
-                                  const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
-                                  return (
-                                    <div
-                                      key={`lbl-${step.id}-${index}`}
-                                      className="flex-1 min-w-0 flex flex-col items-center px-0.5"
-                                    >
-                                      <span
-                                        className={`text-[9px] text-center leading-tight line-clamp-2 ${
-                                          isCurrent
-                                            ? 'text-blue-700 font-semibold'
-                                            : isCompleted
-                                              ? 'text-green-700 font-medium'
-                                              : 'text-gray-400'
-                                        }`}
-                                        title={step.label}
-                                      >
-                                        {step.label}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
+                              {/* Mobile : défilement horizontal pour éviter le chevauchement des titres d’étapes ; sm+ : barre partagée comme avant */}
+                              <div className="overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch] pb-0.5 -mx-0.5 px-0.5 sm:overflow-visible sm:mx-0 sm:px-0">
+                                <div className="w-max min-w-full sm:w-full sm:min-w-0 space-y-1.5">
+                                  <div className="flex h-2 rounded-full overflow-hidden ring-1 ring-gray-200 bg-gray-100">
+                                    {editedEtapes.map((step, index) => {
+                                      const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
+                                      const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
+                                      const fillClass = isCompleted
+                                        ? 'bg-green-500'
+                                        : isCurrent
+                                          ? 'bg-blue-500'
+                                          : 'bg-gray-300';
+                                      return (
+                                        <div
+                                          key={step.id + String(index)}
+                                          className="h-2 w-[4.75rem] flex-shrink-0 border-r border-white/60 last:border-r-0 sm:w-auto sm:flex-1 sm:min-w-0"
+                                          title={step.label}
+                                        >
+                                          <div className={`h-full w-full ${fillClass}`} />
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="flex items-start gap-0 sm:gap-0.5 sm:justify-between">
+                                    {editedEtapes.map((step, index) => {
+                                      const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
+                                      const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
+                                      return (
+                                        <div
+                                          key={`lbl-${step.id}-${index}`}
+                                          className="w-[4.75rem] flex-shrink-0 flex flex-col items-center px-1 box-border sm:w-auto sm:flex-1 sm:min-w-0"
+                                        >
+                                          <span
+                                            className={`text-[9px] text-center leading-tight line-clamp-3 break-words w-full ${
+                                              isCurrent
+                                                ? 'text-blue-700 font-semibold'
+                                                : isCompleted
+                                                  ? 'text-green-700 font-medium'
+                                                  : 'text-gray-400'
+                                            }`}
+                                            title={step.label}
+                                          >
+                                            {step.label}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               </div>
                             </>
                           )}
@@ -3327,6 +3308,40 @@ export default function AdminDossiersPage() {
                 <span className="font-medium">Nouveau statut :</span> <span className="text-primary font-semibold">{getStatutLabel(showStatutModal.newStatut)}</span>
               </p>
             </div>
+            {showStatutModal.newStatut === 'en_cours' && (
+              <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/80 p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    checked={exonererFraisTarification}
+                    onChange={(e) => setExonererFraisTarification(e.target.checked)}
+                  />
+                  <span>
+                    <span className="font-semibold text-emerald-900 block">Exonérer les frais de tarification</span>
+                    <span className="text-sm text-emerald-800/90">
+                      Le client recevra une notification (et un SMS si configuré) l’informant de l’exonération. Il ne sera pas invité à choisir une formule et ne recevra pas le rappel tarification automatique à l’entrée en « Accepté ».
+                    </span>
+                  </span>
+                </label>
+                {exonererFraisTarification && (
+                  <div className="mt-3 pl-7">
+                    <Label htmlFor="fraisExoneresMotif" className="mb-1 block text-sm text-emerald-900">
+                      Motif (optionnel, repris dans la notification client)
+                    </Label>
+                    <Textarea
+                      id="fraisExoneresMotif"
+                      value={fraisExoneresMotifInput}
+                      onChange={(e) => setFraisExoneresMotifInput(e.target.value)}
+                      placeholder="Ex. gracieuseté, dossier pro bono, accord particulier…"
+                      rows={2}
+                      className="w-full text-sm"
+                      maxLength={500}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             <div className="mb-4">
               <Label htmlFor="notificationMessage" className="mb-2 block">
                 Message de notification (optionnel)
@@ -3347,6 +3362,8 @@ export default function AdminDossiersPage() {
               <Button variant="outline" onClick={() => {
                 setShowStatutModal(null);
                 setNotificationMessage('');
+                setExonererFraisTarification(false);
+                setFraisExoneresMotifInput('');
               }} disabled={isLoading}>
                 Annuler
               </Button>

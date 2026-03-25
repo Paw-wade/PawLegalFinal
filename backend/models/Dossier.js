@@ -168,6 +168,26 @@ const dossierSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Exonération des frais de tarification (décision admin à l’acceptation ou ultérieurement)
+  fraisExoneres: {
+    type: Boolean,
+    default: false
+  },
+  fraisExoneresAt: {
+    type: Date,
+    required: false
+  },
+  fraisExoneresBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
+  fraisExoneresMotif: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    required: false
+  },
   transmittedTo: [{
     partenaire: {
       type: mongoose.Schema.Types.ObjectId,

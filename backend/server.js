@@ -160,6 +160,13 @@ try {
           return res.status(403).json({ success: false, message: 'Accès non autorisé à ce dossier' });
         }
 
+        if (dossier.fraisExoneres) {
+          return res.status(400).json({
+            success: false,
+            message: 'Les frais de ce dossier ont été exonérés par l’administration : aucune formule tarifaire n’est requise.',
+          });
+        }
+
         const { formule } = req.body;
         dossier.formuleTarifaire = formule;
         dossier.formuleTarifaireChoisieAt = new Date();
