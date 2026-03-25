@@ -2421,7 +2421,7 @@ router.put(
               dossierForNotification.fraisExoneresMotif &&
               String(dossierForNotification.fraisExoneresMotif).trim();
             const baseMsg =
-              `Bonne nouvelle : vous êtes exonéré(e) des frais de tarification (Standard / Premium) pour le dossier « ${dossierTitle} ». Aucune formule n’est à sélectionner dans l’espace Tarification.`;
+              `Vous êtes exonéré(e) des frais de prise en charge de votre dossier « ${dossierTitle} ». Aucune formule n’est à sélectionner dans l’espace Tarification. Les éventuelles frais d'envoi postal demeurent à votre charge.`;
             const messageExo = motif
               ? `${baseMsg} Précision de l’équipe : ${motif}`
               : baseMsg;
