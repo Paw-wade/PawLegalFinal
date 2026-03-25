@@ -381,6 +381,8 @@ export default function AdminDossiersPage() {
   const [isAddingEtape, setIsAddingEtape] = useState(false);
   const searchParams = useSearchParams();
 
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/signin');
@@ -1026,6 +1028,35 @@ export default function AdminDossiersPage() {
       setError(err.response?.data?.message || 'Erreur lors de la suppression du dossier');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: string) => {
+    const docId = String(documentId || '');
+    if (!docId) return;
+    if (!confirm('Supprimer ce document ?')) return;
+
+    setDeletingDocumentId(docId);
+    setError(null);
+    try {
+      const response = await documentsAPI.deleteDocument(docId);
+      if (response?.data?.success) {
+        setToast({ message: 'Document supprimé avec succès', type: 'success' });
+        await loadDossiers();
+        await loadDossierDocuments();
+      } else {
+        setToast({
+          message: response?.data?.message || 'Erreur lors de la suppression du document',
+          type: 'error'
+        });
+      }
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression du document:', err);
+      const message = err.response?.data?.message || 'Erreur lors de la suppression du document';
+      setError(message);
+      setToast({ message, type: 'error' });
+    } finally {
+      setDeletingDocumentId(null);
     }
   };
 
@@ -2829,8 +2860,9 @@ export default function AdminDossiersPage() {
                                         
                                         {/* Actions pour les documents reçus */}
                                         {!isPending && request.document && (
-                                          <div className="flex items-center gap-2 mt-3 ml-7">
+                                          <div className="flex flex-wrap items-center gap-2 mt-3 ml-7">
                                             <button
+                                              type="button"
                                               onClick={async (e) => {
                                                 e.stopPropagation();
                                                 try {
@@ -2854,6 +2886,7 @@ export default function AdminDossiersPage() {
                                               👁️ Voir
                                             </button>
                                             <button
+                                              type="button"
                                               onClick={async (e) => {
                                                 e.stopPropagation();
                                                 try {
@@ -2884,6 +2917,20 @@ export default function AdminDossiersPage() {
                                               className="px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded text-xs font-medium transition-colors"
                                             >
                                               ⬇️ Télécharger
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={async (e) => {
+                                                e.stopPropagation();
+                                                const docId = String(request.document._id || request.document.id || request.document);
+                                                await handleDeleteDocument(docId);
+                                              }}
+                                              disabled={
+                                                deletingDocumentId === String(request.document._id || request.document.id || request.document)
+                                              }
+                                              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded text-xs font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                            >
+                                              🗑️ Supprimer
                                             </button>
                                           </div>
                                         )}
@@ -2924,7 +2971,7 @@ export default function AdminDossiersPage() {
                                           {new Date(doc.createdAt || doc.updatedAt).toLocaleDateString('fr-FR')}
                                         </span>
                                       </div>
-                                      <div className="flex items-center gap-2 mt-3 ml-7">
+                                      <div className="flex flex-wrap items-center gap-2 mt-3 ml-7">
                                         <button
                                           type="button"
                                           onClick={(e) => {
@@ -2959,6 +3006,18 @@ export default function AdminDossiersPage() {
                                           className="px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded text-xs font-medium transition-colors"
                                         >
                                           ⬇️ Télécharger
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            const docId = String(doc._id || doc.id);
+                                            await handleDeleteDocument(docId);
+                                          }}
+                                          disabled={deletingDocumentId === String(doc._id || doc.id)}
+                                          className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded text-xs font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                        >
+                                          🗑️ Supprimer
                                         </button>
                                       </div>
                                     </div>

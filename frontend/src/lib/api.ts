@@ -23,6 +23,8 @@ export function getApiBaseUrl(): string {
     .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
     .trim();
   baseURL = baseURL.replace(/\/+$/, '');
+  // Evite les doublons (ex: ".../api/api") : on ne garde qu'un seul suffixe "/api"
+  baseURL = baseURL.replace(/(?:\/api)+$/i, '/api');
   return /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
 }
 

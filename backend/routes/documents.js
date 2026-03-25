@@ -556,7 +556,9 @@ router.post('/', (req, res, next) => {
     const documentData = {
       user: effectiveUserId,
       nom: nom || req.file.originalname,
-      nomFichier: req.file.originalname,
+      // `nomFichier` est indexé/unique côté DB : utiliser le nom de fichier généré par multer (timestamp)
+      // pour éviter les doublons lorsque l'utilisateur upload plusieurs fois le même fichier original.
+      nomFichier: req.file.filename,
       cheminFichier: req.file.path, // URL Cloudinary
       typeMime: req.file.mimetype,
       taille: req.file.size,

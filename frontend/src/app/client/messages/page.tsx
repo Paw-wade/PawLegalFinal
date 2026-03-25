@@ -562,16 +562,16 @@ function MessagesContent() {
             </div>
 
             {/* Filtres par utilisateur */}
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="filter-expediteur" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                <Label htmlFor="filter-expediteur" className="text-sm font-medium text-muted-foreground">
                   Expéditeur :
                 </Label>
                 <select
                   id="filter-expediteur"
                   value={selectedExpediteurId}
                   onChange={(e) => setSelectedExpediteurId(e.target.value)}
-                  className="px-3 py-1.5 border border-input rounded-md text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-[200px]"
+                  className="px-3 py-1.5 border border-input rounded-md text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-full sm:w-auto sm:min-w-[200px]"
                 >
                   <option value="">Tous les expéditeurs</option>
                   {users.map((user) => {
@@ -585,15 +585,15 @@ function MessagesContent() {
                 </select>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Label htmlFor="filter-destinataire" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                <Label htmlFor="filter-destinataire" className="text-sm font-medium text-muted-foreground">
                   Destinataire :
                 </Label>
                 <select
                   id="filter-destinataire"
                   value={selectedDestinataireId}
                   onChange={(e) => setSelectedDestinataireId(e.target.value)}
-                  className="px-3 py-1.5 border border-input rounded-md text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-[200px]"
+                  className="px-3 py-1.5 border border-input rounded-md text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-full sm:w-auto sm:min-w-[200px]"
                 >
                   <option value="">Tous les destinataires</option>
                   {users.map((user) => {
@@ -615,7 +615,7 @@ function MessagesContent() {
                     setSelectedExpediteurId('');
                     setSelectedDestinataireId('');
                   }}
-                  className="text-xs"
+                  className="text-xs sm:col-span-2"
                 >
                   Réinitialiser les filtres
                 </Button>
@@ -674,7 +674,7 @@ function MessagesContent() {
             {dossiersList.map((dossierGroup: any) => (
               <div key={dossierGroup.dossierId} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                 {/* En-tête du dossier */}
-                <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-4 border-b border-gray-200">
+                    <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-6 py-4 border-b border-gray-200">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
@@ -707,7 +707,7 @@ function MessagesContent() {
                 {/* Messages du dossier */}
                 <div className="divide-y divide-gray-100">
                   {/* Checkbox pour sélectionner tous les messages de ce dossier */}
-                  <div className="flex items-center gap-3 px-6 py-3 bg-gray-50 border-b border-gray-200">
+                      <div className="flex items-center gap-3 px-4 sm:px-6 py-3 bg-gray-50 border-b border-gray-200">
               <input
                 type="checkbox"
                       checked={dossierGroup.messages.every((m: any) => selectedMessages.has(m._id || m.id)) && dossierGroup.messages.length > 0}
@@ -782,7 +782,7 @@ function MessagesContent() {
                   } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
                 >
                   <div className="p-6">
-                    <div className="flex items-start gap-4">
+                            <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
                       {/* Checkbox */}
                       <input
                         type="checkbox"
@@ -854,7 +854,7 @@ function MessagesContent() {
                             <div className="space-y-2 text-xs">
                               {/* Expéditeur/Destinataire */}
                               <div className="flex items-start gap-2">
-                                <span className="text-muted-foreground font-medium min-w-[70px]">
+                                <span className="text-muted-foreground font-medium min-w-[56px] sm:min-w-[70px]">
                                   {isReceived ? '📤 De' : '📥 À'}:
                                 </span>
                                 <span className="text-foreground font-semibold">
@@ -868,8 +868,8 @@ function MessagesContent() {
                               {/* Copie */}
                               {copieList.length > 0 && (
                                 <div className="flex items-start gap-2">
-                                  <span className="text-muted-foreground font-medium min-w-[70px]">📋 Copie:</span>
-                                  <span className="text-foreground">{copieList.join(', ')}</span>
+                                  <span className="text-muted-foreground font-medium min-w-[56px] sm:min-w-[70px]">📋 Copie:</span>
+                                  <span className="text-foreground break-words">{copieList.join(', ')}</span>
                                 </div>
                               )}
                               
@@ -900,11 +900,12 @@ function MessagesContent() {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex flex-col gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto" onClick={(e) => e.stopPropagation()}>
                         {isReceived && (
                           <Button
                             variant="outline"
                             size="sm"
+                                  className="w-full sm:w-auto"
                             onClick={() => {
                               setReplyData({
                                 sujet: `Re: ${message.sujet}`,
@@ -920,6 +921,7 @@ function MessagesContent() {
                         <Button
                           variant="outline"
                           size="sm"
+                                className="w-full sm:w-auto"
                           onClick={async (e) => {
                             e.stopPropagation();
                             try {
@@ -943,6 +945,7 @@ function MessagesContent() {
                         <Button
                           variant="destructive"
                           size="sm"
+                                className="w-full sm:w-auto"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteMessage(messageId);

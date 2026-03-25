@@ -306,13 +306,13 @@ export default function ClientMessageDetailPage() {
     <div className="min-h-screen bg-background">
       <main className="w-full px-4 py-8">
         {/* En-tête avec bouton retour */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
           <Link href="/client/messages">
             <Button variant="outline" size="sm">
               ← Retour aux messages
             </Button>
           </Link>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             {isReceived && (
               <Button onClick={() => setShowReplyModal(true)}>
                 Répondre

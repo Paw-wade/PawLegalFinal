@@ -416,7 +416,7 @@ export default function DossierDetailPage() {
                   );
                   return (
                     <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
-                      <div className="flex items-center gap-2 min-w-max">
+                      <div className="flex items-center gap-2 min-w-max flex-nowrap">
                         {rawSteps.map((step: any, index: number) => {
                           const isCurrent =
                             currentIndex === -1
@@ -442,7 +442,7 @@ export default function DossierDetailPage() {
                                   }`}
                                 ></span>
                                 <span
-                                  className={`text-[10px] font-medium whitespace-nowrap ${
+                                  className={`text-[10px] font-medium truncate max-w-[88px] ${
                                     isCurrent
                                       ? 'text-blue-700'
                                       : completed
@@ -451,12 +451,12 @@ export default function DossierDetailPage() {
                                   }`}
                                 >
                                   {step.label}
-                                  {dateLabel ? ` (${dateLabel})` : ''}
+                                  {dateLabel ? <span className="hidden sm:inline"> ({dateLabel})</span> : null}
                                 </span>
                               </div>
                               {index < rawSteps.length - 1 && (
                                 <div
-                                  className={`h-0.5 w-6 flex-shrink-0 ${
+                                  className={`h-0.5 w-4 sm:w-6 flex-shrink-0 ${
                                     completed ? 'bg-green-500' : 'bg-gray-300'
                                   }`}
                                 ></div>
