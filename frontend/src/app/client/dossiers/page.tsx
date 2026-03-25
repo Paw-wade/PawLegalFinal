@@ -572,6 +572,15 @@ export default function DossiersPage() {
                                 const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
                                 const totalDocuments = dossierDocuments[dossier._id || dossier.id]?.length || dossier.documents?.length || 0;
                                 const progress = getDossierProgress(dossier.statut);
+                                const rawSteps = dossier.etapesSupplementaires;
+                                const hasSteps = Array.isArray(rawSteps) && rawSteps.length > 0;
+                                const currentIndex = hasSteps
+                                  ? rawSteps.findIndex(
+                                      (s: any) =>
+                                        dossier.statut &&
+                                        (dossier.statut === s.id || dossier.statut === s.label)
+                                    )
+                                  : -1;
 
                                 return (
                                   <>
@@ -580,7 +589,77 @@ export default function DossiersPage() {
                                       {dossierRequests.length > 0 && (
                                         <span>Demandes : <span className="font-semibold text-orange-600">{pendingRequests.length}</span> en attente</span>
                                       )}
-                                      <span>Avancement : <span className="font-semibold text-foreground">{progress} %</span></span>
+                                      {hasSteps ? (
+                                        <div className="w-full mt-1">
+                                          <div className="overflow-x-auto">
+                                            <div className="flex items-center gap-2 min-w-max flex-nowrap">
+                                              {rawSteps.map((step: any, index: number) => {
+                                                const isCurrent =
+                                                  currentIndex === -1
+                                                    ? index === rawSteps.length - 1
+                                                    : index === currentIndex;
+                                                const completed =
+                                                  currentIndex === -1 ? false : index <= currentIndex;
+                                                const dateLabel =
+                                                  step.date
+                                                    ? typeof step.date === 'string'
+                                                      ? step.date
+                                                      : new Date(step.date).toLocaleDateString('fr-FR')
+                                                    : undefined;
+
+                                                return (
+                                                  <div
+                                                    key={step._id || step.id || index}
+                                                    className="flex items-center gap-2 flex-shrink-0"
+                                                  >
+                                                    <div className="flex flex-col items-center gap-1">
+                                                      <span
+                                                        className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                                          isCurrent
+                                                            ? 'bg-blue-500 ring-2 ring-blue-300'
+                                                            : completed
+                                                            ? 'bg-green-500'
+                                                            : 'bg-gray-300'
+                                                        }`}
+                                                      ></span>
+                                                      <span
+                                                        className={`text-[10px] font-medium truncate max-w-[88px] ${
+                                                          isCurrent
+                                                            ? 'text-blue-700'
+                                                            : completed
+                                                            ? 'text-green-700'
+                                                            : 'text-gray-400'
+                                                        }`}
+                                                      >
+                                                        {step.label}
+                                                        {dateLabel ? (
+                                                          <span className="hidden sm:inline">
+                                                            {' '}
+                                                            ({dateLabel})
+                                                          </span>
+                                                        ) : null}
+                                                      </span>
+                                                    </div>
+                                                    {index < rawSteps.length - 1 && (
+                                                      <div
+                                                        className={`h-0.5 w-4 sm:w-6 flex-shrink-0 ${
+                                                          completed
+                                                            ? 'bg-green-500'
+                                                            : 'bg-gray-300'
+                                                        }`}
+                                                      ></div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <span>
+                                          Avancement : <span className="font-semibold text-foreground">{progress} %</span>
+                                        </span>
+                                      )}
                                       {dossier.updatedAt && (
                                         <span>Dernière activité : {formatRelativeTime(dossier.updatedAt)}</span>
                                       )}

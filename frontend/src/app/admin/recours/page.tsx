@@ -439,8 +439,13 @@ export default function RecoursDirectoryPage() {
 
                           // construire une URL exploitable pour ouvrir le fichier
                           // on réutilise la route de prévisualisation existante
-                          const baseURL =
+                          const rawBaseURL =
                             process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
+                          // Normaliser pour éviter les doublons `/api` (ex: ".../api/" ou ".../api ")
+                          const baseURL = String(rawBaseURL)
+                            .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
+                            .trim()
+                            .replace(/\/+$/, '');
                           let fileUrl = baseURL.endsWith('/api')
                             ? `${baseURL}/user/documents/${doc._id}/preview`
                             : `${baseURL}/api/user/documents/${doc._id}/preview`;
