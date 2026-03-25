@@ -8,7 +8,7 @@ import { dossiersAPI, notificationsAPI, documentRequestsAPI, documentsAPI } from
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { Toast } from '@/components/Toast';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getEditedEtapesOnly, customEtapeMatchesStatut, getDossierProgressFromEditedEtapes } from '@/lib/dossierUtils';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -571,16 +571,12 @@ export default function DossiersPage() {
                                 const dossierRequests = documentRequests[dossier._id || dossier.id] || [];
                                 const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
                                 const totalDocuments = dossierDocuments[dossier._id || dossier.id]?.length || dossier.documents?.length || 0;
-                                const progress = getDossierProgress(dossier.statut);
                                 const rawSteps = dossier.etapesSupplementaires;
-                                const hasSteps = Array.isArray(rawSteps) && rawSteps.length > 0;
-                                const currentIndex = hasSteps
-                                  ? rawSteps.findIndex(
-                                      (s: any) =>
-                                        dossier.statut &&
-                                        (dossier.statut === s.id || dossier.statut === s.label)
-                                    )
-                                  : -1;
+                                const editedEtapes = getEditedEtapesOnly(rawSteps);
+                                const progress = getDossierProgressFromEditedEtapes(dossier.statut, editedEtapes);
+                                const currentEtapeIdx = editedEtapes.findIndex((step) =>
+                                  customEtapeMatchesStatut(step, dossier.statut || '')
+                                );
 
                                 return (
                                   <>
@@ -589,77 +585,69 @@ export default function DossiersPage() {
                                       {dossierRequests.length > 0 && (
                                         <span>Demandes : <span className="font-semibold text-orange-600">{pendingRequests.length}</span> en attente</span>
                                       )}
-                                      {hasSteps ? (
-                                        <div className="w-full mt-1">
-                                          <div className="overflow-x-auto">
-                                            <div className="flex items-center gap-2 min-w-max flex-nowrap">
-                                              {rawSteps.map((step: any, index: number) => {
-                                                const isCurrent =
-                                                  currentIndex === -1
-                                                    ? index === rawSteps.length - 1
-                                                    : index === currentIndex;
-                                                const completed =
-                                                  currentIndex === -1 ? false : index <= currentIndex;
-                                                const dateLabel =
-                                                  step.date
-                                                    ? typeof step.date === 'string'
-                                                      ? step.date
-                                                      : new Date(step.date).toLocaleDateString('fr-FR')
-                                                    : undefined;
+                                      <div className="w-full mt-1">
+                                        <div className="flex items-center justify-between text-xs mb-1.5">
+                                          <span className="text-muted-foreground font-medium">Avancement (étapes éditées)</span>
+                                          <span className="font-semibold text-foreground">{progress} %</span>
+                                        </div>
+                                        {editedEtapes.length === 0 ? (
+                                          <p className="text-[11px] text-muted-foreground leading-snug">
+                                            Aucune étape personnalisée. Définissez-les dans la fiche dossier via{' '}
+                                            <span className="font-medium text-foreground">Éditer les étapes</span> pour suivre la progression ici.
+                                          </p>
+                                        ) : (
+                                          <div className="overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch] pb-0.5 -mx-0.5 px-0.5 sm:overflow-visible sm:mx-0 sm:px-0">
+                                            <div className="w-max min-w-full sm:w-full sm:min-w-0 space-y-1.5">
+                                              <div className="flex h-2 rounded-full overflow-hidden ring-1 ring-gray-200 bg-gray-100">
+                                                {editedEtapes.map((step, index) => {
+                                                  const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
+                                                  const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
+                                                  const fillClass = isCompleted
+                                                    ? 'bg-green-500'
+                                                    : isCurrent
+                                                      ? 'bg-blue-500'
+                                                      : 'bg-gray-300';
 
-                                                return (
-                                                  <div
-                                                    key={step._id || step.id || index}
-                                                    className="flex items-center gap-2 flex-shrink-0"
-                                                  >
-                                                    <div className="flex flex-col items-center gap-1">
+                                                  return (
+                                                    <div
+                                                      key={step.id + String(index)}
+                                                      className="h-2 w-[4.75rem] flex-shrink-0 border-r border-white/60 last:border-r-0 sm:w-auto sm:flex-1 sm:min-w-0"
+                                                      title={step.label}
+                                                    >
+                                                      <div className={`h-full w-full ${fillClass}`} />
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                              <div className="flex items-start gap-0 sm:gap-0.5 sm:justify-between">
+                                                {editedEtapes.map((step, index) => {
+                                                  const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
+                                                  const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
+                                                  return (
+                                                    <div
+                                                      key={`lbl-${step.id}-${index}`}
+                                                      className="w-[4.75rem] flex-shrink-0 flex flex-col items-center px-1 box-border sm:w-auto sm:flex-1 sm:min-w-0"
+                                                    >
                                                       <span
-                                                        className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                                        className={`text-[9px] text-center leading-tight line-clamp-3 break-words w-full ${
                                                           isCurrent
-                                                            ? 'bg-blue-500 ring-2 ring-blue-300'
-                                                            : completed
-                                                            ? 'bg-green-500'
-                                                            : 'bg-gray-300'
+                                                            ? 'text-blue-700 font-semibold'
+                                                            : isCompleted
+                                                              ? 'text-green-700 font-medium'
+                                                              : 'text-gray-400'
                                                         }`}
-                                                      ></span>
-                                                      <span
-                                                        className={`text-[10px] font-medium truncate max-w-[88px] ${
-                                                          isCurrent
-                                                            ? 'text-blue-700'
-                                                            : completed
-                                                            ? 'text-green-700'
-                                                            : 'text-gray-400'
-                                                        }`}
+                                                        title={step.label}
                                                       >
                                                         {step.label}
-                                                        {dateLabel ? (
-                                                          <span className="hidden sm:inline">
-                                                            {' '}
-                                                            ({dateLabel})
-                                                          </span>
-                                                        ) : null}
                                                       </span>
                                                     </div>
-                                                    {index < rawSteps.length - 1 && (
-                                                      <div
-                                                        className={`h-0.5 w-4 sm:w-6 flex-shrink-0 ${
-                                                          completed
-                                                            ? 'bg-green-500'
-                                                            : 'bg-gray-300'
-                                                        }`}
-                                                      ></div>
-                                                    )}
-                                                  </div>
-                                                );
-                                              })}
+                                                  );
+                                                })}
+                                              </div>
                                             </div>
                                           </div>
-                                        </div>
-                                      ) : (
-                                        <span>
-                                          Avancement : <span className="font-semibold text-foreground">{progress} %</span>
-                                        </span>
-                                      )}
+                                        )}
+                                      </div>
                                       {dossier.updatedAt && (
                                         <span>Dernière activité : {formatRelativeTime(dossier.updatedAt)}</span>
                                       )}
@@ -703,19 +691,76 @@ export default function DossiersPage() {
                   {/* Ligne compacte : avancement + échéance + prochaine action (avancement masqué sur mobile) */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2 pb-2 border-b border-gray-100">
                     {(() => {
-                      const progress = getDossierProgress(dossier.statut);
+                      const rawSteps = dossier.etapesSupplementaires;
+                      const editedEtapes = getEditedEtapesOnly(rawSteps);
+                      const progress = getDossierProgressFromEditedEtapes(dossier.statut, editedEtapes);
+                      const currentEtapeIdx = editedEtapes.findIndex((step) =>
+                        customEtapeMatchesStatut(step, dossier.statut || '')
+                      );
                       return (
-                        <div className="hidden sm:flex items-center gap-2 min-w-0 flex-1">
-                          <span className="text-[11px] md:text-sm text-muted-foreground shrink-0">Avancement</span>
-                          <div className="w-20 sm:w-28 md:w-32 bg-gray-200 rounded-full h-1.5 md:h-2 flex-1 max-w-28 md:max-w-none">
-                            <div
-                              className={`h-1.5 md:h-2 rounded-full transition-all ${
-                                progress >= 80 ? 'bg-green-500' : progress >= 50 ? 'bg-blue-500' : progress >= 25 ? 'bg-yellow-500' : 'bg-gray-400'
-                              }`}
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                          <span className="text-[11px] md:text-sm font-semibold text-foreground shrink-0">{progress} %</span>
+                        <div className="w-full">
+                          {editedEtapes.length === 0 ? (
+                            <span className="text-[11px] md:text-sm text-muted-foreground">
+                              Avancement : <span className="font-semibold text-foreground">{getDossierProgress(dossier.statut)} %</span>
+                            </span>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between text-xs mb-1.5">
+                                <span className="text-muted-foreground font-medium">Avancement (étapes éditées)</span>
+                                <span className="font-semibold text-foreground">{progress} %</span>
+                              </div>
+                              <div className="overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch] pb-0.5 -mx-0.5 px-0.5">
+                                <div className="w-max min-w-full space-y-1.5">
+                                  <div className="flex h-2 rounded-full overflow-hidden ring-1 ring-gray-200 bg-gray-100">
+                                    {editedEtapes.map((step, index) => {
+                                      const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
+                                      const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
+                                      const fillClass = isCompleted
+                                        ? 'bg-green-500'
+                                        : isCurrent
+                                          ? 'bg-blue-500'
+                                          : 'bg-gray-300';
+
+                                      return (
+                                        <div
+                                          key={step.id + String(index)}
+                                          className="h-2 w-[4.75rem] flex-shrink-0 border-r border-white/60 last:border-r-0"
+                                          title={step.label}
+                                        >
+                                          <div className={`h-full w-full ${fillClass}`} />
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="flex items-start gap-0 sm:gap-0.5 sm:justify-between">
+                                    {editedEtapes.map((step, index) => {
+                                      const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
+                                      const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
+                                      return (
+                                        <div
+                                          key={`lbl-${step.id}-${index}`}
+                                          className="w-[4.75rem] flex-shrink-0 flex flex-col items-center px-1 box-border"
+                                        >
+                                          <span
+                                            className={`text-[9px] text-center leading-tight line-clamp-3 break-words w-full ${
+                                              isCurrent
+                                                ? 'text-blue-700 font-semibold'
+                                                : isCompleted
+                                                  ? 'text-green-700 font-medium'
+                                                  : 'text-gray-400'
+                                            }`}
+                                            title={step.label}
+                                          >
+                                            {step.label}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
                       );
                     })()}
