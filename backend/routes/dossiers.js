@@ -202,7 +202,7 @@ router.post(
       }
 
       const {
-        userId,
+        userId: bodyUserId,
         clientNom,
         clientPrenom,
         clientEmail,
@@ -219,9 +219,20 @@ router.post(
         rendezVousId
       } = req.body;
 
+      const normalizedTitre = [titre, req.body?.title, req.body?.nomDossier, req.body?.nom]
+        .find((v) => typeof v === 'string' && v.trim().length > 0)?.trim() || '';
+
+      // Création depuis l'espace admin: le nom du dossier est obligatoire.
+      if (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin') && !normalizedTitre) {
+        return res.status(400).json({
+          success: false,
+          message: 'Le nom du dossier est requis'
+        });
+      }
+
       // Vérifier si un utilisateur est spécifié (pour utilisateurs connectés)
       let user = null;
-      let finalUserId = userId;
+      let finalUserId = bodyUserId;
       
       // Si l'utilisateur est connecté mais n'a pas fourni d'ID, utiliser l'ID de l'utilisateur connecté
       if (!finalUserId && req.user && req.user.id) {
@@ -272,7 +283,7 @@ router.post(
         clientPrenom: finalUserId ? null : clientPrenom,
         clientEmail: finalUserId ? user.email : clientEmail,
         clientTelephone: finalUserId ? user.phone : clientTelephone,
-        titre: titre || '',
+        titre: normalizedTitre,
         description: description || '',
         categorie: categorie || 'autre',
         type: type || '',
@@ -481,12 +492,12 @@ router.post(
             userEmail: req.user.email,
             targetUser: finalUserId || null,
             targetUserEmail: finalUserId ? user.email : clientEmail,
-            description: `${req.user.email} a créé le dossier "${titre}" ${finalUserId ? `pour ${user.email}` : `pour ${clientNom} ${clientPrenom} (non inscrit)`}`,
+            description: `${req.user.email} a créé le dossier "${normalizedTitre || 'Sans titre'}" ${finalUserId ? `pour ${user.email}` : `pour ${clientNom} ${clientPrenom} (non inscrit)`}`,
             ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
             userAgent: req.get('user-agent'),
             metadata: {
               dossierId: dossier._id.toString(),
-              titre,
+              titre: normalizedTitre,
               categorie: dossier.categorie,
               type: dossier.type,
               statut,
@@ -715,13 +726,25 @@ router.post(
         priorite,
         dateEcheance,
         notes,
-        assignedTo
+        assignedTo,
+        rendezVousId
       } = req.body;
+
+      const normalizedTitre = [titre, req.body?.title, req.body?.nomDossier, req.body?.nom]
+        .find((v) => typeof v === 'string' && v.trim().length > 0)?.trim() || '';
+
+      if (!normalizedTitre) {
+        return res.status(400).json({
+          success: false,
+          message: 'Le nom du dossier est requis'
+        });
+      }
 
       // Vérifier si un utilisateur est spécifié (pour utilisateurs connectés)
       let user = null;
-      if (userId) {
-        user = await User.findById(userId);
+      let finalUserId = bodyUserId;
+      if (finalUserId) {
+        user = await User.findById(finalUserId);
         if (!user) {
           return res.status(404).json({
             success: false,
@@ -733,9 +756,9 @@ router.post(
       // Tous les champs sont optionnels - pas de validation obligatoire pour les visiteurs
 
       // Si l'utilisateur est connecté mais n'a pas fourni d'ID, utiliser l'ID de l'utilisateur connecté
-      if (!userId && req.user && req.user.id) {
-        userId = req.user.id;
-        user = await User.findById(userId);
+      if (!finalUserId && req.user && req.user.id) {
+        finalUserId = req.user.id;
+        user = await User.findById(finalUserId);
       }
 
       // Vérifier si un membre de l'équipe est assigné
@@ -758,12 +781,12 @@ router.post(
       }
 
       const dossier = await Dossier.create({
-        user: userId || null,
-        clientNom: userId ? null : clientNom,
-        clientPrenom: userId ? null : clientPrenom,
-        clientEmail: userId ? user.email : clientEmail,
-        clientTelephone: userId ? user.phone : clientTelephone,
-        titre: titre || '',
+        user: finalUserId || null,
+        clientNom: finalUserId ? null : clientNom,
+        clientPrenom: finalUserId ? null : clientPrenom,
+        clientEmail: finalUserId ? user.email : clientEmail,
+        clientTelephone: finalUserId ? user.phone : clientTelephone,
+        titre: normalizedTitre,
         description: description || '',
         categorie: categorie || 'autre',
         type: type || '',
@@ -783,14 +806,14 @@ router.post(
           action: 'dossier_created',
           user: req.user.id,
           userEmail: req.user.email,
-          targetUser: userId || null,
-          targetUserEmail: userId ? user.email : clientEmail,
-          description: `${req.user.email} a créé le dossier "${titre}" ${userId ? `pour ${user.email}` : `pour ${clientNom} ${clientPrenom} (non inscrit)`}`,
+          targetUser: finalUserId || null,
+          targetUserEmail: finalUserId ? user.email : clientEmail,
+          description: `${req.user.email} a créé le dossier "${normalizedTitre || 'Sans titre'}" ${finalUserId ? `pour ${user.email}` : `pour ${clientNom} ${clientPrenom} (non inscrit)`}`,
           ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
           userAgent: req.get('user-agent'),
           metadata: {
             dossierId: dossier._id.toString(),
-            titre,
+            titre: normalizedTitre,
             categorie: dossier.categorie,
             type: dossier.type,
             statut
@@ -829,11 +852,11 @@ router.post(
               admin._id.toString(),
               'dossier_created',
               'Nouveau dossier créé par un client',
-              `${clientDisplayName} (${clientEmail}) a créé un nouveau dossier : "${titre || 'Sans titre'}"`,
+              `${clientDisplayName} (${clientEmail}) a créé un nouveau dossier : "${normalizedTitre || 'Sans titre'}"`,
               `/admin/dossiers/${dossier._id}`,
               { 
                 dossierId: dossier._id.toString(), 
-                titre: titre || 'Sans titre',
+                titre: normalizedTitre || 'Sans titre',
                 clientId,
                 clientEmail
               }
@@ -848,7 +871,7 @@ router.post(
                     formattedPhone,
                     'dossier_created',
                     {
-                      dossierTitle: titre || dossier.titre || 'Sans titre',
+                      dossierTitle: normalizedTitre || dossier.titre || 'Sans titre',
                       dossierId: dossier.numero || dossier._id.toString()
                     },
                     {
@@ -872,7 +895,7 @@ router.post(
       }
       // Si le dossier a été créé par un admin, notifier le client
       else if (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin')) {
-        let targetUserId = userId;
+        let targetUserId = finalUserId;
         
         // Si pas de userId mais on a un clientEmail, chercher l'utilisateur par email
         if (!targetUserId && clientEmail) {
@@ -892,9 +915,9 @@ router.post(
             targetUserId,
             'dossier_created',
             'Nouveau dossier créé',
-            `Un nouveau dossier "${titre || 'Sans titre'}" a été créé pour vous par l'administrateur.`,
+            `Un nouveau dossier "${normalizedTitre || 'Sans titre'}" a été créé pour vous par l'administrateur.`,
             `/client/dossiers`,
-            { dossierId: dossier._id.toString(), titre: titre || 'Sans titre' }
+            { dossierId: dossier._id.toString(), titre: normalizedTitre || 'Sans titre' }
           );
         }
       }

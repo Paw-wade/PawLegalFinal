@@ -382,6 +382,46 @@ export default function AdminDossiersPage() {
   const searchParams = useSearchParams();
 
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [clientPopover, setClientPopover] = useState<{ dossierId: string; x: number; y: number } | null>(null);
+  const clientPopoverRef = useRef<HTMLDivElement | null>(null);
+
+  const getProfileCompletionInfo = (dossier: any) => {
+    const isRegisteredUser = dossier?.user && typeof dossier.user === 'object';
+    if (!isRegisteredUser) {
+      const missing: string[] = [];
+      if (!String(dossier?.clientPrenom || '').trim()) missing.push('Prénom');
+      if (!String(dossier?.clientNom || '').trim()) missing.push('Nom');
+      if (!String(dossier?.clientEmail || '').trim()) missing.push('Email');
+      if (!String(dossier?.clientTelephone || '').trim()) missing.push('Téléphone');
+      return {
+        isRegisteredUser,
+        profileCompleteFlag: false,
+        computedComplete: missing.length === 0,
+        missingFields: missing,
+      };
+    }
+
+    const u = dossier.user || {};
+    const missing: string[] = [];
+    if (!String(u.firstName || '').trim()) missing.push('Prénom');
+    if (!String(u.lastName || '').trim()) missing.push('Nom');
+    if (!String(u.email || '').trim()) missing.push('Email');
+    if (!String(u.phone || u.telephone || '').trim()) missing.push('Téléphone');
+    if (!String(u.dateNaissance || '').trim()) missing.push('Date de naissance');
+    if (!String(u.nationalite || '').trim()) missing.push('Nationalité');
+    if (!String(u.adressePostale || '').trim()) missing.push('Adresse postale');
+    if (!String(u.ville || '').trim()) missing.push('Ville');
+    if (!String(u.codePostal || '').trim()) missing.push('Code postal');
+    if (!String(u.pays || '').trim()) missing.push('Pays');
+
+    const profileCompleteFlag = u.profilComplete === true;
+    return {
+      isRegisteredUser,
+      profileCompleteFlag,
+      computedComplete: missing.length === 0,
+      missingFields: missing,
+    };
+  };
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -406,6 +446,17 @@ export default function AdminDossiersPage() {
       loadDossierDrafts();
     }
   }, [session, status, dossiers.length]);
+
+  useEffect(() => {
+    const onDocMouseDown = (event: MouseEvent) => {
+      if (!clientPopoverRef.current) return;
+      if (!clientPopoverRef.current.contains(event.target as Node)) {
+        setClientPopover(null);
+      }
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, []);
 
   // Ouvrir automatiquement le badge du dossier passé en paramètre (depuis la vue détail)
   useEffect(() => {
@@ -848,7 +899,9 @@ export default function AdminDossiersPage() {
     setError(null);
 
     try {
-      const titreTrim = (formData.titre || '').trim();
+      const nativeForm = new FormData(e.currentTarget as HTMLFormElement);
+      const nativeTitre = String(nativeForm.get('titre') || '').trim();
+      const titreTrim = (formData.titre || '').trim() || nativeTitre;
       if (!titreTrim) {
         setError('Veuillez indiquer le nom du dossier.');
         setIsLoading(false);
@@ -858,6 +911,9 @@ export default function AdminDossiersPage() {
       const dossierData: any = {
         // Nom du dossier (obligatoire à la création)
         titre: titreTrim,
+        // Alias défensifs (compat route / rétro-compat)
+        title: titreTrim,
+        nomDossier: titreTrim,
       };
       if (formData.description) dossierData.description = formData.description;
       if (formData.categorie) dossierData.categorie = formData.categorie;
@@ -956,7 +1012,9 @@ export default function AdminDossiersPage() {
     setError(null);
 
     try {
-      const titreTrim = (formData.titre || '').trim();
+      const nativeForm = new FormData(e.currentTarget as HTMLFormElement);
+      const nativeTitre = String(nativeForm.get('titre') || '').trim();
+      const titreTrim = (formData.titre || '').trim() || nativeTitre;
       if (!titreTrim) {
         setError('Veuillez indiquer le nom du dossier.');
         setIsLoading(false);
@@ -1057,6 +1115,31 @@ export default function AdminDossiersPage() {
       setToast({ message, type: 'error' });
     } finally {
       setDeletingDocumentId(null);
+    }
+  };
+
+  const handleQuickUserUpdateFromPopover = async (dossier: any, patch: any, successMessage: string) => {
+    try {
+      const userId = dossier?.user?._id || dossier?.user?.id;
+      if (!userId) return;
+      await userAPI.updateUser(String(userId), patch);
+      setDossiers((prev) =>
+        prev.map((d: any) => {
+          const dUserId = d?.user?._id || d?.user?.id;
+          if (String(dUserId || '') !== String(userId)) return d;
+          return {
+            ...d,
+            user: {
+              ...(d.user || {}),
+              ...patch,
+            },
+          };
+        })
+      );
+      setToast({ message: successMessage, type: 'success' });
+    } catch (err: any) {
+      const message = err?.response?.data?.message || 'Action utilisateur impossible';
+      setToast({ message, type: 'error' });
     }
   };
 
@@ -1235,7 +1318,30 @@ export default function AdminDossiersPage() {
               )}
             </p>
           </div>
-          <Button onClick={() => setIsCreating(true)} className="shadow-md hover:shadow-lg transition-shadow">
+          <Button
+            onClick={() => {
+              setEditingDossier(null);
+              setClientType('existing');
+              setFormData({
+                userId: '',
+                clientNom: '',
+                clientPrenom: '',
+                clientEmail: '',
+                clientTelephone: '',
+                titre: '',
+                description: '',
+                categorie: '',
+                type: '',
+                statut: 'en_attente',
+                priorite: 'normale',
+                dateEcheance: getTodayDate(),
+                notes: '',
+                assignedTo: '',
+              });
+              setIsCreating(true);
+            }}
+            className="shadow-md hover:shadow-lg transition-shadow"
+          >
             + Créer un dossier
           </Button>
         </div>
@@ -1385,6 +1491,7 @@ export default function AdminDossiersPage() {
                     <Label htmlFor="titre">Nom du dossier {!editingDossier && '*'}</Label>
                     <Input
                       id="titre"
+                      name="titre"
                       value={formData.titre}
                       onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
                       className="mt-1"
@@ -1888,7 +1995,24 @@ export default function AdminDossiersPage() {
                               </p>
                             )}
                             {/* Client / créateur du dossier — toujours visible, même plié (photo profil si inscrit) */}
-                            <div className="flex items-center gap-2 mt-1 min-w-0">
+                            <button
+                              type="button"
+                              className="flex items-center gap-2 mt-1 min-w-0 rounded-md px-1 py-0.5 -ml-1 hover:bg-blue-50 transition-colors text-left"
+                              title="Voir le profil utilisateur"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const dossierId = String(dossier._id || dossier.id || '');
+                                if (!dossierId) return;
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                const desiredX = Math.max(12, Math.min(rect.left, window.innerWidth - 360));
+                                const desiredY = Math.min(rect.bottom + 8, window.innerHeight - 220);
+                                setClientPopover((prev) => {
+                                  if (prev?.dossierId === dossierId) return null;
+                                  return { dossierId, x: desiredX, y: desiredY };
+                                });
+                              }}
+                            >
                               <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border border-primary/20">
                                 <UserAvatarDisplay
                                   user={dossier.user && typeof dossier.user === 'object' ? dossier.user : null}
@@ -1908,7 +2032,7 @@ export default function AdminDossiersPage() {
                                   ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '—'
                                   : [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ') || dossier.clientEmail || 'Non renseigné'}
                               </p>
-                            </div>
+                            </button>
                             {/* Résumé compact des infos clés du dossier (plié) */}
                             {!expandedDossiers.has(dossier._id || dossier.id) && (
                               <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
@@ -3291,6 +3415,141 @@ export default function AdminDossiersPage() {
           )}
         </div>
       </main>
+
+      {clientPopover && (() => {
+        const dossier = dossiers.find((d: any) => String(d._id || d.id) === clientPopover.dossierId);
+        if (!dossier) return null;
+
+        const isRegisteredUser = dossier.user && typeof dossier.user === 'object';
+        const completion = getProfileCompletionInfo(dossier);
+        const userId = dossier?.user?._id || dossier?.user?.id;
+        const dossierId = dossier._id || dossier.id;
+        const fullName = isRegisteredUser
+          ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ').trim()
+          : [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ').trim();
+        const email = isRegisteredUser ? dossier.user.email : dossier.clientEmail;
+        const phone = isRegisteredUser ? (dossier.user.phone || dossier.user.telephone) : dossier.clientTelephone;
+        const role = isRegisteredUser ? dossier.user.role : 'prospect';
+        const createdAt = isRegisteredUser ? dossier.user.createdAt : dossier.createdAt;
+        const dateNaissance = isRegisteredUser ? dossier.user.dateNaissance : null;
+        const nationalite = isRegisteredUser ? dossier.user.nationalite : null;
+        const adressePostale = isRegisteredUser ? dossier.user.adressePostale : null;
+        const ville = isRegisteredUser ? dossier.user.ville : null;
+        const codePostal = isRegisteredUser ? dossier.user.codePostal : null;
+        const pays = isRegisteredUser ? dossier.user.pays : null;
+        const isActive = isRegisteredUser ? dossier.user.isActive !== false : true;
+        const displayedComplete = completion.profileCompleteFlag || completion.computedComplete;
+
+        return (
+          <div
+            ref={clientPopoverRef}
+            className="fixed z-[70] w-[420px] max-w-[calc(100vw-24px)] rounded-xl border border-blue-200 bg-white shadow-2xl"
+            style={{ left: clientPopover.x, top: clientPopover.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/70 rounded-t-xl">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-blue-900">Profil utilisateur</p>
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
+                    displayedComplete
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {displayedComplete ? 'Profil complet' : 'Profil incomplet'}
+                </span>
+              </div>
+            </div>
+            <div className="p-4 space-y-2">
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Nom :</span> <span className="text-foreground">{fullName || 'Non renseigné'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Email :</span> <span className="text-foreground break-all">{email || 'Non renseigné'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Téléphone :</span> <span className="text-foreground">{phone || 'Non renseigné'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Type :</span> <span className="text-foreground">{isRegisteredUser ? 'Compte inscrit' : 'Client non inscrit'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Rôle :</span> <span className="text-foreground">{role || '—'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Compte :</span> <span className="text-foreground">{isActive ? 'Actif' : 'Inactif'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Créé le :</span> <span className="text-foreground">{createdAt ? new Date(createdAt).toLocaleDateString('fr-FR') : '—'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Date de naissance :</span> <span className="text-foreground">{dateNaissance ? new Date(dateNaissance).toLocaleDateString('fr-FR') : 'Non renseigné'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Nationalité :</span> <span className="text-foreground">{nationalite || 'Non renseigné'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Adresse :</span> <span className="text-foreground">{adressePostale || 'Non renseignée'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Ville / CP / Pays :</span> <span className="text-foreground">{[ville, codePostal, pays].filter(Boolean).join(' - ') || 'Non renseigné'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Statut saisi :</span> <span className="text-foreground">{completion.profileCompleteFlag ? 'Profil complet coché' : 'Profil complet non coché'}</span></p>
+              {completion.missingFields.length > 0 && (
+                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-xs font-semibold text-amber-900">Champs manquants</p>
+                  <p className="text-xs text-amber-800">{completion.missingFields.join(', ')}</p>
+                </div>
+              )}
+            </div>
+            <div className="px-4 pb-2 flex flex-wrap items-center gap-2">
+              {userId && (
+                <Link href={`/admin/utilisateurs?userId=${userId}`} onClick={() => setClientPopover(null)}>
+                  <Button type="button" variant="outline" size="sm" className="text-xs">Voir fiche utilisateur</Button>
+                </Link>
+              )}
+              <Link href={`/admin/messages?dossierId=${dossierId}&action=send`} onClick={() => setClientPopover(null)}>
+                <Button type="button" variant="outline" size="sm" className="text-xs">Envoyer message</Button>
+              </Link>
+              <Link href={`/admin/notifications?dossierId=${dossierId}&filter=all`} onClick={() => setClientPopover(null)}>
+                <Button type="button" variant="outline" size="sm" className="text-xs">Voir notifications</Button>
+              </Link>
+              <Link href={`/admin/dossiers/${dossierId}`} onClick={() => setClientPopover(null)}>
+                <Button type="button" variant="outline" size="sm" className="text-xs">Ouvrir dossier complet</Button>
+              </Link>
+            </div>
+            {isRegisteredUser && userId && (
+              <div className="px-4 pb-3 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQuickUserUpdateFromPopover(
+                      dossier,
+                      { profilComplete: !completion.profileCompleteFlag },
+                      !completion.profileCompleteFlag ? 'Profil marqué complet' : 'Profil marqué incomplet'
+                    );
+                  }}
+                >
+                  {completion.profileCompleteFlag ? 'Marquer incomplet' : 'Marquer complet'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQuickUserUpdateFromPopover(
+                      dossier,
+                      { isActive: !isActive },
+                      !isActive ? 'Compte activé' : 'Compte désactivé'
+                    );
+                  }}
+                >
+                  {isActive ? 'Désactiver compte' : 'Activer compte'}
+                </Button>
+              </div>
+            )}
+            <div className="px-4 pb-3 flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setClientPopover(null);
+                }}
+              >
+                Fermer
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal de confirmation de suppression */}
       {showDeleteConfirm && (
