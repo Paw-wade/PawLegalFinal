@@ -58,6 +58,7 @@ export default function AdminDossierDetailPage() {
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
   const [documents, setDocuments] = useState<any[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
+  const [isExportingZip, setIsExportingZip] = useState(false);
   const [selectedDocumentRequestNotification, setSelectedDocumentRequestNotification] = useState<any>(null);
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState(false);
   const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<any>(null);
@@ -210,6 +211,45 @@ export default function AdminDossierDetailPage() {
       console.error('Erreur lors du chargement des documents:', err);
     } finally {
       setIsLoadingDocuments(false);
+    }
+  };
+
+  const handleExportDocumentsZip = async () => {
+    if (!documents || documents.length === 0) {
+      alert('Aucun document à exporter.');
+      return;
+    }
+
+    setIsExportingZip(true);
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+
+      for (const doc of documents) {
+        const docId = doc._id || doc.id;
+        if (!docId) continue;
+
+        const response = await documentsAPI.downloadDocument(docId);
+        const blob = new Blob([response.data]);
+        const fallbackName = `document-${docId}`;
+        const fileName = String(doc.nom || doc.nomFichier || fallbackName).trim() || fallbackName;
+        zip.file(fileName, blob);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = window.URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `dossier-${dossier?.numero || dossierId}-documents.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erreur lors de l’export ZIP des documents:', error);
+      alert('Erreur lors de l’export ZIP. Vérifiez que tous les documents sont accessibles.');
+    } finally {
+      setIsExportingZip(false);
     }
   };
 
@@ -1220,7 +1260,17 @@ export default function AdminDossierDetailPage() {
 
           {/* Documents du dossier */}
           <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
-            <h2 className="text-xl font-bold mb-4">📁 Documents du dossier</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <h2 className="text-xl font-bold">📁 Documents du dossier</h2>
+              <Button
+                variant="outline"
+                className="text-xs h-8 w-full sm:w-auto"
+                onClick={handleExportDocumentsZip}
+                disabled={isLoadingDocuments || isExportingZip || documents.length === 0}
+              >
+                {isExportingZip ? 'Préparation ZIP...' : '🗜️ Télécharger tout (ZIP)'}
+              </Button>
+            </div>
             {isLoadingDocuments ? (
               <p className="text-sm text-muted-foreground">Chargement...</p>
             ) : documents.length === 0 ? (
