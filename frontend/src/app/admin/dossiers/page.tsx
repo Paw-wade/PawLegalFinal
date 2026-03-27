@@ -334,6 +334,15 @@ export default function AdminDossiersPage() {
 
     return [...DEFAULT_ADMIN_ETAPES, ...customExtra];
   };
+
+  const getDossierStatutDisplayLabel = (dossier: any) => {
+    const statut = String(dossier?.statut || '').trim();
+    if (!statut) return '—';
+    const effectiveEtapes = getEffectiveEtapes(dossier);
+    const matched = effectiveEtapes.find((etape: any) => adminSelectStatutMatchesEtape(statut, etape));
+    if (matched?.label) return String(matched.label);
+    return getStatutLabel(statut);
+  };
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState<any>(null);
   const [documentRequestData, setDocumentRequestData] = useState({
     selectedDocumentTypes: [] as string[],
@@ -2124,7 +2133,7 @@ export default function AdminDossiersPage() {
                       <div className="flex flex-wrap items-center justify-end gap-2 flex-shrink-0 w-full">
                         <div className="flex flex-wrap items-center gap-1">
                           <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getStatutColor(dossier.statut)}`}>
-                            {getStatutLabel(dossier.statut)}
+                            {getDossierStatutDisplayLabel(dossier)}
                           </span>
                           {dossier.priorite && (
                             <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getPrioriteColor(dossier.priorite)}`}>
