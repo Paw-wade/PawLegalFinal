@@ -570,6 +570,8 @@ export const appointmentsAPI = {
     heure: string;
     motif: string;
     description?: string;
+    /** Admin / superadmin : associer le RDV à ce client */
+    forUserId?: string;
   }) => api.post('/appointments', data),
   
   // Client - Récupérer ses rendez-vous

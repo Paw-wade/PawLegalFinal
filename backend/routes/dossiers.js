@@ -121,29 +121,34 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
       : `Le dossier "${dossierTitle}" a été modifié par ${modifierName} (${qualityLabel})`;
     
     for (const userInfo of usersToNotify) {
+      const skipClientPing =
+        changes.skipClientEtapesOnlyNotify === true && userInfo.role === 'client';
+
       // Notification dashboard
       const lien = userInfo.role === 'client' 
         ? `/client/dossiers/${dossier._id}`
         : `/admin/dossiers/${dossier._id}`;
       
-      await createNotification(
-        userInfo.userId,
-        'dossier_updated',
-        'Dossier modifié',
-        notificationMessage,
-        lien,
-        {
-          dossierId: dossier._id.toString(),
-          dossierTitre: dossierTitle,
-          modifiedBy: modifier._id ? modifier._id.toString() : modifier.id.toString(),
-          modifierName: modifierName,
-          modifierRole: modifierRole,
-          changes: changes
-        }
-      );
+      if (!skipClientPing) {
+        await createNotification(
+          userInfo.userId,
+          'dossier_updated',
+          'Dossier modifié',
+          notificationMessage,
+          lien,
+          {
+            dossierId: dossier._id.toString(),
+            dossierTitre: dossierTitle,
+            modifiedBy: modifier._id ? modifier._id.toString() : modifier.id.toString(),
+            modifierName: modifierName,
+            modifierRole: modifierRole,
+            changes: changes
+          }
+        );
+      }
       
       // SMS si téléphone disponible (ex. renommage du dossier seul → pas de SMS)
-      if (!changes.skipSms && userInfo.user && userInfo.user.phone) {
+      if (!skipClientPing && !changes.skipSms && userInfo.user && userInfo.user.phone) {
         try {
           const formattedPhone = formatPhoneNumber(userInfo.user.phone);
           if (formattedPhone) {
@@ -2315,6 +2320,20 @@ router.put(
         dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
         dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson;
 
+      // Édition des seules étapes (jalons) : pas de changement de statut métier → pas de SMS client
+      const onlyEtapesEdited =
+        dossierSnapshotBeforeUpdate.etapesJson !== dossierSnapshotAfterUpdate.etapesJson &&
+        dossierSnapshotBeforeUpdate.titre === dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.assignedTo === dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs;
+
       await dossier.save();
 
       // Recharger le dossier avec les données peuplées pour les notifications
@@ -2328,7 +2347,8 @@ router.put(
         newStatut: statut,
         oldAssignedTo,
         newAssignedTo: assignedTo,
-        skipSms: onlyTitreRenamed
+        skipSms: onlyTitreRenamed || onlyEtapesEdited,
+        skipClientEtapesOnlyNotify: onlyEtapesEdited
       });
 
       // Pour les admins, créer aussi des notifications spécifiques au client (logique existante)
@@ -2400,8 +2420,8 @@ router.put(
           // ⚠️ Ne plus notifier le client sur les changements d'assignation de dossier
           // (ni assignation ni retrait d'assignation)
           
-          // Notification générale si d'autres modifications
-          if (!statut || statut === oldStatut) {
+          // Notification générale si d'autres modifications (pas si seules les étapes ont changé)
+          if (!onlyEtapesEdited && (!statut || statut === oldStatut)) {
             if (assignedTo === undefined || assignedTo === oldAssignedTo) {
               await createNotification(
                 userId,

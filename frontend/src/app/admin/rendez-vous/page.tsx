@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { appointmentsAPI, dossiersAPI } from '@/lib/api';
+import { appointmentsAPI, dossiersAPI, userAPI, creneauxAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
 
@@ -121,6 +121,26 @@ const getTypeLabel = (categorie: string, type: string) => {
   return typeObj?.label || type;
 };
 
+const RDV_MOTIFS_OPTIONS = [
+  { value: 'premiere_demande_titre', label: 'Je fais une première demande de titre de séjour' },
+  { value: 'renouvellement_titre', label: 'Je demande le renouvellement de mon titre de séjour' },
+  { value: 'changement_statut', label: 'Je demande un changement de statut' },
+  { value: 'regroupement_familial', label: 'Je demande un regroupement familial' },
+  { value: 'nationalite_francaise', label: 'Je demande la nationalité française' },
+  { value: 'demande_visa', label: 'Je demande un visa' },
+  { value: 'demande_carte_resident', label: 'Je demande une carte de résident' },
+  { value: 'pas_reponse_titre', label: 'Je n’ai pas eu de réponse à ma demande de titre de séjour' },
+  { value: 'pas_reponse_visa', label: 'Je n’ai pas eu de réponse à ma demande de visa' },
+  { value: 'conteste_refus_titre', label: 'Je conteste un refus de titre de séjour' },
+  { value: 'conteste_oqtf', label: 'J’ai reçu une OQTF (obligation de quitter le territoire)' },
+  { value: 'autre', label: 'Autre' },
+];
+
+const DEFAULT_RDV_HEURES = [
+  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00',
+];
+
 export default function AdminRendezVousPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -132,8 +152,26 @@ export default function AdminRendezVousPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [editingRdv, setEditingRdv] = useState<any | null>(null);
+  const [showAdminBookingModal, setShowAdminBookingModal] = useState(false);
+  const [clientUsers, setClientUsers] = useState<any[]>([]);
+  const [loadingClientUsers, setLoadingClientUsers] = useState(false);
+  const [adminBookingSlots, setAdminBookingSlots] = useState<string[]>(DEFAULT_RDV_HEURES);
+  const [loadingAdminSlots, setLoadingAdminSlots] = useState(false);
+  const [adminBookingSubmitting, setAdminBookingSubmitting] = useState(false);
+  const [adminBookingError, setAdminBookingError] = useState<string | null>(null);
   // Fonction pour obtenir la date du jour au format YYYY-MM-DD
   const getTodayDate = () => new Date().toISOString().split('T')[0];
+  const [adminBookingForm, setAdminBookingForm] = useState({
+    forUserId: '',
+    nom: '',
+    prenom: '',
+    email: '',
+    telephone: '',
+    date: '',
+    heure: '',
+    motif: 'premiere_demande_titre',
+    description: '',
+  });
 
   const [editFormData, setEditFormData] = useState({
     statut: '',
@@ -247,6 +285,119 @@ export default function AdminRendezVousPage() {
     }
   };
 
+  const openAdminBookingModal = async () => {
+    setAdminBookingError(null);
+    setAdminBookingForm({
+      forUserId: '',
+      nom: '',
+      prenom: '',
+      email: '',
+      telephone: '',
+      date: getTodayDate(),
+      heure: '',
+      motif: 'premiere_demande_titre',
+      description: '',
+    });
+    setShowAdminBookingModal(true);
+    setLoadingClientUsers(true);
+    try {
+      const res = await userAPI.getAllUsers();
+      if (res.data.success && Array.isArray(res.data.users)) {
+        setClientUsers(
+          res.data.users.filter((u: any) => u.role === 'client' && u.isActive !== false)
+        );
+      } else {
+        setClientUsers([]);
+      }
+    } catch (e) {
+      console.error(e);
+      setClientUsers([]);
+      setAdminBookingError('Impossible de charger la liste des clients.');
+    } finally {
+      setLoadingClientUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!showAdminBookingModal || !adminBookingForm.date) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingAdminSlots(true);
+      const dateStr = adminBookingForm.date;
+      try {
+        const response = await creneauxAPI.getAvailableSlots(dateStr);
+        if (cancelled) return;
+        if (response.data.success) {
+          let heures: string[] = response.data.heuresDisponibles || [];
+          const maintenant = new Date();
+          const dateAujourdhui = maintenant.toISOString().split('T')[0];
+          if (dateStr === dateAujourdhui) {
+            const hh = maintenant.getHours();
+            const mm = maintenant.getMinutes();
+            const cur = `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
+            heures = heures.filter((h: string) => h > cur);
+          }
+          setAdminBookingSlots(heures.length > 0 ? heures : []);
+        } else {
+          setAdminBookingSlots(DEFAULT_RDV_HEURES);
+        }
+      } catch {
+        if (cancelled) return;
+        let heures = [...DEFAULT_RDV_HEURES];
+        const maintenant = new Date();
+        const dateAujourdhui = maintenant.toISOString().split('T')[0];
+        if (dateStr === dateAujourdhui) {
+          const hh = maintenant.getHours();
+          const mm = maintenant.getMinutes();
+          const cur = `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
+          heures = heures.filter((h) => h > cur);
+        }
+        setAdminBookingSlots(heures);
+      } finally {
+        if (!cancelled) setLoadingAdminSlots(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showAdminBookingModal, adminBookingForm.date]);
+
+  const handleAdminBookingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminBookingError(null);
+    if (!adminBookingForm.nom.trim() || !adminBookingForm.email.trim() || !adminBookingForm.date || !adminBookingForm.heure) {
+      setAdminBookingError('Le nom, l’email, la date et l’heure sont obligatoires.');
+      return;
+    }
+    setAdminBookingSubmitting(true);
+    try {
+      const res = await appointmentsAPI.createAppointment({
+        nom: adminBookingForm.nom.trim(),
+        prenom: adminBookingForm.prenom.trim(),
+        email: adminBookingForm.email.trim(),
+        telephone: (adminBookingForm.telephone || '').trim() || '—',
+        date: adminBookingForm.date,
+        heure: adminBookingForm.heure,
+        motif: adminBookingForm.motif,
+        description: adminBookingForm.description.trim() || undefined,
+        ...(adminBookingForm.forUserId ? { forUserId: adminBookingForm.forUserId } : {}),
+      });
+      if (res.data.success) {
+        setShowAdminBookingModal(false);
+        setSuccess(res.data.message || 'Rendez-vous enregistré.');
+        await loadAppointments();
+      } else {
+        setAdminBookingError(res.data.message || 'Erreur lors de la création.');
+      }
+    } catch (err: any) {
+      setAdminBookingError(
+        err.response?.data?.message || err.message || 'Erreur lors de la création du rendez-vous.'
+      );
+    } finally {
+      setAdminBookingSubmitting(false);
+    }
+  };
+
   const handleCreateDossierFromAppointment = async (createDossier: boolean) => {
     if (!appointmentForDossier) return;
 
@@ -351,14 +502,16 @@ export default function AdminRendezVousPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
       <main className="w-full px-4 py-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
               Gestion des Rendez-vous
             </h1>
             <p className="text-muted-foreground text-lg">Gérez tous les rendez-vous de votre cabinet</p>
           </div>
-          <Button>Nouveau rendez-vous</Button>
+          <Button type="button" className="w-full sm:w-auto shrink-0" onClick={openAdminBookingModal}>
+            Nouveau rendez-vous
+          </Button>
         </div>
 
         {/* Filtres */}
@@ -868,6 +1021,226 @@ export default function AdminRendezVousPage() {
           )}
         </div>
       </main>
+
+      {/* Modal : créer un rendez-vous pour un client (admin) */}
+      {showAdminBookingModal && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => !adminBookingSubmitting && setShowAdminBookingModal(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 relative"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-2 mb-4">
+              <div>
+                <h3 className="text-lg font-bold">Nouveau rendez-vous</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Le rendez-vous est enregistré comme une demande (statut en attente). Choisissez un client
+                  inscrit pour lier le RDV à son espace, ou saisissez les coordonnées manuellement.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-gray-400 hover:text-gray-700 text-xl leading-none p-1"
+                disabled={adminBookingSubmitting}
+                onClick={() => setShowAdminBookingModal(false)}
+                aria-label="Fermer"
+              >
+                ×
+              </button>
+            </div>
+
+            {adminBookingError && (
+              <div className="mb-3 p-2 rounded-md bg-red-50 border border-red-200 text-sm text-red-700">
+                {adminBookingError}
+              </div>
+            )}
+
+            <form onSubmit={handleAdminBookingSubmit} className="space-y-3">
+              <div>
+                <Label htmlFor="admin-rdv-client">Client inscrit (optionnel)</Label>
+                <select
+                  id="admin-rdv-client"
+                  className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  disabled={loadingClientUsers || adminBookingSubmitting}
+                  value={adminBookingForm.forUserId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id) {
+                      setAdminBookingForm((f) => ({
+                        ...f,
+                        forUserId: '',
+                        nom: '',
+                        prenom: '',
+                        email: '',
+                        telephone: '',
+                      }));
+                      return;
+                    }
+                    const u = clientUsers.find((x) => String(x._id || x.id) === id);
+                    if (!u) return;
+                    setAdminBookingForm((f) => ({
+                      ...f,
+                      forUserId: id,
+                      nom: u.lastName || '',
+                      prenom: u.firstName || '',
+                      email: u.email || '',
+                      telephone: u.phone || u.telephone || '',
+                    }));
+                  }}
+                >
+                  <option value="">— Saisie manuelle (sans compte) —</option>
+                  {clientUsers.map((u) => (
+                    <option key={String(u._id || u.id)} value={String(u._id || u.id)}>
+                      {`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email} · {u.email}
+                    </option>
+                  ))}
+                </select>
+                {loadingClientUsers && (
+                  <p className="text-[11px] text-muted-foreground mt-1">Chargement des clients…</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="admin-rdv-nom">Nom *</Label>
+                  <Input
+                    id="admin-rdv-nom"
+                    value={adminBookingForm.nom}
+                    onChange={(e) => setAdminBookingForm({ ...adminBookingForm, nom: e.target.value })}
+                    disabled={adminBookingSubmitting}
+                    required
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="admin-rdv-prenom">Prénom</Label>
+                  <Input
+                    id="admin-rdv-prenom"
+                    value={adminBookingForm.prenom}
+                    onChange={(e) => setAdminBookingForm({ ...adminBookingForm, prenom: e.target.value })}
+                    disabled={adminBookingSubmitting}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="admin-rdv-email">Email *</Label>
+                <Input
+                  id="admin-rdv-email"
+                  type="email"
+                  value={adminBookingForm.email}
+                  onChange={(e) => setAdminBookingForm({ ...adminBookingForm, email: e.target.value })}
+                  disabled={adminBookingSubmitting}
+                  required
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="admin-rdv-tel">Téléphone</Label>
+                <Input
+                  id="admin-rdv-tel"
+                  type="tel"
+                  value={adminBookingForm.telephone}
+                  onChange={(e) => setAdminBookingForm({ ...adminBookingForm, telephone: e.target.value })}
+                  disabled={adminBookingSubmitting}
+                  className="mt-1"
+                  placeholder="Facultatif (— si vide)"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="admin-rdv-date">Date *</Label>
+                  <Input
+                    id="admin-rdv-date"
+                    type="date"
+                    value={adminBookingForm.date}
+                    min={getTodayDate()}
+                    onChange={(e) =>
+                      setAdminBookingForm({ ...adminBookingForm, date: e.target.value, heure: '' })
+                    }
+                    disabled={adminBookingSubmitting}
+                    required
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="admin-rdv-heure">Heure *</Label>
+                  <select
+                    id="admin-rdv-heure"
+                    className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={adminBookingForm.heure}
+                    onChange={(e) => setAdminBookingForm({ ...adminBookingForm, heure: e.target.value })}
+                    required
+                    disabled={adminBookingSubmitting || loadingAdminSlots || !adminBookingForm.date}
+                  >
+                    <option value="">
+                      {loadingAdminSlots ? 'Chargement…' : adminBookingSlots.length === 0 ? 'Aucun créneau' : 'Choisir'}
+                    </option>
+                    {adminBookingSlots.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="admin-rdv-motif">Motif *</Label>
+                <select
+                  id="admin-rdv-motif"
+                  className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={adminBookingForm.motif}
+                  onChange={(e) => setAdminBookingForm({ ...adminBookingForm, motif: e.target.value })}
+                  required
+                  disabled={adminBookingSubmitting}
+                >
+                  {RDV_MOTIFS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label htmlFor="admin-rdv-desc">Précisions (optionnel)</Label>
+                <Textarea
+                  id="admin-rdv-desc"
+                  rows={3}
+                  value={adminBookingForm.description}
+                  onChange={(e) =>
+                    setAdminBookingForm({ ...adminBookingForm, description: e.target.value.slice(0, 500) })
+                  }
+                  disabled={adminBookingSubmitting}
+                  className="mt-1 text-sm"
+                  maxLength={500}
+                />
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-2 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={adminBookingSubmitting}
+                  onClick={() => setShowAdminBookingModal(false)}
+                >
+                  Annuler
+                </Button>
+                <Button type="submit" className="w-full sm:w-auto" disabled={adminBookingSubmitting}>
+                  {adminBookingSubmitting ? 'Enregistrement…' : 'Enregistrer le rendez-vous'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal de modification */}
       {editingRdv && (

@@ -360,3 +360,30 @@ export const getTimelineStepsWithCustom = (
   return [...standardSteps, ...customSteps];
 };
 
+/**
+ * Timestamps (ms) des dates renseignées sur `etapesSupplementaires` (jalons édités par l’admin).
+ */
+export function getDossierEtapeDatesMs(
+  dossier: { etapesSupplementaires?: Array<{ date?: string | Date | null }> } | null | undefined
+): number[] {
+  const steps = Array.isArray(dossier?.etapesSupplementaires) ? dossier.etapesSupplementaires : [];
+  const out: number[] = [];
+  for (const e of steps) {
+    if (e?.date == null || e.date === '') continue;
+    const t = new Date(e.date as Date).getTime();
+    if (!Number.isNaN(t)) out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Date de jalon la plus « proche dans le temps » (min) parmi les étapes datées — retards et échéances proches en tête si tri asc.
+ */
+export function getDossierMinEtapeDateMs(
+  dossier: { etapesSupplementaires?: Array<{ date?: string | Date | null }> } | null | undefined
+): number | null {
+  const arr = getDossierEtapeDatesMs(dossier);
+  if (arr.length === 0) return null;
+  return Math.min(...arr);
+}
+

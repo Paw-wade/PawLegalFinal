@@ -1,12 +1,17 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, userAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI, collaborativeDraftsAPI } from '@/lib/api';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getDossierMinEtapeDateMs } from '@/lib/dossierUtils';
+import {
+  collectAdminDossierAgendaItems,
+  downloadAdminDossierAgendaPdf,
+  DEFAULT_AGENDA_HORIZON_DAYS,
+} from '@/lib/adminDossierAgenda';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -292,6 +297,8 @@ export default function AdminDossiersPage() {
     'all' | 'pending' | 'in_progress' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
   >('all');
   const [userFilter, setUserFilter] = useState<string>('all');
+  /** Tri liste : jalons datés dans `etapesSupplementaires` (front uniquement). */
+  const [dossierSortEtapes, setDossierSortEtapes] = useState<'default' | 'etape_date_asc' | 'etape_date_desc'>('default');
 
   // Toujours proposer un minimum de 3 actions avant toute "édition des étapes".
   const DEFAULT_ADMIN_ETAPES = [
@@ -358,6 +365,12 @@ export default function AdminDossiersPage() {
   const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(new Set());
   const [expandedDossierDocumentDropdowns, setExpandedDossierDocumentDropdowns] = useState<Set<string>>(new Set());
   const [dossierTasks, setDossierTasks] = useState<Record<string, any[]>>({});
+  const [agendaPdfLoading, setAgendaPdfLoading] = useState(false);
+
+  const agendaItems = useMemo(
+    () => collectAdminDossierAgendaItems(dossiers, dossierTasks, DEFAULT_AGENDA_HORIZON_DAYS),
+    [dossiers, dossierTasks]
+  );
   const [dossierDrafts, setDossierDrafts] = useState<Record<string, any[]>>({});
   const [activeDirectUploadDossierId, setActiveDirectUploadDossierId] = useState<string | null>(null);
   const [directUploadData, setDirectUploadData] = useState({
@@ -787,6 +800,18 @@ export default function AdminDossiersPage() {
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des tâches des dossiers:', err);
+    }
+  };
+
+  const handleDownloadAgendaPdf = async () => {
+    setAgendaPdfLoading(true);
+    try {
+      await downloadAdminDossierAgendaPdf(agendaItems, DEFAULT_AGENDA_HORIZON_DAYS);
+    } catch (e) {
+      console.error(e);
+      alert('Impossible de générer le PDF. Réessayez ou vérifiez la console.');
+    } finally {
+      setAgendaPdfLoading(false);
     }
   };
 
@@ -1675,37 +1700,51 @@ export default function AdminDossiersPage() {
         <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
           {/* Barre de recherche et filtres */}
           <div className="mb-5 space-y-3">
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-              <div className="flex-1 w-full sm:max-w-md">
-                <input
-                  type="text"
-                  placeholder="🔍 Rechercher un dossier..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setTimeout(() => loadDossiers(), 500);
-                  }}
-                  className="flex h-10 w-full rounded-lg border border-gray-300 bg-background px-4 py-2 text-sm shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
-                />
+              <div className="flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-center justify-between">
+                <div className="flex-1 w-full sm:max-w-md min-w-0">
+                  <input
+                    type="text"
+                    placeholder="🔍 Rechercher un dossier..."
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setTimeout(() => loadDossiers(), 500);
+                    }}
+                    className="flex h-10 w-full rounded-lg border border-gray-300 bg-background px-4 py-2 text-sm shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:min-w-0 sm:flex-shrink-0">
+                  <select
+                    value={userFilter}
+                    onChange={(e) => setUserFilter(e.target.value)}
+                    className="flex h-10 w-full sm:w-64 min-w-0 rounded-lg border border-gray-300 bg-background px-3 sm:px-4 py-2 text-sm shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                  >
+                    <option value="all">👤 Tous les utilisateurs</option>
+                    <option value="no_user">👤 Sans utilisateur</option>
+                    {utilisateurs.map((user: any) => (
+                      <option key={user._id || user.id} value={(user._id || user.id)?.toString()}>
+                        {`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={dossierSortEtapes}
+                    onChange={(e) =>
+                      setDossierSortEtapes(e.target.value as 'default' | 'etape_date_asc' | 'etape_date_desc')
+                    }
+                    title="Tri selon la date la plus proche parmi les étapes du dossier qui ont une date"
+                    className="flex h-10 w-full sm:w-[13.5rem] min-w-0 rounded-lg border border-gray-300 bg-background px-3 sm:px-4 py-2 text-sm shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                  >
+                    <option value="default">📅 Tri : ordre chargé</option>
+                    <option value="etape_date_asc">📅 Jalons : date la plus proche</option>
+                    <option value="etape_date_desc">📅 Jalons : date la plus lointaine</option>
+                  </select>
+                </div>
+                <Button onClick={loadDossiers} variant="outline" size="sm" className="whitespace-nowrap w-full sm:w-auto shrink-0">
+                  🔄 Actualiser
+                </Button>
               </div>
-              <div className="w-full sm:w-64">
-                <select
-                  value={userFilter}
-                  onChange={(e) => setUserFilter(e.target.value)}
-                  className="flex h-10 w-full rounded-lg border border-gray-300 bg-background px-4 py-2 text-sm shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
-                >
-                  <option value="all">👤 Tous les utilisateurs</option>
-                  <option value="no_user">👤 Sans utilisateur</option>
-                  {utilisateurs.map((user: any) => (
-                    <option key={user._id || user.id} value={(user._id || user.id)?.toString()}>
-                      {`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Button onClick={loadDossiers} variant="outline" size="sm" className="whitespace-nowrap">
-                🔄 Actualiser
-              </Button>
             </div>
           </div>
 
@@ -1728,6 +1767,92 @@ export default function AdminDossiersPage() {
             </div>
           ) : (
             <>
+              {/* Agenda : échéances, jalons datés, tâches — 15 jours + retards */}
+              <div className="mb-4 rounded-xl border border-primary/25 bg-gradient-to-br from-primary/5 to-background p-3 sm:p-4 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-semibold text-foreground">
+                      Actions à prévoir (15 jours + retards)
+                    </h2>
+                    <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 break-words leading-snug">
+                      Synthèse des dates connues : échéance du dossier, jalons avec date dans les étapes, et
+                      tâches ouvertes avec échéance. Les dossiers clôturés, archivés, refusés ou annulés sont
+                      exclus.
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {agendaItems.length === 0
+                        ? 'Aucune action dans la fenêtre.'
+                        : `${agendaItems.length} action${agendaItems.length > 1 ? 's' : ''} (${agendaItems.filter((i) => i.bucket === 'overdue').length} retard${agendaItems.filter((i) => i.bucket === 'overdue').length > 1 ? 's' : ''}, ${agendaItems.filter((i) => i.bucket === 'upcoming').length} à venir)`}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 w-full sm:w-auto text-xs h-9"
+                    disabled={agendaPdfLoading}
+                    onClick={handleDownloadAgendaPdf}
+                  >
+                    {agendaPdfLoading ? 'PDF…' : '📄 Télécharger PDF'}
+                  </Button>
+                </div>
+                {agendaItems.length > 0 && (
+                  <div className="mt-3 max-h-52 sm:max-h-64 overflow-y-auto rounded-lg border border-border/70 bg-background/90 text-left">
+                    {(['overdue', 'upcoming'] as const).map((bucket) => {
+                      const rows = agendaItems.filter((i) => i.bucket === bucket);
+                      if (rows.length === 0) return null;
+                      return (
+                        <div key={bucket}>
+                          <div
+                            className={`sticky top-0 z-[1] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide border-b ${
+                              bucket === 'overdue'
+                                ? 'bg-red-50 text-red-800 border-red-100'
+                                : 'bg-blue-50 text-blue-800 border-blue-100'
+                            }`}
+                          >
+                            {bucket === 'overdue' ? 'Retards' : `Dans les ${DEFAULT_AGENDA_HORIZON_DAYS} prochains jours`}
+                          </div>
+                          <ul className="divide-y divide-border/40">
+                            {rows.map((it, idx) => (
+                              <li key={`${bucket}-${it.dossierId}-${it.kind}-${it.eventDayMs}-${idx}`}>
+                                <Link
+                                  href={`/admin/dossiers/${it.dossierId}`}
+                                  className="flex flex-col gap-0.5 px-3 py-2 hover:bg-muted/50 transition-colors min-w-0"
+                                >
+                                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] min-w-0">
+                                    <span className="font-semibold text-foreground tabular-nums shrink-0">
+                                      {new Date(it.eventDayMs).toLocaleDateString('fr-FR')}
+                                    </span>
+                                    <span
+                                      className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                                        it.kind === 'dossier_echeance'
+                                          ? 'bg-amber-100 text-amber-900'
+                                          : it.kind === 'etape'
+                                            ? 'bg-violet-100 text-violet-900'
+                                            : 'bg-slate-100 text-slate-800'
+                                      }`}
+                                    >
+                                      {it.kindLabel}
+                                    </span>
+                                    <span className="text-muted-foreground shrink-0">{it.dossierRef}</span>
+                                  </div>
+                                  <p className="text-[11px] text-foreground font-medium truncate" title={it.dossierTitle}>
+                                    {it.dossierTitle}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground line-clamp-2 break-words">
+                                    {it.actionLabel}
+                                  </p>
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Statistiques rapides (badges cliquables) */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                 {/* En attente : dossiers créés par un utilisateur dont le statut n'a pas encore été édité par l'admin */}
@@ -1822,47 +1947,64 @@ export default function AdminDossiersPage() {
               </div>
 
               {/* Indicateur de filtre actif et réinitialisation */}
-              <div className="flex items-center justify-between mb-4 text-xs text-muted-foreground">
-                <div>
-                  {statusFilter === 'all' && userFilter === 'all' ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4 text-xs text-muted-foreground">
+                <div className="min-w-0">
+                  {statusFilter === 'all' && userFilter === 'all' && dossierSortEtapes === 'default' ? (
                     <span>Tous les dossiers sont affichés.</span>
                   ) : (
-                    <span>
-                      Filtre appliqué :{' '}
-                      <span className="font-semibold text-primary">
-                        {statusFilter !== 'all' && (
-                          <>
-                            {statusFilter === 'pending' && 'En attente'}
-                            {statusFilter === 'in_progress' && 'En cours'}
-                            {statusFilter === 'closed' && 'Clôturés'}
-                            {statusFilter === 'archived' && 'Archivés'}
-                          </>
-                        )}
-                        {statusFilter !== 'all' && userFilter !== 'all' && ' • '}
-                        {userFilter !== 'all' && (
-                          <>
-                            {userFilter === 'no_user' ? 'Sans utilisateur' : (
-                              (() => {
-                                const selectedUser = utilisateurs.find((u: any) => (u._id || u.id)?.toString() === userFilter);
-                                return selectedUser ? `${selectedUser.firstName || ''} ${selectedUser.lastName || ''}`.trim() || selectedUser.email : 'Utilisateur';
-                              })()
+                    <span className="break-words">
+                      {statusFilter !== 'all' || userFilter !== 'all' ? (
+                        <>
+                          Filtre :{' '}
+                          <span className="font-semibold text-primary">
+                            {statusFilter !== 'all' && (
+                              <>
+                                {statusFilter === 'pending' && 'En attente'}
+                                {statusFilter === 'in_progress' && 'En cours'}
+                                {statusFilter === 'closed' && 'Clôturés'}
+                                {statusFilter === 'archived' && 'Archivés'}
+                              </>
                             )}
-                          </>
-                        )}
-                      </span>
+                            {statusFilter !== 'all' && userFilter !== 'all' && ' • '}
+                            {userFilter !== 'all' && (
+                              <>
+                                {userFilter === 'no_user' ? 'Sans utilisateur' : (
+                                  (() => {
+                                    const selectedUser = utilisateurs.find((u: any) => (u._id || u.id)?.toString() === userFilter);
+                                    return selectedUser ? `${selectedUser.firstName || ''} ${selectedUser.lastName || ''}`.trim() || selectedUser.email : 'Utilisateur';
+                                  })()
+                                )}
+                              </>
+                            )}
+                          </span>
+                        </>
+                      ) : null}
+                      {dossierSortEtapes !== 'default' && (
+                        <span className={statusFilter !== 'all' || userFilter !== 'all' ? ' block sm:inline sm:mt-0 mt-1' : ''}>
+                          {(statusFilter !== 'all' || userFilter !== 'all') && <span className="hidden sm:inline"> • </span>}
+                          {(statusFilter !== 'all' || userFilter !== 'all') && <span className="block sm:hidden" />}
+                          Tri jalons :{' '}
+                          <span className="font-semibold text-primary">
+                            {dossierSortEtapes === 'etape_date_asc' && 'date la plus proche d’abord'}
+                            {dossierSortEtapes === 'etape_date_desc' && 'date la plus lointaine d’abord'}
+                          </span>
+                          <span className="text-muted-foreground font-normal"> (sans étape datée en bas)</span>
+                        </span>
+                      )}
                     </span>
                   )}
                 </div>
-                {(statusFilter !== 'all' || userFilter !== 'all') && (
+                {(statusFilter !== 'all' || userFilter !== 'all' || dossierSortEtapes !== 'default') && (
                   <button
                     type="button"
                     onClick={() => {
                       setStatusFilter('all');
                       setUserFilter('all');
+                      setDossierSortEtapes('default');
                     }}
-                    className="px-2 py-1 rounded-md border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
+                    className="px-2 py-1 rounded-md border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors shrink-0 self-start sm:self-auto"
                   >
-                    Réinitialiser les filtres
+                    Réinitialiser filtres & tri
                   </button>
                 )}
               </div>
@@ -1935,7 +2077,35 @@ export default function AdminDossiersPage() {
                   return true;
                 });
 
-                if (filteredDossiers.length === 0) {
+                const dossierIdStr = (d: any) => String(d._id || d.id || '');
+                const sortedDossiers =
+                  dossierSortEtapes === 'default'
+                    ? filteredDossiers
+                    : (() => {
+                        const list = filteredDossiers.slice();
+                        if (dossierSortEtapes === 'etape_date_asc') {
+                          list.sort((a, b) => {
+                            const ma = getDossierMinEtapeDateMs(a);
+                            const mb = getDossierMinEtapeDateMs(b);
+                            const va = ma == null ? Number.POSITIVE_INFINITY : ma;
+                            const vb = mb == null ? Number.POSITIVE_INFINITY : mb;
+                            if (va !== vb) return va - vb;
+                            return dossierIdStr(a).localeCompare(dossierIdStr(b));
+                          });
+                        } else if (dossierSortEtapes === 'etape_date_desc') {
+                          list.sort((a, b) => {
+                            const ma = getDossierMinEtapeDateMs(a);
+                            const mb = getDossierMinEtapeDateMs(b);
+                            const va = ma == null ? Number.NEGATIVE_INFINITY : ma;
+                            const vb = mb == null ? Number.NEGATIVE_INFINITY : mb;
+                            if (vb !== va) return vb - va;
+                            return dossierIdStr(a).localeCompare(dossierIdStr(b));
+                          });
+                        }
+                        return list;
+                      })();
+
+                if (sortedDossiers.length === 0) {
                   return (
                     <div className="py-12 text-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
                       <p className="text-sm text-muted-foreground mb-3">
@@ -1946,6 +2116,7 @@ export default function AdminDossiersPage() {
                         onClick={() => {
                           setStatusFilter('all');
                           setUserFilter('all');
+                          setDossierSortEtapes('default');
                         }}
                         className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90"
                       >
@@ -1957,7 +2128,7 @@ export default function AdminDossiersPage() {
 
                 return (
                   <div className="space-y-4">
-                    {filteredDossiers.map((dossier) => (
+                    {sortedDossiers.map((dossier) => (
                   <div
                     key={dossier._id || dossier.id}
                     className={`relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 bg-gradient-to-r shadow-sm w-full min-w-0 ${

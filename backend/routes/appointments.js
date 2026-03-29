@@ -5,6 +5,27 @@ const RendezVous = require('../models/RendezVous');
 const { protect, authorize } = require('../middleware/auth');
 const { sendNotificationSMS } = require('../sendSMS');
 
+/** Libellés des motifs (formulaire public) — pour les notifications admin. */
+const MOTIF_RDV_LABELS = {
+  premiere_demande_titre: 'Je fais une première demande de titre de séjour',
+  renouvellement_titre: 'Je demande le renouvellement de mon titre de séjour',
+  changement_statut: 'Je demande un changement de statut',
+  regroupement_familial: 'Je demande un regroupement familial',
+  nationalite_francaise: 'Je demande la nationalité française',
+  demande_visa: 'Je demande un visa',
+  demande_carte_resident: 'Je demande une carte de résident',
+  pas_reponse_titre: 'Je n’ai pas eu de réponse à ma demande de titre de séjour',
+  pas_reponse_visa: 'Je n’ai pas eu de réponse à ma demande de visa',
+  conteste_refus_titre: 'Je conteste un refus de titre de séjour',
+  conteste_oqtf: 'J’ai reçu une OQTF (obligation de quitter le territoire)',
+  autre: 'Autre'
+};
+
+function getMotifRdvLabel(motifKey) {
+  const k = String(motifKey || '').trim();
+  return MOTIF_RDV_LABELS[k] || k || 'Non renseigné';
+}
+
 // @route   POST /api/appointments
 // @desc    Créer un rendez-vous (public ou authentifié)
 // @access  Public ou Private
@@ -20,7 +41,11 @@ router.post(
     body('date').notEmpty().withMessage('La date est requise'),
     body('heure').trim().notEmpty().withMessage('L\'heure est requise'),
     body('motif').trim().notEmpty().withMessage('Le motif est requis'),
-    body('description').optional().trim().isLength({ max: 500 }).withMessage('La description ne peut pas dépasser 500 caractères')
+    body('description').optional().trim().isLength({ max: 500 }).withMessage('La description ne peut pas dépasser 500 caractères'),
+    body('forUserId')
+      .optional({ values: 'falsy' })
+      .isMongoId()
+      .withMessage('Identifiant utilisateur client invalide')
   ],
   async (req, res) => {
     try {
@@ -40,18 +65,40 @@ router.post(
         });
       }
 
-      const { nom, prenom, email, telephone, date, heure, motif, description } = req.body;
+      const { nom, prenom, email, telephone, date, heure, motif, description, forUserId } = req.body;
 
-      // Vérifier si un utilisateur est connecté (optionnel)
+      const User = require('../models/User');
+
+      // Lier le RDV au bon compte : client connecté, ou client ciblé par un admin (forUserId), jamais le compte admin seul.
       let userId = null;
       if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         try {
           const jwt = require('jsonwebtoken');
           const token = req.headers.authorization.split(' ')[1];
           const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-here');
-          const User = require('../models/User');
-          const user = await User.findById(decoded.id);
-          if (user) userId = user._id;
+          const authUser = await User.findById(decoded.id);
+          if (authUser) {
+            const isAdmin = authUser.role === 'admin' || authUser.role === 'superadmin';
+            if (isAdmin && forUserId) {
+              const target = await User.findById(String(forUserId).trim());
+              if (!target) {
+                return res.status(400).json({
+                  success: false,
+                  message: 'Utilisateur client introuvable pour ce rendez-vous.'
+                });
+              }
+              const tr = target.role || 'client';
+              if (tr === 'admin' || tr === 'superadmin') {
+                return res.status(400).json({
+                  success: false,
+                  message: 'Vous ne pouvez pas réserver pour un compte administrateur.'
+                });
+              }
+              userId = target._id;
+            } else if (!isAdmin) {
+              userId = authUser._id;
+            }
+          }
         } catch (error) {
           // Si le token est invalide, on continue sans utilisateur (rendez-vous public)
         }
@@ -121,12 +168,19 @@ router.post(
           day: 'numeric'
         });
 
+        const motifLabel = getMotifRdvLabel(rendezVous.motif);
+        const descTrim = String(rendezVous.description || '').trim();
+        let message = `${prenom || ''} ${nom} (${email}) a demandé un rendez-vous le ${dateLabel} à ${heure}. Motif : ${motifLabel}.`;
+        if (descTrim) {
+          message += ` Précisions : ${descTrim}`;
+        }
+
         for (const admin of admins) {
           await Notification.create({
             user: admin._id,
             type: 'appointment_created',
             titre: 'Nouveau rendez-vous demandé',
-            message: `${prenom} ${nom} (${email}) a demandé un rendez-vous le ${dateLabel} à ${heure}.`,
+            message,
             lien: '/admin?section=appointments',
             metadata: {
               appointmentId: rendezVous._id.toString(),
@@ -134,7 +188,10 @@ router.post(
               email,
               telephone,
               date: rendezVous.date,
-              heure: rendezVous.heure
+              heure: rendezVous.heure,
+              motif: rendezVous.motif,
+              motifLabel,
+              description: descTrim || undefined
             }
           });
         }
