@@ -13,9 +13,9 @@ export type TarifFormuleConfig = {
 export const tarificationFormules: TarifFormuleConfig[] = [
   {
     id: 'premium',
-    title: 'Formule Premium',
+    title: 'Formule Tawfekh',
     subtitle: 'Délégation complète de la demande de titre de séjour',
-    prix: '100 €',
+    prix: '150 €',
     badge: 'La plus choisie',
     highlight: true,
     points: [
@@ -40,7 +40,7 @@ export const tarificationFormules: TarifFormuleConfig[] = [
     id: 'standard',
     title: 'Formule standard',
     subtitle: 'Intervention en cas de retard dans la délivrance',
-    prix: '50 € par action ou forfait 250 €',
+    prix: '70 € par action ou forfait 250 €',
     points: [
       'Accès gratuit au portail de calcul des délais.',
       'Saisine du Défenseur des droits.',
