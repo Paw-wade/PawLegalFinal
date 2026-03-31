@@ -71,6 +71,7 @@ router.post(
 
       // Lier le RDV au bon compte : client connecté, ou client ciblé par un admin (forUserId), jamais le compte admin seul.
       let userId = null;
+      let bookingByAdmin = false;
       if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         try {
           const jwt = require('jsonwebtoken');
@@ -80,6 +81,7 @@ router.post(
           if (authUser) {
             const isAdmin = authUser.role === 'admin' || authUser.role === 'superadmin';
             if (isAdmin && forUserId) {
+              bookingByAdmin = true;
               const target = await User.findById(String(forUserId).trim());
               if (!target) {
                 return res.status(400).json({
@@ -199,6 +201,44 @@ router.post(
         console.log(`✅ Notifications de rendez-vous envoyées à ${admins.length} administrateur(s)`);
       } catch (notifError) {
         console.error('⚠️ Erreur lors de la création des notifications de rendez-vous (non bloquant):', notifError);
+      }
+
+      // Si un admin a créé un rendez-vous pour un client, envoyer aussi un SMS au client
+      if (bookingByAdmin && userId) {
+        try {
+          const client = await User.findById(userId).select('firstName lastName phone');
+          const phone = client?.phone;
+          if (phone) {
+            const name =
+              `${client?.firstName || ''} ${client?.lastName || ''}`.trim() ||
+              `${prenom || ''} ${nom || ''}`.trim() ||
+              'Client';
+
+            const dateLabelSms = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric'
+            });
+
+            await sendNotificationSMS(
+              phone,
+              'appointment_created',
+              {
+                name,
+                date: dateLabelSms,
+                time: rendezVous.heure
+              },
+              {
+                userId: userId.toString(),
+                skipPreferences: true,
+                context: 'appointment',
+                contextId: rendezVous._id.toString()
+              }
+            );
+          }
+        } catch (smsErr) {
+          console.error('⚠️ Erreur lors de l\'envoi du SMS de création de RDV (non bloquant):', smsErr);
+        }
       }
 
       res.status(201).json({
@@ -554,7 +594,7 @@ router.patch(
       const oldStatut = rendezVous.statut;
       rendezVous.statut = 'annule';
       await rendezVous.save();
-      await rendezVous.populate('user', 'firstName lastName email');
+      await rendezVous.populate('user', 'firstName lastName email phone');
 
       // Créer une notification pour l'utilisateur
       if (rendezVous.user) {
@@ -949,35 +989,53 @@ router.patch(
               }
             });
 
-            // Envoyer un SMS si le téléphone est disponible et si c'est une confirmation ou annulation
-            if (rendezVous.telephone && (statut === 'confirme' || statut === 'annule')) {
-              try {
-                const dateFormatted = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                });
-                const smsData = {
-                  name: `${rendezVous.prenom} ${rendezVous.nom}`,
-                  date: dateFormatted,
-                  time: rendezVous.heure
-                };
-                await sendNotificationSMS(rendezVous.telephone, statut === 'confirme' ? 'appointment_confirmed' : 'appointment_cancelled', smsData, {
-                  userId: rendezVous.user?._id || rendezVous.user,
-                  context: 'appointment',
-                  contextId: rendezVous._id.toString()
-                });
-                console.log(`✅ SMS envoyé à ${rendezVous.telephone} pour le rendez-vous ${rendezVous._id}`);
-              } catch (smsError) {
-                console.error('⚠️ Erreur lors de l\'envoi du SMS (non bloquant):', smsError.message);
-                // Ne pas bloquer la réponse si l'envoi de SMS échoue
-              }
-            }
           }
         } catch (notifError) {
           console.error('Erreur lors de la création de la notification:', notifError);
           // Ne pas bloquer la mise à jour si la notification échoue
+        }
+      }
+
+      // SMS de confirmation/annulation : doit partir même si rendez-vous.user est manquant.
+      if (statut && statut !== oldStatut && (statut === 'confirme' || statut === 'annule')) {
+        try {
+          let smsPhone = rendezVous.telephone || rendezVous.user?.phone || null;
+          if (!smsPhone && rendezVous.user?._id) {
+            const UserModel = require('../models/User');
+            const u = await UserModel.findById(rendezVous.user._id).select('phone');
+            if (u?.phone) smsPhone = u.phone;
+          }
+
+          if (!smsPhone) {
+            console.warn(`⚠️ SMS non envoyé (aucun téléphone) pour le rendez-vous ${rendezVous._id}`);
+          } else {
+            const dateFormatted = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            });
+            const smsData = {
+              name: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim() || 'Client',
+              date: dateFormatted,
+              time: rendezVous.heure
+            };
+            await sendNotificationSMS(
+              smsPhone,
+              statut === 'confirme' ? 'appointment_confirmed' : 'appointment_cancelled',
+              smsData,
+              {
+                userId: rendezVous.user?._id || rendezVous.user || undefined,
+                skipPreferences: true,
+                context: 'appointment',
+                contextId: rendezVous._id.toString()
+              }
+            );
+            console.log(`✅ SMS envoyé à ${smsPhone} pour le rendez-vous ${rendezVous._id}`);
+          }
+        } catch (smsError) {
+          console.error('⚠️ Erreur lors de l\'envoi du SMS (non bloquant):', smsError.message);
+          // Ne pas bloquer la réponse si l'envoi de SMS échoue
         }
       }
 

@@ -237,6 +237,7 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
       // Fallback sur les messages par défaut si aucun template trouvé
       const defaultMessages = {
         appointment_confirmed: `Bonjour {{name}}, votre rendez-vous est confirmé le {{date}} à {{time}}. Ada Papers.`,
+        appointment_created: `Bonjour {{name}}, votre rendez-vous a été enregistré le {{date}} à {{time}}. Ada Papers.`,
         appointment_reminder: `Rappel: Vous avez un rendez-vous demain le {{date}} à {{time}}. Ada Papers.`,
         appointment_cancelled: `Votre rendez-vous du {{date}} à {{time}} a été annulé. Ada Papers.`,
         appointment_updated: `Votre rendez-vous du {{date}} à {{time}} a été modifié. Ada Papers.`,

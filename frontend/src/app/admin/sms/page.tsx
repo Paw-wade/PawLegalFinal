@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { smsTemplatesAPI, smsHistoryAPI } from '@/lib/api';
+import { smsTemplatesAPI, smsHistoryAPI, smsAPI, userAPI } from '@/lib/api';
 
 type SmsTemplate = {
   _id: string;
@@ -67,7 +67,7 @@ function Textarea({ className = '', ...props }: any) {
 export default function AdminSmsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'templates' | 'history'>('templates');
+  const [activeTab, setActiveTab] = useState<'templates' | 'history' | 'send'>('templates');
   
   // Templates state
   const [templates, setTemplates] = useState<SmsTemplate[]>([]);
@@ -107,6 +107,18 @@ export default function AdminSmsPage() {
     endDate: '',
   });
 
+  // Send SMS state
+  const [allTemplates, setAllTemplates] = useState<SmsTemplate[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [loadingSendData, setLoadingSendData] = useState(false);
+  const [sendMode, setSendMode] = useState<'template' | 'manual'>('template');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [manualMessage, setManualMessage] = useState('');
+  const [templateVariablesSend, setTemplateVariablesSend] = useState<Record<string, string>>({});
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [isSendingSms, setIsSendingSms] = useState(false);
+
   useEffect(() => {
     if (status === 'loading') return;
     if (status === 'unauthenticated') {
@@ -123,9 +135,11 @@ export default function AdminSmsPage() {
       loadTemplates();
       // Initialiser les templates par défaut s'ils n'existent pas
       initDefaultTemplates();
-    } else {
+    } else if (activeTab === 'history') {
       loadHistory();
       loadStats();
+    } else if (activeTab === 'send') {
+      loadSendData();
     }
   }, [status, session, activeTab, searchTemplate, categoryFilter, isActiveFilter, historyPage, historyFilters]);
 
@@ -192,6 +206,126 @@ export default function AdminSmsPage() {
       setHistoryStats(res.data);
     } catch (error: any) {
       console.error('Erreur lors du chargement des stats:', error);
+    }
+  };
+
+  const loadSendData = async () => {
+    try {
+      setLoadingSendData(true);
+      const [tplRes, usersRes] = await Promise.all([
+        smsTemplatesAPI.getTemplates({}),
+        userAPI.getAllUsers(),
+      ]);
+
+      const tplList = Array.isArray(tplRes.data?.templates) ? tplRes.data.templates : [];
+      const usersList = Array.isArray(usersRes.data?.users)
+        ? usersRes.data.users
+        : Array.isArray(usersRes.data?.data?.users)
+          ? usersRes.data.data.users
+          : Array.isArray(usersRes.data?.data)
+            ? usersRes.data.data
+            : [];
+
+      setAllTemplates(tplList);
+      setAllUsers(usersList);
+    } catch (error) {
+      console.error('Erreur lors du chargement des données d’envoi SMS:', error);
+    } finally {
+      setLoadingSendData(false);
+    }
+  };
+
+  const selectedTemplate = allTemplates.find((t) => t._id === selectedTemplateId) || null;
+
+  const applyVars = (message: string, vars: Record<string, string>) =>
+    String(message || '').replace(/\{\{(.*?)\}\}/g, (_, k) => vars[String(k).trim()] || '');
+
+  const previewMessage =
+    sendMode === 'manual'
+      ? manualMessage
+      : selectedTemplate
+        ? applyVars(selectedTemplate.message, templateVariablesSend)
+        : '';
+
+  const visibleUsers = allUsers.filter((u: any) => {
+    const q = userSearch.trim().toLowerCase();
+    if (!q) return true;
+    const name = `${u.firstName || ''} ${u.lastName || ''}`.trim().toLowerCase();
+    const email = String(u.email || '').toLowerCase();
+    const phone = String(u.phone || u.telephone || '').toLowerCase();
+    return name.includes(q) || email.includes(q) || phone.includes(q);
+  });
+
+  const toggleUser = (id: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSendSms = async () => {
+    if (selectedUserIds.length === 0) {
+      alert('Sélectionnez au moins un utilisateur.');
+      return;
+    }
+    if (sendMode === 'template' && !selectedTemplate) {
+      alert('Sélectionnez un template.');
+      return;
+    }
+    if (sendMode === 'manual' && !manualMessage.trim()) {
+      alert('Saisissez le message SMS.');
+      return;
+    }
+
+    const selectedUsers = allUsers.filter((u: any) => selectedUserIds.includes(String(u._id || u.id)));
+    const withPhones = selectedUsers.filter((u: any) => String(u.phone || u.telephone || '').trim());
+    const withoutPhones = selectedUsers.length - withPhones.length;
+
+    if (withPhones.length === 0) {
+      alert('Aucun utilisateur sélectionné ne possède de numéro de téléphone.');
+      return;
+    }
+
+    setIsSendingSms(true);
+    try {
+      if (sendMode === 'manual') {
+        const recipients = withPhones.map((u: any) => ({
+          phone: String(u.phone || u.telephone || '').trim(),
+          name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || 'Utilisateur',
+        }));
+        const res = await smsAPI.sendBulk({
+          recipients,
+          message: manualMessage.trim(),
+        });
+        alert(
+          `✅ Envoi terminé. Réussis: ${res.data?.data?.success ?? recipients.length}, échoués: ${res.data?.data?.failed ?? 0}${withoutPhones > 0 ? `, sans téléphone: ${withoutPhones}` : ''}.`
+        );
+      } else {
+        let ok = 0;
+        let ko = 0;
+        for (const u of withPhones) {
+          const to = String(u.phone || u.telephone || '').trim();
+          const data = {
+            ...templateVariablesSend,
+            name: templateVariablesSend.name || `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Client',
+          };
+          try {
+            await smsAPI.sendNotification({
+              to,
+              type: selectedTemplate!.code,
+              data,
+            });
+            ok += 1;
+          } catch (e) {
+            ko += 1;
+          }
+        }
+        alert(`✅ Envoi terminé. Réussis: ${ok}, échoués: ${ko}${withoutPhones > 0 ? `, sans téléphone: ${withoutPhones}` : ''}.`);
+      }
+    } catch (error: any) {
+      console.error('Erreur lors de l’envoi SMS:', error);
+      alert(error?.response?.data?.message || 'Erreur lors de l’envoi des SMS');
+    } finally {
+      setIsSendingSms(false);
     }
   };
 
@@ -423,6 +557,16 @@ export default function AdminSmsPage() {
               >
                 📊 Historique
               </button>
+              <button
+                onClick={() => setActiveTab('send')}
+                className={`px-6 py-4 font-semibold transition-colors ${
+                  activeTab === 'send'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                📤 Envoi
+              </button>
             </div>
           </div>
 
@@ -558,7 +702,7 @@ export default function AdminSmsPage() {
                   </div>
                 )}
               </div>
-            ) : (
+            ) : activeTab === 'history' ? (
               <div className="space-y-6">
                 {/* Stats */}
                 {historyStats && (
@@ -720,6 +864,172 @@ export default function AdminSmsPage() {
                           Suivant
                         </Button>
                       </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {loadingSendData ? (
+                  <div className="text-center py-8">Chargement...</div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      <div>
+                        <Label>Mode d’envoi</Label>
+                        <div className="flex gap-2">
+                          <Button
+                            variant={sendMode === 'template' ? 'default' : 'outline'}
+                            onClick={() => setSendMode('template')}
+                            className="text-xs"
+                          >
+                            Avec template
+                          </Button>
+                          <Button
+                            variant={sendMode === 'manual' ? 'default' : 'outline'}
+                            onClick={() => setSendMode('manual')}
+                            className="text-xs"
+                          >
+                            Sans template
+                          </Button>
+                        </div>
+                      </div>
+                      {sendMode === 'template' ? (
+                        <div className="lg:col-span-2">
+                          <Label>Template SMS</Label>
+                          <select
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            value={selectedTemplateId}
+                            onChange={(e) => {
+                              const id = e.target.value;
+                              setSelectedTemplateId(id);
+                              const t = allTemplates.find((x) => x._id === id);
+                              const vars: Record<string, string> = {};
+                              (t?.variables || []).forEach((v) => {
+                                vars[v.name] = v.example || '';
+                              });
+                              setTemplateVariablesSend(vars);
+                            }}
+                          >
+                            <option value="">Sélectionner un template</option>
+                            {allTemplates.map((t) => (
+                              <option key={t._id} value={t._id}>
+                                {t.name} ({t.code}) {t.isActive ? '' : ' - inactif'}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="lg:col-span-2">
+                          <Label>Message SMS (sans template)</Label>
+                          <Textarea
+                            rows={4}
+                            value={manualMessage}
+                            onChange={(e) => setManualMessage(e.target.value)}
+                            placeholder="Votre message SMS..."
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {sendMode === 'template' && selectedTemplate && selectedTemplate.variables && selectedTemplate.variables.length > 0 && (
+                      <div className="border border-border rounded-lg p-4 bg-gray-50">
+                        <p className="text-sm font-semibold mb-3">Variables du template</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {selectedTemplate.variables.map((v) => (
+                            <div key={v.name}>
+                              <Label className="text-xs">{v.name}</Label>
+                              <Input
+                                value={templateVariablesSend[v.name] || ''}
+                                onChange={(e) =>
+                                  setTemplateVariablesSend((prev) => ({ ...prev, [v.name]: e.target.value }))
+                                }
+                                placeholder={v.example || ''}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="border border-border rounded-lg p-4">
+                      <Label>Aperçu du SMS</Label>
+                      <div className="bg-gray-50 rounded border p-3 text-sm whitespace-pre-wrap min-h-[70px]">
+                        {previewMessage || 'Sélectionnez un template ou écrivez un message manuel.'}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Longueur: {previewMessage.length} caractères
+                      </p>
+                    </div>
+
+                    <div className="border border-border rounded-lg p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-end gap-3 mb-3">
+                        <div className="flex-1">
+                          <Label>Utilisateurs destinataires</Label>
+                          <Input
+                            placeholder="Rechercher utilisateur (nom, email, téléphone)..."
+                            value={userSearch}
+                            onChange={(e) => setUserSearch(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            className="text-xs"
+                            onClick={() =>
+                              setSelectedUserIds(visibleUsers.map((u: any) => String(u._id || u.id)))
+                            }
+                          >
+                            Tout sélectionner
+                          </Button>
+                          <Button variant="outline" className="text-xs" onClick={() => setSelectedUserIds([])}>
+                            Tout désélectionner
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="max-h-72 overflow-y-auto border rounded">
+                        {visibleUsers.length === 0 ? (
+                          <div className="p-3 text-sm text-muted-foreground">Aucun utilisateur trouvé.</div>
+                        ) : (
+                          <ul className="divide-y">
+                            {visibleUsers.map((u: any) => {
+                              const id = String(u._id || u.id);
+                              const checked = selectedUserIds.includes(id);
+                              const phone = u.phone || u.telephone || '';
+                              return (
+                                <li key={id} className="p-2">
+                                  <label className="flex items-start gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleUser(id)}
+                                      className="mt-1"
+                                    />
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium">
+                                        {`${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Utilisateur'}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground break-all">
+                                        {u.email || 'Sans email'} • {phone || 'Sans téléphone'}
+                                      </p>
+                                    </div>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm text-muted-foreground">
+                        {selectedUserIds.length} utilisateur(s) sélectionné(s)
+                      </p>
+                      <Button onClick={handleSendSms} disabled={isSendingSms}>
+                        {isSendingSms ? 'Envoi...' : '📨 Envoyer SMS'}
+                      </Button>
                     </div>
                   </>
                 )}

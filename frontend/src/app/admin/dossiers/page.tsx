@@ -366,6 +366,7 @@ export default function AdminDossiersPage() {
   const [expandedDossierDocumentDropdowns, setExpandedDossierDocumentDropdowns] = useState<Set<string>>(new Set());
   const [dossierTasks, setDossierTasks] = useState<Record<string, any[]>>({});
   const [agendaPdfLoading, setAgendaPdfLoading] = useState(false);
+  const [isAgendaCollapsed, setIsAgendaCollapsed] = useState(false);
 
   const agendaItems = useMemo(
     () => collectAdminDossierAgendaItems(dossiers, dossierTasks, DEFAULT_AGENDA_HORIZON_DAYS),
@@ -1771,9 +1772,20 @@ export default function AdminDossiersPage() {
               <div className="mb-4 rounded-xl border border-primary/25 bg-gradient-to-br from-primary/5 to-background p-3 sm:p-4 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1">
-                    <h2 className="text-sm font-semibold text-foreground">
-                      Actions à prévoir (15 jours + retards)
-                    </h2>
+                    <div className="flex items-center justify-between gap-2">
+                      <h2 className="text-sm font-semibold text-foreground">
+                        Actions à prévoir (15 jours + retards)
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={() => setIsAgendaCollapsed((v) => !v)}
+                        className="inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        aria-expanded={!isAgendaCollapsed}
+                        aria-label={isAgendaCollapsed ? 'Déplier la section des actions à prévoir' : 'Replier la section des actions à prévoir'}
+                      >
+                        {isAgendaCollapsed ? '▾ Déplier' : '▴ Replier'}
+                      </button>
+                    </div>
                     <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 break-words leading-snug">
                       Synthèse des dates connues : échéance du dossier, jalons avec date dans les étapes, et
                       tâches ouvertes avec échéance. Les dossiers clôturés, archivés, refusés ou annulés sont
@@ -1796,7 +1808,7 @@ export default function AdminDossiersPage() {
                     {agendaPdfLoading ? 'PDF…' : '📄 Télécharger PDF'}
                   </Button>
                 </div>
-                {agendaItems.length > 0 && (
+                {!isAgendaCollapsed && agendaItems.length > 0 && (
                   <div className="mt-3 max-h-52 sm:max-h-64 overflow-y-auto rounded-lg border border-border/70 bg-background/90 text-left">
                     {(['overdue', 'upcoming'] as const).map((bucket) => {
                       const rows = agendaItems.filter((i) => i.bucket === bucket);

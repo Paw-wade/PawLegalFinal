@@ -1282,6 +1282,23 @@ export const smsHistoryAPI = {
   },
 };
 
+export const smsAPI = {
+  // Envoi SMS manuel simple
+  send: (data: { to: string; message: string }) => {
+    return api.post('/sms/send', data);
+  },
+
+  // Envoi SMS via template/code de notification
+  sendNotification: (data: { to: string; type: string; data?: Record<string, any> }) => {
+    return api.post('/sms/notification', data);
+  },
+
+  // Envoi SMS manuel en masse
+  sendBulk: (data: { recipients: Array<{ phone: string; name?: string }>; message: string }) => {
+    return api.post('/sms/bulk', data);
+  },
+};
+
 export const smsPreferencesAPI = {
   // Mettre à jour les préférences SMS
   updatePreferences: (data: {

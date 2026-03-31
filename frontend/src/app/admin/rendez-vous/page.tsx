@@ -302,13 +302,28 @@ export default function AdminRendezVousPage() {
     setLoadingClientUsers(true);
     try {
       const res = await userAPI.getAllUsers();
-      if (res.data.success && Array.isArray(res.data.users)) {
-        setClientUsers(
-          res.data.users.filter((u: any) => u.role === 'client' && u.isActive !== false)
-        );
-      } else {
-        setClientUsers([]);
-      }
+      const possibleUsers =
+        (res.data && Array.isArray(res.data.users) && res.data.users) ||
+        (res.data && res.data.data && Array.isArray(res.data.data.users) && res.data.data.users) ||
+        (res.data && Array.isArray(res.data.data) && res.data.data) ||
+        [];
+
+      // Debug utile (l’UI n’est pas fonctionnelle si la liste est vide)
+      console.log('🧪 admin rendez-vous - getAllUsers possibleUsers sample:', possibleUsers.slice(0, 5));
+
+      const onlyActive = (u: any) => u && u.isActive !== false;
+
+      const roleStr = (u: any) => String(u?.role || '').trim().toLowerCase();
+      const clientsStrict = possibleUsers.filter((u: any) => onlyActive(u) && roleStr(u) === 'client');
+
+      // Fallback : si jamais la DB renvoie des rôles différemment, éviter d’afficher uniquement “saisie manuelle”.
+      const clientsFallback =
+        clientsStrict.length > 0
+          ? clientsStrict
+          : possibleUsers.filter((u: any) => onlyActive(u) && !['admin', 'superadmin'].includes(roleStr(u)));
+
+      if (!res.data?.success && possibleUsers.length === 0) setClientUsers([]);
+      else setClientUsers(clientsFallback);
     } catch (e) {
       console.error(e);
       setClientUsers([]);
@@ -317,6 +332,30 @@ export default function AdminRendezVousPage() {
       setLoadingClientUsers(false);
     }
   };
+
+  // Pré-remplissage robuste depuis le profil client :
+  // - on remplit quand un client est sélectionné
+  // - et uniquement les champs encore vides (pour ne pas écraser une saisie manuelle)
+  useEffect(() => {
+    if (!showAdminBookingModal) return;
+    if (!adminBookingForm.forUserId) return;
+
+    const selected = clientUsers.find((x) => String(x._id || x.id) === adminBookingForm.forUserId);
+    if (!selected) return;
+
+    const nextNom = selected.lastName || selected.nom || '';
+    const nextPrenom = selected.firstName || selected.prenom || '';
+    const nextEmail = selected.email || selected.clientEmail || '';
+    const nextTel = selected.phone || selected.telephone || '';
+
+    setAdminBookingForm((f) => ({
+      ...f,
+      nom: f.nom?.trim() ? f.nom : nextNom,
+      prenom: f.prenom?.trim() ? f.prenom : nextPrenom,
+      email: f.email?.trim() ? f.email : nextEmail,
+      telephone: f.telephone?.trim() ? f.telephone : nextTel,
+    }));
+  }, [showAdminBookingModal, adminBookingForm.forUserId, clientUsers]);
 
   useEffect(() => {
     if (!showAdminBookingModal || !adminBookingForm.date) return;
@@ -1080,13 +1119,17 @@ export default function AdminRendezVousPage() {
                     }
                     const u = clientUsers.find((x) => String(x._id || x.id) === id);
                     if (!u) return;
+                    const nomValue = u.lastName || u.nom || u.last_name || '';
+                    const prenomValue = u.firstName || u.prenom || u.first_name || '';
+                    const emailValue = u.email || u.clientEmail || u.mail || '';
+                    const telValue = u.phone || u.telephone || u.tel || '';
                     setAdminBookingForm((f) => ({
                       ...f,
                       forUserId: id,
-                      nom: u.lastName || '',
-                      prenom: u.firstName || '',
-                      email: u.email || '',
-                      telephone: u.phone || u.telephone || '',
+                      nom: nomValue,
+                      prenom: prenomValue,
+                      email: emailValue,
+                      telephone: telValue,
                     }));
                   }}
                 >
