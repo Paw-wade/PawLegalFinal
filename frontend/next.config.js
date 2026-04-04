@@ -4,6 +4,15 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
+  async redirects() {
+    return [
+      {
+        source: '/logs',
+        destination: '/admin/logs',
+        permanent: false,
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {

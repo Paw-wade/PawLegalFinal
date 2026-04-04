@@ -119,6 +119,7 @@ export default function AdminDashboardPage() {
     visible: boolean;
     latestUser?: any;
     latestDossier?: any;
+    latestAppointment?: any;
     signature?: string;
   }>({ visible: false });
 
@@ -179,19 +180,66 @@ export default function AdminDashboardPage() {
     return `adminDashboardNoticeSeen:${currentUserId}`;
   };
 
+  const buildDismissedUsersKey = () => {
+    const currentUserId = (session?.user as any)?.id || 'admin';
+    return `adminDashboardNoticeDismissedUsers:${currentUserId}`;
+  };
+
+  const buildDismissedDossiersKey = () => {
+    const currentUserId = (session?.user as any)?.id || 'admin';
+    return `adminDashboardNoticeDismissedDossiers:${currentUserId}`;
+  };
+
+  const buildDismissedAppointmentsKey = () => {
+    const currentUserId = (session?.user as any)?.id || 'admin';
+    return `adminDashboardNoticeDismissedAppointments:${currentUserId}`;
+  };
+
   const loadAdminTopNotice = async () => {
     try {
-      const [usersRes, dossiersRes] = await Promise.all([
+      const [usersRes, dossiersRes, appointmentsRes] = await Promise.all([
         userAPI.getAllUsers(),
-        dossiersAPI.getMyDossiers()
+        dossiersAPI.getMyDossiers(),
+        appointmentsAPI.getAllAppointments()
       ]);
 
       const users = usersRes?.data?.success ? (usersRes.data.users || []) : [];
       const dossiers = dossiersRes?.data?.success ? (dossiersRes.data.dossiers || []) : [];
+      const appointments = appointmentsRes?.data?.success
+        ? (appointmentsRes.data.data || appointmentsRes.data.appointments || [])
+        : [];
+
+      const dismissedUsers = (() => {
+        try {
+          const raw = typeof window !== 'undefined' ? localStorage.getItem(buildDismissedUsersKey()) : null;
+          return new Set<string>(raw ? JSON.parse(raw) : []);
+        } catch {
+          return new Set<string>();
+        }
+      })();
+
+      const dismissedDossiers = (() => {
+        try {
+          const raw = typeof window !== 'undefined' ? localStorage.getItem(buildDismissedDossiersKey()) : null;
+          return new Set<string>(raw ? JSON.parse(raw) : []);
+        } catch {
+          return new Set<string>();
+        }
+      })();
+
+      const dismissedAppointments = (() => {
+        try {
+          const raw = typeof window !== 'undefined' ? localStorage.getItem(buildDismissedAppointmentsKey()) : null;
+          return new Set<string>(raw ? JSON.parse(raw) : []);
+        } catch {
+          return new Set<string>();
+        }
+      })();
 
       const latestUser = users
         .filter((u: any) => !!u?.createdAt)
-        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .find((u: any) => !dismissedUsers.has(String(u._id || u.id)));
 
       const latestDossier = dossiers
         .filter((d: any) => !!d?.createdAt)
@@ -199,11 +247,24 @@ export default function AdminDashboardPage() {
           const aTime = new Date(a.createdAt).getTime();
           const bTime = new Date(b.createdAt).getTime();
           return bTime - aTime;
-        })[0];
+        })
+        .find((d: any) => !dismissedDossiers.has(String(d._id || d.id)));
+
+      const latestAppointment = appointments
+        .filter((a: any) => !!(a?.createdAt || a?.date))
+        .sort((a: any, b: any) => {
+          const aTime = new Date(a.createdAt || a.date).getTime();
+          const bTime = new Date(b.createdAt || b.date).getTime();
+          return bTime - aTime;
+        })
+        .find((a: any) => !dismissedAppointments.has(String(a._id || a.id)));
 
       const userSig = latestUser ? `u:${latestUser._id || latestUser.id}:${latestUser.createdAt}` : '';
       const dossierSig = latestDossier ? `d:${latestDossier._id || latestDossier.id}:${latestDossier.createdAt}` : '';
-      const signature = `${userSig}|${dossierSig}`;
+      const appointmentSig = latestAppointment
+        ? `a:${latestAppointment._id || latestAppointment.id}:${latestAppointment.createdAt || latestAppointment.date}`
+        : '';
+      const signature = `${userSig}|${dossierSig}|${appointmentSig}`;
 
       const storageKey = buildNoticeStorageKey();
       const seenSignature = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
@@ -212,6 +273,7 @@ export default function AdminDashboardPage() {
         visible: !!signature && signature !== seenSignature,
         latestUser,
         latestDossier,
+        latestAppointment,
         signature
       });
     } catch (error) {
@@ -221,6 +283,22 @@ export default function AdminDashboardPage() {
 
   const closeAdminTopNotice = () => {
     try {
+      const upsertInStorageList = (key: string, value?: string) => {
+        if (!value || typeof window === 'undefined') return;
+        try {
+          const currentRaw = localStorage.getItem(key);
+          const current = new Set<string>(currentRaw ? JSON.parse(currentRaw) : []);
+          current.add(value);
+          localStorage.setItem(key, JSON.stringify(Array.from(current)));
+        } catch {
+          // non bloquant
+        }
+      };
+
+      upsertInStorageList(buildDismissedUsersKey(), adminTopNotice.latestUser ? String(adminTopNotice.latestUser._id || adminTopNotice.latestUser.id) : undefined);
+      upsertInStorageList(buildDismissedDossiersKey(), adminTopNotice.latestDossier ? String(adminTopNotice.latestDossier._id || adminTopNotice.latestDossier.id) : undefined);
+      upsertInStorageList(buildDismissedAppointmentsKey(), adminTopNotice.latestAppointment ? String(adminTopNotice.latestAppointment._id || adminTopNotice.latestAppointment.id) : undefined);
+
       if (adminTopNotice.signature && typeof window !== 'undefined') {
         localStorage.setItem(buildNoticeStorageKey(), adminTopNotice.signature);
       }
@@ -835,6 +913,18 @@ export default function AdminDashboardPage() {
                       <p>
                         📁 Nouveau dossier : <span className="font-semibold">{adminTopNotice.latestDossier.titre || 'Dossier'}</span>
                         {adminTopNotice.latestDossier.numero ? ` (${adminTopNotice.latestDossier.numero})` : ''}
+                      </p>
+                    )}
+                    {adminTopNotice.latestAppointment && (
+                      <p>
+                        📅 Nouveau rendez-vous :{' '}
+                        <span className="font-semibold">
+                          {`${adminTopNotice.latestAppointment.prenom || ''} ${adminTopNotice.latestAppointment.nom || ''}`.trim() || 'Client'}
+                        </span>
+                        {adminTopNotice.latestAppointment.date
+                          ? ` — ${new Date(adminTopNotice.latestAppointment.date).toLocaleDateString('fr-FR')}`
+                          : ''}
+                        {adminTopNotice.latestAppointment.heure ? ` à ${adminTopNotice.latestAppointment.heure}` : ''}
                       </p>
                     )}
                   </div>
