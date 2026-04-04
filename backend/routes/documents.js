@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const mongoose = require('mongoose');
 const Document = require('../models/Document');
 const User = require('../models/User');
 const Log = require('../models/Log');
@@ -272,6 +273,24 @@ if (hasCloudinaryConfig) {
 const localDocumentsDir = path.join(UPLOADS_ROOT, 'documents');
 if (!fs.existsSync(localDocumentsDir)) {
   fs.mkdirSync(localDocumentsDir, { recursive: true });
+}
+
+/** public_id Cloudinary depuis une URL res.cloudinary.com (évite slice(-2) qui coupe le dossier racine) */
+function cloudinaryPublicIdFromUrl(fileUrl) {
+  if (!fileUrl || typeof fileUrl !== 'string') return null;
+  if (!fileUrl.includes('res.cloudinary.com')) return null;
+  const noQuery = fileUrl.split('?')[0];
+  const marker = '/upload/';
+  const idx = noQuery.indexOf(marker);
+  if (idx === -1) return null;
+  let rest = noQuery.slice(idx + marker.length);
+  // Segments de transformations (ex. c_scale,w_500/) avant la version ou le public_id
+  while (rest.includes('/') && /^[a-z0-9_]+,[a-z0-9_.,\-]+/i.test(rest.split('/')[0])) {
+    rest = rest.slice(rest.indexOf('/') + 1);
+  }
+  rest = rest.replace(/^v\d+\//, '');
+  const withoutExt = rest.replace(/\.[^/.]+$/, '');
+  return withoutExt || null;
 }
 
 const cloudinaryStorage = hasCloudinaryConfig
@@ -896,9 +915,12 @@ router.get('/:id/download', async (req, res) => {
 // @access  Private
 router.delete('/:id', async (req, res) => {
   try {
-    const document = await Document.findById(req.params.id)
-      .populate('user', 'firstName lastName email')
-      .populate('dossierId', 'titre numero');
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Identifiant de document invalide' });
+    }
+
+    // Ne pas populate('user') : si le compte a été supprimé, user devient null et .toString() provoque un 500.
+    const document = await Document.findById(req.params.id).populate('dossierId', 'titre numero');
 
     if (!document) {
       return res.status(404).json({
@@ -907,11 +929,21 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    // Vérifier les permissions
-    const effectiveUserId = req.user.id;
-    if (document.user.toString() !== effectiveUserId.toString() && 
-        req.user.role !== 'admin' && 
-        req.user.role !== 'superadmin') {
+    const effectiveUserId = req.user.id || req.user._id;
+    if (!effectiveUserId) {
+      return res.status(401).json({ success: false, message: 'Session invalide' });
+    }
+
+    const ownerId = document.user != null ? String(document.user) : null;
+    if (!ownerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Document sans propriétaire valide',
+      });
+    }
+
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    if (ownerId !== String(effectiveUserId) && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé à ce document'
@@ -928,7 +960,7 @@ router.delete('/:id', async (req, res) => {
         originalId: document._id,
         itemData: documentData,
         deletedBy: effectiveUserId,
-        originalOwner: document.user._id || document.user,
+        originalOwner: document.user,
         origin: req.headers.referer || 'unknown',
         metadata: {
           nom: document.nom,
@@ -942,31 +974,39 @@ router.delete('/:id', async (req, res) => {
       // Continuer la suppression même si l'ajout à la corbeille échoue
     }
 
-// Suppression sur Cloudinary
-if (document.cheminFichier && document.cheminFichier.startsWith('http')) {
-  try {
-    const urlParts = document.cheminFichier.split('/');
-    const publicIdWithExt = urlParts.slice(-2).join('/'); // folder/filename
-    const publicId = publicIdWithExt.replace(/\.[^/.]+$/, ''); // sans extension
-    await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
-    console.log('✅ Fichier supprimé sur Cloudinary:', publicId);
-  } catch (cloudErr) {
-    console.warn('⚠️ Suppression Cloudinary échouée:', cloudErr.message);
-  }
-}
+    // Suppression sur Cloudinary (uniquement si configuré + URL Cloudinary + public_id fiable)
+    if (
+      hasCloudinaryConfig &&
+      document.cheminFichier &&
+      document.cheminFichier.startsWith('http') &&
+      document.cheminFichier.includes('res.cloudinary.com')
+    ) {
+      try {
+        const publicId = cloudinaryPublicIdFromUrl(document.cheminFichier);
+        if (publicId) {
+          const resourceType = document.cheminFichier.includes('/raw/upload/') ? 'raw' : 'image';
+          await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+          console.log('✅ Fichier supprimé sur Cloudinary:', publicId, resourceType);
+        } else {
+          console.warn('⚠️ Impossible d’extraire le public_id Cloudinary:', document.cheminFichier);
+        }
+      } catch (cloudErr) {
+        console.warn('⚠️ Suppression Cloudinary échouée:', cloudErr.message);
+      }
+    }
 
     // Supprimer le document de la base de données
     await document.deleteOne();
 
-    // Logger l'action
+    // Logger l'action (userEmail requis par le schéma — comptes téléphone seulement sans email)
     try {
-      const effectiveUserId = req.user.id;
-      const effectiveUser = req.user;
+      const actorEmail =
+        req.user.email || req.user.phone || (req.user.name ? String(req.user.name) : '') || 'inconnu';
       await Log.create({
         user: effectiveUserId,
-        userEmail: effectiveUser?.email || req.user.email,
+        userEmail: actorEmail,
         action: 'document_deleted',
-        description: `${effectiveUser?.email || req.user.email} a supprimé le document "${document.nom}"`,
+        description: `${actorEmail} a supprimé le document "${document.nom || document.nomFichier || 'sans nom'}"`,
         ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
         userAgent: req.get('user-agent'),
         metadata: {
@@ -984,10 +1024,17 @@ if (document.cheminFichier && document.cheminFichier.startsWith('http')) {
     });
   } catch (error) {
     console.error('Erreur lors de la suppression du document:', error);
+    if (error.name === 'CastError' || error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Requête de suppression invalide',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Erreur serveur',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 });
