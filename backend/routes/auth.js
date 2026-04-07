@@ -12,7 +12,8 @@ const router = express.Router();
 // Générer un token JWT
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'your-secret-key-here', {
-    expiresIn: '30d'
+    // Session longue configurable (ex: 90d) pour limiter les reconnexions fréquentes.
+    expiresIn: process.env.JWT_EXPIRES_IN || '90d'
   });
 };
 

@@ -188,6 +188,30 @@ const dossierSchema = new mongoose.Schema({
     maxlength: 500,
     required: false
   },
+  // Mise en stand-by : le dossier existe mais n'est pas traité temporairement
+  isStandby: {
+    type: Boolean,
+    default: false
+  },
+  standbyReason: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    required: false
+  },
+  standbyAt: {
+    type: Date,
+    required: false
+  },
+  standbyUntil: {
+    type: Date,
+    required: false
+  },
+  standbyBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
   transmittedTo: [{
     partenaire: {
       type: mongoose.Schema.Types.ObjectId,

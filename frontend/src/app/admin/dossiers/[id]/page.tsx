@@ -69,6 +69,12 @@ export default function AdminDossierDetailPage() {
   const [titreEditValue, setTitreEditValue] = useState('');
   const [savingTitre, setSavingTitre] = useState(false);
   const [titreEditError, setTitreEditError] = useState<string | null>(null);
+  const [strictPrivacyMode, setStrictPrivacyMode] = useState(false);
+
+  const maskStrict = (value: string, fallback: string = 'N/A') => {
+    if (!strictPrivacyMode) return value || fallback;
+    return value ? '••••••' : fallback;
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -108,6 +114,13 @@ export default function AdminDossierDetailPage() {
       loadDocuments();
     }
   }, [session, status, router, dossierId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const currentUserId = (session?.user as any)?.id || 'admin';
+    const stored = localStorage.getItem(`adminDossiersStrictPrivacy:${currentUserId}`);
+    setStrictPrivacyMode(stored === 'true');
+  }, [session]);
 
   // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
@@ -581,6 +594,25 @@ export default function AdminDossierDetailPage() {
             <Link href="/admin/dossiers" className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 transition-colors">
               Vue liste complète
             </Link>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !strictPrivacyMode;
+                setStrictPrivacyMode(next);
+                if (typeof window !== 'undefined') {
+                  const currentUserId = (session?.user as any)?.id || 'admin';
+                  localStorage.setItem(`adminDossiersStrictPrivacy:${currentUserId}`, String(next));
+                }
+              }}
+              className={`inline-flex items-center gap-2 text-xs px-2 py-1 rounded-md border transition-colors ${
+                strictPrivacyMode
+                  ? 'border-gray-300 bg-gray-900 text-white hover:bg-gray-800'
+                  : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
+              }`}
+              title="Masquer strictement les noms et coordonnées"
+            >
+              {strictPrivacyMode ? 'Confidentialité stricte: ON' : 'Confidentialité stricte: OFF'}
+            </button>
           </div>
           
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
@@ -654,7 +686,9 @@ export default function AdminDossierDetailPage() {
                     </div>
                   ) : (
                     <>
-                      <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
+                      <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">
+                        {strictPrivacyMode ? 'Dossier masqué' : (dossier.titre || 'Sans titre')}
+                      </h1>
                       <button
                         type="button"
                         onClick={() => {
@@ -850,7 +884,7 @@ export default function AdminDossierDetailPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground font-semibold">Titre</p>
-              <p className="font-medium">{dossier.titre || 'Sans titre'}</p>
+              <p className="font-medium">{strictPrivacyMode ? 'Dossier masqué' : (dossier.titre || 'Sans titre')}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground font-semibold">Catégorie</p>
@@ -951,7 +985,7 @@ export default function AdminDossierDetailPage() {
                     alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Client'}
                     fallback={
                       <span className="text-xl font-bold text-primary">
-                        {`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'}
+                        {strictPrivacyMode ? '••' : (`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤')}
                       </span>
                     }
                   />
@@ -959,7 +993,9 @@ export default function AdminDossierDetailPage() {
                 <div className="min-w-0">
                   <h2 className="text-xl font-bold">👤 Coordonnées Client</h2>
                   <p className="text-sm text-muted-foreground truncate">
-                    {[dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email}
+                    {strictPrivacyMode
+                      ? 'Titulaire masqué'
+                      : ([dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email)}
                   </p>
                 </div>
               </div>
@@ -971,19 +1007,19 @@ export default function AdminDossierDetailPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
-                <p className="font-medium">{dossier.user.firstName || 'N/A'}</p>
+                <p className="font-medium">{strictPrivacyMode ? '••••••' : (dossier.user.firstName || 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Nom</p>
-                <p className="font-medium">{dossier.user.lastName || 'N/A'}</p>
+                <p className="font-medium">{strictPrivacyMode ? '••••••' : (dossier.user.lastName || 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Email</p>
-                <p className="font-medium">{dossier.user.email || 'N/A'}</p>
+                <p className="font-medium">{maskStrict(dossier.user.email || '', 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Téléphone</p>
-                <p className="font-medium">{dossier.user.phone || 'N/A'}</p>
+                <p className="font-medium">{maskStrict(dossier.user.phone || '', 'N/A')}</p>
               </div>
               {dossier.user.dateNaissance && (
                 <div>
@@ -1088,19 +1124,19 @@ export default function AdminDossierDetailPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
-                <p className="font-medium">{dossier.clientPrenom || 'N/A'}</p>
+                <p className="font-medium">{strictPrivacyMode ? '••••••' : (dossier.clientPrenom || 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Nom</p>
-                <p className="font-medium">{dossier.clientNom || 'N/A'}</p>
+                <p className="font-medium">{strictPrivacyMode ? '••••••' : (dossier.clientNom || 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Email</p>
-                <p className="font-medium">{dossier.clientEmail || 'N/A'}</p>
+                <p className="font-medium">{maskStrict(dossier.clientEmail || '', 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Téléphone</p>
-                <p className="font-medium">{dossier.clientTelephone || 'N/A'}</p>
+                <p className="font-medium">{maskStrict(dossier.clientTelephone || '', 'N/A')}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-sm text-orange-600 font-semibold">⚠️ Client non inscrit</p>

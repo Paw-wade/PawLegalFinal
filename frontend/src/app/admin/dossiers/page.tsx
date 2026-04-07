@@ -294,7 +294,7 @@ export default function AdminDossiersPage() {
   const [exonererFraisTarification, setExonererFraisTarification] = useState(false);
   const [fraisExoneresMotifInput, setFraisExoneresMotifInput] = useState('');
   const [statusFilter, setStatusFilter] = useState<
-    'all' | 'pending' | 'in_progress' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
+    'all' | 'pending' | 'in_progress' | 'standby' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
   >('all');
   const [userFilter, setUserFilter] = useState<string>('all');
   /** Tri liste : jalons datés dans `etapesSupplementaires` (front uniquement). */
@@ -350,6 +350,24 @@ export default function AdminDossiersPage() {
     if (matched?.label) return String(matched.label);
     return getStatutLabel(statut);
   };
+
+  const maskStrict = (value: string, fallback: string = '—') => {
+    if (!strictPrivacyMode) return value || fallback;
+    return value ? '••••••' : fallback;
+  };
+
+  const getDossierDisplayTitle = (dossier: any) => {
+    const raw = typeof dossier?.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre';
+    return strictPrivacyMode ? 'Dossier masqué' : raw;
+  };
+
+  const getDossierClientDisplayName = (dossier: any) => {
+    const raw = dossier.user && typeof dossier.user === 'object'
+      ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '—'
+      : [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ') || dossier.clientEmail || 'Non renseigné';
+    return strictPrivacyMode ? 'Titulaire masqué' : raw;
+  };
+
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState<any>(null);
   const [documentRequestData, setDocumentRequestData] = useState({
     selectedDocumentTypes: [] as string[],
@@ -407,6 +425,14 @@ export default function AdminDossiersPage() {
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [clientPopover, setClientPopover] = useState<{ dossierId: string; x: number; y: number } | null>(null);
   const clientPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [strictPrivacyMode, setStrictPrivacyMode] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const currentUserId = (session?.user as any)?.id || 'admin';
+    const stored = localStorage.getItem(`adminDossiersStrictPrivacy:${currentUserId}`);
+    setStrictPrivacyMode(stored === 'true');
+  }, [session]);
 
   const getProfileCompletionInfo = (dossier: any) => {
     const isRegisteredUser = dossier?.user && typeof dossier.user === 'object';
@@ -1265,6 +1291,40 @@ export default function AdminDossiersPage() {
     }
   };
 
+  const handleToggleStandby = async (dossier: any, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const dossierId = String(dossier?._id || dossier?.id || '');
+    if (!dossierId) return;
+    const willEnable = !dossier?.isStandby;
+    const reason = willEnable ? window.prompt('Motif du stand-by (optionnel) :', String(dossier?.standbyReason || '')) : '';
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const payload: any = { isStandby: willEnable };
+      if (willEnable) {
+        if (typeof reason === 'string' && reason.trim()) payload.standbyReason = reason.trim();
+      }
+      const response = await dossiersAPI.updateDossier(dossierId, payload);
+      if (response.data.success) {
+        await loadDossiers();
+        setToast({
+          message: willEnable ? 'Dossier mis en stand-by.' : 'Dossier retiré du stand-by.',
+          type: 'success'
+        });
+      }
+    } catch (err: any) {
+      console.error('Erreur lors du changement de stand-by:', err);
+      setError(err.response?.data?.message || 'Erreur lors du changement de stand-by');
+      setToast({ message: err.response?.data?.message || 'Erreur lors du changement de stand-by', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleAcceptDossier = async (dossierId: string) => {
     setIsLoading(true);
     setError(null);
@@ -1866,7 +1926,7 @@ export default function AdminDossiersPage() {
               </div>
 
               {/* Statistiques rapides (badges cliquables) */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
                 {/* En attente : dossiers créés par un utilisateur dont le statut n'a pas encore été édité par l'admin */}
                 <button
                   type="button"
@@ -1889,6 +1949,7 @@ export default function AdminDossiersPage() {
                       return (
                         hasClient &&
                         initialStatut &&
+                        !d.isStandby &&
                         !d.estCloture &&
                         !d.estArchive &&
                         rawStatut !== 'annule'
@@ -1926,6 +1987,20 @@ export default function AdminDossiersPage() {
                         !initialStatut
                       );
                     }).length}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('standby')}
+                  className={`text-left bg-gradient-to-br from-violet-50 to-fuchsia-100 border border-violet-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
+                    statusFilter === 'standby'
+                      ? 'ring-2 ring-violet-500/60 shadow-md'
+                      : 'hover:shadow-md hover:-translate-y-0.5'
+                  }`}
+                >
+                  <p className="text-xs text-violet-700 font-semibold mb-1 uppercase tracking-wide">Stand-by</p>
+                  <p className="text-2xl font-bold text-violet-900">
+                    {dossiers.filter((d: any) => !!d.isStandby && !d.estCloture && !d.estArchive).length}
                   </p>
                 </button>
                 <button
@@ -1973,6 +2048,7 @@ export default function AdminDossiersPage() {
                               <>
                                 {statusFilter === 'pending' && 'En attente'}
                                 {statusFilter === 'in_progress' && 'En cours'}
+                                {statusFilter === 'standby' && 'Stand-by'}
                                 {statusFilter === 'closed' && 'Clôturés'}
                                 {statusFilter === 'archived' && 'Archivés'}
                               </>
@@ -2006,19 +2082,41 @@ export default function AdminDossiersPage() {
                     </span>
                   )}
                 </div>
-                {(statusFilter !== 'all' || userFilter !== 'all' || dossierSortEtapes !== 'default') && (
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
-                      setStatusFilter('all');
-                      setUserFilter('all');
-                      setDossierSortEtapes('default');
+                      const next = !strictPrivacyMode;
+                      setStrictPrivacyMode(next);
+                      if (next) setClientPopover(null);
+                      if (typeof window !== 'undefined') {
+                        const currentUserId = (session?.user as any)?.id || 'admin';
+                        localStorage.setItem(`adminDossiersStrictPrivacy:${currentUserId}`, String(next));
+                      }
                     }}
-                    className="px-2 py-1 rounded-md border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors shrink-0 self-start sm:self-auto"
+                    className={`px-2 py-1 rounded-md border transition-colors shrink-0 self-start sm:self-auto ${
+                      strictPrivacyMode
+                        ? 'border-gray-300 bg-gray-900 text-white hover:bg-gray-800'
+                        : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
+                    }`}
+                    title="Masquer strictement les titulaires et noms de dossier dans la liste"
                   >
-                    Réinitialiser filtres & tri
+                    {strictPrivacyMode ? 'Confidentialité stricte: ON' : 'Confidentialité stricte: OFF'}
                   </button>
-                )}
+                  {(statusFilter !== 'all' || userFilter !== 'all' || dossierSortEtapes !== 'default') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter('all');
+                        setUserFilter('all');
+                        setDossierSortEtapes('default');
+                      }}
+                      className="px-2 py-1 rounded-md border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors shrink-0 self-start sm:self-auto"
+                    >
+                      Réinitialiser filtres & tri
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Liste des dossiers en cartes */}
@@ -2036,6 +2134,7 @@ export default function AdminDossiersPage() {
                     if (
                       !hasClient ||
                       !initialStatut ||
+                      d.isStandby ||
                       d.estCloture ||
                       d.estArchive ||
                       rawStatut === 'annule'
@@ -2055,6 +2154,7 @@ export default function AdminDossiersPage() {
                     const isArchived = rawStatut === 'annule';
                     if (
                       initialStatut ||
+                      d.isStandby ||
                       isRefused ||
                       isArchived ||
                       d.estCloture ||
@@ -2062,6 +2162,8 @@ export default function AdminDossiersPage() {
                     ) {
                       return false;
                     }
+                  } else if (statusFilter === 'standby') {
+                    if (!d.isStandby || d.estCloture || d.estArchive) return false;
                   } else if (statusFilter === 'closed') {
                     if (!d.estCloture) return false;
                   } else if (statusFilter === 'archived') {
@@ -2144,7 +2246,9 @@ export default function AdminDossiersPage() {
                   <div
                     key={dossier._id || dossier.id}
                     className={`relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 bg-gradient-to-r shadow-sm w-full min-w-0 ${
-                      dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
+                      dossier.isStandby
+                        ? 'from-violet-200/70 via-fuchsia-200/70 to-violet-200/70 group-hover:from-violet-400/70 group-hover:via-fuchsia-400/70 group-hover:to-violet-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(168,85,247,0.5)]'
+                        : dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
                         ? 'from-yellow-200/70 via-amber-200/70 to-yellow-200/70 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(234,179,8,0.5)]'
                         : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
                         ? 'from-green-200/70 via-emerald-200/70 to-green-200/70 group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(34,197,94,0.5)]'
@@ -2179,7 +2283,7 @@ export default function AdminDossiersPage() {
                           </button>
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-base text-foreground line-clamp-1 leading-snug truncate">
-                              {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
+                              {getDossierDisplayTitle(dossier)}
                             </h3>
                             {(dossier.numero || dossier.numeroDossier) && (
                               <p className="text-xs text-primary font-mono font-semibold">
@@ -2190,10 +2294,11 @@ export default function AdminDossiersPage() {
                             <button
                               type="button"
                               className="flex items-center gap-2 mt-1 min-w-0 rounded-md px-1 py-0.5 -ml-1 hover:bg-blue-50 transition-colors text-left"
-                              title="Voir le profil utilisateur"
+                              title={strictPrivacyMode ? 'Mode confidentialité actif' : 'Voir le profil utilisateur'}
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
+                                if (strictPrivacyMode) return;
                                 const dossierId = String(dossier._id || dossier.id || '');
                                 if (!dossierId) return;
                                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -2211,7 +2316,9 @@ export default function AdminDossiersPage() {
                                   alt=""
                                   fallback={
                                     <span className="text-[10px] font-bold text-primary leading-none">
-                                      {dossier.user && typeof dossier.user === 'object'
+                                      {strictPrivacyMode
+                                        ? '••'
+                                        : dossier.user && typeof dossier.user === 'object'
                                         ? `${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'
                                         : `${dossier.clientPrenom?.[0] || ''}${dossier.clientNom?.[0] || ''}`.trim() || '👤'}
                                     </span>
@@ -2219,10 +2326,7 @@ export default function AdminDossiersPage() {
                                 />
                               </div>
                               <p className="text-xs text-primary font-medium min-w-0 flex-1">
-                                Client :{' '}
-                                {dossier.user && typeof dossier.user === 'object'
-                                  ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '—'
-                                  : [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ') || dossier.clientEmail || 'Non renseigné'}
+                                Client : {getDossierClientDisplayName(dossier)}
                               </p>
                             </button>
                             {/* Résumé compact des infos clés du dossier (plié) */}
@@ -2323,6 +2427,14 @@ export default function AdminDossiersPage() {
                               {dossier.priorite}
                             </span>
                           )}
+                          {dossier.isStandby && (
+                            <span
+                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-violet-100 text-violet-900 border border-violet-200"
+                              title={dossier.standbyReason ? String(dossier.standbyReason) : 'Dossier temporairement en attente de traitement'}
+                            >
+                              ⏸ Stand-by
+                            </span>
+                          )}
                           {dossier.fraisExoneres ? (
                             <span
                               className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-100 text-emerald-900 border border-emerald-200"
@@ -2400,6 +2512,18 @@ export default function AdminDossiersPage() {
                         >
                           Voir les détails
                         </Link>
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleStandby(dossier, e)}
+                          className={`inline-flex items-center justify-center px-3 py-2 h-9 rounded-md text-xs font-semibold transition-colors border ${
+                            dossier.isStandby
+                              ? 'bg-violet-100 border-violet-300 text-violet-900 hover:bg-violet-200'
+                              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                          title={dossier.isStandby ? 'Retirer ce dossier du stand-by' : 'Mettre ce dossier en stand-by'}
+                        >
+                          {dossier.isStandby ? '▶ Reprendre' : '⏸ Stand-by'}
+                        </button>
                       </div>
                     </div>
 
@@ -2431,16 +2555,16 @@ export default function AdminDossiersPage() {
                           {dossier.user ? (
                             <>
                               <p className="font-semibold text-sm text-foreground truncate">
-                                {dossier.user.firstName} {dossier.user.lastName}
+                                {strictPrivacyMode ? 'Titulaire masqué' : `${dossier.user.firstName} ${dossier.user.lastName}`}
                               </p>
-                              <p className="text-xs text-muted-foreground truncate">{dossier.user.email}</p>
+                              <p className="text-xs text-muted-foreground truncate">{maskStrict(dossier.user.email || '', '—')}</p>
                             </>
                           ) : (
                             <>
                               <p className="font-semibold text-sm text-foreground truncate">
-                                {dossier.clientPrenom} {dossier.clientNom}
+                                {strictPrivacyMode ? 'Titulaire masqué' : `${dossier.clientPrenom} ${dossier.clientNom}`}
                               </p>
-                              <p className="text-xs text-muted-foreground truncate">{dossier.clientEmail}</p>
+                              <p className="text-xs text-muted-foreground truncate">{maskStrict(dossier.clientEmail || '', '—')}</p>
                               <span className="text-xs text-amber-600">(Non inscrit)</span>
                             </>
                           )}

@@ -107,7 +107,10 @@ const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 jours
+    // Session longue (90 jours) pour éviter les déconnexions fréquentes.
+    maxAge: 90 * 24 * 60 * 60,
+    // Réécrit la session au fil de l'eau pour conserver une expérience continue.
+    updateAge: 24 * 60 * 60,
   },
   secret: process.env.NEXTAUTH_SECRET || 'your-secret-key-change-this-in-production',
 };

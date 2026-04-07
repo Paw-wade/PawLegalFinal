@@ -2174,7 +2174,10 @@ router.put(
         notificationMessage,
         etapesSupplementaires: bodyEtapesSupplementaires,
         fraisExoneres,
-        fraisExoneresMotif: bodyFraisExoneresMotif
+        fraisExoneresMotif: bodyFraisExoneresMotif,
+        isStandby,
+        standbyReason,
+        standbyUntil
       } = req.body;
 
       const oldStatut = dossier.statut;
@@ -2191,7 +2194,10 @@ router.put(
         motifRefus: dossier.motifRefus == null ? '' : String(dossier.motifRefus),
         assignedTo: dossier.assignedTo ? dossier.assignedTo.toString() : null,
         dateEcheanceMs: dossier.dateEcheance ? new Date(dossier.dateEcheance).getTime() : null,
-        etapesJson: JSON.stringify(dossier.etapesSupplementaires || [])
+        etapesJson: JSON.stringify(dossier.etapesSupplementaires || []),
+        isStandby: !!dossier.isStandby,
+        standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
+        standbyUntilMs: dossier.standbyUntil ? new Date(dossier.standbyUntil).getTime() : null
       };
 
       // Appliquer directement les modifications
@@ -2221,6 +2227,59 @@ router.put(
       if (dateEcheance) dossier.dateEcheance = dateEcheance;
       if (notes !== undefined) dossier.notes = notes;
       if (motifRefus !== undefined) dossier.motifRefus = motifRefus;
+
+      // Stand-by (admin/superadmin uniquement) : suspend temporairement le traitement sans changer le statut métier
+      if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+        if (isStandby !== undefined && isStandby !== null) {
+          const truthy =
+            isStandby === true ||
+            isStandby === 'true' ||
+            isStandby === 1 ||
+            isStandby === '1';
+          const falsy =
+            isStandby === false ||
+            isStandby === 'false' ||
+            isStandby === 0 ||
+            isStandby === '0';
+
+          if (truthy) {
+            dossier.isStandby = true;
+            dossier.standbyAt = new Date();
+            dossier.standbyBy = req.user.id;
+            if (standbyReason !== undefined && standbyReason !== null) {
+              const reason = String(standbyReason).trim();
+              dossier.standbyReason = reason ? reason.slice(0, 500) : undefined;
+            }
+            if (standbyUntil !== undefined) {
+              if (standbyUntil) {
+                const d = new Date(standbyUntil);
+                dossier.standbyUntil = Number.isNaN(d.getTime()) ? undefined : d;
+              } else {
+                dossier.standbyUntil = undefined;
+              }
+            }
+          } else if (falsy) {
+            dossier.isStandby = false;
+            dossier.standbyReason = undefined;
+            dossier.standbyAt = undefined;
+            dossier.standbyBy = undefined;
+            dossier.standbyUntil = undefined;
+          }
+        } else {
+          if (dossier.isStandby && standbyReason !== undefined) {
+            const reason = String(standbyReason || '').trim();
+            dossier.standbyReason = reason ? reason.slice(0, 500) : undefined;
+          }
+          if (dossier.isStandby && standbyUntil !== undefined) {
+            if (standbyUntil) {
+              const d = new Date(standbyUntil);
+              dossier.standbyUntil = Number.isNaN(d.getTime()) ? undefined : d;
+            } else {
+              dossier.standbyUntil = undefined;
+            }
+          }
+        }
+      }
 
       // Étapes supplémentaires (admin/superadmin uniquement, partenaire géré au-dessus)
       if (Array.isArray(bodyEtapesSupplementaires)) {
@@ -2304,7 +2363,10 @@ router.put(
         motifRefus: dossier.motifRefus == null ? '' : String(dossier.motifRefus),
         assignedTo: dossier.assignedTo ? dossier.assignedTo.toString() : null,
         dateEcheanceMs: dossier.dateEcheance ? new Date(dossier.dateEcheance).getTime() : null,
-        etapesJson: JSON.stringify(dossier.etapesSupplementaires || [])
+        etapesJson: JSON.stringify(dossier.etapesSupplementaires || []),
+        isStandby: !!dossier.isStandby,
+        standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
+        standbyUntilMs: dossier.standbyUntil ? new Date(dossier.standbyUntil).getTime() : null
       };
 
       const onlyTitreRenamed =
@@ -2334,6 +2396,25 @@ router.put(
         dossierSnapshotBeforeUpdate.assignedTo === dossierSnapshotAfterUpdate.assignedTo &&
         dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs;
 
+      const standbyFieldsChanged =
+        dossierSnapshotBeforeUpdate.isStandby !== dossierSnapshotAfterUpdate.isStandby ||
+        dossierSnapshotBeforeUpdate.standbyReason !== dossierSnapshotAfterUpdate.standbyReason ||
+        dossierSnapshotBeforeUpdate.standbyUntilMs !== dossierSnapshotAfterUpdate.standbyUntilMs;
+
+      const onlyStandbySettingChanged =
+        standbyFieldsChanged &&
+        dossierSnapshotBeforeUpdate.titre === dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.assignedTo === dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
+        dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson;
+
       await dossier.save();
 
       // Recharger le dossier avec les données peuplées pour les notifications
@@ -2347,7 +2428,7 @@ router.put(
         newStatut: statut,
         oldAssignedTo,
         newAssignedTo: assignedTo,
-        skipSms: onlyTitreRenamed || onlyEtapesEdited,
+        skipSms: onlyTitreRenamed || onlyEtapesEdited || onlyStandbySettingChanged,
         skipClientEtapesOnlyNotify: onlyEtapesEdited
       });
 
@@ -2421,7 +2502,7 @@ router.put(
           // (ni assignation ni retrait d'assignation)
           
           // Notification générale si d'autres modifications (pas si seules les étapes ont changé)
-          if (!onlyEtapesEdited && (!statut || statut === oldStatut)) {
+          if (!onlyEtapesEdited && !onlyStandbySettingChanged && (!statut || statut === oldStatut)) {
             if (assignedTo === undefined || assignedTo === oldAssignedTo) {
               await createNotification(
                 userId,
