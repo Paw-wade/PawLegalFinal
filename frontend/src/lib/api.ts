@@ -1,23 +1,12 @@
 import axios from 'axios';
 
-// URL de base de l'API backend
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
 const IS_DEV = process.env.NODE_ENV === 'development';
-const TOKEN_CACHE_TTL_MS = 10000;
+const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
 let cachedToken: string | null = null;
 let cachedTokenAt = 0;
 let pendingTokenPromise: Promise<string | null> | null = null;
 
-// Créer une instance axios avec la configuration par défaut
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 10000, // 10 secondes
-});
-
-/** URL API sans double `/api` (pour fetch hors axios) */
+/** URL API terminée par `/api` une seule fois (axios + fetch hors axios). */
 export function getApiBaseUrl(): string {
   let baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005')
     .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
@@ -27,6 +16,19 @@ export function getApiBaseUrl(): string {
   baseURL = baseURL.replace(/(?:\/api)+$/i, '/api');
   return /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
 }
+
+// Même base que getApiBaseUrl : sinon api.get('/logs') tape .../logs au lieu de .../api/logs → 404 en prod
+const api = axios.create({
+  baseURL: getApiBaseUrl(),
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 10000, // 10 secondes
+});
+
+// Retry léger sur erreurs réseau temporaires (mobile/4G, réveil backend, micro-coupures)
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_RETRIES = 2;
 
 // Fonction utilitaire pour récupérer le token (NextAuth + localStorage + session)
 export const getAuthToken = async (): Promise<string | null> => {
@@ -180,7 +182,26 @@ api.interceptors.response.use(
   (response) => {
     return response;
   },
-  (error) => {
+  async (error) => {
+    const cfg: any = error.config || {};
+    const status = error.response?.status;
+    const retried = Number(cfg.__retryCount || 0);
+    const isNetworkError =
+      error.code === 'ECONNABORTED' ||
+      error.code === 'ECONNREFUSED' ||
+      error.message?.includes('Network Error') ||
+      error.message?.includes('ERR_CONNECTION_REFUSED') ||
+      !error.response;
+    const canRetry = (isNetworkError || (status && RETRYABLE_STATUS.has(status))) && retried < MAX_RETRIES;
+    const isAuthRoute = String(cfg.url || '').includes('/auth/');
+
+    if (canRetry && !isAuthRoute) {
+      cfg.__retryCount = retried + 1;
+      const delay = 300 * Math.pow(2, retried); // 300ms, 600ms
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return api(cfg);
+    }
+
     const url = error.config?.url || '';
 
     // Ignorer silencieusement les 404 pour les clés CMS manquantes (comportement attendu)
@@ -376,14 +397,8 @@ export const logsAPI = {
   downloadDlogPDF: async (date: string): Promise<void> => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || sessionStorage.getItem('token') : null;
     
-    // Utiliser la même logique que pour API_BASE_URL
-    let baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
-    
-    // Si baseURL se termine déjà par /api, ne pas l'ajouter à nouveau
-    // Sinon, construire l'URL complète
-    const url = baseURL.endsWith('/api')
-      ? `${baseURL}/logs/dlog/pdf?date=${date}`
-      : `${baseURL}/api/logs/dlog/pdf?date=${date}`;
+    const baseURL = getApiBaseUrl();
+    const url = `${baseURL}/logs/dlog/pdf?date=${encodeURIComponent(date)}`;
     
     console.log('📥 Tentative de téléchargement DLOG:', { url, date, hasToken: !!token });
     
