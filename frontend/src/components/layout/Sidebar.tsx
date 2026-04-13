@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
 import { signOut } from 'next-auth/react';
-import { forumAPI, documentsAPI } from '@/lib/api';
+import { forumAPI, documentsAPI, dossiersAPI } from '@/lib/api';
 import {
   LayoutDashboard,
   FolderOpen,
@@ -79,6 +79,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
   const [forumRepliesCount, setForumRepliesCount] = useState<number>(0);
   const [documentsPendingCount, setDocumentsPendingCount] = useState<number>(0);
+  const [tarificationPendingCount, setTarificationPendingCount] = useState<number>(0);
 
   const isActive = (href: string) => {
     if (href === '/client' || href === '/admin') {
@@ -132,9 +133,39 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
   };
 
+  const refreshTarificationCount = async () => {
+    try {
+      const res = await dossiersAPI.getMyDossiers();
+      const list = res.data?.dossiers || res.data?.data || [];
+      if (!Array.isArray(list)) {
+        setTarificationPendingCount(0);
+        return;
+      }
+
+      const pending = list.filter((dossier: any) => {
+        if (!dossier || dossier.fraisExoneres) return false;
+        const fixedAmount = Number(dossier?.montantTarificationFixe || 0);
+        // Badge si un paiement est attendu:
+        // - montant fixe demandé par l'administration
+        // - ou formule non encore choisie.
+        return fixedAmount > 0 || !dossier?.formuleTarifaire;
+      }).length;
+
+      setTarificationPendingCount(pending);
+    } catch (err) {
+      console.error('Erreur lors du chargement du badge tarification:', err);
+      setTarificationPendingCount(0);
+    }
+  };
+
   useEffect(() => {
     refreshDocumentsCount();
+    refreshTarificationCount();
   }, []);
+
+  useEffect(() => {
+    refreshTarificationCount();
+  }, [pathname]);
 
   useEffect(() => {
     const handler = () => {
@@ -143,6 +174,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     window.addEventListener('documentsUpdated', handler);
     return () => window.removeEventListener('documentsUpdated', handler);
     // refreshDocumentsCount est stable ici car il ne dépend pas de props/state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handler = () => refreshTarificationCount();
+    window.addEventListener('tarificationUpdated', handler);
+    return () => window.removeEventListener('tarificationUpdated', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -208,6 +246,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   {item.href === '/client/documents' && documentsPendingCount > 0 && (
                     <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
                       {documentsPendingCount > 99 ? '99+' : documentsPendingCount}
+                    </span>
+                  )}
+                  {item.href === '/client/tarification' && tarificationPendingCount > 0 && (
+                    <span className="ml-1 text-[11px] font-semibold bg-red-100 text-red-800 px-2 py-0.5 rounded-full">
+                      {tarificationPendingCount > 99 ? '99+' : tarificationPendingCount}
                     </span>
                   )}
                   {item.href === '/forum' && forumUnreadCount > 0 && (

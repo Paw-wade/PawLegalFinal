@@ -55,7 +55,7 @@ const smsHistorySchema = new mongoose.Schema({
   },
   context: {
     type: String,
-    enum: ['appointment', 'dossier', 'message', 'account', 'task', 'otp', 'manual', 'other'],
+    enum: ['appointment', 'dossier', 'document_request', 'message', 'account', 'task', 'otp', 'manual', 'other'],
     default: 'other'
   },
   contextId: {

@@ -55,6 +55,8 @@ export default function ClientTarificationPage() {
   const selectedDossier = dossiers.find((d) => (d._id || d.id) === selectedDossierId);
   const currentFormule = selectedDossier?.formuleTarifaire as TarifFormuleId | undefined;
   const fraisExoneresPourDossier = !!selectedDossier?.fraisExoneres;
+  const montantTarificationFixe = Number(selectedDossier?.montantTarificationFixe || 0);
+  const hasMontantFixe = montantTarificationFixe > 0;
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -68,6 +70,10 @@ export default function ClientTarificationPage() {
     }
     if (fraisExoneresPourDossier) {
       showToast('Les frais de ce dossier ont été exonérés : aucun choix de formule n’est nécessaire.');
+      return;
+    }
+    if (hasMontantFixe) {
+      showToast('Le montant de ce dossier est déjà fixé par l’administration : aucun choix de formule n’est nécessaire.');
       return;
     }
     setSaving(true);
@@ -156,6 +162,17 @@ export default function ClientTarificationPage() {
                     L’administration n’attend pas de choix de formule tarifaire. Vous pouvez ignorer cette page pour ce dossier.
                   </p>
                 </div>
+              ) : hasMontantFixe ? (
+                <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-900">
+                  <p className="font-semibold">Montant convenu avec Ada Papers.</p>
+                  <p className="text-blue-800/90 mt-1">
+                    Montant à régler: {montantTarificationFixe.toLocaleString('fr-FR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    EUR. Aucun choix de formule n’est requis pour ce dossier.
+                  </p>
+                </div>
               ) : (
                 currentFormule && (
                   <p className="mt-3 text-sm text-green-800 font-medium">
@@ -193,7 +210,6 @@ export default function ClientTarificationPage() {
                     type="button"
                     onClick={() => setSelectedIndex(index)}
                     onMouseEnter={() => setSelectedIndex(index)}
-                    disabled={fraisExoneresPourDossier}
                     className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
                       selectedIndex === index
                         ? 'bg-white border border-orange-400 text-orange-700 font-semibold shadow-sm'
@@ -250,7 +266,7 @@ export default function ClientTarificationPage() {
                     <Button
                       size="lg"
                       className="min-w-[200px] bg-orange-600 hover:bg-orange-700 text-white"
-                      disabled={saving || !selectedDossierId || fraisExoneresPourDossier}
+                      disabled={saving || !selectedDossierId || fraisExoneresPourDossier || hasMontantFixe}
                       onClick={() => handleChoose(current.id)}
                     >
                       {saving ? 'Enregistrement…' : `Choisir ${current.title}`}

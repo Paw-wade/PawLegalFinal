@@ -293,8 +293,8 @@ router.post(
           );
           const isMultiple = batchTotal > 1;
           const bodyLine1 = isMultiple
-            ? `${batchTotal} documents vous sont demandés pour le dossier ${dossierRef}. Connectez-vous à votre espace client Ada Papers pour voir la liste complète et déposer vos pièces.`
-            : `Un document vous est demandé : ${documentTypeLabel}. Dossier ${dossierRef}. Connectez-vous à votre espace client Ada Papers pour le déposer.`;
+            ? `${batchTotal} documents vous sont demandés.`
+            : `Un document vous est demandé : ${documentTypeLabel}.`;
 
           await sendNotificationSMS(
             clientUser.phone,
@@ -713,7 +713,7 @@ router.post(
             user: requestedById,
             type: 'document_received',
             title: `📥 Document reçu - Dossier ${dossierNumero}`,
-            message: `Le document "${document.nom}" a été envoyé en réponse à votre demande pour le dossier ${dossierNumero}.`,
+            message: `Le document "${document.nom}" a été uploadé.`,
             data: {
               documentRequestId: documentRequest._id.toString(),
               documentId: documentId.toString(),
@@ -723,29 +723,7 @@ router.post(
             priority: 'normal'
           });
 
-          // Envoyer un SMS à l'admin si configuré
-          if (adminUser.phone) {
-            try {
-              const smsDossierNumero = documentRequest.dossier?.numero || documentRequest.dossier?._id?.toString() || 'N/A';
-              await sendNotificationSMS(
-                adminUser.phone,
-                'document_received',
-                {
-                  dossierNumero: smsDossierNumero,
-                  documentName: document.nom
-                },
-                {
-                  userId: requestedById,
-                  context: 'document_request',
-                  contextId: documentRequest._id.toString()
-                }
-              );
-              console.log(`✅ SMS envoyé à l'admin ${adminUser.email} pour la réception du document`);
-            } catch (smsError) {
-              console.error('⚠️ Erreur lors de l\'envoi du SMS:', smsError);
-              console.error('Stack trace:', smsError.stack);
-            }
-          }
+          // Pas de SMS ici: on conserve uniquement la notification in-app admin.
         }
       } catch (adminNotifError) {
         console.error('⚠️ Erreur lors de la création de la notification admin:', adminNotifError);
@@ -839,4 +817,3 @@ router.patch(
 );
 
 module.exports = router;
-

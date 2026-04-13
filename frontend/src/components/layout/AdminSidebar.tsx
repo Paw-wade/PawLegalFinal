@@ -41,6 +41,7 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin', label: 'Tableau de bord', icon: LayoutDashboard },
   { href: '/admin/utilisateurs', label: 'Utilisateurs', icon: Users },
   { href: '/admin/dossiers', label: 'Dossiers', icon: FolderOpen },
+  { href: '/admin/dossiers/tarification', label: 'Dossiers tarification', icon: FolderOpen },
   { href: '/admin/taches', label: 'Tâches', icon: CheckSquare },
   { href: '/admin/rendez-vous', label: 'Rendez-vous', icon: Calendar },
   { href: '/admin/creneaux', label: 'Créneaux', icon: Clock },
@@ -72,6 +73,10 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === href;
+    if (href === '/admin/dossiers') {
+      if (pathname.startsWith('/admin/dossiers/tarification')) return false;
+      return pathname === href || pathname.startsWith('/admin/dossiers/');
+    }
     return pathname.startsWith(href);
   };
 

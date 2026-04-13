@@ -225,10 +225,9 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
     if (template) {
       templateCode = template.code;
       templateName = template.name;
-      const batchCount = Number(data.documentsCount) || 1;
-      const isMultiDocRequest =
-        type === 'document_request' && data.bodyLine1 && batchCount > 1;
-      if (isMultiDocRequest && !template.message.includes('{{bodyLine1}}')) {
+      // For document requests, force the short canonical wording and ignore
+      // any long custom template stored in DB.
+      if (type === 'document_request') {
         message = fillTemplate('{{isUrgentText}}{{bodyLine1}} Ada Papers.', data);
       } else {
         message = fillTemplate(template.message, data);
@@ -247,12 +246,12 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
         document_uploaded: `Un nouveau document a été ajouté à votre dossier "{{dossierTitle}}". Ada Papers.`,
         document_request: `{{isUrgentText}}{{bodyLine1}} Ada Papers.`,
         document_received: `Document "{{documentName}}" reçu pour le dossier {{dossierNumero}}. Ada Papers.`,
-        message_received: `Vous avez reçu un nouveau message de {{senderName}}. Connectez-vous pour le consulter. Ada Papers.`,
+        message_received: `Vous avez reçu un nouveau message de {{senderName}}. Ada Papers.`,
         task_assigned: `Une nouvelle tâche vous a été assignée: {{taskTitle}}. Ada Papers.`,
         task_reminder: `Rappel: La tâche "{{taskTitle}}" est due le {{dateEcheance}}. Ada Papers.`,
         task_overdue: `⚠️ ALERTE: La tâche "{{taskTitle}}" assignée à {{assignedTo}} est en retard de {{daysOverdue}} jour(s). Échéance: {{deadlineDate}}. Ada Papers.`,
-        tarification_choice_reminder: `Votre dossier "{{dossierTitle}}" est en cours. Choisissez votre formule tarifaire sur votre espace client (rubrique Tarification). Ada Papers.`,
-        frais_tarification_exoneres: `Votre dossier "{{dossierTitle}}" : vous êtes exonéré(e) des frais de tarification. Aucune formule tarifaire à choisir. Ada Papers.`,
+        tarification_choice_reminder: `Votre dossier "{{dossierTitle}}" est en cours. Choisissez votre formule tarifaire dans votre espace client. Ada Papers.`,
+        frais_tarification_exoneres: `Votre dossier "{{dossierTitle}}" : vous êtes exonéré(e) des frais. Ada Papers.`,
       };
       
       const defaultTemplate = defaultMessages[type] || data.message || 'Vous avez reçu une notification de Ada Papers.';

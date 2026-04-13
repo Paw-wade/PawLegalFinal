@@ -134,6 +134,7 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
             // - demandes de documents
             // - transmissions de dossier
             // - clôture / archivage de dossier
+            // - tarification (choix demandé, montant fixé, exonération)
             const importantNotifications = notifications.filter((notif: any) => {
               const rawType = notif.type || '';
               const type = rawType.toLowerCase();
@@ -152,7 +153,11 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
                 type.includes('closed') ||
                 type.includes('archive');
 
-              return isDocument || isTransmission || isClosureOrArchive;
+              const isTarification =
+                type === 'tarification_choice_requested' ||
+                type.includes('tarification');
+
+              return isDocument || isTransmission || isClosureOrArchive || isTarification;
             });
 
             importantNotifications.slice(0, 3).forEach((notif: any) => {
@@ -162,6 +167,7 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
               let icon = '🔔';
 
               const notifType = notif.type || '';
+              const lowerType = notifType.toLowerCase();
               const data = notif.data || notif.metadata || {};
 
               if (notifType === 'document_request') {
@@ -189,7 +195,23 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
                 return;
               }
 
-              const lowerType = notifType.toLowerCase();
+              if (notifType === 'tarification_choice_requested' || lowerType.includes('tarification')) {
+                message =
+                  safeString(notif.message) ||
+                  safeString(notif.titre) ||
+                  'Information de tarification disponible pour votre dossier.';
+                icon = '💶';
+                link = '/client/tarification';
+                items.push({
+                  id: `notification-${safeString(notif._id) || safeString(notif.id) || Math.random()}`,
+                  type: 'custom',
+                  message,
+                  link,
+                  icon,
+                  priority: 'high'
+                });
+                return;
+              }
 
               if (lowerType.includes('document')) {
                 icon = '📄';

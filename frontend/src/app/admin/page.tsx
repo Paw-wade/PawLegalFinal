@@ -930,53 +930,6 @@ export default function AdminDashboardPage() {
           <p className="text-sm text-gray-700">{dashboardSubtitle}</p>
         </div>
 
-        {adminTopNotice.visible && (
-          <div className="mb-6 rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-amber-200/70 to-orange-200/70 shadow-sm">
-            <div className="bg-white rounded-xl border border-white/70 px-4 py-3 sm:px-5 sm:py-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Notifications récentes</p>
-                  <div className="space-y-1 text-sm text-foreground">
-                    {adminTopNotice.latestUser && (
-                      <p>
-                        👤 Nouvelle inscription : <span className="font-semibold">{adminTopNotice.latestUser.firstName || ''} {adminTopNotice.latestUser.lastName || ''}</span>
-                        {adminTopNotice.latestUser.email ? ` (${adminTopNotice.latestUser.email})` : ''}
-                      </p>
-                    )}
-                    {adminTopNotice.latestDossier && (
-                      <p>
-                        📁 Nouveau dossier : <span className="font-semibold">{adminTopNotice.latestDossier.titre || 'Dossier'}</span>
-                        {adminTopNotice.latestDossier.numero ? ` (${adminTopNotice.latestDossier.numero})` : ''}
-                      </p>
-                    )}
-                    {adminTopNotice.latestAppointment && (
-                      <p>
-                        📅 Nouveau rendez-vous :{' '}
-                        <span className="font-semibold">
-                          {`${adminTopNotice.latestAppointment.prenom || ''} ${adminTopNotice.latestAppointment.nom || ''}`.trim() || 'Client'}
-                        </span>
-                        {adminTopNotice.latestAppointment.date
-                          ? ` — ${new Date(adminTopNotice.latestAppointment.date).toLocaleDateString('fr-FR')}`
-                          : ''}
-                        {adminTopNotice.latestAppointment.heure ? ` à ${adminTopNotice.latestAppointment.heure}` : ''}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeAdminTopNotice}
-                  className="shrink-0 inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-foreground transition-colors"
-                  aria-label="Fermer la notification"
-                  title="Fermer"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {unreadAppointmentNotifications.length > 0 && (
           <div className="mb-6 rounded-xl border border-red-300 bg-gradient-to-r from-red-50 via-orange-50 to-red-50 p-4 sm:p-5 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
