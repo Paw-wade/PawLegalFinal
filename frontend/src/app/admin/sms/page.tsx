@@ -34,7 +34,7 @@ type SmsHistory = {
   error?: string;
   sentBy?: { _id: string; firstName?: string; lastName?: string; email?: string };
   sentToUser?: { _id: string; firstName?: string; lastName?: string; phone?: string };
-  context: 'appointment' | 'dossier' | 'message' | 'account' | 'task' | 'otp' | 'manual' | 'other';
+  context: 'appointment' | 'dossier' | 'document_request' | 'message' | 'account' | 'task' | 'otp' | 'manual' | 'other';
   contextId?: string;
   cost?: number;
   sentAt: string;
@@ -506,6 +506,7 @@ export default function AdminSmsPage() {
     const icons: Record<string, string> = {
       appointment: '📅',
       dossier: '📁',
+      document_request: '📄',
       message: '💬',
       account: '👤',
       task: '✅',
@@ -760,6 +761,7 @@ export default function AdminSmsPage() {
                       <option value="">Tous</option>
                       <option value="appointment">Rendez-vous</option>
                       <option value="dossier">Dossier</option>
+                      <option value="document_request">Demande document</option>
                       <option value="message">Message</option>
                       <option value="otp">OTP</option>
                       <option value="manual">Manuel</option>

@@ -9,33 +9,18 @@ const { protect, authorize } = require('../middleware/auth');
 const router = express.Router();
 
 // Helper function pour créer une notification
-/** Aligné sur le filtre « En cours » du dashboard admin (dossiers avec utilisateur lié) */
-function isDossierInAdminEnCoursFilter(dossierLike) {
-  const hasClient = !!(dossierLike.user);
-  const rawStatut = dossierLike.statut || '';
-  const initialStatut =
-    hasClient &&
-    (!rawStatut ||
-      rawStatut === 'recu' ||
-      rawStatut === 'en_attente_onboarding');
-  const isRefused = rawStatut === 'refuse';
-  const isArchived = rawStatut === 'annule';
-  const estCloture = !!dossierLike.estCloture;
-  const estArchive = !!dossierLike.estArchive;
-  return (
-    !estCloture &&
-    !estArchive &&
-    !isArchived &&
-    !isRefused &&
-    !initialStatut
-  );
-}
-
 function sanitizeDossierForPartenaire(dossier) {
   const o = dossier && typeof dossier.toObject === 'function' ? dossier.toObject() : { ...dossier };
   delete o.formuleTarifaire;
   delete o.formuleTarifaireChoisieAt;
   delete o.formuleTarifaireReminderSent;
+  delete o.montantTarificationFixe;
+  delete o.montantTarificationFixeAt;
+  delete o.montantTarificationFixeBy;
+  delete o.tarificationNotificationSentAt;
+  delete o.paiementTarificationEffectue;
+  delete o.paiementTarificationEffectueAt;
+  delete o.paiementTarificationEffectueBy;
   delete o.fraisExoneres;
   delete o.fraisExoneresAt;
   delete o.fraisExoneresBy;
@@ -122,7 +107,10 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
     
     for (const userInfo of usersToNotify) {
       const skipClientPing =
-        changes.skipClientEtapesOnlyNotify === true && userInfo.role === 'client';
+        (changes.skipClientEtapesOnlyNotify === true && userInfo.role === 'client') ||
+        (changes.skipClientTarificationOnlyNotify === true && userInfo.role === 'client');
+      const skipClientSmsBecauseStandby =
+        userInfo.role === 'client' && !!dossier.isStandby;
 
       // Notification dashboard
       const lien = userInfo.role === 'client' 
@@ -148,7 +136,7 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
       }
       
       // SMS si téléphone disponible (ex. renommage du dossier seul → pas de SMS)
-      if (!skipClientPing && !changes.skipSms && userInfo.user && userInfo.user.phone) {
+      if (!skipClientPing && !skipClientSmsBecauseStandby && !changes.skipSms && userInfo.user && userInfo.user.phone) {
         try {
           const formattedPhone = formatPhoneNumber(userInfo.user.phone);
           if (formattedPhone) {
@@ -2175,10 +2163,28 @@ router.put(
         etapesSupplementaires: bodyEtapesSupplementaires,
         fraisExoneres,
         fraisExoneresMotif: bodyFraisExoneresMotif,
+        montantTarificationFixe,
+        paiementTarificationEffectue,
+        notifyTarificationClient,
         isStandby,
         standbyReason,
         standbyUntil
       } = req.body;
+
+      const shouldNotifyTarificationClientNow =
+        notifyTarificationClient === true ||
+        notifyTarificationClient === 'true' ||
+        notifyTarificationClient === 1 ||
+        notifyTarificationClient === '1';
+      const isMontantTarificationPatch =
+        montantTarificationFixe !== undefined && montantTarificationFixe !== null;
+
+      if ((montantTarificationFixe !== undefined || shouldNotifyTarificationClientNow) && req.user.role !== 'superadmin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Seul le superadmin peut fixer un montant manuel ou envoyer la notification de tarification.'
+        });
+      }
 
       const oldStatut = dossier.statut;
       const oldAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
@@ -2195,6 +2201,10 @@ router.put(
         assignedTo: dossier.assignedTo ? dossier.assignedTo.toString() : null,
         dateEcheanceMs: dossier.dateEcheance ? new Date(dossier.dateEcheance).getTime() : null,
         etapesJson: JSON.stringify(dossier.etapesSupplementaires || []),
+        fraisExoneres: !!dossier.fraisExoneres,
+        fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
+        montantTarificationFixe: Number(dossier.montantTarificationFixe || 0),
+        paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
         isStandby: !!dossier.isStandby,
         standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
         standbyUntilMs: dossier.standbyUntil ? new Date(dossier.standbyUntil).getTime() : null
@@ -2329,6 +2339,67 @@ router.put(
         }
       }
 
+      // Montant manuel de tarification (superadmin uniquement)
+      if (req.user.role === 'superadmin' && montantTarificationFixe !== undefined) {
+        const rawAmount = typeof montantTarificationFixe === 'string'
+          ? montantTarificationFixe.replace(',', '.').trim()
+          : montantTarificationFixe;
+        const parsedAmount = Number(rawAmount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Le montant de tarification fixe est invalide.'
+          });
+        }
+
+        if (parsedAmount === 0) {
+          dossier.montantTarificationFixe = undefined;
+          dossier.montantTarificationFixeAt = undefined;
+          dossier.montantTarificationFixeBy = undefined;
+        } else {
+          dossier.montantTarificationFixe = parsedAmount;
+          dossier.montantTarificationFixeAt = new Date();
+          dossier.montantTarificationFixeBy = req.user.id;
+          // Pas de choix client quand un montant manuel est défini.
+          dossier.formuleTarifaire = undefined;
+          dossier.formuleTarifaireChoisieAt = undefined;
+          dossier.formuleTarifaireReminderSent = true;
+          // Un montant manuel n'est pas une exonération.
+          dossier.fraisExoneres = false;
+          dossier.fraisExoneresAt = undefined;
+          dossier.fraisExoneresBy = undefined;
+          dossier.fraisExoneresMotif = undefined;
+        }
+      }
+
+      // Statut de paiement tarification (admin / superadmin)
+      if (
+        (req.user.role === 'admin' || req.user.role === 'superadmin') &&
+        paiementTarificationEffectue !== undefined &&
+        paiementTarificationEffectue !== null
+      ) {
+        const truthy =
+          paiementTarificationEffectue === true ||
+          paiementTarificationEffectue === 'true' ||
+          paiementTarificationEffectue === 1 ||
+          paiementTarificationEffectue === '1';
+        const falsy =
+          paiementTarificationEffectue === false ||
+          paiementTarificationEffectue === 'false' ||
+          paiementTarificationEffectue === 0 ||
+          paiementTarificationEffectue === '0';
+
+        if (truthy) {
+          dossier.paiementTarificationEffectue = true;
+          dossier.paiementTarificationEffectueAt = new Date();
+          dossier.paiementTarificationEffectueBy = req.user.id;
+        } else if (falsy) {
+          dossier.paiementTarificationEffectue = false;
+          dossier.paiementTarificationEffectueAt = undefined;
+          dossier.paiementTarificationEffectueBy = undefined;
+        }
+      }
+
       // Gérer l'assignation
       if (assignedTo !== undefined) {
         if (assignedTo === '' || assignedTo === null) {
@@ -2364,6 +2435,10 @@ router.put(
         assignedTo: dossier.assignedTo ? dossier.assignedTo.toString() : null,
         dateEcheanceMs: dossier.dateEcheance ? new Date(dossier.dateEcheance).getTime() : null,
         etapesJson: JSON.stringify(dossier.etapesSupplementaires || []),
+        fraisExoneres: !!dossier.fraisExoneres,
+        fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
+        montantTarificationFixe: Number(dossier.montantTarificationFixe || 0),
+        paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
         isStandby: !!dossier.isStandby,
         standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
         standbyUntilMs: dossier.standbyUntil ? new Date(dossier.standbyUntil).getTime() : null
@@ -2415,6 +2490,28 @@ router.put(
         dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
         dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson;
 
+      const tarificationFieldsChanged =
+        dossierSnapshotBeforeUpdate.fraisExoneres !== dossierSnapshotAfterUpdate.fraisExoneres ||
+        dossierSnapshotBeforeUpdate.fraisExoneresMotif !== dossierSnapshotAfterUpdate.fraisExoneresMotif ||
+        dossierSnapshotBeforeUpdate.montantTarificationFixe !== dossierSnapshotAfterUpdate.montantTarificationFixe ||
+        dossierSnapshotBeforeUpdate.paiementTarificationEffectue !== dossierSnapshotAfterUpdate.paiementTarificationEffectue ||
+        shouldNotifyTarificationClientNow;
+
+      const onlyTarificationSettingChanged =
+        tarificationFieldsChanged &&
+        dossierSnapshotBeforeUpdate.titre === dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.assignedTo === dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
+        dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson &&
+        !standbyFieldsChanged;
+
       await dossier.save();
 
       // Recharger le dossier avec les données peuplées pour les notifications
@@ -2428,8 +2525,9 @@ router.put(
         newStatut: statut,
         oldAssignedTo,
         newAssignedTo: assignedTo,
-        skipSms: onlyTitreRenamed || onlyEtapesEdited || onlyStandbySettingChanged,
-        skipClientEtapesOnlyNotify: onlyEtapesEdited
+        skipSms: onlyTitreRenamed || onlyEtapesEdited || onlyStandbySettingChanged || onlyTarificationSettingChanged,
+        skipClientEtapesOnlyNotify: onlyEtapesEdited,
+        skipClientTarificationOnlyNotify: onlyTarificationSettingChanged
       });
 
       // Pour les admins, créer aussi des notifications spécifiques au client (logique existante)
@@ -2502,7 +2600,7 @@ router.put(
           // (ni assignation ni retrait d'assignation)
           
           // Notification générale si d'autres modifications (pas si seules les étapes ont changé)
-          if (!onlyEtapesEdited && !onlyStandbySettingChanged && (!statut || statut === oldStatut)) {
+          if (!onlyEtapesEdited && !onlyStandbySettingChanged && !onlyTarificationSettingChanged && (!statut || statut === oldStatut)) {
             if (assignedTo === undefined || assignedTo === oldAssignedTo) {
               await createNotification(
                 userId,
@@ -2522,6 +2620,7 @@ router.put(
       // Client informé lors d'une nouvelle exonération des frais de tarification
       if (
         fraisExoneresJustGranted &&
+        !isMontantTarificationPatch &&
         (req.user.role === 'admin' || req.user.role === 'superadmin')
       ) {
         try {
@@ -2562,7 +2661,7 @@ router.put(
             );
             const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
             const phoneUser = await User.findById(userIdExo).select('phone');
-            if (phoneUser?.phone) {
+            if (phoneUser?.phone && !dossierForNotification.isStandby) {
               const formattedPhone = formatPhoneNumber(phoneUser.phone);
               if (formattedPhone) {
                 await sendNotificationSMS(
@@ -2584,60 +2683,70 @@ router.put(
         }
       }
 
-      // Rappel choix formule tarifaire : passage dans le filtre admin « En cours » sans formule choisie
-      if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+      // Notification tarification envoyée uniquement à la demande du superadmin (à tout moment)
+      if (shouldNotifyTarificationClientNow && req.user.role === 'superadmin') {
         try {
-          if (statut && statut !== oldStatut) {
-            const prevSnap = {
-              user: dossierForNotification.user,
-              statut: oldStatut,
-              estCloture: dossierForNotification.estCloture,
-              estArchive: dossierForNotification.estArchive
-            };
-            const nextSnap = {
-              user: dossierForNotification.user,
-              statut: dossierForNotification.statut,
-              estCloture: dossierForNotification.estCloture,
-              estArchive: dossierForNotification.estArchive
-            };
-            const wasIn = isDossierInAdminEnCoursFilter(prevSnap);
-            const nowIn = isDossierInAdminEnCoursFilter(nextSnap);
-            if (
-              !wasIn &&
-              nowIn &&
-              dossierForNotification.user &&
-              !dossier.formuleTarifaire &&
-              !dossier.formuleTarifaireReminderSent &&
-              !dossier.fraisExoneres
-            ) {
-              const clientUserId = dossierForNotification.user._id
-                ? dossierForNotification.user._id.toString()
-                : dossierForNotification.user.toString();
-              await Dossier.updateOne(
-                { _id: dossier._id },
-                { $set: { formuleTarifaireReminderSent: true } }
-              );
-              dossier.formuleTarifaireReminderSent = true;
-              const titreTarif = 'Choisissez votre formule tarifaire';
-              const messageTarif = `Votre dossier « ${dossierForNotification.titre || dossierForNotification.numero || 'votre dossier'} » est désormais suivi comme « en cours ». Merci de sélectionner votre formule (Standard ou Premium) dans votre espace client, rubrique Tarification.`;
-              await createNotification(
-                clientUserId,
-                'tarification_choice_requested',
-                titreTarif,
-                messageTarif,
-                '/client/tarification',
-                { dossierId: dossierForNotification._id.toString() }
-              );
-              const { sendNotificationSMS } = require('../sendSMS');
-              const UserModel = require('../models/User');
-              const phoneUser = await UserModel.findById(clientUserId).select('phone');
-              if (phoneUser && phoneUser.phone) {
+          let clientUserId = null;
+          if (dossierForNotification.user) {
+            clientUserId = dossierForNotification.user._id
+              ? dossierForNotification.user._id.toString()
+              : dossierForNotification.user.toString();
+          } else if (dossierForNotification.clientEmail) {
+            const userByEmail = await User.findOne({
+              email: String(dossierForNotification.clientEmail).toLowerCase()
+            }).select('_id');
+            if (userByEmail) clientUserId = userByEmail._id.toString();
+          }
+
+          if (clientUserId) {
+            const dossierTitle = dossierForNotification.titre || dossierForNotification.numero || 'votre dossier';
+            const montantFixe = Number(dossierForNotification.montantTarificationFixe || 0);
+            const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+            let titreTarif = 'Choisissez votre formule tarifaire';
+            let messageTarif = `Votre dossier « ${dossierTitle} » nécessite un choix de formule (Standard ou Tawfekh) dans votre espace client, rubrique Tarification.`;
+            let smsType = 'tarification_choice_reminder';
+            let smsData = { dossierTitle };
+
+            if (dossierForNotification.fraisExoneres) {
+              const motif = dossierForNotification.fraisExoneresMotif
+                ? String(dossierForNotification.fraisExoneresMotif).trim()
+                : '';
+              titreTarif = 'Frais de tarification exonérés';
+              messageTarif = motif
+                ? `Vous êtes exonéré(e) des frais de tarification pour le dossier « ${dossierTitle} ». Motif : ${motif}`
+                : `Vous êtes exonéré(e) des frais de tarification pour le dossier « ${dossierTitle} ».`;
+              smsType = 'frais_tarification_exoneres';
+              smsData = { dossierTitle };
+            } else if (montantFixe > 0) {
+              const amountText = montantFixe.toLocaleString('fr-FR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              });
+              titreTarif = 'Montant du paiement convenu avec Ada Papers.';
+              messageTarif = `Pour le dossier « ${dossierTitle} », le montant à payer a été fixé à ${amountText} EUR.`;
+              smsType = 'manual';
+              smsData = {
+                message: `Dossier "${dossierTitle}" : montant de tarification fixe ${amountText} EUR. Ada Papers.`
+              };
+            }
+
+            await createNotification(
+              clientUserId,
+              'tarification_choice_requested',
+              titreTarif,
+              messageTarif,
+              '/client/tarification',
+              { dossierId: dossierForNotification._id.toString() }
+            );
+
+            const phoneUser = await User.findById(clientUserId).select('phone');
+            if (phoneUser?.phone && !dossierForNotification.isStandby && !isMontantTarificationPatch) {
+              const formattedPhone = formatPhoneNumber(phoneUser.phone);
+              if (formattedPhone) {
                 await sendNotificationSMS(
-                  phoneUser.phone,
-                  'tarification_choice_reminder',
-                  {
-                    dossierTitle: dossierForNotification.titre || dossierForNotification.numero || 'Votre dossier'
-                  },
+                  formattedPhone,
+                  smsType,
+                  smsData,
                   {
                     userId: clientUserId,
                     skipPreferences: true,
@@ -2647,9 +2756,14 @@ router.put(
                 );
               }
             }
+
+            dossier.tarificationNotificationSentAt = new Date();
+            await dossier.save();
+          } else {
+            console.warn('⚠️ Notification tarification non envoyée: client introuvable pour ce dossier', dossier._id);
           }
         } catch (tarifErr) {
-          console.error('⚠️ Rappel tarification non envoyé:', tarifErr);
+          console.error('⚠️ Notification tarification manuelle non envoyée:', tarifErr);
         }
       }
 

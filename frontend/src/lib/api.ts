@@ -791,6 +791,10 @@ export const dossiersAPI = {
   // Mettre à jour un dossier
   updateDossier: (id: string, data: any) =>
     api.put(`/user/dossiers/${id}`, data),
+
+  // Superadmin - notifier tarification à la demande
+  notifyTarification: (id: string) =>
+    api.put(`/user/dossiers/${id}`, { notifyTarificationClient: true }),
   
   // Supprimer un dossier (Admin)
   deleteDossier: (id: string) =>

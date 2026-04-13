@@ -299,6 +299,7 @@ export default function AdminDossiersPage() {
   const [userFilter, setUserFilter] = useState<string>('all');
   /** Tri liste : jalons datés dans `etapesSupplementaires` (front uniquement). */
   const [dossierSortEtapes, setDossierSortEtapes] = useState<'default' | 'etape_date_asc' | 'etape_date_desc'>('default');
+  const isSuperadmin = (session?.user as any)?.role === 'superadmin';
 
   // Toujours proposer un minimum de 3 actions avant toute "édition des étapes".
   const DEFAULT_ADMIN_ETAPES = [
@@ -384,7 +385,7 @@ export default function AdminDossiersPage() {
   const [expandedDossierDocumentDropdowns, setExpandedDossierDocumentDropdowns] = useState<Set<string>>(new Set());
   const [dossierTasks, setDossierTasks] = useState<Record<string, any[]>>({});
   const [agendaPdfLoading, setAgendaPdfLoading] = useState(false);
-  const [isAgendaCollapsed, setIsAgendaCollapsed] = useState(false);
+  const [isAgendaCollapsed, setIsAgendaCollapsed] = useState(true);
 
   const agendaItems = useMemo(
     () => collectAdminDossierAgendaItems(dossiers, dossierTasks, DEFAULT_AGENDA_HORIZON_DAYS),
@@ -1320,6 +1321,47 @@ export default function AdminDossiersPage() {
       console.error('Erreur lors du changement de stand-by:', err);
       setError(err.response?.data?.message || 'Erreur lors du changement de stand-by');
       setToast({ message: err.response?.data?.message || 'Erreur lors du changement de stand-by', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSetMontantTarificationFixe = async (dossier: any, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const dossierId = String(dossier?._id || dossier?.id || '');
+    if (!dossierId) return;
+    const current = Number(dossier?.montantTarificationFixe || 0);
+    const input = window.prompt(
+      'Montant de tarification fixe (EUR). Mettre 0 pour retirer le montant fixe.',
+      current > 0 ? String(current) : ''
+    );
+    if (input === null) return;
+    const normalized = input.replace(',', '.').trim();
+    const parsed = Number(normalized || '0');
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setToast({ message: 'Montant invalide.', type: 'error' });
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      await dossiersAPI.updateDossier(dossierId, {
+        montantTarificationFixe: parsed,
+        notifyTarificationClient: parsed > 0,
+      });
+      await loadDossiers();
+      setToast({
+        message: parsed > 0
+          ? 'Montant fixé et notification tarification envoyée.'
+          : 'Montant fixe retiré.',
+        type: 'success',
+      });
+    } catch (err: any) {
+      const message = err?.response?.data?.message || 'Mise à jour du montant impossible';
+      setToast({ message, type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -2442,6 +2484,13 @@ export default function AdminDossiersPage() {
                             >
                               Frais exonérés
                             </span>
+                          ) : Number(dossier.montantTarificationFixe || 0) > 0 ? (
+                            <span
+                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-100 text-blue-900 border border-blue-200"
+                              title="Montant fixé manuellement par superadmin. Le client n'a pas à choisir Standard/Premium."
+                            >
+                              Montant fixe : {Number(dossier.montantTarificationFixe).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR
+                            </span>
                           ) : dossier.formuleTarifaire ? (
                             <span
                               className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${
@@ -2457,11 +2506,11 @@ export default function AdminDossiersPage() {
                             >
                               Formule : {dossier.formuleTarifaire === 'premium' ? 'Premium' : 'Standard'}
                             </span>
-                          ) : (
+                          ) : dossier.tarificationNotificationSentAt ? (
                             <span className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-200">
                               Tarif : non choisi
                             </span>
-                          )}
+                          ) : null}
                           {Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0 && (
                             (() => {
                               const transmittedPartners = dossier.transmittedTo.map((t: any) => {
@@ -2524,6 +2573,18 @@ export default function AdminDossiersPage() {
                         >
                           {dossier.isStandby ? '▶ Reprendre' : '⏸ Stand-by'}
                         </button>
+                        {isSuperadmin && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => handleSetMontantTarificationFixe(dossier, e)}
+                              className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md text-xs font-semibold transition-colors border bg-white border-blue-300 text-blue-700 hover:bg-blue-50"
+                              title="Fixer/retirer un montant manuel et notifier automatiquement la tarification."
+                            >
+                              Tarif
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -3954,7 +4015,7 @@ export default function AdminDossiersPage() {
                   <span>
                     <span className="font-semibold text-emerald-900 block">Exonérer les frais de tarification</span>
                     <span className="text-sm text-emerald-800/90">
-                      Le client recevra une notification (et un SMS si configuré) l’informant de l’exonération. Il ne sera pas invité à choisir une formule et ne recevra pas le rappel tarification automatique à l’entrée en « Accepté ».
+                      Le client recevra une notification (et un SMS si configuré) l’informant de l’exonération. Il ne sera pas invité à choisir une formule.
                     </span>
                   </span>
                 </label>

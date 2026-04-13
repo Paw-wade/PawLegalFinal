@@ -166,6 +166,12 @@ try {
             message: 'Les frais de ce dossier ont été exonérés par l’administration : aucune formule tarifaire n’est requise.',
           });
         }
+        if (Number(dossier.montantTarificationFixe || 0) > 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Le montant de ce dossier a été fixé par le superadmin : aucun choix de formule n’est requis.',
+          });
+        }
 
         const { formule } = req.body;
         dossier.formuleTarifaire = formule;

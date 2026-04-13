@@ -168,6 +168,38 @@ const dossierSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Montant de tarification fixé manuellement par superadmin (pas de choix Standard/Premium côté client)
+  montantTarificationFixe: {
+    type: Number,
+    min: 0,
+    required: false
+  },
+  montantTarificationFixeAt: {
+    type: Date,
+    required: false
+  },
+  montantTarificationFixeBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
+  tarificationNotificationSentAt: {
+    type: Date,
+    required: false
+  },
+  paiementTarificationEffectue: {
+    type: Boolean,
+    default: false
+  },
+  paiementTarificationEffectueAt: {
+    type: Date,
+    required: false
+  },
+  paiementTarificationEffectueBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
   // Exonération des frais de tarification (décision admin à l’acceptation ou ultérieurement)
   fraisExoneres: {
     type: Boolean,
