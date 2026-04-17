@@ -407,6 +407,7 @@ export default function AdminDossiersPage() {
   const [quickComplementError, setQuickComplementError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   const directFileInputRef = useRef<HTMLInputElement | null>(null);
+  const quickComplementTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [expandedTaskSections, setExpandedTaskSections] = useState<Set<string>>(new Set());
   const [showTaskFormForDossier, setShowTaskFormForDossier] = useState<string | null>(null);
   const [taskFormData, setTaskFormData] = useState<{ titre: string; description: string; priorite: string; assignedTo: string[] }>({
@@ -774,6 +775,18 @@ export default function AdminDossiersPage() {
     setQuickComplementText(lastComplement?.text || '');
     setQuickComplementError(null);
   };
+
+  useEffect(() => {
+    if (!activeQuickComplementDossierId) return;
+    const timer = window.setTimeout(() => {
+      quickComplementTextareaRef.current?.focus();
+      quickComplementTextareaRef.current?.setSelectionRange(
+        quickComplementTextareaRef.current.value.length,
+        quickComplementTextareaRef.current.value.length
+      );
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeQuickComplementDossierId]);
 
   const saveQuickComplement = async (e: React.FormEvent, dossierId: string) => {
     e.preventDefault();
@@ -3104,6 +3117,7 @@ export default function AdminDossiersPage() {
                       const receivedRequests = dossierRequests.filter((r: any) => r.status === 'received' || r.status === 'sent');
                       const isExpanded = expandedDocumentSections.has(dossierId);
                       const receivedPiecesCount = receivedRequests.length + spontaneousDocs.length;
+                      const importantInfoCount = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit.length : 0;
 
                       const toggleDirectUpload = (e?: { stopPropagation?: () => void }) => {
                         e?.stopPropagation?.();
@@ -3171,8 +3185,15 @@ export default function AdminDossiersPage() {
                                 }}
                               >
                                 ℹ️
-                                {hasUnseenComplement(dossier) && (
-                                  <span className="absolute -top-1 -right-1 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                                {importantInfoCount > 0 && (
+                                  <span
+                                    className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] leading-4 text-white text-center font-bold ring-2 ring-white ${
+                                      hasUnseenComplement(dossier) ? 'bg-red-500' : 'bg-blue-500'
+                                    }`}
+                                    title={`${importantInfoCount} information(s) importante(s)`}
+                                  >
+                                    {importantInfoCount > 99 ? '99+' : importantInfoCount}
+                                  </span>
                                 )}
                               </Button>
                               <span className="text-muted-foreground text-sm">{isExpanded ? '▲' : '▼'}</span>
@@ -3266,6 +3287,7 @@ export default function AdminDossiersPage() {
                             >
                               <label className="text-[11px] md:text-sm font-medium">Complément d&apos;information</label>
                               <textarea
+                                ref={quickComplementTextareaRef}
                                 value={quickComplementText}
                                 onChange={(e) => setQuickComplementText(e.target.value)}
                                 className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm min-h-[72px]"
