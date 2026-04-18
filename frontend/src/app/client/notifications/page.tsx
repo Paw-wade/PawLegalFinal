@@ -144,6 +144,7 @@ function NotificationsContent() {
       appointment_cancelled: '❌',
       message_received: '💬',
       tarification_choice_requested: '💶',
+      tarification_payment_reminder: '💶',
       other: '🔔',
     };
     return icons[type] || '🔔';
@@ -165,6 +166,7 @@ function NotificationsContent() {
       appointment_cancelled: 'bg-red-50 border border-red-300/70',
       message_received: 'bg-pink-50 border border-pink-300/70',
       tarification_choice_requested: 'bg-amber-50 border border-amber-300/70',
+      tarification_payment_reminder: 'bg-amber-50 border border-amber-300/70',
       other: 'bg-gray-50 border border-gray-300/70',
     };
     return colors[type] || 'bg-gray-50 border border-gray-300/70';
@@ -174,7 +176,7 @@ function NotificationsContent() {
 
   const getNotificationCategory = (notification: any): NotificationCategoryKey => {
     const type = notification.type || '';
-    if (type === 'tarification_choice_requested') return 'dossiers';
+    if (type === 'tarification_choice_requested' || type === 'tarification_payment_reminder') return 'dossiers';
     if (type.startsWith('dossier_')) return 'dossiers';
     if (type.startsWith('appointment_')) return 'rendezvous';
     if (type === 'message_received') return 'messages';

@@ -37,9 +37,11 @@ const getCategorieLabel = (categorie: string) => {
 interface DossierDetailViewProps {
   dossier: any;
   variant?: 'client' | 'admin' | 'partenaire';
+  /** Pièces du dossier (toutes origines) — prioritaire sur dossier.documents si fourni */
+  dossierFiles?: any[];
 }
 
-export function DossierDetailView({ dossier, variant = 'client' }: DossierDetailViewProps) {
+export function DossierDetailView({ dossier, variant = 'client', dossierFiles }: DossierDetailViewProps) {
   const componentRef = useRef<HTMLDivElement>(null);
 
   /** Depuis la liste dossiers : lien avec #fiche-client pour cibler la section contact */
@@ -497,28 +499,39 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
           </div>
         )}
 
-        {/* Documents associés */}
-        {dossier.documents && dossier.documents.length > 0 && (
-          <div className="section mb-6">
-            <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
-              Documents Associés ({dossier.documents.length})
-            </h2>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <ul className="list-disc list-inside space-y-2">
-                {dossier.documents.map((doc: any, index: number) => (
-                  <li key={index} className="text-foreground">
-                    {doc.nomFichier || doc.filename || `Document ${index + 1}`}
-                    {doc.url && (
-                      <span className="text-xs text-muted-foreground ml-2">
-                        ({doc.url})
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+        {/* Documents associés (références dossier ou liste complète via dossierFiles) */}
+        {(() => {
+          const fromProp = Array.isArray(dossierFiles) && dossierFiles.length > 0 ? dossierFiles : null;
+          const fromDossier =
+            Array.isArray(dossier.documents) && dossier.documents.length > 0 ? dossier.documents : null;
+          const list = fromProp || fromDossier;
+          if (!list?.length) return null;
+          return (
+            <div className="section mb-6">
+              <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
+                Documents associés ({list.length})
+              </h2>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <ul className="list-disc list-inside space-y-2">
+                  {list.map((doc: any, index: number) => (
+                    <li key={doc._id || doc.id || index} className="text-foreground">
+                      {doc.nom || doc.nomFichier || doc.filename || `Document ${index + 1}`}
+                      {doc.user && (doc.user.firstName || doc.user.email) && (
+                        <span className="text-xs text-muted-foreground ml-2">
+                          — {doc.user.firstName || ''} {doc.user.lastName || ''}{' '}
+                          {doc.user.email ? `(${doc.user.email})` : ''}
+                        </span>
+                      )}
+                      {doc.url && (
+                        <span className="text-xs text-muted-foreground ml-2">({doc.url})</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Messages */}
         {dossier.messages && dossier.messages.length > 0 && (

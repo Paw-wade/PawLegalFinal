@@ -21,6 +21,8 @@ export default function AdminDossiersTarificationPage() {
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [filterText, setFilterText] = useState('');
   const [updatingPaymentId, setUpdatingPaymentId] = useState<string | null>(null);
+  const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,7 +116,29 @@ export default function AdminDossiersTarificationPage() {
     }
   };
 
-  const renderList = (items: any[], emptyText: string) => {
+  const handlePaymentReminder = async (dossier: any) => {
+    const id = String(dossier?._id || dossier?.id || '');
+    if (!id || !canTogglePayment(dossier) || dossier?.paiementTarificationEffectue) return;
+    setRemindingId(id);
+    setFeedback(null);
+    try {
+      const res = await dossiersAPI.sendTarificationPaymentReminder(id);
+      if (res.data?.success) {
+        setFeedback({ type: 'success', text: res.data.message || 'Relance envoyée.' });
+      } else {
+        setFeedback({ type: 'error', text: res.data?.message || 'Échec de la relance.' });
+      }
+    } catch (e: any) {
+      setFeedback({
+        type: 'error',
+        text: e?.response?.data?.message || e?.message || 'Erreur lors de la relance.',
+      });
+    } finally {
+      setRemindingId(null);
+    }
+  };
+
+  const renderList = (items: any[], emptyText: string, opts?: { showPaymentReminder?: boolean }) => {
     if (!items.length) {
       return <p className="text-sm text-gray-500">{emptyText}</p>;
     }
@@ -125,6 +149,8 @@ export default function AdminDossiersTarificationPage() {
           const fixedAmount = Number(dossier?.montantTarificationFixe || 0);
           const paymentDone = !!dossier?.paiementTarificationEffectue;
           const paymentToggleAllowed = canTogglePayment(dossier);
+          const showRelance =
+            !!opts?.showPaymentReminder && paymentToggleAllowed && !paymentDone;
           return (
             <div
               key={String(id)}
@@ -137,27 +163,40 @@ export default function AdminDossiersTarificationPage() {
                   </p>
                   <span className="text-xs text-gray-600">{dossier?.titre || 'Sans titre'}</span>
                 </Link>
-                <button
-                  type="button"
-                  disabled={!paymentToggleAllowed || updatingPaymentId === String(id)}
-                  onClick={() => handleTogglePayment(dossier)}
-                  className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition-colors ${
-                    paymentDone
-                      ? 'bg-emerald-100 border-emerald-300 text-emerald-800 hover:bg-emerald-200'
-                      : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  title={
-                    paymentToggleAllowed
-                      ? 'Basculer le statut paiement effectué / non effectué'
-                      : 'Paiement non applicable (pas de formule ni montant fixé)'
-                  }
-                >
-                  {updatingPaymentId === String(id)
-                    ? 'Mise à jour...'
-                    : paymentDone
-                    ? 'Paiement effectué'
-                    : 'Paiement non effectué'}
-                </button>
+                <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
+                  {showRelance && (
+                    <button
+                      type="button"
+                      disabled={remindingId === String(id)}
+                      onClick={() => handlePaymentReminder(dossier)}
+                      className="rounded-md px-3 py-1.5 text-xs font-semibold border border-blue-600 bg-blue-50 text-blue-900 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Notification dans l’app client + SMS court (1 segment) si un numéro est enregistré"
+                    >
+                      {remindingId === String(id) ? 'Envoi…' : 'Relance app + SMS'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!paymentToggleAllowed || updatingPaymentId === String(id)}
+                    onClick={() => handleTogglePayment(dossier)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold border transition-colors ${
+                      paymentDone
+                        ? 'bg-emerald-100 border-emerald-300 text-emerald-800 hover:bg-emerald-200'
+                        : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title={
+                      paymentToggleAllowed
+                        ? 'Basculer le statut paiement effectué / non effectué'
+                        : 'Paiement non applicable (pas de formule ni montant fixé)'
+                    }
+                  >
+                    {updatingPaymentId === String(id)
+                      ? 'Mise à jour...'
+                      : paymentDone
+                      ? 'Paiement effectué'
+                      : 'Paiement non effectué'}
+                  </button>
+                </div>
               </div>
               <div className="mt-1 text-xs text-gray-700">
                 {dossier?.fraisExoneres
@@ -218,7 +257,31 @@ export default function AdminDossiersTarificationPage() {
 
       <section className="rounded-xl border border-gray-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-gray-900 mb-3">Paiement requis ({filteredWithPayment.length})</h2>
-        {renderList(filteredWithPayment, 'Aucun dossier avec paiement enregistré pour le moment.')}
+        <p className="text-xs text-gray-600 mb-3">
+          Pour les dossiers avec paiement non effectué : bouton <strong>Relance app + SMS</strong> — notification
+          in-app et SMS court (un segment) vers le numéro du compte client, si Twilio est configuré.
+        </p>
+        {feedback && (
+          <div
+            className={`mb-3 rounded-lg border px-3 py-2 text-sm ${
+              feedback.type === 'success'
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                : 'border-red-300 bg-red-50 text-red-800'
+            }`}
+          >
+            {feedback.text}
+            <button
+              type="button"
+              className="ml-2 underline text-xs"
+              onClick={() => setFeedback(null)}
+            >
+              Fermer
+            </button>
+          </div>
+        )}
+        {renderList(filteredWithPayment, 'Aucun dossier avec paiement enregistré pour le moment.', {
+          showPaymentReminder: true,
+        })}
       </section>
 
       <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">

@@ -454,13 +454,18 @@ router.get('/dossier/:dossierId', async (req, res) => {
       });
     }
     
-    // Vérifier l'accès
+    // Vérifier l'accès (aligné sur GET /user/dossiers/:id pour le client)
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
     const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
     const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const isClientByEmail =
+      req.user.role === 'client' &&
+      dossier.clientEmail &&
+      req.user.email &&
+      String(dossier.clientEmail).trim().toLowerCase() === String(req.user.email).trim().toLowerCase();
     const isPartenaire = req.user.role === 'partenaire';
     
-    let hasAccess = isAdmin || isOwner || isAssigned;
+    let hasAccess = isAdmin || isOwner || isAssigned || isClientByEmail;
     
     // Pour les partenaires, vérifier si le dossier leur est transmis (pending ou accepted, pas refused)
     if (isPartenaire && !hasAccess) {
@@ -667,6 +672,36 @@ router.post('/', (req, res, next) => {
 const isCabinetStaff = (role) =>
   role === 'admin' || role === 'superadmin' || role === 'secretaire';
 
+/**
+ * Client : accès aux pièces du dossier si même règle que GET /user/dossiers/:id
+ * (utilisateur lié au dossier OU email client du dossier = email connecté).
+ */
+async function canClientAccessDocumentViaOwningDossier(document, user) {
+  if (!document || !document.dossierId || user.role !== 'client') return false;
+  const userId = (user.id || user._id || '').toString();
+  const userEmail = (user.email || '').trim().toLowerCase();
+  if (!userId) return false;
+  const rawDossierId = document.dossierId._id || document.dossierId;
+  if (!rawDossierId || !mongoose.Types.ObjectId.isValid(String(rawDossierId))) return false;
+  try {
+    const Dossier = require('../models/Dossier');
+    const dossier = await Dossier.findById(rawDossierId).select('user clientEmail').lean();
+    if (!dossier) return false;
+    if (dossier.user && dossier.user.toString() === userId) return true;
+    if (
+      dossier.clientEmail &&
+      userEmail &&
+      String(dossier.clientEmail).trim().toLowerCase() === userEmail
+    ) {
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.warn('canClientAccessDocumentViaOwningDossier:', e.message);
+    return false;
+  }
+}
+
 // @route   GET /api/user/documents/:id/preview
 // @desc    Prévisualiser un document (retourne le fichier avec headers pour affichage)
 // @access  Private — auth via middleware protect (Bearer ou ?token=)
@@ -747,19 +782,22 @@ router.get('/:id/preview', async (req, res) => {
       }
     }
     
+    const isDossierOwnerClient = await canClientAccessDocumentViaOwningDossier(document, user);
+
     console.log('🔐 Vérification des permissions:', {
       isOwner,
       isAdmin,
       isPartenaire,
       isTransmittedToPartenaire,
+      isDossierOwnerClient,
       documentUserId,
       currentUserId,
       userRole: user.role,
       dossierId: document.dossierId?._id || document.dossierId
     });
 
-    if (!isOwner && !isAdmin && !isTransmittedToPartenaire) {
-      console.error('❌ Accès refusé - Pas propriétaire, pas admin/secrétaire, et pas partenaire autorisé');
+    if (!isOwner && !isAdmin && !isTransmittedToPartenaire && !isDossierOwnerClient) {
+      console.error('❌ Accès refusé - Pas propriétaire, pas admin/secrétaire, pas partenaire autorisé, pas client propriétaire du dossier');
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé à ce document'
@@ -875,8 +913,10 @@ router.get('/:id/download', async (req, res) => {
         });
       }
     }
+
+    const isDossierOwnerClient = await canClientAccessDocumentViaOwningDossier(document, req.user);
     
-    if (!isOwner && !isAdmin && !hasAccessViaTransmission) {
+    if (!isOwner && !isAdmin && !hasAccessViaTransmission && !isDossierOwnerClient) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé à ce document'

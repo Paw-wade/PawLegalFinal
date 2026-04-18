@@ -119,14 +119,9 @@ export default function DossierDetailPage() {
     if (!dossierId) return;
     setIsLoadingDocuments(true);
     try {
-      const response = await documentsAPI.getAllDocuments();
+      const response = await dossiersAPI.getDossierDocuments(dossierId);
       if (response.data.success) {
-        const allDocuments = response.data.documents || response.data.data || [];
-        // Filtrer les documents liés à ce dossier
-        const dossierDocuments = allDocuments.filter((doc: any) => 
-          doc.dossierId && (doc.dossierId._id || doc.dossierId).toString() === dossierId.toString()
-        );
-        setDocuments(dossierDocuments);
+        setDocuments(response.data.documents || []);
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des documents:', err);
@@ -529,7 +524,7 @@ export default function DossierDetailPage() {
         </div>
 
         {/* Vue détaillée avec téléchargement et impression */}
-        <DossierDetailView dossier={dossier} variant="client" />
+        <DossierDetailView dossier={dossier} variant="client" dossierFiles={documents} />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mt-6 sm:mt-8">
           {/* Informations principales */}

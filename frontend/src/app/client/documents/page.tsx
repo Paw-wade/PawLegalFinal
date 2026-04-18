@@ -72,7 +72,6 @@ export default function DocumentsPage() {
         }
       }
       loadDocuments();
-      loadDossiers();
     }
   }, [session, status, router]);
 
@@ -84,35 +83,47 @@ export default function DocumentsPage() {
     }
   }, [dossiers]);
 
-  const loadDossiers = async () => {
-    setIsLoadingDossiers(true);
-    try {
-      const response = await dossiersAPI.getMyDossiers();
-      if (response.data.success) {
-        setDossiers(response.data.dossiers || []);
-      }
-    } catch (err: any) {
-      console.error('Erreur lors du chargement des dossiers:', err);
-    } finally {
-      setIsLoadingDossiers(false);
-    }
-  };
-
   const loadDocuments = async () => {
     setIsLoading(true);
+    setIsLoadingDossiers(true);
     setError(null);
     try {
-      const response = await documentsAPI.getMyDocuments();
-      if (response.data.success) {
-        setDocuments(response.data.documents || []);
-      } else {
-        setError('Erreur lors du chargement des documents');
-      }
+      const dossiersRes = await dossiersAPI.getMyDossiers();
+      const list = dossiersRes.data?.success ? dossiersRes.data.dossiers || [] : [];
+      setDossiers(list);
+
+      const byId = new Map<string, any>();
+      await Promise.all(
+        list.map(async (d: any) => {
+          const id = (d._id || d.id)?.toString();
+          if (!id || !/^[a-f0-9]{24}$/i.test(id)) return;
+          try {
+            const res = await dossiersAPI.getDossierDocuments(id);
+            if (res.data.success) {
+              (res.data.documents || []).forEach((doc: any) => {
+                const docId = (doc._id || doc.id)?.toString();
+                if (docId) byId.set(docId, doc);
+              });
+            }
+          } catch (e: any) {
+            if (e?.response?.status !== 403) {
+              console.error(`Erreur documents dossier ${id}:`, e);
+            }
+          }
+        })
+      );
+
+      const merged = Array.from(byId.values()).sort(
+        (a, b) =>
+          new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
+      setDocuments(merged);
     } catch (err: any) {
       console.error('Erreur lors du chargement des documents:', err);
       setError(err.response?.data?.message || 'Erreur lors du chargement des documents');
     } finally {
       setIsLoading(false);
+      setIsLoadingDossiers(false);
     }
   };
 

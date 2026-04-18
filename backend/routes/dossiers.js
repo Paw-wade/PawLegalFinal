@@ -1947,6 +1947,150 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
   }
 });
 
+// @route   POST /api/user/dossiers/:id/tarification-payment-reminder
+// @desc    Relance client : notification in-app + SMS court (1 segment) si numéro présent
+// @access  Private (admin, superadmin)
+router.post(
+  '/:id/tarification-payment-reminder',
+  protect,
+  authorize('admin', 'superadmin'),
+  async (req, res) => {
+    try {
+      const dossierId = req.params.id;
+      if (!mongoose.Types.ObjectId.isValid(dossierId)) {
+        return res.status(400).json({ success: false, message: 'Identifiant de dossier invalide' });
+      }
+
+      const dossier = await Dossier.findById(dossierId).lean();
+      if (!dossier) {
+        return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+      }
+
+      if (dossier.fraisExoneres) {
+        return res.status(400).json({
+          success: false,
+          message: 'Dossier exonéré : relance paiement non applicable.'
+        });
+      }
+
+      const hasPaymentDefined =
+        Number(dossier.montantTarificationFixe || 0) > 0 || !!dossier.formuleTarifaire;
+      if (!hasPaymentDefined) {
+        return res.status(400).json({
+          success: false,
+          message: 'Aucun montant ni formule de tarification définie pour ce dossier.'
+        });
+      }
+
+      if (dossier.paiementTarificationEffectue) {
+        return res.status(400).json({
+          success: false,
+          message: 'Le paiement est déjà enregistré comme effectué.'
+        });
+      }
+
+      let clientUserId = null;
+      if (dossier.user) {
+        clientUserId = dossier.user.toString();
+      } else if (dossier.clientEmail) {
+        const userByEmail = await User.findOne({
+          email: String(dossier.clientEmail).toLowerCase()
+        }).select('_id');
+        if (userByEmail) clientUserId = userByEmail._id.toString();
+      }
+
+      if (!clientUserId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Client introuvable : associez un compte ou un email client au dossier.'
+        });
+      }
+
+      const dossierTitle = dossier.titre || dossier.numero || 'votre dossier';
+      const refCourte = (dossier.numero || dossierId.slice(-8)).toString().replace(/\s+/g, '').slice(0, 20);
+      const montantFixe = Number(dossier.montantTarificationFixe || 0);
+      const messageInApp =
+        montantFixe > 0
+          ? `Le règlement de la tarification (${montantFixe.toLocaleString('fr-FR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            })} EUR) pour le dossier « ${dossierTitle} » est en attente. Finalisez depuis la rubrique Tarification.`
+          : `Le dossier « ${dossierTitle} » : choix de formule et paiement tarifaire sont attendus. Consultez Tarification dans votre espace client.`;
+
+      const notif = await createNotification(
+        clientUserId,
+        'tarification_payment_reminder',
+        'Rappel : paiement tarification en attente',
+        messageInApp,
+        '/client/tarification',
+        { dossierId: dossierId.toString(), sentByAdmin: req.user.id?.toString?.() || String(req.user.id) }
+      );
+
+      if (!notif) {
+        return res.status(500).json({
+          success: false,
+          message: 'Impossible de créer la notification in-app (voir les logs serveur).'
+        });
+      }
+
+      const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+      let smsSent = false;
+      let smsSkipped = null;
+
+      const phoneUser = await User.findById(clientUserId).select('phone');
+      if (dossier.isStandby) {
+        smsSkipped = 'dossier_standby';
+      } else if (!phoneUser?.phone) {
+        smsSkipped = 'no_phone';
+      } else {
+        const formattedPhone = formatPhoneNumber(phoneUser.phone);
+        if (!formattedPhone) {
+          smsSkipped = 'invalid_phone';
+        } else {
+          try {
+            await sendNotificationSMS(
+              formattedPhone,
+              'tarification_payment_reminder',
+              { numero: refCourte },
+              {
+                userId: clientUserId,
+                skipPreferences: true,
+                context: 'tarification_payment_reminder',
+                contextId: dossierId,
+                sentBy: req.user.id
+              }
+            );
+            smsSent = true;
+          } catch (smsErr) {
+            console.error('⚠️ SMS relance tarification:', smsErr);
+            smsSkipped = smsErr.message || 'sms_error';
+          }
+        }
+      }
+
+      const parts = ['notification in-app'];
+      if (smsSent) parts.push('SMS');
+      const smsHint =
+        smsSent ? '' : ` — SMS non envoyé${smsSkipped ? ` (${smsSkipped})` : ''}`;
+
+      return res.json({
+        success: true,
+        message: `Relance enregistrée (${parts.join(' + ')})${smsHint}.`,
+        notificationCreated: true,
+        smsSent,
+        smsSkipped: smsSent ? null : smsSkipped
+      });
+    } catch (error) {
+      console.error('Erreur relance tarification:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+);
+
 // @route   GET /api/user/dossiers/:id
 // @desc    Récupérer un dossier par ID
 // @access  Private

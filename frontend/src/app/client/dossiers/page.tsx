@@ -8,6 +8,7 @@ import { dossiersAPI, notificationsAPI, documentRequestsAPI, documentsAPI } from
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { Toast } from '@/components/Toast';
+import { Eye, Download } from 'lucide-react';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getEditedEtapesOnly, customEtapeMatchesStatut, getDossierProgressFromEditedEtapes } from '@/lib/dossierUtils';
 
 // Mapping des catégories pour l'affichage
@@ -155,13 +156,11 @@ export default function DossiersPage() {
       loadDossiers();
       loadNotifications();
       loadDocumentRequests();
-      loadDossierDocuments();
     } else if (token) {
       // Si on a un token mais pas de session, charger quand même les dossiers
       loadDossiers();
       loadNotifications();
       loadDocumentRequests();
-      loadDossierDocuments();
     }
   }, [session, status, router]);
 
@@ -240,30 +239,45 @@ export default function DossiersPage() {
     }
   };
 
-  const loadDossierDocuments = async () => {
+  /** Toutes les pièces du dossier (client, admin, partenaire), comme GET /user/documents/dossier/:id */
+  const loadDossierDocumentsForList = async (dossiersList: any[]) => {
+    if (!dossiersList?.length) {
+      setDossierDocuments({});
+      return;
+    }
     try {
-      const response = await documentsAPI.getMyDocuments();
-      if (response.data.success) {
-        const allDocuments = response.data.documents || [];
-        const documentsMap: Record<string, any[]> = {};
-        
-        // Grouper les documents par dossier
-        allDocuments.forEach((doc: any) => {
-          const dossierId = doc.dossierId?._id || doc.dossierId || doc.dossier?._id || doc.dossier;
-          if (dossierId) {
-            const dossierIdStr = dossierId.toString();
-            if (!documentsMap[dossierIdStr]) {
-              documentsMap[dossierIdStr] = [];
+      const entries = await Promise.all(
+        dossiersList.map(async (d: any) => {
+          const id = (d._id || d.id)?.toString();
+          if (!id || !/^[a-f0-9]{24}$/i.test(id)) return null;
+          try {
+            const res = await dossiersAPI.getDossierDocuments(id);
+            if (res.data.success) {
+              return [id, res.data.documents || []] as [string, any[]];
             }
-            documentsMap[dossierIdStr].push(doc);
+          } catch (e: any) {
+            if (e?.response?.status !== 403) {
+              console.error(`Erreur documents dossier ${id}:`, e);
+            }
           }
-        });
-        
-        setDossierDocuments(documentsMap);
+          return [id, []] as [string, any[]];
+        })
+      );
+      const documentsMap: Record<string, any[]> = {};
+      for (const row of entries) {
+        if (row) {
+          const [id, docs] = row;
+          documentsMap[id] = docs;
+        }
       }
+      setDossierDocuments(documentsMap);
     } catch (err: any) {
       console.error('Erreur lors du chargement des documents des dossiers:', err);
     }
+  };
+
+  const loadDossierDocuments = async () => {
+    await loadDossierDocumentsForList(dossiers);
   };
 
   const handleDirectUploadFromList = async (e: React.FormEvent, dossierId: string) => {
@@ -440,6 +454,7 @@ export default function DossiersPage() {
         console.log('✅ Dossiers chargés:', dossiersList.length);
         console.log('✅ Liste des dossiers:', dossiersList);
         setDossiers(dossiersList);
+        await loadDossierDocumentsForList(dossiersList);
         // Toujours déplier tous les badges pour l'espace client
         const allIds = new Set<string>();
         dossiersList.forEach((d: any) => {
@@ -869,6 +884,7 @@ export default function DossiersPage() {
                     const isExpanded = expandedDocumentSections.has(dossierIdKey);
                     const hasRequests = dossierRequests.length > 0;
                     const docs = dossierDocuments[dossierIdStr] || [];
+                    const importantInfoCount = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit.length : 0;
 
                     const toggleDirectUpload = (e?: { stopPropagation?: () => void }) => {
                       e?.stopPropagation?.();
@@ -924,8 +940,15 @@ export default function DossiersPage() {
                               }}
                             >
                               ℹ️
-                              {hasUnseenComplement(dossier) && (
-                                <span className="absolute -top-1 -right-1 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                              {importantInfoCount > 0 && (
+                                <span
+                                  className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] leading-4 text-white text-center font-bold ring-2 ring-white ${
+                                    hasUnseenComplement(dossier) ? 'bg-red-500' : 'bg-blue-500'
+                                  }`}
+                                  title={`${importantInfoCount} information(s) importante(s)`}
+                                >
+                                  {importantInfoCount > 99 ? '99+' : importantInfoCount}
+                                </span>
                               )}
                             </Button>
                           </div>
@@ -959,8 +982,15 @@ export default function DossiersPage() {
                               }}
                             >
                               ℹ️
-                              {hasUnseenComplement(dossier) && (
-                                <span className="absolute -top-1 -right-1 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                              {importantInfoCount > 0 && (
+                                <span
+                                  className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] leading-4 text-white text-center font-bold ring-2 ring-white ${
+                                    hasUnseenComplement(dossier) ? 'bg-red-500' : 'bg-blue-500'
+                                  }`}
+                                  title={`${importantInfoCount} information(s) importante(s)`}
+                                >
+                                  {importantInfoCount > 99 ? '99+' : importantInfoCount}
+                                </span>
                               )}
                             </Button>
                           </div>
@@ -1152,7 +1182,7 @@ export default function DossiersPage() {
                             <div className="mt-2 pt-2 border-t border-gray-100">
                               <button
                                 type="button"
-                                className="w-full flex items-center justify-between gap-2 py-1 px-1 rounded hover:bg-gray-50 transition-colors text-left mb-1"
+                                className="w-full flex items-center justify-between gap-2 py-2 px-2 sm:py-2.5 sm:px-3 rounded-lg border-2 border-green-600/80 bg-green-50 hover:bg-green-100/90 transition-colors text-left mb-1 shadow-sm"
                                 onClick={() => {
                                   const newExpanded = new Set(expandedDocumentDropdowns);
                                   if (docsExpanded) newExpanded.delete(dossierIdStr);
@@ -1160,10 +1190,10 @@ export default function DossiersPage() {
                                   setExpandedDocumentDropdowns(newExpanded);
                                 }}
                               >
-                                <span className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                <span className="text-xs sm:text-sm font-bold text-green-800 uppercase tracking-wide">
                                   Documents du dossier
                                 </span>
-                                <span className="text-[11px] md:text-sm text-muted-foreground">
+                                <span className="text-xs sm:text-sm font-bold text-green-700 tabular-nums shrink-0">
                                   {docs.length} doc{docs.length > 1 ? 's' : ''} {docsExpanded ? '▲' : '▼'}
                                 </span>
                               </button>
@@ -1173,27 +1203,32 @@ export default function DossiersPage() {
                                   {docs.map((doc: any) => (
                                     <div
                                       key={doc._id || doc.id}
-                                      className="flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-sm"
+                                      className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-[11px] md:text-sm shadow-sm"
                                     >
-                                      <div className="min-w-0 flex-1 truncate font-medium text-foreground">
+                                      <div className="min-w-0 flex-1 truncate font-medium text-foreground pr-1">
+                                        <span className="mr-1.5 inline-block text-muted-foreground" aria-hidden>
+                                          📄
+                                        </span>
                                         {doc.nom || doc.filename || 'Document'}
                                       </div>
-                                      <div className="flex items-center gap-1.5 shrink-0">
+                                      <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto">
                                         <button
                                           type="button"
-                                          className="px-1.5 py-0.5 rounded border border-gray-300 text-[10px] md:text-xs hover:bg-gray-50"
+                                          title="Prévisualiser le document"
+                                          className="inline-flex flex-1 sm:flex-none min-h-[40px] items-center justify-center gap-1.5 rounded-md border border-green-700/35 bg-green-50 px-3 py-2 text-xs font-semibold text-green-900 hover:bg-green-100 active:bg-green-100/80 transition-colors"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             setSelectedDocumentForPreview(doc);
                                           }}
                                         >
+                                          <Eye className="h-4 w-4 shrink-0" aria-hidden />
                                           Voir
                                         </button>
                                         <button
                                           type="button"
-                                          className="h-5 w-5 inline-flex items-center justify-center rounded border border-gray-300 text-[10px] hover:bg-gray-50"
-                                          title="Télécharger"
-                                          aria-label="Télécharger"
+                                          title="Télécharger le document"
+                                          aria-label="Télécharger le document"
+                                          className="inline-flex flex-1 sm:flex-none min-h-[40px] items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-foreground hover:bg-gray-50 active:bg-gray-100 transition-colors"
                                           onClick={async (e) => {
                                             e.stopPropagation();
                                             try {
@@ -1211,7 +1246,9 @@ export default function DossiersPage() {
                                             }
                                           }}
                                         >
-                                          ⬇
+                                          <Download className="h-4 w-4 shrink-0" aria-hidden />
+                                          <span className="hidden min-[380px]:inline">Télécharger</span>
+                                          <span className="min-[380px]:hidden">Tél.</span>
                                         </button>
                                       </div>
                                     </div>

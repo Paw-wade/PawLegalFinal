@@ -251,6 +251,8 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
         task_reminder: `Rappel: La tâche "{{taskTitle}}" est due le {{dateEcheance}}. Ada Papers.`,
         task_overdue: `⚠️ ALERTE: La tâche "{{taskTitle}}" assignée à {{assignedTo}} est en retard de {{daysOverdue}} jour(s). Échéance: {{deadlineDate}}. Ada Papers.`,
         tarification_choice_reminder: `Votre dossier "{{dossierTitle}}" est en cours. Choisissez votre formule tarifaire dans votre espace client. Ada Papers.`,
+        /** Relance admin : message court (1 segment GSM ~160c) — {{numero}} = ref. dossier courte */
+        tarification_payment_reminder: `Rappel Ada Papers: reglement tarif dossier {{numero}} en attente. Espace client > Tarification.`,
         frais_tarification_exoneres: `Votre dossier "{{dossierTitle}}" : vous êtes exonéré(e) des frais. Ada Papers.`,
       };
       

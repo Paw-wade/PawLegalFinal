@@ -27,6 +27,7 @@ const notificationSchema = new mongoose.Schema({
       'account_created',
       'draft_access_granted',
       'tarification_choice_requested',
+      'tarification_payment_reminder',
       'other'
     ]
   },
