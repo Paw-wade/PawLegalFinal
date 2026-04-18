@@ -202,5 +202,12 @@ nextjs-portal[data-cursor-element-id] {
   animation-delay: 1000ms;
 }
 
+/* RichTextEditor : afficher le placeholder quand la zone est vide */
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}
+
 
 

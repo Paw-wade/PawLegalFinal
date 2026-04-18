@@ -65,33 +65,41 @@ async function fixDossierNumero() {
 
     console.log(`📋 ${dossiersSansNumero.length} dossiers sans numéro trouvés`);
 
-    // Générer des numéros pour chaque dossier
+    // Générer des numéros pour chaque dossier (format DOS-YYMM-NN, aligné sur le modèle Dossier)
     for (let i = 0; i < dossiersSansNumero.length; i++) {
       const dossier = dossiersSansNumero[i];
       const date = dossier.createdAt || new Date();
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const prefix = `DOS-${year}${month}${day}-`;
+      const yy = String(date.getFullYear() % 100).padStart(2, '0');
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const yymm = `${yy}${mm}`;
+      const prefix = `DOS-${yymm}-`;
 
-      // Trouver le dernier numéro du jour
       const lastDossier = await Dossier.findOne({
-        numero: { $regex: `^${prefix}` }
+        numero: { $regex: `^DOS-${yymm}-\\d{2}$` }
       }).sort({ numero: -1 });
 
       let sequence = 1;
       if (lastDossier && lastDossier.numero) {
-        const lastSequence = parseInt(lastDossier.numero.split('-')[2] || '0');
-        sequence = lastSequence + 1;
+        const parts = lastDossier.numero.split('-');
+        const lastSequence = parseInt((parts.length >= 3 ? parts[2] : '0') || '0', 10);
+        if (Number.isFinite(lastSequence)) {
+          sequence = lastSequence + 1;
+        }
       }
 
-      // Vérifier que le numéro n'existe pas déjà
-      let numero = `${prefix}${String(sequence).padStart(4, '0')}`;
+      if (sequence > 99) {
+        throw new Error(`Séquence mensuelle > 99 pour ${prefix}`);
+      }
+
+      let numero = `${prefix}${String(sequence).padStart(2, '0')}`;
       let exists = await Dossier.findOne({ numero });
       let attempts = 0;
       while (exists && attempts < 100) {
         sequence++;
-        numero = `${prefix}${String(sequence).padStart(4, '0')}`;
+        if (sequence > 99) {
+          throw new Error(`Séquence mensuelle > 99 pour ${prefix}`);
+        }
+        numero = `${prefix}${String(sequence).padStart(2, '0')}`;
         exists = await Dossier.findOne({ numero });
         attempts++;
       }

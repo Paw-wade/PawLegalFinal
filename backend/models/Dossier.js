@@ -301,40 +301,47 @@ dossierSchema.pre('save', async function(next) {
   // Générer un numéro unique si ce n'est pas déjà défini
   if (!this.numero) {
     try {
-      // Générer un numéro au format DOS-YYYYMMDD-XXXX
+      // Format court : DOS-YYMM-NN (séquence mensuelle sur 2 chiffres, ex. DOS-2604-07)
       const date = this.createdAt || new Date();
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const prefix = `DOS-${year}${month}${day}-`;
-      
-      // Trouver le dernier numéro du jour en utilisant la collection directement
+      const yy = String(date.getFullYear() % 100).padStart(2, '0');
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const yymm = `${yy}${mm}`;
+      const prefix = `DOS-${yymm}-`;
+
       const collection = this.constructor.collection;
       const lastDossier = await collection.findOne(
-        { numero: { $regex: `^${prefix}` } },
+        { numero: { $regex: `^DOS-${yymm}-\\d{2}$` } },
         { sort: { numero: -1 } }
       );
-      
+
       let sequence = 1;
       if (lastDossier && lastDossier.numero) {
         const parts = lastDossier.numero.split('-');
         if (parts.length >= 3) {
-          const lastSequence = parseInt(parts[2] || '0');
-          sequence = lastSequence + 1;
+          const lastSequence = parseInt(parts[2] || '0', 10);
+          if (Number.isFinite(lastSequence)) {
+            sequence = lastSequence + 1;
+          }
         }
       }
-      
-      // Vérifier que le numéro n'existe pas déjà
-      let numero = `${prefix}${String(sequence).padStart(4, '0')}`;
+
+      if (sequence > 99) {
+        throw new Error(`Séquence mensuelle dépassée (>99) pour le préfixe ${prefix}`);
+      }
+
+      let numero = `${prefix}${String(sequence).padStart(2, '0')}`;
       let exists = await collection.findOne({ numero });
       let attempts = 0;
       while (exists && attempts < 100) {
         sequence++;
-        numero = `${prefix}${String(sequence).padStart(4, '0')}`;
+        if (sequence > 99) {
+          throw new Error(`Séquence mensuelle dépassée (>99) pour le préfixe ${prefix}`);
+        }
+        numero = `${prefix}${String(sequence).padStart(2, '0')}`;
         exists = await collection.findOne({ numero });
         attempts++;
       }
-      
+
       this.numero = numero;
     } catch (error) {
       console.error('Erreur lors de la génération du numéro de dossier:', error);

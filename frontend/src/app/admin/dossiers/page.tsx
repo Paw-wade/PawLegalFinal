@@ -4,7 +4,17 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { dossiersAPI, userAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI, collaborativeDraftsAPI } from '@/lib/api';
+import {
+  dossiersAPI,
+  userAPI,
+  documentRequestsAPI,
+  notificationsAPI,
+  messagesAPI,
+  documentsAPI,
+  tasksAPI,
+  collaborativeDraftsAPI,
+  dossierDocumentDraftsAPI,
+} from '@/lib/api';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getDossierMinEtapeDateMs } from '@/lib/dossierUtils';
 import {
@@ -293,6 +303,14 @@ export default function AdminDossiersPage() {
   const [notificationMessage, setNotificationMessage] = useState('');
   const [exonererFraisTarification, setExonererFraisTarification] = useState(false);
   const [fraisExoneresMotifInput, setFraisExoneresMotifInput] = useState('');
+  /** Modal superadmin : montant fixe vs notification tarification (séparés). */
+  const [showTarifModal, setShowTarifModal] = useState<any>(null);
+  const [tarifMontantInput, setTarifMontantInput] = useState('');
+  const [tarifNotifyMessage, setTarifNotifyMessage] = useState('');
+  const [tarifExonerer, setTarifExonerer] = useState(false);
+  const [tarifExoMotif, setTarifExoMotif] = useState('');
+  const [tarifSavingMontant, setTarifSavingMontant] = useState(false);
+  const [tarifSendingNotify, setTarifSendingNotify] = useState(false);
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'pending' | 'in_progress' | 'standby' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
   >('all');
@@ -496,6 +514,19 @@ export default function AdminDossiersPage() {
       loadDossierTasks();
       loadDossierDrafts();
     }
+  }, [session, status, dossiers.length]);
+
+  useEffect(() => {
+    const refreshPreparation = () => {
+      void loadDossierDrafts();
+    };
+    if (typeof window === 'undefined') return;
+    window.addEventListener('dossierDocumentDraftsUpdated', refreshPreparation);
+    window.addEventListener('collaborativeDraftsUpdated', refreshPreparation);
+    return () => {
+      window.removeEventListener('dossierDocumentDraftsUpdated', refreshPreparation);
+      window.removeEventListener('collaborativeDraftsUpdated', refreshPreparation);
+    };
   }, [session, status, dossiers.length]);
 
   useEffect(() => {
@@ -859,18 +890,43 @@ export default function AdminDossiersPage() {
   const loadDossierDrafts = async () => {
     try {
       const draftsMap: Record<string, any[]> = {};
+      let wordDrafts: any[] = [];
+      try {
+        const wordRes = await dossierDocumentDraftsAPI.list();
+        if (wordRes.data?.success && Array.isArray(wordRes.data.drafts)) {
+          wordDrafts = wordRes.data.drafts;
+        }
+      } catch (err) {
+        console.warn('⚠️ Impossible de charger les brouillons Word (préparation):', err);
+      }
+      const wordByDossierId: Record<string, any[]> = {};
+      for (const w of wordDrafts) {
+        const did = w.dossier?._id?.toString() || (typeof w.dossier === 'string' ? w.dossier : null);
+        if (!did) continue;
+        if (!wordByDossierId[did]) wordByDossierId[did] = [];
+        wordByDossierId[did].push({ ...w, prepKind: 'word' as const });
+      }
+
       await Promise.all(
         dossiers.map(async (dossier: any) => {
           const dossierId = dossier._id || dossier.id;
           if (!dossierId) return;
+          const idStr = String(dossierId);
           try {
             const draftRes = await collaborativeDraftsAPI.getDossierDrafts(dossierId);
-            if (draftRes.data.success && Array.isArray(draftRes.data.drafts)) {
-              draftsMap[dossierId] = draftRes.data.drafts;
-            }
+            const collabList =
+              draftRes.data.success && Array.isArray(draftRes.data.drafts) ? draftRes.data.drafts : [];
+            const collabs = collabList.map((c: any) => ({ ...c, prepKind: 'collab' as const }));
+            const words = wordByDossierId[idStr] || [];
+            const merged = [...collabs, ...words].sort((a, b) => {
+              const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+              const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+              return tb - ta;
+            });
+            draftsMap[idStr] = merged;
           } catch (err) {
-            // On ignore les erreurs pour un dossier donné pour ne pas bloquer l'affichage global
             console.warn(`⚠️ Impossible de charger les documents en préparation pour le dossier ${dossierId}`, err);
+            draftsMap[idStr] = wordByDossierId[idStr] || [];
           }
         })
       );
@@ -1339,44 +1395,122 @@ export default function AdminDossiersPage() {
     }
   };
 
-  const handleSetMontantTarificationFixe = async (dossier: any, e?: React.MouseEvent) => {
+  const parseTarifMontantInput = (s: string): number | null => {
+    const normalized = String(s || '')
+      .replace(/\s/g, '')
+      .replace(',', '.')
+      .trim();
+    const parsed = Number(normalized || '0');
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    return parsed;
+  };
+
+  const openTarifModal = (dossier: any, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
-    const dossierId = String(dossier?._id || dossier?.id || '');
+    const cur = Number(dossier?.montantTarificationFixe || 0);
+    setShowTarifModal(dossier);
+    setTarifMontantInput(cur > 0 ? String(cur) : '');
+    setTarifNotifyMessage('');
+    setTarifExonerer(!!dossier?.fraisExoneres);
+    setTarifExoMotif(dossier?.fraisExoneresMotif ? String(dossier.fraisExoneresMotif) : '');
+  };
+
+  const closeTarifModal = () => {
+    setShowTarifModal(null);
+    setTarifMontantInput('');
+    setTarifNotifyMessage('');
+    setTarifExonerer(false);
+    setTarifExoMotif('');
+  };
+
+  const tarifMontantDirty = () => {
+    if (!showTarifModal) return false;
+    const p = parseTarifMontantInput(tarifMontantInput);
+    if (p === null) return true;
+    const base = Number(showTarifModal.montantTarificationFixe || 0);
+    return Math.abs(p - base) > 0.0001;
+  };
+
+  const handleTarifSaveMontantOnly = async () => {
+    if (!showTarifModal) return;
+    const dossierId = String(showTarifModal._id || showTarifModal.id || '');
     if (!dossierId) return;
-    const current = Number(dossier?.montantTarificationFixe || 0);
-    const input = window.prompt(
-      'Montant de tarification fixe (EUR). Mettre 0 pour retirer le montant fixe.',
-      current > 0 ? String(current) : ''
-    );
-    if (input === null) return;
-    const normalized = input.replace(',', '.').trim();
-    const parsed = Number(normalized || '0');
-    if (!Number.isFinite(parsed) || parsed < 0) {
+    const parsed = parseTarifMontantInput(tarifMontantInput);
+    if (parsed === null) {
       setToast({ message: 'Montant invalide.', type: 'error' });
       return;
     }
-    setIsLoading(true);
+    setTarifSavingMontant(true);
     setError(null);
     try {
       await dossiersAPI.updateDossier(dossierId, {
         montantTarificationFixe: parsed,
-        notifyTarificationClient: parsed > 0,
+        skipDossierModificationNotify: true,
       });
       await loadDossiers();
       setToast({
-        message: parsed > 0
-          ? 'Montant fixé et notification tarification envoyée.'
-          : 'Montant fixe retiré.',
+        message: parsed > 0 ? 'Montant enregistré (aucune notification envoyée).' : 'Montant fixe retiré.',
         type: 'success',
       });
+      if (parsed > 0) {
+        setTarifExonerer(false);
+        setTarifExoMotif('');
+      } else {
+        setTarifMontantInput('');
+      }
+      setShowTarifModal((prev: any) => {
+        if (!prev || String(prev._id || prev.id) !== dossierId) return prev;
+        if (parsed > 0) {
+          return {
+            ...prev,
+            montantTarificationFixe: parsed,
+            fraisExoneres: false,
+            fraisExoneresMotif: undefined,
+          };
+        }
+        const {
+          montantTarificationFixe: _rm,
+          montantTarificationFixeAt: _ra,
+          montantTarificationFixeBy: _rb,
+          ...rest
+        } = prev;
+        return rest;
+      });
     } catch (err: any) {
-      const message = err?.response?.data?.message || 'Mise à jour du montant impossible';
+      const message = err?.response?.data?.message || 'Enregistrement du montant impossible';
       setToast({ message, type: 'error' });
     } finally {
-      setIsLoading(false);
+      setTarifSavingMontant(false);
+    }
+  };
+
+  const handleTarifSendNotification = async () => {
+    if (!showTarifModal) return;
+    const dossierId = String(showTarifModal._id || showTarifModal.id || '');
+    if (!dossierId) return;
+    setTarifSendingNotify(true);
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = { notifyTarificationClient: true };
+      const msg = tarifNotifyMessage.trim();
+      if (msg) payload.tarificationClientMessage = msg;
+      if (tarifExonerer) {
+        payload.fraisExoneres = true;
+        const m = tarifExoMotif.trim();
+        if (m) payload.fraisExoneresMotif = m;
+      }
+      await dossiersAPI.updateDossier(dossierId, payload);
+      await loadDossiers();
+      setToast({ message: 'Notification tarification envoyée au client.', type: 'success' });
+      closeTarifModal();
+    } catch (err: any) {
+      const message = err?.response?.data?.message || 'Envoi de la notification impossible';
+      setToast({ message, type: 'error' });
+    } finally {
+      setTarifSendingNotify(false);
     }
   };
 
@@ -2590,9 +2724,9 @@ export default function AdminDossiersPage() {
                           <>
                             <button
                               type="button"
-                              onClick={(e) => handleSetMontantTarificationFixe(dossier, e)}
+                              onClick={(e) => openTarifModal(dossier, e)}
                               className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md text-xs font-semibold transition-colors border bg-white border-blue-300 text-blue-700 hover:bg-blue-50"
-                              title="Fixer/retirer un montant manuel et notifier automatiquement la tarification."
+                              title="Montant fixe, notification client (tarification / exonération) et message in-app."
                             >
                               Tarif
                             </button>
@@ -2745,23 +2879,63 @@ export default function AdminDossiersPage() {
                       return null;
                     })()}
 
-                    {/* Documents en préparation — même affichage que l'espace partenaire */}
+                    {/* Documents en préparation — brouillons collaboratifs + brouillons cabinet (éditeur riche, export .docx) */}
                     {(dossierDrafts[dossier._id || dossier.id]?.length || 0) > 0 && (
                       <div className="mb-3">
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                           Documents en préparation
                         </p>
-                        <Link
-                          href={`/admin/dossiers/${dossier._id || dossier.id}/documents-en-preparation`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="block rounded-lg border border-gray-200 bg-gray-50/50 p-3 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-                        >
-                          <div className="space-y-2">
-                            {(dossierDrafts[dossier._id || dossier.id] || []).map((d: any) => (
-                              <div key={d._id} className="rounded border border-gray-100 bg-white px-3 py-2">
-                                <p className="font-medium text-sm text-foreground">
-                                  {d.title || 'Sans titre'}
-                                </p>
+                        <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 space-y-2">
+                          {(dossierDrafts[dossier._id || dossier.id] || []).map((d: any) => {
+                            const isWord = d.prepKind === 'word';
+                            const dossierIdStr = String(dossier._id || dossier.id);
+                            const href = isWord
+                              ? `/admin/documents/preparation/${d._id}`
+                              : `/admin/dossiers/${dossierIdStr}/documents-en-preparation?draft=${encodeURIComponent(d._id)}`;
+                            const dueLabel =
+                              d.dueDate &&
+                              new Date(d.dueDate).toLocaleDateString('fr-FR', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                              });
+                            const prepCompleted = !!d.completedAt;
+                            const dueD = d.dueDate ? new Date(d.dueDate) : null;
+                            let prepOverdue = false;
+                            if (dueD && !Number.isNaN(dueD.getTime()) && !prepCompleted) {
+                              const t0 = new Date();
+                              t0.setHours(0, 0, 0, 0);
+                              dueD.setHours(0, 0, 0, 0);
+                              prepOverdue = dueD < t0;
+                            }
+                            return (
+                              <Link
+                                key={`${isWord ? 'w' : 'c'}-${d._id}`}
+                                href={href}
+                                onClick={(e) => e.stopPropagation()}
+                                className="block rounded border border-gray-100 bg-white px-3 py-2 hover:border-orange-200 hover:bg-orange-50/30 transition-colors"
+                              >
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-orange-50 text-orange-800 border border-orange-200">
+                                    Éditeur riche
+                                  </span>
+                                  {isWord ? (
+                                    <span className="text-[10px] text-muted-foreground">· export .docx</span>
+                                  ) : null}
+                                  {prepCompleted ? (
+                                    <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                      Terminé
+                                    </span>
+                                  ) : null}
+                                  {prepOverdue ? (
+                                    <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold bg-red-50 text-red-800 border border-red-200">
+                                      Échéance dépassée
+                                    </span>
+                                  ) : null}
+                                  <p className="font-medium text-sm text-foreground flex-1 min-w-0 truncate">
+                                    {d.title || 'Sans titre'}
+                                  </p>
+                                </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                   Créé par :{' '}
                                   {d.createdBy
@@ -2769,8 +2943,14 @@ export default function AdminDossiersPage() {
                                       d.createdBy.role ||
                                       '—'
                                     : '—'}
+                                  {dueLabel ? (
+                                    <>
+                                      {' '}
+                                      · Échéance : <span className="font-medium text-foreground">{dueLabel}</span>
+                                    </>
+                                  ) : null}
                                 </p>
-                                {d.partnerAccess?.length > 0 && (
+                                {!isWord && d.partnerAccess?.length > 0 && (
                                   <p className="text-xs text-gray-500 mt-0.5">
                                     Accès :{' '}
                                     {(
@@ -2787,13 +2967,26 @@ export default function AdminDossiersPage() {
                                     ) || '—'}
                                   </p>
                                 )}
-                              </div>
-                            ))}
-                          </div>
-                          <p className="text-xs text-primary font-medium mt-2">
-                            Ouvrir la page Documents en préparation →
-                          </p>
-                        </Link>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                          <Link
+                            href={`/admin/dossiers/${dossier._id || dossier.id}/documents-en-preparation`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-primary font-medium hover:underline"
+                          >
+                            Éditeur riche (page dossier) →
+                          </Link>
+                          <Link
+                            href="/admin/documents/preparation"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-primary font-medium hover:underline"
+                          >
+                            Tous les documents en préparation →
+                          </Link>
+                        </div>
                       </div>
                     )}
 
@@ -3964,6 +4157,106 @@ export default function AdminDossiersPage() {
               </Button>
               <Button variant="destructive" onClick={() => handleDeleteDossier(showDeleteConfirm)} disabled={isLoading}>
                 {isLoading ? 'Suppression...' : 'Supprimer'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal superadmin : tarification (montant séparé de la notification) */}
+      {showTarifModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Tarification — {showTarifModal.titre || showTarifModal.numero || 'Dossier'}</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                L&apos;enregistrement du montant et l&apos;envoi de la notification au client sont deux actions distinctes.
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 space-y-3">
+              <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">1. Montant fixe (sans notification)</p>
+              <Label htmlFor="tarif-montant" className="text-sm">
+                Montant en EUR (0 pour retirer le montant fixe)
+              </Label>
+              <Input
+                id="tarif-montant"
+                value={tarifMontantInput}
+                onChange={(e) => setTarifMontantInput(e.target.value)}
+                placeholder="Ex. 1500 ou 0"
+                className="w-full"
+              />
+              <Button type="button" variant="outline" onClick={() => void handleTarifSaveMontantOnly()} disabled={tarifSavingMontant}>
+                {tarifSavingMontant ? 'Enregistrement…' : 'Enregistrer le montant uniquement'}
+              </Button>
+            </div>
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4 space-y-3">
+              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">2. Notifier le client (in-app)</p>
+              <p className="text-xs text-blue-900/90">
+                Le message envoyé dépend de l&apos;état du dossier après enregistrement : choix de formule sur le site, montant fixe déjà enregistré, ou frais exonérés si vous cochez l&apos;exonération ci-dessous.
+              </p>
+              {tarifMontantDirty() ? (
+                <p className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                  Le montant saisi diffère de celui en base : la notification utilisera le montant <strong>déjà enregistré</strong> tant que vous n&apos;avez pas cliqué sur « Enregistrer le montant uniquement ».
+                </p>
+              ) : null}
+              <div>
+                <Label htmlFor="tarif-notify-msg" className="text-sm mb-1 block">
+                  Message complémentaire pour le client (optionnel)
+                </Label>
+                <Textarea
+                  id="tarif-notify-msg"
+                  value={tarifNotifyMessage}
+                  onChange={(e) => setTarifNotifyMessage(e.target.value)}
+                  placeholder="Consignes de paiement, délais, modalités… (affiché dans la notification in-app)"
+                  rows={4}
+                  className="w-full text-sm"
+                  maxLength={2000}
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">Ajouté sous le texte automatique de la notification (max. 2000 caractères).</p>
+              </div>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={tarifExonerer}
+                  onChange={(e) => setTarifExonerer(e.target.checked)}
+                  disabled={
+                    Number(showTarifModal.montantTarificationFixe || 0) > 0 ||
+                    (parseTarifMontantInput(tarifMontantInput) ?? 0) > 0
+                  }
+                />
+                <span className="text-sm">
+                  <span className="font-semibold text-gray-900 block">Exonérer les frais de tarification</span>
+                  <span className="text-muted-foreground text-xs">
+                    Appliquée à l&apos;envoi de la notification. Incompatible avec un montant fixe {'>'} 0 (en base ou saisi).
+                  </span>
+                </span>
+              </label>
+              {tarifExonerer && (
+                <div>
+                  <Label htmlFor="tarif-exo-motif" className="text-sm mb-1 block">
+                    Motif d&apos;exonération (optionnel)
+                  </Label>
+                  <Textarea
+                    id="tarif-exo-motif"
+                    value={tarifExoMotif}
+                    onChange={(e) => setTarifExoMotif(e.target.value)}
+                    rows={2}
+                    className="w-full text-sm"
+                    maxLength={500}
+                  />
+                </div>
+              )}
+              <Button type="button" onClick={() => void handleTarifSendNotification()} disabled={tarifSendingNotify} className="w-full sm:w-auto">
+                {tarifSendingNotify ? 'Envoi…' : 'Envoyer la notification tarification'}
+              </Button>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <Button type="button" variant="outline" onClick={closeTarifModal} disabled={tarifSavingMontant || tarifSendingNotify}>
+                Fermer
               </Button>
             </div>
           </div>

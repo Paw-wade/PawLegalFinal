@@ -54,6 +54,16 @@ const collaborativeDraftSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    /** Date d’échéance souhaitée (optionnelle). */
+    dueDate: {
+      type: Date,
+      default: null,
+    },
+    /** Marqué comme terminé (pilotage). */
+    completedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

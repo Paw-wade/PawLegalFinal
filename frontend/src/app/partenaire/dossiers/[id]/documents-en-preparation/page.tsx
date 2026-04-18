@@ -1,12 +1,14 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 
 export default function PartenaireDossierDocumentsEnPreparationPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const dossierId = params?.id as string;
+  const initialDraftId = searchParams.get('draft');
 
   if (!dossierId) {
     return (
@@ -31,7 +33,7 @@ export default function PartenaireDossierDocumentsEnPreparationPage() {
           </svg>
           Retour au dossier
         </Link>
-        <DossierDraftsPanel dossierId={dossierId} />
+        <DossierDraftsPanel dossierId={dossierId} initialDraftId={initialDraftId} />
       </main>
     </div>
   );

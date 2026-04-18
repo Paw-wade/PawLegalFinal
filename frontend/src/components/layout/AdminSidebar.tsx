@@ -4,7 +4,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { forumAPI } from '@/lib/api';
+import { collaborativeDraftsAPI, forumAPI } from '@/lib/api';
 import {
   LayoutDashboard,
   Users,
@@ -14,6 +14,7 @@ import {
   Clock,
   MessageSquare,
   FileText,
+  PenLine,
   Star,
   Bell,
   Smartphone,
@@ -47,6 +48,12 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/creneaux', label: 'Créneaux', icon: Clock },
   { href: '/admin/messages', label: 'Messages', icon: MessageSquare },
   { href: '/admin/documents', label: 'Documents', icon: FileText },
+  {
+    href: '/admin/documents/preparation',
+    label: 'Docs en préparation',
+    icon: PenLine,
+    roles: ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'],
+  },
   { href: '/admin/temoignages', label: 'Témoignages', icon: Star },
   { href: '/admin/notifications', label: 'Notifications', icon: Bell },
   { href: '/admin/sms', label: 'SMS', icon: Smartphone },
@@ -63,6 +70,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
   const { data: session } = useSession();
   const pathname = usePathname();
   const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
+  const [prepDraftCount, setPrepDraftCount] = useState<number>(0);
 
   const userRole = (session?.user as any)?.role || 'client';
 
@@ -77,8 +85,33 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
       if (pathname.startsWith('/admin/dossiers/tarification')) return false;
       return pathname === href || pathname.startsWith('/admin/dossiers/');
     }
+    if (href === '/admin/documents') {
+      if (pathname.startsWith('/admin/documents/preparation')) return false;
+      return pathname === href;
+    }
+    if (href === '/admin/documents/preparation') {
+      return pathname.startsWith('/admin/documents/preparation');
+    }
     return pathname.startsWith(href);
   };
+
+  const loadPrepDraftCount = useCallback(async () => {
+    const role = (session?.user as any)?.role as string | undefined;
+    const staff = ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'];
+    if (!role || !staff.includes(role)) {
+      setPrepDraftCount(0);
+      return;
+    }
+    try {
+      const collabRes = await collaborativeDraftsAPI.getGlobalCount();
+      const c =
+        collabRes.data?.success && typeof collabRes.data.count === 'number' ? collabRes.data.count : 0;
+      setPrepDraftCount(c);
+    } catch (err: any) {
+      if (err?.response?.status !== 404) console.error('Erreur compteur documents en préparation:', err);
+      setPrepDraftCount(0);
+    }
+  }, [session]);
 
   const loadForumCount = useCallback(async () => {
     try {
@@ -98,15 +131,21 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
 
   useEffect(() => {
     loadForumCount();
-  }, [loadForumCount, pathname]);
+    loadPrepDraftCount();
+  }, [loadForumCount, loadPrepDraftCount, pathname]);
 
   useEffect(() => {
     const onForumUnreadUpdated = () => loadForumCount();
+    const onCollaborativeDraftsUpdated = () => loadPrepDraftCount();
     if (typeof window !== 'undefined') {
       window.addEventListener('forumUnreadUpdated', onForumUnreadUpdated);
-      return () => window.removeEventListener('forumUnreadUpdated', onForumUnreadUpdated);
+      window.addEventListener('collaborativeDraftsUpdated', onCollaborativeDraftsUpdated);
+      return () => {
+        window.removeEventListener('forumUnreadUpdated', onForumUnreadUpdated);
+        window.removeEventListener('collaborativeDraftsUpdated', onCollaborativeDraftsUpdated);
+      };
     }
-  }, [loadForumCount]);
+  }, [loadForumCount, loadPrepDraftCount]);
 
   return (
     <>
@@ -174,6 +213,11 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
                   {item.href === '/forum' && forumUnreadCount > 0 && (
                     <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
                       {forumUnreadCount > 99 ? '99+' : forumUnreadCount}
+                    </span>
+                  )}
+                  {item.href === '/admin/documents/preparation' && prepDraftCount > 0 && (
+                    <span className="ml-1 text-[11px] font-semibold bg-slate-100 text-slate-800 px-2 py-0.5 rounded-full">
+                      {prepDraftCount > 99 ? '99+' : prepDraftCount}
                     </span>
                   )}
                 </span>

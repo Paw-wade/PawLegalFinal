@@ -160,6 +160,8 @@ api.interceptors.request.use(
           url.includes('/user') ||
           url.includes('/appointments') ||
           url.includes('/dossiers') ||
+          url.includes('/dossier-document-drafts') ||
+          url.includes('/collaborative-drafts') ||
           url.includes('/messages') ||
           url.includes('/notifications') ||
           url.includes('/tasks');
@@ -976,16 +978,34 @@ export const documentsAPI = {
 };
 
 export const collaborativeDraftsAPI = {
+  getGlobalCount: () => api.get('/collaborative-drafts/count'),
+  getGlobalList: (params?: { q?: string }) => api.get('/collaborative-drafts', { params }),
   getDossierDrafts: (dossierId: string) =>
     api.get(`/dossiers/${dossierId}/drafts`),
-  createDraft: (dossierId: string, data: { title: string; content?: any }) =>
+  createDraft: (dossierId: string, data: { title: string; content?: any; dueDate?: string | null }) =>
     api.post(`/dossiers/${dossierId}/drafts`, data),
-  updateDraft: (draftId: string, data: { title?: string; content?: any }) =>
-    api.patch(`/drafts/${draftId}`, data),
+  updateDraft: (
+    draftId: string,
+    data: { title?: string; content?: any; dueDate?: string | null; completed?: boolean | null }
+  ) => api.patch(`/drafts/${draftId}`, data),
   updatePermissions: (draftId: string, data: { visibleToAdmins?: boolean; excludedAdminIds?: string[]; partnerAccess?: { partner: string; canEdit: boolean }[] }) =>
     api.patch(`/drafts/${draftId}/permissions`, data),
   archiveDraft: (draftId: string) =>
     api.delete(`/drafts/${draftId}`),
+};
+
+/** Brouillons rédactionnels liés à un dossier (admin / équipe), export .docx */
+export const dossierDocumentDraftsAPI = {
+  getCount: () => api.get('/dossier-document-drafts/count'),
+  list: (params?: { q?: string }) => api.get('/dossier-document-drafts', { params }),
+  getById: (id: string) => api.get(`/dossier-document-drafts/${id}`),
+  create: (data: { dossierId: string; title: string; body?: string; dueDate?: string | null }) =>
+    api.post('/dossier-document-drafts', data),
+  update: (id: string, data: { title?: string; body?: string; dueDate?: string | null; completed?: boolean | null }) =>
+    api.patch(`/dossier-document-drafts/${id}`, data),
+  remove: (id: string) => api.delete(`/dossier-document-drafts/${id}`),
+  downloadDocx: (id: string) =>
+    api.get(`/dossier-document-drafts/${id}/docx`, { responseType: 'blob' }),
 };
 
 // Médias publics (carrousel, etc.)
