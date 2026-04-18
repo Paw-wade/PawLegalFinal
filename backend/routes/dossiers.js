@@ -60,6 +60,10 @@ const createNotification = async (userId, type, titre, message, lien = null, met
 // Helper function pour notifier toutes les parties lors d'une modification de dossier
 const notifyDossierModification = async (dossier, modifier, changes = {}) => {
   try {
+    if (changes.skipAllPingAndSms === true) {
+      console.log('⏭️ notifyDossierModification ignorée (montant tarification — aucun ping / SMS).');
+      return;
+    }
     const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
     const modifierName = `${modifier.firstName} ${modifier.lastName}`;
     const modifierRole = modifier.role;
@@ -620,9 +624,12 @@ router.get('/', async (req, res) => {
 });
 
 // @route   GET /api/user/dossiers/admin
-// @desc    Récupérer tous les dossiers (Admin seulement)
-// @access  Private/Admin
-router.get('/admin', authorize('admin', 'superadmin'), async (req, res) => {
+// @desc    Récupérer tous les dossiers (équipe cabinet)
+// @access  Private — rôles admin / équipe
+router.get(
+  '/admin',
+  authorize('admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'),
+  async (req, res) => {
   try {
     const { statut, type, categorie, userId, search } = req.query;
     
@@ -2310,6 +2317,7 @@ router.put(
         montantTarificationFixe,
         paiementTarificationEffectue,
         notifyTarificationClient,
+        tarificationClientMessage,
         isStandby,
         standbyReason,
         standbyUntil
@@ -2323,6 +2331,13 @@ router.put(
       const isMontantTarificationPatch =
         montantTarificationFixe !== undefined && montantTarificationFixe !== null;
 
+      /** Superadmin : enregistrer uniquement le montant fixe sans aucune notif/SMS « dossier modifié ». */
+      const skipMontantSilentNotify =
+        (req.body.skipDossierModificationNotify === true || req.body.skipDossierModificationNotify === 'true') &&
+        req.user.role === 'superadmin' &&
+        isMontantTarificationPatch &&
+        !shouldNotifyTarificationClientNow;
+
       if ((montantTarificationFixe !== undefined || shouldNotifyTarificationClientNow) && req.user.role !== 'superadmin') {
         return res.status(403).json({
           success: false,
@@ -2332,6 +2347,8 @@ router.put(
 
       const oldStatut = dossier.statut;
       const oldAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
+      /** Après save : retirer toute trace du montant fixe en base (évite null / 0 résiduel). */
+      let shouldUnsetMontantTarificationFixeFields = false;
 
       const dossierSnapshotBeforeUpdate = {
         titre: (dossier.titre || '').trim(),
@@ -2500,6 +2517,7 @@ router.put(
           dossier.montantTarificationFixe = undefined;
           dossier.montantTarificationFixeAt = undefined;
           dossier.montantTarificationFixeBy = undefined;
+          shouldUnsetMontantTarificationFixeFields = true;
         } else {
           dossier.montantTarificationFixe = parsedAmount;
           dossier.montantTarificationFixeAt = new Date();
@@ -2658,6 +2676,13 @@ router.put(
 
       await dossier.save();
 
+      if (shouldUnsetMontantTarificationFixeFields) {
+        await Dossier.updateOne(
+          { _id: dossier._id },
+          { $unset: { montantTarificationFixe: 1, montantTarificationFixeAt: 1, montantTarificationFixeBy: 1 } }
+        );
+      }
+
       // Recharger le dossier avec les données peuplées pour les notifications
       const dossierForNotification = await Dossier.findById(dossier._id)
         .populate('user', 'firstName lastName email phone profilePhoto');
@@ -2669,13 +2694,19 @@ router.put(
         newStatut: statut,
         oldAssignedTo,
         newAssignedTo: assignedTo,
-        skipSms: onlyTitreRenamed || onlyEtapesEdited || onlyStandbySettingChanged || onlyTarificationSettingChanged,
+        skipSms:
+          skipMontantSilentNotify ||
+          onlyTitreRenamed ||
+          onlyEtapesEdited ||
+          onlyStandbySettingChanged ||
+          onlyTarificationSettingChanged,
         skipClientEtapesOnlyNotify: onlyEtapesEdited,
-        skipClientTarificationOnlyNotify: onlyTarificationSettingChanged
+        skipClientTarificationOnlyNotify: onlyTarificationSettingChanged || skipMontantSilentNotify,
+        skipAllPingAndSms: skipMontantSilentNotify,
       });
 
       // Pour les admins, créer aussi des notifications spécifiques au client (logique existante)
-      if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+      if ((req.user.role === 'admin' || req.user.role === 'superadmin') && !skipMontantSilentNotify) {
         let userId = null;
         
         // Si le dossier a un user associé
@@ -2762,9 +2793,11 @@ router.put(
       }
 
       // Client informé lors d'une nouvelle exonération des frais de tarification
+      // (éviter le doublon si notifyTarificationClient est aussi envoyé dans la même requête)
       if (
         fraisExoneresJustGranted &&
         !isMontantTarificationPatch &&
+        !shouldNotifyTarificationClientNow &&
         (req.user.role === 'admin' || req.user.role === 'superadmin')
       ) {
         try {
@@ -2874,13 +2907,24 @@ router.put(
               };
             }
 
+            const tarifMsgExtra =
+              tarificationClientMessage != null && String(tarificationClientMessage).trim()
+                ? String(tarificationClientMessage).trim().slice(0, 2000)
+                : '';
+            if (tarifMsgExtra) {
+              messageTarif = `${messageTarif}\n\n— Message de l’équipe —\n${tarifMsgExtra}`;
+            }
+
             await createNotification(
               clientUserId,
               'tarification_choice_requested',
               titreTarif,
               messageTarif,
               '/client/tarification',
-              { dossierId: dossierForNotification._id.toString() }
+              {
+                dossierId: dossierForNotification._id.toString(),
+                ...(tarifMsgExtra ? { tarificationClientMessage: tarifMsgExtra.slice(0, 500) } : {})
+              }
             );
 
             const phoneUser = await User.findById(clientUserId).select('phone');

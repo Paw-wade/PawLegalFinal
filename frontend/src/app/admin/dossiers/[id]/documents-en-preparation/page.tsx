@@ -1,16 +1,24 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 
+const STAFF_ROLES = ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'] as const;
+
+function isStaffRole(role: string | undefined) {
+  return !!role && (STAFF_ROLES as readonly string[]).includes(role);
+}
+
 export default function AdminDossierDocumentsEnPreparationPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const dossierId = params?.id as string;
+  const initialDraftId = searchParams.get('draft');
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -21,7 +29,7 @@ export default function AdminDossierDocumentsEnPreparationPage() {
     }
     if (status === 'authenticated' && session) {
       const role = (session.user as any)?.role;
-      if (role !== 'admin' && role !== 'superadmin') {
+      if (!isStaffRole(role)) {
         router.push('/client');
       }
     }
@@ -50,7 +58,17 @@ export default function AdminDossierDocumentsEnPreparationPage() {
           </svg>
           Retour au dossier
         </Link>
-        <DossierDraftsPanel dossierId={dossierId} />
+        <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-gray-800">
+          <span className="font-medium">Autre brouillon (même éditeur riche, export .docx)</span>
+          {' — '}
+          <Link
+            href={`/admin/documents/preparation?dossierId=${encodeURIComponent(dossierId)}`}
+            className="text-primary font-semibold hover:underline"
+          >
+            Liste globale des documents en préparation
+          </Link>
+        </div>
+        <DossierDraftsPanel dossierId={dossierId} initialDraftId={initialDraftId} />
       </main>
     </div>
   );

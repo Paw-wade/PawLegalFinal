@@ -450,6 +450,15 @@ try {
   console.error('❌ Erreur lors du chargement des routes de brouillons collaboratifs:', error.message);
 }
 
+// Brouillons « document en préparation » (entité dédiée, export Word)
+try {
+  const dossierDocumentDraftsRouter = require('./routes/dossierDocumentDrafts');
+  app.use('/api', dossierDocumentDraftsRouter);
+  console.log('✅ Routes dossier-document-drafts enregistrées');
+} catch (error) {
+  console.error('❌ Erreur lors du chargement des routes dossier-document-drafts:', error.message);
+}
+
 // Répertoire des recours (types + modèles)
 try {
   const recoursRouter = require('./routes/recours');

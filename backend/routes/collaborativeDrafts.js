@@ -38,6 +38,129 @@ function getPartnerAccessEntry(draft, userId) {
   );
 }
 
+function clientDisplayName(dossier) {
+  if (!dossier) return '';
+  const u = dossier.user;
+  if (u && (u.firstName || u.lastName)) {
+    return [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
+  }
+  const n = [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ').trim();
+  return n || dossier.clientEmail || '—';
+}
+
+function parseDueDateField(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d;
+}
+
+function buildGlobalCollaborativeQuery(user, qTrim) {
+  const parts = [];
+  if (isAdmin(user)) {
+    parts.push({
+      $or: [
+        { visibleToAdmins: true, excludedAdminIds: { $ne: user._id } },
+        { createdBy: user._id },
+      ],
+    });
+  } else if (isPartenaire(user)) {
+    parts.push({
+      $or: [{ 'partnerAccess.partner': user._id }, { createdBy: user._id }],
+    });
+  } else {
+    return null;
+  }
+  if (qTrim) {
+    const esc = qTrim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    parts.push({ title: { $regex: esc, $options: 'i' } });
+  }
+  if (parts.length === 1) return { isArchived: false, ...parts[0] };
+  return { isArchived: false, $and: parts };
+}
+
+// GET /collaborative-drafts/count — tous les brouillons visibles (liste globale)
+router.get('/collaborative-drafts/count', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
+    }
+    const query = buildGlobalCollaborativeQuery(user, '');
+    if (!query) {
+      return res.status(403).json({ success: false, message: 'Accès refusé' });
+    }
+    const count = await CollaborativeDraft.countDocuments(query);
+    return res.json({ success: true, count });
+  } catch (error) {
+    console.error('collaborative-drafts count:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// GET /collaborative-drafts — liste globale (mêmes règles de visibilité que par dossier)
+router.get('/collaborative-drafts', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
+    }
+    const q = (req.query.q || '').toString().trim();
+    const query = buildGlobalCollaborativeQuery(user, q);
+    if (!query) {
+      return res.status(403).json({ success: false, message: 'Accès refusé' });
+    }
+
+    const drafts = await CollaborativeDraft.find(query)
+      .sort({ updatedAt: -1 })
+      .populate('createdBy', 'firstName lastName role email')
+      .populate('partnerAccess.partner', 'firstName lastName email')
+      .populate({
+        path: 'dossier',
+        select: 'numero titre clientNom clientPrenom clientEmail user',
+        populate: { path: 'user', select: 'firstName lastName email' },
+      })
+      .lean();
+
+    const enhancedDrafts = drafts
+      .filter((draft) => draft.dossier)
+      .map((draft) => {
+        const isCreator = draft.createdBy && draft.createdBy._id?.toString() === user._id.toString();
+        const partnerAccessEntry = getPartnerAccessEntry(draft, user._id);
+
+        const adminCanSee =
+          isAdmin(user) &&
+          (isCreator ||
+            (draft.visibleToAdmins === true &&
+              !(draft.excludedAdminIds || []).some((id) => id.toString() === user._id.toString())));
+
+        const canEdit =
+          adminCanSee ||
+          (isPartenaire(user) &&
+            (isCreator || (partnerAccessEntry && partnerAccessEntry.canEdit === true)));
+
+        const canManagePermissions = isCreator || isAdmin(user);
+
+        return {
+          ...draft,
+          canEdit,
+          canManagePermissions,
+          clientName: clientDisplayName(draft.dossier),
+        };
+      });
+
+    return res.json({
+      success: true,
+      drafts: enhancedDrafts,
+      currentUserIsAdmin: isAdmin(user),
+    });
+  } catch (error) {
+    console.error('collaborative-drafts list:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // GET /dossiers/:dossierId/drafts - lister les brouillons visibles pour l'utilisateur
 router.get('/dossiers/:dossierId/drafts', async (req, res) => {
   try {
@@ -118,7 +241,7 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
 router.post('/dossiers/:dossierId/drafts', async (req, res) => {
   try {
     const { dossierId } = req.params;
-    const { title, content } = req.body;
+    const { title, content, dueDate: dueDateRaw } = req.body;
     const userId = req.user.id;
 
     if (!title || !title.trim()) {
@@ -139,12 +262,14 @@ router.post('/dossiers/:dossierId/drafts', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
 
+    const dueParsed = parseDueDateField(dueDateRaw);
     const draft = await CollaborativeDraft.create({
       dossier: dossierId,
       title: title.trim(),
       content: content || '',
       createdBy: user._id,
       visibleToAdmins: isAdmin(user),
+      ...(dueParsed !== undefined ? { dueDate: dueParsed } : {}),
     });
 
     return res.status(201).json({ success: true, draft });
@@ -158,7 +283,7 @@ router.post('/dossiers/:dossierId/drafts', async (req, res) => {
 router.patch('/drafts/:draftId', async (req, res) => {
   try {
     const { draftId } = req.params;
-    const { title, content } = req.body;
+    const { title, content, dueDate: dueDateRaw } = req.body;
     const userId = req.user.id;
 
     const draft = await CollaborativeDraft.findById(draftId).populate('createdBy');
@@ -194,6 +319,22 @@ router.patch('/drafts/:draftId', async (req, res) => {
     }
     if (typeof content !== 'undefined') {
       draft.content = content;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'dueDate')) {
+      const parsed = parseDueDateField(dueDateRaw);
+      if (parsed === undefined) {
+        return res.status(400).json({ success: false, message: 'Date d’échéance invalide' });
+      }
+      draft.dueDate = parsed;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'completed')) {
+      const c = req.body.completed;
+      if (c === true) {
+        draft.completedAt = new Date();
+      } else if (c === false || c === null) {
+        draft.completedAt = null;
+      }
     }
 
     await draft.save();

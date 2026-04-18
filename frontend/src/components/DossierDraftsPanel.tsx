@@ -6,10 +6,19 @@ import { collaborativeDraftsAPI, userAPI, dossiersAPI } from '@/lib/api';
 import { RichTextEditor } from './RichTextEditor';
 import { exportDraftAsPdf, exportDraftAsWord } from '@/utils/exportDraft';
 
+function toInputDateValue(iso?: string | Date | null) {
+  if (!iso) return '';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
 type DossierDraftsPanelProps = {
   dossierId: string;
   /** Lien vers la page dédiée "Documents en préparation" (ex: /partenaire/dossiers/[id]/documents-en-preparation). Si fourni, un bouton permet d'y accéder. */
   linkToDedicatedPageHref?: string;
+  /** Ouvre directement ce brouillon (ex. depuis la liste globale admin ?draft=). */
+  initialDraftId?: string | null;
 };
 
 type PartnerAccessEntry = {
@@ -21,6 +30,8 @@ type Draft = {
   _id: string;
   title: string;
   content: any;
+  dueDate?: string | Date | null;
+  completedAt?: string | Date | null;
   createdBy?: { _id?: string; firstName?: string; lastName?: string; role?: string };
   updatedAt?: string;
   canEdit?: boolean;
@@ -30,19 +41,31 @@ type Draft = {
   partnerAccess?: PartnerAccessEntry[];
 };
 
+function isDraftOverdue(due?: string | Date | null, completed?: boolean) {
+  if (completed || !due) return false;
+  const d = typeof due === 'string' ? new Date(due) : due;
+  if (Number.isNaN(d.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  return d < today;
+}
+
 const ADMIN_ROLES = ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'];
 
-export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: DossierDraftsPanelProps) {
+export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initialDraftId }: DossierDraftsPanelProps) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [currentTitle, setCurrentTitle] = useState('');
   const [currentContent, setCurrentContent] = useState('');
+  const [currentDueDate, setCurrentDueDate] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newDraftTitle, setNewDraftTitle] = useState('');
+  const [newDraftDueDate, setNewDraftDueDate] = useState('');
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [permsVisibleToAdmins, setPermsVisibleToAdmins] = useState(true);
   const [permsExcludedAdminIds, setPermsExcludedAdminIds] = useState<string[]>([]);
@@ -53,6 +76,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
   const [permissionsError, setPermissionsError] = useState<string | null>(null);
   const [currentUserIsAdmin, setCurrentUserIsAdmin] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [statusToggling, setStatusToggling] = useState(false);
 
   const selectedDraft = drafts.find((d) => d._id === selectedId) || null;
 
@@ -67,10 +91,22 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
           setDrafts(list);
           setCurrentUserIsAdmin(!!response.data.currentUserIsAdmin);
           if (list.length > 0) {
-            const first = list[0];
-            setSelectedId(first._id);
-            setCurrentTitle(first.title || '');
-            setCurrentContent(typeof first.content === 'string' ? first.content : first.content || '');
+            const preferred =
+              initialDraftId && list.some((d) => String(d._id) === String(initialDraftId))
+                ? list.find((d) => String(d._id) === String(initialDraftId))!
+                : list[0];
+            setSelectedId(preferred._id);
+            setCurrentTitle(preferred.title || '');
+            setCurrentContent(
+              typeof preferred.content === 'string' ? preferred.content : preferred.content || ''
+            );
+            setCurrentDueDate(toInputDateValue(preferred.dueDate));
+            setHasUnsavedChanges(false);
+          } else {
+            setSelectedId(null);
+            setCurrentTitle('');
+            setCurrentContent('');
+            setCurrentDueDate('');
             setHasUnsavedChanges(false);
           }
         } else {
@@ -87,17 +123,19 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
     if (dossierId) {
       loadDrafts();
     }
-  }, [dossierId]);
+  }, [dossierId, initialDraftId]);
 
   const handleSaveDraft = async () => {
     if (!selectedDraft || !selectedDraft.canEdit) return;
     setIsSaving(true);
     setError(null);
     try {
-      await collaborativeDraftsAPI.updateDraft(selectedDraft._id, {
+      const saveRes = await collaborativeDraftsAPI.updateDraft(selectedDraft._id, {
         title: currentTitle.trim() || selectedDraft.title || 'Sans titre',
         content: currentContent,
+        dueDate: currentDueDate.trim() ? currentDueDate.trim() : null,
       });
+      const savedDraft = saveRes.data?.draft;
       setDrafts((prev) =>
         prev.map((d) =>
           d._id === selectedDraft._id
@@ -105,6 +143,8 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
                 ...d,
                 title: currentTitle.trim() || d.title,
                 content: currentContent,
+                dueDate: savedDraft?.dueDate ?? (currentDueDate.trim() ? currentDueDate : null),
+                completedAt: savedDraft?.completedAt != null ? savedDraft.completedAt : d.completedAt,
                 updatedAt: new Date().toISOString(),
               }
             : d
@@ -118,11 +158,38 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
         })
       );
       setHasUnsavedChanges(false);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('collaborativeDraftsUpdated'));
+      }
     } catch (e: any) {
       console.error('Erreur lors de la sauvegarde du brouillon:', e);
       setError(e.response?.data?.message || 'Impossible d’enregistrer le document.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleToggleDraftCompleted = async () => {
+    if (!selectedDraft || !selectedDraft.canEdit) return;
+    const next = !selectedDraft.completedAt;
+    setStatusToggling(true);
+    setError(null);
+    try {
+      const res = await collaborativeDraftsAPI.updateDraft(selectedDraft._id, { completed: next });
+      const doc = res.data?.draft;
+      setDrafts((prev) =>
+        prev.map((d) =>
+          d._id === selectedDraft._id ? { ...d, completedAt: doc?.completedAt ?? (next ? new Date() : null) } : d
+        )
+      );
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('collaborativeDraftsUpdated'));
+      }
+    } catch (e: any) {
+      console.error('Erreur statut terminé:', e);
+      setError(e.response?.data?.message || 'Impossible de mettre à jour le statut.');
+    } finally {
+      setStatusToggling(false);
     }
   };
 
@@ -137,12 +204,14 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
     setSelectedId(draft._id);
     setCurrentTitle(draft.title || '');
     setCurrentContent(typeof draft.content === 'string' ? draft.content : draft.content || '');
+    setCurrentDueDate(toInputDateValue(draft.dueDate));
     setLastSavedAt(null);
     setHasUnsavedChanges(false);
   };
 
   const handleOpenCreateModal = () => {
     setNewDraftTitle('');
+    setNewDraftDueDate('');
     setShowCreateModal(true);
   };
 
@@ -150,10 +219,13 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
     const title = newDraftTitle.trim() || 'Nouveau document';
     setShowCreateModal(false);
     setNewDraftTitle('');
+    const dueForCreate = newDraftDueDate.trim();
+    setNewDraftDueDate('');
     try {
       const response = await collaborativeDraftsAPI.createDraft(dossierId, {
         title,
         content: '',
+        ...(dueForCreate ? { dueDate: dueForCreate } : {}),
       });
 
       if (response.data.success) {
@@ -162,7 +234,11 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
         setSelectedId(newDraft._id);
         setCurrentTitle(newDraft.title || '');
         setCurrentContent('');
+        setCurrentDueDate(toInputDateValue(newDraft.dueDate));
         setLastSavedAt(null);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('collaborativeDraftsUpdated'));
+        }
       }
     } catch (e: any) {
       console.error('Erreur lors de la création du brouillon:', e);
@@ -173,6 +249,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
   const handleCloseCreateModal = () => {
     setShowCreateModal(false);
     setNewDraftTitle('');
+    setNewDraftDueDate('');
   };
 
   const handleOpenPermissionsModal = async () => {
@@ -223,6 +300,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
         if (updated) {
           setCurrentTitle(updated.title || '');
           setCurrentContent(typeof updated.content === 'string' ? updated.content : updated.content || '');
+          setCurrentDueDate(toInputDateValue(updated.dueDate));
           setHasUnsavedChanges(false);
         }
       }
@@ -337,6 +415,9 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
                 ? `${draft.createdBy.firstName || ''} ${draft.createdBy.lastName || ''}`.trim()
                 : '';
               const label = authorName || (draft.createdBy?.role ? draft.createdBy.role : 'Auteur');
+              const dueChip = draft.dueDate
+                ? ` · ${new Date(draft.dueDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}`
+                : '';
 
               return (
                 <button
@@ -351,6 +432,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
                 >
                   <span className="text-gray-900">{draft.title || 'Sans titre'}</span>
                   <span className="ml-1.5 text-[11px] text-gray-500">· {label}</span>
+                  {dueChip ? <span className="text-[11px] text-orange-700 font-medium">{dueChip}</span> : null}
                 </button>
               );
             })}
@@ -371,6 +453,21 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
                     disabled={!selectedDraft.canEdit}
                     className="flex-1 min-w-[140px] rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 disabled:bg-gray-50 disabled:text-gray-400"
                     placeholder="Titre du document"
+                  />
+                  <label className="sr-only" htmlFor="draft-due-date">
+                    Date d&apos;échéance
+                  </label>
+                  <input
+                    id="draft-due-date"
+                    type="date"
+                    value={currentDueDate}
+                    onChange={(e) => {
+                      setCurrentDueDate(e.target.value);
+                      if (selectedDraft.canEdit) setHasUnsavedChanges(true);
+                    }}
+                    disabled={!selectedDraft.canEdit}
+                    title="Échéance (optionnel)"
+                    className="shrink-0 rounded-md border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:bg-gray-50 disabled:text-gray-400"
                   />
                   <button
                     type="button"
@@ -408,6 +505,28 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
                       {isSaving ? 'Enregistrement…' : 'Enregistrer le document'}
                     </button>
                   )}
+                  {selectedDraft.canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => void handleToggleDraftCompleted()}
+                      disabled={statusToggling || isSaving}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 disabled:opacity-60"
+                    >
+                      {statusToggling ? '…' : selectedDraft.completedAt ? 'Rouvrir (non terminé)' : 'Marquer terminé'}
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {selectedDraft.completedAt ? (
+                    <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
+                      Terminé
+                    </span>
+                  ) : null}
+                  {isDraftOverdue(selectedDraft.dueDate, !!selectedDraft.completedAt) ? (
+                    <span className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-800 border border-red-200">
+                      Échéance dépassée
+                    </span>
+                  ) : null}
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-gray-500 flex-wrap gap-2">
                   <span>
@@ -478,6 +597,15 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref }: Dossi
               className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               autoFocus
             />
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Date d&apos;échéance (optionnel)</label>
+              <input
+                type="date"
+                value={newDraftDueDate}
+                onChange={(e) => setNewDraftDueDate(e.target.value)}
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              />
+            </div>
             <div className="flex justify-end gap-2 mt-4">
               <button
                 type="button"
