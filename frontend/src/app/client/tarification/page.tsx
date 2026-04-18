@@ -195,6 +195,47 @@ export default function ClientTarificationPage() {
               )}
             </div>
 
+            {selectedDossier && !fraisExoneresPourDossier && (
+              <div className="relative mb-6 overflow-hidden rounded-xl p-[1px] shadow-sm bg-gradient-to-r from-orange-200/80 via-orange-300/60 to-orange-200/80">
+                <div className="rounded-[11px] border border-gray-100 bg-white px-4 py-3.5 sm:px-5 sm:py-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 gap-y-1 mb-3">
+                    <h2 className="text-base sm:text-lg font-bold text-gray-900">
+                      Modalités de paiement
+                      <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-orange-600 align-middle">
+                        Tarification ouverte
+                      </span>
+                    </h2>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3 leading-snug">
+                    Règlement par WERO, PayPal ou virement — indiquez la référence du dossier sur le libellé ou le message.
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-3 sm:gap-3">
+                    <div className="rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-orange-600 mb-1">WERO</p>
+                      <p className="font-mono text-xs font-semibold text-gray-900 select-all tabular-nums">
+                        +33 7 68 03 33 58
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-orange-600 mb-1">PayPal</p>
+                      <a
+                        href="mailto:wadepaw@gmail.com"
+                        className="text-xs font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2 break-all"
+                      >
+                        wadepaw@gmail.com
+                      </a>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2.5 sm:min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-orange-600 mb-1">Virement</p>
+                      <p className="font-mono text-[11px] font-semibold text-gray-900 break-all leading-tight select-all">
+                        FR76 3000 4012 1800 0014 7080 247
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 mb-8 text-sm text-amber-950">
               <p className="font-semibold mb-1">💡 La formule Premium est la plus choisie par nos clients</p>
               <p className="text-amber-900/90">

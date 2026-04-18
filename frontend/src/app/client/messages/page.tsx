@@ -979,18 +979,6 @@ function MessagesContent() {
                 <button onClick={() => setShowComposeModal(false)} className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">×</button>
               </div>
               <form onSubmit={handleSendMessage} className="p-6 space-y-5">
-                {/* Info automatique aux admins */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl">ℹ️</span>
-                    <div>
-                      <p className="text-sm font-semibold text-blue-900 mb-1">Message automatique aux administrateurs</p>
-                      <p className="text-xs text-blue-700">
-                        Votre message sera automatiquement envoyé à tous les administrateurs de l'équipe.
-                      </p>
-                    </div>
-                  </div>
-                </div>
                 <div>
                   <Label htmlFor="sujet">Sujet *</Label>
                   <Input

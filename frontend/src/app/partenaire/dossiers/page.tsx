@@ -2254,6 +2254,7 @@ export default function PartenaireDossiersPage() {
                       const receivedRequests = dossierRequests.filter((r: any) => r.status === 'received' || r.status === 'sent');
                       const isExpanded = expandedDocumentSections.has(dossierId);
                       const receivedPiecesCount = receivedRequests.length + spontaneousDocs.length;
+                      const importantInfoCount = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit.length : 0;
 
                       const toggleDirectUpload = (e?: { stopPropagation?: () => void }) => {
                         e?.stopPropagation?.();
@@ -2321,8 +2322,15 @@ export default function PartenaireDossiersPage() {
                                 }}
                               >
                                 ℹ️
-                                {hasUnseenComplement(dossier) && (
-                                  <span className="absolute -top-1 -right-1 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                                {importantInfoCount > 0 && (
+                                  <span
+                                    className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] leading-4 text-white text-center font-bold ring-2 ring-white ${
+                                      hasUnseenComplement(dossier) ? 'bg-red-500' : 'bg-blue-500'
+                                    }`}
+                                    title={`${importantInfoCount} information(s) importante(s)`}
+                                  >
+                                    {importantInfoCount > 99 ? '99+' : importantInfoCount}
+                                  </span>
                                 )}
                               </Button>
                               <span className="text-muted-foreground text-sm">{isExpanded ? '▲' : '▼'}</span>
