@@ -4,14 +4,14 @@ export const config = {
   // URL de l'API backend
   apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api',
   
-  // URL du frontend
-  frontendUrl: process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000',
+  // URL du frontend (port 3004 = script `next dev` du package.json)
+  frontendUrl: process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3004',
   
   // Timeout pour les requêtes API (en millisecondes)
   apiTimeout: 10000,
   
   // Configuration NextAuth
-  nextAuthUrl: process.env.NEXTAUTH_URL || 'http://localhost:3000',
+  nextAuthUrl: process.env.NEXTAUTH_URL || 'http://localhost:3004',
   nextAuthSecret: process.env.NEXTAUTH_SECRET || 'your-secret-key-change-this-in-production',
 };
 

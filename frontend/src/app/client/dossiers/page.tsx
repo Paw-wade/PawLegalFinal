@@ -8,6 +8,7 @@ import { dossiersAPI, notificationsAPI, documentRequestsAPI, documentsAPI } from
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { Toast } from '@/components/Toast';
+import { QuickComplementTabsForm } from '@/components/dossiers/QuickComplementTabsForm';
 import { Eye, Download } from 'lucide-react';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getEditedEtapesOnly, customEtapeMatchesStatut, getDossierProgressFromEditedEtapes } from '@/lib/dossierUtils';
 
@@ -122,10 +123,6 @@ export default function DossiersPage() {
   const [directUploadError, setDirectUploadError] = useState<string | null>(null);
   const [directUploading, setDirectUploading] = useState(false);
   const [activeQuickComplementDossierId, setActiveQuickComplementDossierId] = useState<string | null>(null);
-  const [quickComplementId, setQuickComplementId] = useState<string | null>(null);
-  const [quickComplementText, setQuickComplementText] = useState('');
-  const [quickComplementSaving, setQuickComplementSaving] = useState(false);
-  const [quickComplementError, setQuickComplementError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -347,7 +344,7 @@ export default function DossiersPage() {
     const complements = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit : [];
     if (complements.length === 0) return 0;
     const lastComplement = complements[complements.length - 1];
-    const rawDate = lastComplement?.updatedAt || lastComplement?.createdAt;
+    const rawDate = lastComplement?.updatedAt || lastComplement?.addedAt || lastComplement?.createdAt;
     const ts = rawDate ? new Date(rawDate).getTime() : 0;
     return Number.isFinite(ts) ? ts : 0;
   };
@@ -382,49 +379,11 @@ export default function DossiersPage() {
 
     if (activeQuickComplementDossierId === dossierId) {
       setActiveQuickComplementDossierId(null);
-      setQuickComplementId(null);
-      setQuickComplementText('');
-      setQuickComplementError(null);
       return;
     }
 
     markComplementAsSeen(dossier);
-    const complements = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit : [];
-    const lastComplement = complements.length > 0 ? complements[complements.length - 1] : null;
     setActiveQuickComplementDossierId(dossierId);
-    setQuickComplementId(lastComplement?._id || lastComplement?.id || null);
-    setQuickComplementText(lastComplement?.text || '');
-    setQuickComplementError(null);
-  };
-
-  const saveQuickComplement = async (e: React.FormEvent, dossierId: string) => {
-    e.preventDefault();
-    const text = quickComplementText.trim();
-    if (!text) {
-      setQuickComplementError('Le complément ne peut pas être vide.');
-      return;
-    }
-
-    setQuickComplementSaving(true);
-    setQuickComplementError(null);
-    try {
-      if (quickComplementId) {
-        await dossiersAPI.updateRecapComplement(dossierId, quickComplementId, text);
-      } else {
-        await dossiersAPI.addRecapComplement(dossierId, text);
-      }
-      await loadDossiers();
-      setActiveQuickComplementDossierId(null);
-      setQuickComplementId(null);
-      setQuickComplementText('');
-      setToast({ message: '✅ Information importante enregistrée avec succès.', type: 'success' });
-    } catch (err: any) {
-      console.error('Erreur édition rapide du complément:', err);
-      setQuickComplementError(err.response?.data?.message || 'Erreur lors de l’enregistrement du complément.');
-      setToast({ message: err.response?.data?.message || 'Erreur lors de l’enregistrement du complément.', type: 'error' });
-    } finally {
-      setQuickComplementSaving(false);
-    }
   };
 
   const loadDossiers = async () => {
@@ -1075,43 +1034,20 @@ export default function DossiersPage() {
                         )}
 
                         {activeQuickComplementDossierId === dossierIdStr && (
-                          <form
-                            onSubmit={(e) => saveQuickComplement(e, dossierIdStr)}
-                            className="mt-2 p-3 rounded-lg border border-amber-200 bg-amber-50/60 space-y-2.5"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <label className="text-[11px] md:text-sm font-medium">Complément d&apos;information</label>
-                            <textarea
-                              value={quickComplementText}
-                              onChange={(e) => setQuickComplementText(e.target.value)}
-                              className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm min-h-[72px]"
-                              placeholder="Ajouter un complément utile au dossier..."
-                            />
-                            {quickComplementError && <p className="text-xs text-red-600">{quickComplementError}</p>}
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
-                                onClick={() => {
-                                  setActiveQuickComplementDossierId(null);
-                                  setQuickComplementId(null);
-                                  setQuickComplementText('');
-                                  setQuickComplementError(null);
-                                }}
-                                disabled={quickComplementSaving}
-                              >
-                                Annuler
-                              </Button>
-                              <Button
-                                type="submit"
-                                className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
-                                disabled={quickComplementSaving}
-                              >
-                                {quickComplementSaving ? 'Enregistrement...' : 'Enregistrer'}
-                              </Button>
-                            </div>
-                          </form>
+                          <QuickComplementTabsForm
+                            key={`${dossierIdStr}-${(dossier.complementsRecit || [])
+                              .map((c: any) => c._id || c.id)
+                              .join('-')}`}
+                            dossierId={dossierIdStr}
+                            complements={dossier.complementsRecit || []}
+                            onSaved={async () => {
+                              await loadDossiers();
+                              setActiveQuickComplementDossierId(null);
+                            }}
+                            onCancel={() => setActiveQuickComplementDossierId(null)}
+                            onSuccessToast={(msg) => setToast({ message: msg, type: 'success' })}
+                            onErrorToast={(msg) => setToast({ message: msg, type: 'error' })}
+                          />
                         )}
                         
                         {hasRequests && isExpanded && (

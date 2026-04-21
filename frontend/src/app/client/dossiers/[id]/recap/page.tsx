@@ -17,9 +17,11 @@ export default function ClientDossierRecapPage() {
   const [loading, setLoading] = useState(true);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
   const [newComplementText, setNewComplementText] = useState('');
+  const [newComplementTitle, setNewComplementTitle] = useState('');
   const [addingComplement, setAddingComplement] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [editingTitle, setEditingTitle] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentUserIdFromApi, setCurrentUserIdFromApi] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
@@ -56,8 +58,12 @@ export default function ClientDossierRecapPage() {
     if (!newComplementText.trim()) return;
     try {
       setAddingComplement(true);
-      await dossiersAPI.addRecapComplement(dossierId, newComplementText.trim());
+      await dossiersAPI.addRecapComplement(dossierId, {
+        text: newComplementText.trim(),
+        title: newComplementTitle.trim() || undefined,
+      });
       setNewComplementText('');
+      setNewComplementTitle('');
       await loadRecap();
     } catch (err: any) {
       setToast({ message: err.response?.data?.message || 'Erreur lors de l\'ajout du complément', type: 'error' });
@@ -70,9 +76,13 @@ export default function ClientDossierRecapPage() {
     e.preventDefault();
     if (!editingId || !editingText.trim()) return;
     try {
-      await dossiersAPI.updateRecapComplement(dossierId, editingId, editingText.trim());
+      await dossiersAPI.updateRecapComplement(dossierId, editingId, {
+        text: editingText.trim(),
+        title: editingTitle.trim(),
+      });
       setEditingId(null);
       setEditingText('');
+      setEditingTitle('');
       await loadRecap();
     } catch (err: any) {
       setToast({ message: err.response?.data?.message || 'Erreur lors de la modification', type: 'error' });
@@ -244,6 +254,9 @@ export default function ClientDossierRecapPage() {
               <div className="space-y-4">
                 {recap.complementsRecit.map((c: any, idx: number) => (
                   <div key={c._id || idx} className="p-4 bg-orange-50/50 rounded-lg border border-orange-200/60">
+                    {c.title ? (
+                      <p className="text-sm font-semibold text-gray-900 mb-1">{c.title}</p>
+                    ) : null}
                     <p className="text-gray-800 whitespace-pre-wrap">{c.text}</p>
                     <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
                       <span className="text-sm text-gray-500">
@@ -382,6 +395,14 @@ export default function ClientDossierRecapPage() {
                   <div key={c._id} className="p-4 bg-orange-50/50 rounded-lg border border-orange-200/60">
                     {editingId === c._id ? (
                       <form onSubmit={handleUpdateComplement} className="space-y-3">
+                        <input
+                          type="text"
+                          value={editingTitle}
+                          onChange={(e) => setEditingTitle(e.target.value)}
+                          maxLength={200}
+                          placeholder="Titre de la rubrique (optionnel)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-medium"
+                        />
                         <textarea
                           value={editingText}
                           onChange={(e) => setEditingText(e.target.value)}
@@ -391,11 +412,24 @@ export default function ClientDossierRecapPage() {
                         />
                         <div className="flex gap-2">
                           <button type="submit" className="px-3 py-1.5 bg-primary text-white rounded-md text-sm hover:bg-primary/90">Enregistrer</button>
-                          <button type="button" onClick={() => { setEditingId(null); setEditingText(''); }} className="px-3 py-1.5 bg-gray-200 rounded-md text-sm">Annuler</button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(null);
+                              setEditingText('');
+                              setEditingTitle('');
+                            }}
+                            className="px-3 py-1.5 bg-gray-200 rounded-md text-sm"
+                          >
+                            Annuler
+                          </button>
                         </div>
                       </form>
                     ) : (
                       <>
+                        {c.title ? (
+                          <p className="text-sm font-semibold text-gray-900 mb-1">{c.title}</p>
+                        ) : null}
                         <p className="text-gray-800 whitespace-pre-wrap">{c.text}</p>
                         <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
                           <span className="text-sm text-gray-500">
@@ -405,7 +439,11 @@ export default function ClientDossierRecapPage() {
                             <div className="flex gap-2">
                               <button
                                 type="button"
-                                onClick={() => { setEditingId(c._id); setEditingText(c.text); }}
+                                onClick={() => {
+                                  setEditingId(c._id);
+                                  setEditingText(c.text);
+                                  setEditingTitle(c.title || '');
+                                }}
                                 className="p-1.5 text-gray-600 hover:text-primary hover:bg-orange-100 rounded"
                                 title="Modifier"
                               >
@@ -430,6 +468,14 @@ export default function ClientDossierRecapPage() {
               </div>
             )}
             <form onSubmit={handleAddComplement} className="space-y-3">
+              <input
+                type="text"
+                value={newComplementTitle}
+                onChange={(e) => setNewComplementTitle(e.target.value)}
+                maxLength={200}
+                placeholder="Titre de la rubrique (optionnel)"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-medium placeholder:text-gray-400"
+              />
               <textarea
                 value={newComplementText}
                 onChange={(e) => setNewComplementText(e.target.value)}

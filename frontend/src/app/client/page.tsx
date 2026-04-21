@@ -114,25 +114,6 @@ function ClientDashboardContent() {
       const isAdmin = userRole === 'admin' || userRole === 'superadmin';
       const isPartenaire = userRole === 'partenaire';
 
-      // Vérifier le délai de 7 jours pour la complétion du profil (sauf pour admin/superadmin/partenaire)
-      if (!isAdmin && !isPartenaire) {
-        // Charger les informations utilisateur pour vérifier le délai
-        userAPI.getProfile().then(res => {
-          if (res.data.success && res.data.user) {
-            if (!res.data.user.profilComplete && res.data.user.createdAt) {
-              const daysSinceCreation = Math.floor((Date.now() - new Date(res.data.user.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-              if (daysSinceCreation >= 7) {
-                // Le délai est dépassé, rediriger vers la page de complétion avec un message
-                router.push('/auth/complete-profile?expired=true');
-                return;
-              }
-            }
-          }
-        }).catch(() => {
-          // En cas d'erreur, continuer
-        });
-      }
-      
       // Si admin, rediriger vers l'espace admin
       if (isAdmin) {
         if (IS_DEV) console.log('🚫 Admin tentant d\'accéder à la vue client - redirection vers /admin');

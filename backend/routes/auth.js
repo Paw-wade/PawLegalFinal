@@ -167,18 +167,6 @@ router.post(
         });
       }
 
-      // Vérifier si le profil doit être complété (sauf pour admin/superadmin)
-      if (user.role !== 'admin' && user.role !== 'superadmin') {
-        const daysSinceCreation = Math.floor((Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-        if (!user.profilComplete && daysSinceCreation >= 7) {
-          return res.status(403).json({
-            success: false,
-            message: 'Votre profil doit être complété dans les 7 jours suivant la création du compte. Le délai est dépassé. Veuillez contacter l\'administrateur pour réactiver votre compte.',
-            code: 'PROFILE_EXPIRED'
-          });
-        }
-      }
-
       const isPasswordValid = await user.comparePassword(password);
       
       if (!isPasswordValid) {
@@ -406,14 +394,50 @@ router.post(
 
       // Générer un code de vérification à 6 chiffres
       const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-      // Stocker une version hachée du code dans le compte utilisateur avec une expiration courte (10 minutes)
       const hashedToken = crypto.createHash('sha256').update(verificationCode).digest('hex');
-      user.resetPasswordToken = hashedToken;
-      user.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-      await user.save();
+      const resetExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-      // Envoyer le code de vérification par SMS
+      const isDev = process.env.NODE_ENV === 'development';
+      const twilioNotConfigured =
+        !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN;
+      const devSimulateSms =
+        isDev &&
+        (process.env.ALLOW_OTP_WITHOUT_SMS === 'true' || twilioNotConfigured);
+
+      const successPayload = (message, extra = {}) =>
+        res.json({
+          success: true,
+          message,
+          ...extra,
+        });
+
+      const persistResetCode = async () => {
+        user.resetPasswordToken = hashedToken;
+        user.resetPasswordExpires = resetExpires;
+        await user.save();
+      };
+
+      // Développement : même logique que /otp/send (SMS simulé ou Twilio absent)
+      if (devSimulateSms) {
+        await persistResetCode();
+        console.log(
+          `⚠️ [dev] SMS réinitialisation mdp simulé pour ${formattedPhone} — code : ${verificationCode} (10 min)`
+        );
+        return successPayload(
+          'Si ce numéro est associé à un compte, un code de vérification a été généré (mode développement — SMS simulé).',
+          { devResetCode: verificationCode }
+        );
+      }
+
+      if (twilioNotConfigured) {
+        console.error(
+          '❌ Twilio non configuré : impossible d\'envoyer le SMS de réinitialisation (aucun jeton enregistré).'
+        );
+        return successPayload(
+          'Si ce numéro est associé à un compte, un SMS vient de vous être envoyé avec un code de vérification.'
+        );
+      }
+
       try {
         await sendNotificationSMS(
           formattedPhone,
@@ -421,25 +445,35 @@ router.post(
           {
             firstName: user.firstName || '',
             lastName: user.lastName || '',
-            tempPassword: verificationCode, // utilisé comme code de vérification
+            tempPassword: verificationCode,
           },
           {
             userId: user._id,
             context: 'auth',
             contextId: user._id.toString(),
-            // SMS critique pour l'accès : on ignore les préférences générales
             skipPreferences: true,
           }
         );
+        await persistResetCode();
+        return successPayload(
+          'Si ce numéro est associé à un compte, un SMS vient de vous être envoyé avec un code de vérification.'
+        );
       } catch (smsError) {
         console.error('Erreur lors de l\'envoi du SMS de réinitialisation:', smsError);
-        // Même si le SMS échoue, ne pas révéler l’erreur précise au client
+        if (isDev) {
+          await persistResetCode();
+          console.log(
+            `⚠️ [dev] Envoi SMS échoué — code réinitialisation conservé pour ${formattedPhone} : ${verificationCode} (10 min)`
+          );
+          return successPayload(
+            'Si ce numéro est associé à un compte, un code a été généré (développement — échec envoi SMS).',
+            { devResetCode: verificationCode }
+          );
+        }
+        return successPayload(
+          'Si ce numéro est associé à un compte, un SMS vient de vous être envoyé avec un code de vérification.'
+        );
       }
-
-      return res.json({
-        success: true,
-        message: 'Si ce numéro est associé à un compte, un SMS vient de vous être envoyé avec un code de vérification.'
-      });
     } catch (error) {
       console.error('Erreur lors de la demande de réinitialisation par téléphone:', error);
       res.status(500).json({

@@ -151,6 +151,8 @@ const dossierSchema = new mongoose.Schema({
     addedAt: { type: Date, default: Date.now },
     authorName: { type: String, trim: true },
     role: { type: String, trim: true },
+    /** Titre court affiché en onglet / en-tête (optionnel) */
+    title: { type: String, trim: true, default: '' },
     text: { type: String, required: true, trim: true }
   }],
   // Formule tarifaire choisie par le client (visible admin uniquement côté API pour les partenaires)

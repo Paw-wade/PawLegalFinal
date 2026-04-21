@@ -56,22 +56,36 @@ export default function ForgotPasswordPage() {
 
     try {
       if (step === 1) {
-        await authAPI.forgotPassword({ phone });
-        setSuccessMessage(
-          'Si ce numéro est associé à un compte, un code de vérification vient de vous être envoyé par SMS.'
-        );
+        const { data } = await authAPI.forgotPassword({ phone });
+        let msg =
+          'Si ce numéro est associé à un compte, un code de vérification vient de vous être envoyé par SMS.';
+        if (data?.message && typeof data.message === 'string') {
+          msg = data.message;
+        }
+        if (process.env.NODE_ENV === 'development' && data?.devResetCode) {
+          msg += ` Code de test affiché uniquement en développement : ${data.devResetCode}.`;
+        }
+        setSuccessMessage(msg);
         setStep(2);
       } else {
         await authAPI.resetPasswordByPhone({ phone, code, password });
-        setSuccessMessage(
-          'Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.'
-        );
-        setCode('');
-        setPassword('');
+        const base = (
+          process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin
+        ).replace(/\/+$/, '');
+        window.location.assign(`${base}/auth/signin`);
       }
     } catch (error: any) {
       console.error('Erreur lors de la demande de réinitialisation:', error);
-      setErrorMessage("Une erreur est survenue. Veuillez réessayer dans quelques instants.");
+      const apiMsg = error?.response?.data?.message;
+      const validation = error?.response?.data?.errors;
+      if (Array.isArray(validation) && validation.length > 0) {
+        const first = validation[0]?.msg || validation[0]?.message;
+        setErrorMessage(first || apiMsg || 'Requête invalide. Vérifiez les champs saisis.');
+      } else if (typeof apiMsg === 'string' && apiMsg.trim()) {
+        setErrorMessage(apiMsg);
+      } else {
+        setErrorMessage('Une erreur est survenue. Veuillez réessayer dans quelques instants.');
+      }
     } finally {
       setIsSubmitting(false);
     }
