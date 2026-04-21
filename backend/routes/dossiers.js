@@ -1183,6 +1183,7 @@ router.get('/:id/recap', protect, async (req, res) => {
         addedAt: c.addedAt,
         authorName: c.authorName || 'Inconnu',
         role: c.role || '',
+        title: c.title || '',
         text: c.text
       })),
       statistiques: {
@@ -1234,7 +1235,7 @@ function canEditRecapComplements(dossier, user) {
 router.post('/:id/recap/complements', protect, async (req, res) => {
   try {
     const dossierId = req.params.id;
-    const { text } = req.body;
+    const { text, title } = req.body;
     if (!text || !String(text).trim()) {
       return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
     }
@@ -1258,6 +1259,7 @@ router.post('/:id/recap/complements', protect, async (req, res) => {
       addedAt: new Date(),
       authorName,
       role,
+      title: title != null ? String(title).trim().slice(0, 200) : '',
       text: String(text).trim()
     };
     if (!dossier.complementsRecit) dossier.complementsRecit = [];
@@ -1333,6 +1335,7 @@ router.post('/:id/recap/complements', protect, async (req, res) => {
         addedAt: added.addedAt,
         authorName: added.authorName,
         role: added.role,
+        title: added.title || '',
         text: added.text
       }
     });
@@ -1348,7 +1351,7 @@ router.post('/:id/recap/complements', protect, async (req, res) => {
 router.patch('/:id/recap/complements/:complementId', protect, async (req, res) => {
   try {
     const { id: dossierId, complementId } = req.params;
-    const { text } = req.body;
+    const { text, title } = req.body;
     if (!text || !String(text).trim()) {
       return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
     }
@@ -1375,11 +1378,21 @@ router.patch('/:id/recap/complements/:complementId', protect, async (req, res) =
       return res.status(403).json({ success: false, message: 'Seul l\'auteur du complément ou un administrateur peut le modifier.' });
     }
     comp.text = String(text).trim();
+    if (title !== undefined) {
+      comp.title = String(title).trim().slice(0, 200);
+    }
     await dossier.save();
     return res.json({
       success: true,
       message: 'Complément mis à jour.',
-      complement: { _id: comp._id, addedAt: comp.addedAt, authorName: comp.authorName, role: comp.role, text: comp.text }
+      complement: {
+        _id: comp._id,
+        addedAt: comp.addedAt,
+        authorName: comp.authorName,
+        role: comp.role,
+        title: comp.title || '',
+        text: comp.text
+      }
     });
   } catch (error) {
     console.error('Erreur modification complément récit:', error);
@@ -1642,6 +1655,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         addedAt: c.addedAt,
         authorName: c.authorName || 'Inconnu',
         role: c.role || '',
+        title: c.title || '',
         text: c.text
       })),
       statistiques: {
@@ -1787,7 +1801,8 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       recap.complementsRecit.forEach((c, index) => {
         const dateStr = c.addedAt ? new Date(c.addedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
         const authorLabel = [c.authorName, c.role].filter(Boolean).join(' • ');
-        yPosition = addText(`${index + 1}. Le ${dateStr} — ${authorLabel}`, margin, yPosition);
+        const titlePart = c.title && String(c.title).trim() ? ` — ${String(c.title).trim()}` : '';
+        yPosition = addText(`${index + 1}. Le ${dateStr} — ${authorLabel}${titlePart}`, margin, yPosition);
         yPosition += lineHeight * 0.5;
         yPosition = addMultilineText(c.text, margin + 10, yPosition, {
           width: doc.page.width - 2 * margin - 10,

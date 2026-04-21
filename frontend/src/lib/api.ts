@@ -775,10 +775,10 @@ export const dossiersAPI = {
   },
 
   // Compléments au récit (visibles dans le récap et le PDF)
-  addRecapComplement: (dossierId: string, text: string) =>
-    api.post(`/user/dossiers/${dossierId}/recap/complements`, { text }),
-  updateRecapComplement: (dossierId: string, complementId: string, text: string) =>
-    api.patch(`/user/dossiers/${dossierId}/recap/complements/${complementId}`, { text }),
+  addRecapComplement: (dossierId: string, body: { text: string; title?: string }) =>
+    api.post(`/user/dossiers/${dossierId}/recap/complements`, body),
+  updateRecapComplement: (dossierId: string, complementId: string, body: { text: string; title?: string }) =>
+    api.patch(`/user/dossiers/${dossierId}/recap/complements/${complementId}`, body),
   deleteRecapComplement: (dossierId: string, complementId: string) =>
     api.delete(`/user/dossiers/${dossierId}/recap/complements/${complementId}`),
   
