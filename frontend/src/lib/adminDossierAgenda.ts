@@ -8,7 +8,7 @@ export interface AdminDossierAgendaItem {
   bucket: AdminDossierAgendaBucket;
   /** Début du jour (local) de l’échéance, pour tri et affichage. */
   eventDayMs: number;
-  kind: 'dossier_echeance' | 'etape' | 'tache';
+  kind: 'dossier_echeance' | 'etape' | 'tache' | 'doc_preparation';
   kindLabel: string;
   actionLabel: string;
   dossierId: string;
@@ -46,6 +46,7 @@ function taskIsOpen(task: any): boolean {
 export function collectAdminDossierAgendaItems(
   dossiers: any[],
   dossierTasksByDossierId: Record<string, any[]>,
+  dossierDraftsByDossierId: Record<string, any[]> = {},
   horizonDays: number = DEFAULT_AGENDA_HORIZON_DAYS
 ): AdminDossierAgendaItem[] {
   const safeHorizon = Math.max(1, Math.min(60, Math.floor(horizonDays) || DEFAULT_AGENDA_HORIZON_DAYS));
@@ -124,6 +125,26 @@ export function collectAdminDossierAgendaItems(
         kind: 'tache',
         kindLabel: 'Tâche',
         actionLabel: titre,
+        dossierId,
+        dossierRef,
+        dossierTitle,
+      });
+    }
+
+    const prepDocs = dossierDraftsByDossierId[dossierId] || [];
+    for (const doc of prepDocs) {
+      if (doc?.completedAt) continue;
+      const dd = parseToStartOfLocalDay(doc?.dueDate);
+      if (dd == null) continue;
+      const bucket = classify(dd);
+      if (!bucket) continue;
+      const title = String(doc?.title || '').trim() || 'Document en préparation';
+      items.push({
+        bucket,
+        eventDayMs: dd,
+        kind: 'doc_preparation',
+        kindLabel: 'Doc préparation',
+        actionLabel: title,
         dossierId,
         dossierRef,
         dossierTitle,

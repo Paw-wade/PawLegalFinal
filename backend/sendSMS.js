@@ -250,6 +250,9 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
         task_assigned: `Une nouvelle tâche vous a été assignée: {{taskTitle}}. Ada Papers.`,
         task_reminder: `Rappel: La tâche "{{taskTitle}}" est due le {{dateEcheance}}. Ada Papers.`,
         task_overdue: `⚠️ ALERTE: La tâche "{{taskTitle}}" assignée à {{assignedTo}} est en retard de {{daysOverdue}} jour(s). Échéance: {{deadlineDate}}. Ada Papers.`,
+        /** Fallback si le template DB `password_reset_temp` est absent ou inactif */
+        password_reset_temp:
+          'Bonjour {{firstName}} {{lastName}}, votre code de vérification pour réinitialiser votre mot de passe est : {{tempPassword}}. Ce code est valable 10 minutes. Ada Papers.',
         tarification_choice_reminder: `Votre dossier "{{dossierTitle}}" est en cours. Choisissez votre formule tarifaire dans votre espace client. Ada Papers.`,
         /** Relance admin : message court (1 segment GSM ~160c) — {{numero}} = ref. dossier courte */
         tarification_payment_reminder: `Rappel Ada Papers: reglement tarif dossier {{numero}} en attente. Espace client > Tarification.`,

@@ -103,12 +103,6 @@ export default function SignInPage() {
             return;
           }
 
-          const daysRemaining = sessionUser?.daysRemaining;
-          if (typeof daysRemaining === 'number' && daysRemaining <= 0) {
-            window.location.href = '/auth/complete-profile?expired=true';
-            return;
-          }
-
           if (sessionUser?.profilComplete === false) {
             window.location.href = '/auth/complete-profile';
             return;

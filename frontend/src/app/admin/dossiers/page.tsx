@@ -402,14 +402,20 @@ export default function AdminDossiersPage() {
   const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(new Set());
   const [expandedDossierDocumentDropdowns, setExpandedDossierDocumentDropdowns] = useState<Set<string>>(new Set());
   const [dossierTasks, setDossierTasks] = useState<Record<string, any[]>>({});
+  const [dossierDrafts, setDossierDrafts] = useState<Record<string, any[]>>({});
   const [agendaPdfLoading, setAgendaPdfLoading] = useState(false);
   const [isAgendaCollapsed, setIsAgendaCollapsed] = useState(true);
 
   const agendaItems = useMemo(
-    () => collectAdminDossierAgendaItems(dossiers, dossierTasks, DEFAULT_AGENDA_HORIZON_DAYS),
-    [dossiers, dossierTasks]
+    () =>
+      collectAdminDossierAgendaItems(
+        dossiers,
+        dossierTasks,
+        dossierDrafts,
+        DEFAULT_AGENDA_HORIZON_DAYS
+      ),
+    [dossiers, dossierTasks, dossierDrafts]
   );
-  const [dossierDrafts, setDossierDrafts] = useState<Record<string, any[]>>({});
   const [activeDirectUploadDossierId, setActiveDirectUploadDossierId] = useState<string | null>(null);
   const [directUploadData, setDirectUploadData] = useState({
     nom: '',
@@ -2037,8 +2043,8 @@ export default function AdminDossiersPage() {
                     </div>
                     <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 break-words leading-snug">
                       Synthèse des dates connues : échéance du dossier, jalons avec date dans les étapes, et
-                      tâches ouvertes avec échéance. Les dossiers clôturés, archivés, refusés ou annulés sont
-                      exclus.
+                      tâches ouvertes avec échéance, ainsi que les documents en préparation (non terminés) avec
+                      date d’échéance. Les dossiers clôturés, archivés, refusés ou annulés sont exclus.
                     </p>
                     <p className="text-[11px] text-muted-foreground mt-1">
                       {agendaItems.length === 0
@@ -2090,6 +2096,8 @@ export default function AdminDossiersPage() {
                                           ? 'bg-amber-100 text-amber-900'
                                           : it.kind === 'etape'
                                             ? 'bg-violet-100 text-violet-900'
+                                            : it.kind === 'doc_preparation'
+                                              ? 'bg-cyan-100 text-cyan-900'
                                             : 'bg-slate-100 text-slate-800'
                                       }`}
                                     >
@@ -2169,6 +2177,7 @@ export default function AdminDossiersPage() {
                       const isRefused = rawStatut === 'refuse';
                       const isArchived = rawStatut === 'annule';
                       return (
+                        !d.isStandby &&
                         !d.estCloture &&
                         !d.estArchive &&
                         !isArchived &&
