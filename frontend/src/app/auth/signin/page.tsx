@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { signIn, getSession, getProviders } from 'next-auth/react';
 
 // Composants simplifiés
@@ -43,7 +42,6 @@ function Label({ className = '', children, ...props }: any) {
 }
 
 export default function SignInPage() {
-  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isCheckingProviders, setIsCheckingProviders] = useState(true);
@@ -70,14 +68,16 @@ export default function SignInPage() {
   }, []);
 
   useEffect(() => {
-    const authError = searchParams.get('error');
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get('error');
     if (!authError) return;
     if (authError === 'AccessDenied') {
       setError('Connexion Google refusée. Vérifiez que votre email est déjà associé à un compte Ada Papers.');
       return;
     }
     setError('La connexion externe a échoué. Veuillez réessayer.');
-  }, [searchParams]);
+  }, []);
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
