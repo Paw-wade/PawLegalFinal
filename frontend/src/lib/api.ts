@@ -366,6 +366,10 @@ export const userAPI = {
   // Admin - Mettre à jour un utilisateur par ID
   updateUser: (id: string, data: any) =>
     api.put(`/user/${id}`, data),
+
+  // Admin - Modifier le mot de passe d'un utilisateur
+  updateUserPassword: (id: string, data: { newPassword: string }) =>
+    api.put(`/user/${id}/password`, data),
   
   // Admin - Supprimer un utilisateur par ID
   deleteUser: (id: string) =>

@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getProviders, signIn, useSession } from 'next-auth/react';
 import { authAPI } from '@/lib/api';
 
 function Button({ 
@@ -68,8 +69,11 @@ const REDIRECT_DELAY_MS = 2600;
 
 export default function SignupPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGoogleAvailable, setIsGoogleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -88,6 +92,49 @@ export default function SignupPage() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const loadProviders = async () => {
+      try {
+        const providers = await getProviders();
+        setIsGoogleAvailable(Boolean(providers?.['google-signup']));
+      } catch (e) {
+        console.error('Erreur chargement providers NextAuth:', e);
+        setIsGoogleAvailable(false);
+      }
+    };
+    void loadProviders();
+  }, []);
+
+  useEffect(() => {
+    const user: any = session?.user;
+    if (!user) return;
+
+    // Si l'utilisateur existe déjà et est connecté, on redirige vers son espace.
+    if (user.accessToken) {
+      const role = user.role;
+      if (role === 'admin' || role === 'superadmin') {
+        router.replace('/admin');
+      } else if (role === 'partenaire') {
+        router.replace('/partenaire');
+      } else if (user.profilComplete === false) {
+        router.replace('/auth/complete-profile');
+      } else {
+        router.replace('/client');
+      }
+      return;
+    }
+
+    // Préremplissage des champs depuis Google pour finaliser l'inscription.
+    if (user.googleSignupPending) {
+      setFormData((prev) => ({
+        ...prev,
+        firstName: prev.firstName || user.googleFirstName || '',
+        lastName: prev.lastName || user.googleLastName || '',
+        email: prev.email || user.email || '',
+      }));
+    }
+  }, [session, router]);
 
   const validateField = (name: string, value: string) => {
     setFieldErrors(prev => {
@@ -198,6 +245,24 @@ export default function SignupPage() {
     }
   };
 
+  const handleGoogleSignup = async () => {
+    setError(null);
+    setIsGoogleLoading(true);
+    try {
+      await signIn('google-signup', { callbackUrl: '/auth/signup' });
+    } catch (err) {
+      console.error('Erreur lors de la pré-inscription Google:', err);
+      setError('Impossible de continuer avec Google pour le moment.');
+      setIsGoogleLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isGoogleLoading) return;
+    const t = setTimeout(() => setIsGoogleLoading(false), 5000);
+    return () => clearTimeout(t);
+  }, [isGoogleLoading]);
+
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-primary/5 via-background to-primary/10 relative">
       <Link href="/" className="absolute top-4 left-4 z-50">
@@ -297,129 +362,164 @@ export default function SignupPage() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-5" aria-busy={isLoading || !!success}>
-                  <div className="space-y-5">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="firstName">Prénom *</Label>
-                        <Input
-                          id="firstName"
-                          name="firstName"
-                          type="text"
-                          value={formData.firstName}
-                          onChange={handleChange}
-                          onBlur={(e) => validateField('firstName', e.target.value)}
-                          placeholder="Votre prénom"
-                          autoComplete="given-name"
-                          disabled={!!success}
-                          className={fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}
-                        />
-                        {fieldErrors.firstName && (
-                          <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                            <span>⚠️</span>
-                            <span>{fieldErrors.firstName}</span>
-                          </p>
-                        )}
-                      </div>
+              <form onSubmit={handleSubmit} className="space-y-6" aria-busy={isLoading || !!success}>
+                <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 space-y-2">
+                  <p className="text-xs text-blue-900/80 text-center font-medium">
+                    Inscription rapide avec Google
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full h-12 text-base font-semibold bg-white"
+                    onClick={handleGoogleSignup}
+                    disabled={!isGoogleAvailable || isGoogleLoading || isLoading || !!success}
+                  >
+                    {isGoogleLoading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin">⏳</span>
+                        <span>Redirection vers Google...</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <span>🔵</span>
+                        <span>Continuer l&apos;inscription avec Google</span>
+                      </span>
+                    )}
+                  </Button>
+                </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="lastName">Nom *</Label>
-                        <Input
-                          id="lastName"
-                          name="lastName"
-                          type="text"
-                          value={formData.lastName}
-                          onChange={handleChange}
-                          onBlur={(e) => validateField('lastName', e.target.value)}
-                          placeholder="Votre nom"
-                          autoComplete="family-name"
-                          disabled={!!success}
-                          className={fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}
-                        />
-                        {fieldErrors.lastName && (
-                          <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                            <span>⚠️</span>
-                            <span>{fieldErrors.lastName}</span>
-                          </p>
-                        )}
-                      </div>
+                <div className="relative py-1">
+                  <div className="absolute inset-0 flex items-center" aria-hidden>
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-2 text-muted-foreground">Ou inscrivez-vous manuellement</span>
+                  </div>
+                </div>
+
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">Prénom *</Label>
+                      <Input
+                        id="firstName"
+                        name="firstName"
+                        type="text"
+                        value={formData.firstName}
+                        onChange={handleChange}
+                        onBlur={(e) => validateField('firstName', e.target.value)}
+                        placeholder="Votre prénom"
+                        autoComplete="given-name"
+                        disabled={!!success}
+                        className={fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}
+                      />
+                      {fieldErrors.firstName && (
+                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                          <span>⚠️</span>
+                          <span>{fieldErrors.firstName}</span>
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
-                      {/* Email désormais requis pour la création de compte */}
+                      <Label htmlFor="lastName">Nom *</Label>
                       <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        value={formData.email}
+                        id="lastName"
+                        name="lastName"
+                        type="text"
+                        value={formData.lastName}
                         onChange={handleChange}
-                        placeholder="votre.email@exemple.com"
-                        autoComplete="email"
-                        required
+                        onBlur={(e) => validateField('lastName', e.target.value)}
+                        placeholder="Votre nom"
+                        autoComplete="family-name"
                         disabled={!!success}
+                        className={fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}
                       />
-                    </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Numéro de téléphone *</Label>
-                        <Input
-                          id="phone"
-                          name="phone"
-                          type="tel"
-                          value={formData.phone}
-                          onChange={handleChange}
-                          onBlur={(e) => validateField('phone', e.target.value)}
-                          placeholder="07 68 03 33 58"
-                          autoComplete="tel"
-                          disabled={!!success}
-                          className={fieldErrors.phone ? 'border-red-500 focus:border-red-500' : ''}
-                        />
-                        {fieldErrors.phone && (
-                          <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                            <span>⚠️</span>
-                            <span>{fieldErrors.phone}</span>
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          Une fois votre inscription validée, un SMS contenant votre mot de passe temporaire vous sera envoyé.
+                      {fieldErrors.lastName && (
+                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                          <span>⚠️</span>
+                          <span>{fieldErrors.lastName}</span>
                         </p>
-                      </div>
-
-                      <Button
-                        type="submit"
-                        className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                        disabled={isLoading || !!success}
-                      >
-                        {success ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <span className="animate-pulse">✓</span>
-                            <span>Redirection vers l&apos;accueil…</span>
-                          </span>
-                        ) : isLoading ? (
-                          <span className="flex items-center gap-2">
-                            <span className="animate-spin">⏳</span>
-                            <span>Envoi en cours...</span>
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            <span>Créer mon compte</span>
-                          </span>
-                        )}
-                      </Button>
-                      <p className="mt-3 text-[11px] text-muted-foreground leading-snug">
-                        En créant un compte, vous acceptez les{' '}
-                        <Link href="/cgu" className="text-primary hover:underline font-semibold">
-                          Conditions Générales d&apos;Utilisation
-                        </Link>{' '}
-                        et la{' '}
-                        <Link href="/politique-confidentialite" className="text-primary hover:underline font-semibold">
-                          Politique de confidentialité
-                        </Link>
-                        .
-                      </p>
+                      )}
                     </div>
-                </form>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      placeholder="votre.email@exemple.com"
+                      autoComplete="email"
+                      required
+                      disabled={!!success}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Numéro de téléphone *</Label>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      onBlur={(e) => validateField('phone', e.target.value)}
+                      placeholder="07 68 03 33 58"
+                      autoComplete="tel"
+                      disabled={!!success}
+                      className={fieldErrors.phone ? 'border-red-500 focus:border-red-500' : ''}
+                    />
+                    {fieldErrors.phone && (
+                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                        <span>⚠️</span>
+                        <span>{fieldErrors.phone}</span>
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Une fois votre inscription validée, un SMS contenant votre mot de passe temporaire vous sera envoyé.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-1">
+                  <Button
+                    type="submit"
+                    className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                    disabled={isLoading || !!success}
+                  >
+                    {success ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="animate-pulse">✓</span>
+                        <span>Redirection vers l&apos;accueil…</span>
+                      </span>
+                    ) : isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin">⏳</span>
+                        <span>Envoi en cours...</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <span>Créer mon compte</span>
+                      </span>
+                    )}
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    En créant un compte, vous acceptez les{' '}
+                    <Link href="/cgu" className="text-primary hover:underline font-semibold">
+                      Conditions Générales d&apos;Utilisation
+                    </Link>{' '}
+                    et la{' '}
+                    <Link href="/politique-confidentialite" className="text-primary hover:underline font-semibold">
+                      Politique de confidentialité
+                    </Link>
+                    .
+                  </p>
+                </div>
+              </form>
 
               <div className="mt-6 pt-6 border-t border-border text-center">
                 <p className="text-sm text-muted-foreground">

@@ -207,6 +207,9 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showPasswordPanel, setShowPasswordPanel] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [formData, setFormData] = useState<any>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -218,6 +221,9 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
       setUser(null);
       setFormData({});
       setIsEditing(false);
+      setShowPasswordPanel(false);
+      setPasswordForm({ newPassword: '', confirmPassword: '' });
+      setPasswordLoading(false);
       setError(null);
       setSuccess(null);
     }
@@ -299,6 +305,37 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
     }
   };
 
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+    if (passwordForm.newPassword.length < 8) {
+      setError('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setError('La confirmation du mot de passe ne correspond pas.');
+      return;
+    }
+
+    setPasswordLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await userAPI.updateUserPassword(userId, { newPassword: passwordForm.newPassword });
+      if (response.data.success) {
+        setSuccess('Mot de passe utilisateur mis à jour avec succès');
+        setPasswordForm({ newPassword: '', confirmPassword: '' });
+        setShowPasswordPanel(false);
+        onUpdate();
+      }
+    } catch (err: any) {
+      console.error('Erreur lors de la mise à jour du mot de passe utilisateur:', err);
+      setError(err.response?.data?.message || 'Erreur lors de la mise à jour du mot de passe utilisateur');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -353,6 +390,17 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                         📥 Télécharger la fiche
                       </Button>
                       <Button onClick={() => setIsEditing(true)}>Modifier</Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowPasswordPanel((prev) => !prev);
+                          setPasswordForm({ newPassword: '', confirmPassword: '' });
+                          setError(null);
+                        }}
+                        className="bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100"
+                      >
+                        Mot de passe
+                      </Button>
                       <Button 
                         variant="destructive" 
                         onClick={async () => {
@@ -385,6 +433,56 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                       </Button>
                     </div>
                   </div>
+
+                  {showPasswordPanel && (
+                    <div className="p-4 rounded-lg border border-amber-200 bg-amber-50/60">
+                      <h4 className="text-sm font-semibold text-amber-900 mb-3">
+                        Modifier le mot de passe du compte
+                      </h4>
+                      <form onSubmit={handlePasswordUpdate} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="adminNewPassword">Nouveau mot de passe *</Label>
+                          <Input
+                            id="adminNewPassword"
+                            type="password"
+                            autoComplete="new-password"
+                            value={passwordForm.newPassword}
+                            onChange={(e: any) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                            placeholder="Au moins 8 caractères"
+                            disabled={passwordLoading}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="adminConfirmPassword">Confirmer *</Label>
+                          <Input
+                            id="adminConfirmPassword"
+                            type="password"
+                            autoComplete="new-password"
+                            value={passwordForm.confirmPassword}
+                            onChange={(e: any) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                            placeholder="Répétez le mot de passe"
+                            disabled={passwordLoading}
+                          />
+                        </div>
+                        <div className="md:col-span-2 flex justify-end gap-2 pt-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setShowPasswordPanel(false);
+                              setPasswordForm({ newPassword: '', confirmPassword: '' });
+                            }}
+                            disabled={passwordLoading}
+                          >
+                            Annuler
+                          </Button>
+                          <Button type="submit" disabled={passwordLoading}>
+                            {passwordLoading ? 'Mise à jour...' : 'Enregistrer le mot de passe'}
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-6">
                     <div>
