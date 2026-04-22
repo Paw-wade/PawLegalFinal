@@ -66,6 +66,11 @@ export default function RecoursDirectoryPage() {
   const [dossierIdForSend, setDossierIdForSend] = useState<string>('');
   const [dossiersForSend, setDossiersForSend] = useState<any[]>([]);
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [showTypeForm, setShowTypeForm] = useState(false);
+  const [typeLabel, setTypeLabel] = useState('');
+  const [typeDescription, setTypeDescription] = useState('');
+  const [typeError, setTypeError] = useState<string | null>(null);
+  const [creatingType, setCreatingType] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -245,6 +250,54 @@ export default function RecoursDirectoryPage() {
     }
   };
 
+  const buildTypeCode = (label: string) => {
+    const normalized = label
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return normalized || 'TYPE_PERSONNALISE';
+  };
+
+  const handleCreateType = async () => {
+    const trimmedLabel = typeLabel.trim();
+    if (!trimmedLabel) {
+      setTypeError('Veuillez renseigner un nom de thème.');
+      return;
+    }
+
+    setCreatingType(true);
+    setTypeError(null);
+    try {
+      const res = await recoursAPI.createType({
+        code: buildTypeCode(trimmedLabel),
+        label: trimmedLabel,
+        description: typeDescription.trim(),
+      });
+
+      if (!res.data?.success || !res.data?.type) {
+        throw new Error(res.data?.message || 'Erreur lors de la création du thème');
+      }
+
+      const newType: RecoursType = res.data.type;
+      const nextTypes = [...types, newType].sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+      setTypes(nextTypes);
+      setSelectedTypeId(newType._id);
+      await loadTemplates(newType._id);
+      setTypeLabel('');
+      setTypeDescription('');
+      setShowTypeForm(false);
+      setToast({ message: '✅ Thème ajouté avec succès.', type: 'success' });
+    } catch (e: any) {
+      const message = e.response?.data?.message || e.message || 'Erreur lors de la création du thème';
+      setTypeError(message);
+      setToast({ message, type: 'error' });
+    } finally {
+      setCreatingType(false);
+    }
+  };
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -262,10 +315,7 @@ export default function RecoursDirectoryPage() {
         <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Répertoire des recours</h1>
-              <p className="text-sm text-muted-foreground">
-                Gérez les modèles de recours et envoyez-les comme documents en préparation sur vos dossiers.
-              </p>
+              <h1 className="text-2xl font-bold text-foreground">Répertoire des documents importants</h1>
             </div>
           </div>
 
@@ -280,7 +330,7 @@ export default function RecoursDirectoryPage() {
             <div className="md:col-span-1">
               <div className="border rounded-lg p-3 bg-gray-50">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Types de recours
+                  Type de document
                 </p>
                 <div className="space-y-1 max-h-[60vh] overflow-y-auto">
                   {types.map((type) => (
@@ -302,11 +352,6 @@ export default function RecoursDirectoryPage() {
                           </span>
                         )}
                       </div>
-                      {type.description && (
-                        <p className="mt-0.5 text-[11px] text-gray-500 line-clamp-2">
-                          {type.description}
-                        </p>
-                      )}
                     </button>
                   ))}
                   {types.length === 0 && !isLoading && (
@@ -315,6 +360,44 @@ export default function RecoursDirectoryPage() {
                     </p>
                   )}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTypeForm((prev) => !prev);
+                    setTypeError(null);
+                  }}
+                  className="mt-3 w-full px-3 py-2 rounded-md text-xs font-semibold border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  {showTypeForm ? 'Annuler le nouveau thème' : '+ Ajouter un thème'}
+                </button>
+
+                {showTypeForm && (
+                  <div className="mt-2 space-y-2 border border-gray-200 rounded-md bg-white p-2.5">
+                    {typeError && <p className="text-xs text-red-600">{typeError}</p>}
+                    <input
+                      type="text"
+                      value={typeLabel}
+                      onChange={(e) => setTypeLabel(e.target.value)}
+                      placeholder="Nom du thème (ex: Jurisprudence)"
+                      className="w-full border rounded-md px-2.5 py-1.5 text-xs"
+                    />
+                    <textarea
+                      value={typeDescription}
+                      onChange={(e) => setTypeDescription(e.target.value)}
+                      placeholder="Description (optionnelle)"
+                      className="w-full border rounded-md px-2.5 py-1.5 text-xs min-h-[58px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateType}
+                      disabled={creatingType || !typeLabel.trim()}
+                      className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-60"
+                    >
+                      {creatingType ? 'Ajout...' : 'Créer le thème'}
+                    </button>
+                  </div>
+                )}
+
                 {/* Bouton pour afficher le formulaire de création (admin/superadmin) */}
                 <button
                   type="button"
@@ -329,11 +412,6 @@ export default function RecoursDirectoryPage() {
             {/* Colonne droite : modèles */}
             <div className="md:col-span-3">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                <p className="text-sm text-muted-foreground">
-                  {selectedTypeId
-                    ? 'Modèles de recours pour le type sélectionné.'
-                    : 'Sélectionnez un type de recours pour voir les modèles associés.'}
-                </p>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"

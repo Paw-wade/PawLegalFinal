@@ -209,6 +209,8 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
   const [isEditing, setIsEditing] = useState(false);
   const [showPasswordPanel, setShowPasswordPanel] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [formData, setFormData] = useState<any>({});
   const [error, setError] = useState<string | null>(null);
@@ -223,6 +225,8 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
       setIsEditing(false);
       setShowPasswordPanel(false);
       setPasswordForm({ newPassword: '', confirmPassword: '' });
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
       setPasswordLoading(false);
       setError(null);
       setSuccess(null);
@@ -308,11 +312,16 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
   const handlePasswordUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) return;
-    if (passwordForm.newPassword.length < 8) {
+    const formEl = e.currentTarget as HTMLFormElement;
+    const fd = new FormData(formEl);
+    const newPassword = String(fd.get('newPassword') || passwordForm.newPassword || '').trim();
+    const confirmPassword = String(fd.get('confirmPassword') || passwordForm.confirmPassword || '').trim();
+
+    if (newPassword.length < 8) {
       setError('Le nouveau mot de passe doit contenir au moins 8 caractères.');
       return;
     }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    if (newPassword !== confirmPassword) {
       setError('La confirmation du mot de passe ne correspond pas.');
       return;
     }
@@ -321,10 +330,12 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
     setError(null);
     setSuccess(null);
     try {
-      const response = await userAPI.updateUserPassword(userId, { newPassword: passwordForm.newPassword });
+      const response = await userAPI.updateUserPassword(userId, { newPassword });
       if (response.data.success) {
         setSuccess('Mot de passe utilisateur mis à jour avec succès');
         setPasswordForm({ newPassword: '', confirmPassword: '' });
+        setShowNewPassword(false);
+        setShowConfirmPassword(false);
         setShowPasswordPanel(false);
         onUpdate();
       }
@@ -395,6 +406,8 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                         onClick={() => {
                           setShowPasswordPanel((prev) => !prev);
                           setPasswordForm({ newPassword: '', confirmPassword: '' });
+                          setShowNewPassword(false);
+                          setShowConfirmPassword(false);
                           setError(null);
                         }}
                         className="bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100"
@@ -442,27 +455,55 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                       <form onSubmit={handlePasswordUpdate} className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <Label htmlFor="adminNewPassword">Nouveau mot de passe *</Label>
-                          <Input
-                            id="adminNewPassword"
-                            type="password"
-                            autoComplete="new-password"
-                            value={passwordForm.newPassword}
-                            onChange={(e: any) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
-                            placeholder="Au moins 8 caractères"
-                            disabled={passwordLoading}
-                          />
+                          <div className="relative">
+                            <Input
+                              id="adminNewPassword"
+                              name="newPassword"
+                              type={showNewPassword ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              value={passwordForm.newPassword}
+                              onChange={(e: any) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                              onInput={(e: any) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                              placeholder="Au moins 8 caractères"
+                              disabled={passwordLoading}
+                              className="pr-12"
+                            />
+                            <button
+                              type="button"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowNewPassword((prev) => !prev)}
+                              disabled={passwordLoading}
+                              aria-label={showNewPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                            >
+                              {showNewPassword ? '🙈' : '👁️'}
+                            </button>
+                          </div>
                         </div>
                         <div className="space-y-1">
                           <Label htmlFor="adminConfirmPassword">Confirmer *</Label>
-                          <Input
-                            id="adminConfirmPassword"
-                            type="password"
-                            autoComplete="new-password"
-                            value={passwordForm.confirmPassword}
-                            onChange={(e: any) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
-                            placeholder="Répétez le mot de passe"
-                            disabled={passwordLoading}
-                          />
+                          <div className="relative">
+                            <Input
+                              id="adminConfirmPassword"
+                              name="confirmPassword"
+                              type={showConfirmPassword ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              value={passwordForm.confirmPassword}
+                              onChange={(e: any) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                              onInput={(e: any) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                              placeholder="Répétez le mot de passe"
+                              disabled={passwordLoading}
+                              className="pr-12"
+                            />
+                            <button
+                              type="button"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowConfirmPassword((prev) => !prev)}
+                              disabled={passwordLoading}
+                              aria-label={showConfirmPassword ? 'Masquer la confirmation du mot de passe' : 'Afficher la confirmation du mot de passe'}
+                            >
+                              {showConfirmPassword ? '🙈' : '👁️'}
+                            </button>
+                          </div>
                         </div>
                         <div className="md:col-span-2 flex justify-end gap-2 pt-1">
                           <Button
@@ -471,6 +512,8 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                             onClick={() => {
                               setShowPasswordPanel(false);
                               setPasswordForm({ newPassword: '', confirmPassword: '' });
+                              setShowNewPassword(false);
+                              setShowConfirmPassword(false);
                             }}
                             disabled={passwordLoading}
                           >
