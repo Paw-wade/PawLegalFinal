@@ -531,6 +531,78 @@ router.get('/expirations', authorize('admin', 'superadmin'), async (req, res) =>
 // @route   GET /api/user/:id
 // @desc    Récupérer un utilisateur par ID (Admin seulement)
 // @access  Private/Admin
+// @route   PUT /api/user/:id/password
+// @desc    Modifier le mot de passe d'un utilisateur (Admin seulement)
+// @access  Private/Admin
+router.put(
+  '/:id/password',
+  authorize('admin', 'superadmin'),
+  [
+    body('newPassword')
+      .isLength({ min: 8 })
+      .withMessage('Le nouveau mot de passe doit contenir au moins 8 caractères')
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Erreurs de validation',
+          errors: errors.array()
+        });
+      }
+
+      const { newPassword } = req.body;
+      const targetUser = await User.findById(req.params.id).select('+password');
+
+      if (!targetUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'Utilisateur non trouvé'
+        });
+      }
+
+      targetUser.password = newPassword;
+      targetUser.needsPasswordSetup = false;
+      targetUser.resetPasswordToken = undefined;
+      targetUser.resetPasswordExpires = undefined;
+      await targetUser.save();
+
+      try {
+        const Log = require('../models/Log');
+        await Log.create({
+          action: 'user_password_updated_by_admin',
+          user: req.user.id,
+          userEmail: req.user.email,
+          targetUser: targetUser._id,
+          targetUserEmail: targetUser.email,
+          description: `${req.user.email} a modifié le mot de passe de ${targetUser.email || targetUser._id}`,
+          ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
+          userAgent: req.get('user-agent')
+        });
+      } catch (logError) {
+        console.error('Erreur lors de l\'enregistrement du log mot de passe admin:', logError);
+      }
+
+      return res.json({
+        success: true,
+        message: 'Mot de passe utilisateur mis à jour avec succès'
+      });
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour admin du mot de passe:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: error.message
+      });
+    }
+  }
+);
+
+// @route   GET /api/user/:id
+// @desc    Récupérer un utilisateur par ID (Admin seulement)
+// @access  Private/Admin
 router.get('/:id', authorize('admin', 'superadmin'), async (req, res) => {
   try {
     console.log('✅ Route GET /api/user/:id appelée avec ID:', req.params.id); // Debug log

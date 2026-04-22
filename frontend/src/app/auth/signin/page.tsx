@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { signIn, getSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
+import { signIn, getSession, getProviders } from 'next-auth/react';
 
 // Composants simplifiés
 function Button({ children, variant = 'default', size = 'default', className = '', disabled = false, type = 'button', ...props }: any) {
@@ -42,12 +43,41 @@ function Label({ className = '', children, ...props }: any) {
 }
 
 export default function SignInPage() {
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isCheckingProviders, setIsCheckingProviders] = useState(true);
+  const [isGoogleAvailable, setIsGoogleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const isRedirecting = useRef(false);
+
+  useEffect(() => {
+    const loadProviders = async () => {
+      try {
+        const providers = await getProviders();
+        setIsGoogleAvailable(Boolean(providers?.google));
+      } catch (e) {
+        console.error('Erreur lors de la récupération des providers NextAuth:', e);
+        setIsGoogleAvailable(false);
+      } finally {
+        setIsCheckingProviders(false);
+      }
+    };
+    void loadProviders();
+  }, []);
+
+  useEffect(() => {
+    const authError = searchParams.get('error');
+    if (!authError) return;
+    if (authError === 'AccessDenied') {
+      setError('Connexion Google refusée. Vérifiez que votre email est déjà associé à un compte Ada Papers.');
+      return;
+    }
+    setError('La connexion externe a échoué. Veuillez réessayer.');
+  }, [searchParams]);
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
@@ -127,6 +157,25 @@ export default function SignInPage() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (isRedirecting.current) return;
+    if (!isGoogleAvailable) {
+      setError('Connexion Google indisponible. Vérifiez GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET.');
+      return;
+    }
+    setError(null);
+    setIsGoogleLoading(true);
+    try {
+      // Evite de réutiliser un ancien token API d'un autre compte.
+      localStorage.removeItem('token');
+      await signIn('google', { callbackUrl: '/client' });
+    } catch (err: any) {
+      console.error('Erreur lors de la connexion Google:', err);
+      setError('Impossible de se connecter avec Google pour le moment.');
+      setIsGoogleLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen min-h-[100dvh] flex bg-gradient-to-br from-primary/5 via-background to-primary/10 relative overflow-x-hidden max-w-[100vw] pt-[env(safe-area-inset-top,0)]">
       {/* Bouton retour — zone tactile 44px sur mobile */}
@@ -172,10 +221,10 @@ export default function SignInPage() {
       </div>
 
       {/* Section droite - Formulaire de connexion */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center px-3 sm:px-4 py-8 sm:py-12 safe-bottom">
+      <div className="w-full lg:w-1/2 flex items-center justify-center px-3 sm:px-4 py-6 sm:py-8 safe-bottom">
         <div className="w-full max-w-md min-w-0">
           {/* Logo */}
-          <div className="text-center mb-6">
+          <div className="text-center mb-4">
             <Link href="/" className="inline-block">
               <div className="flex flex-col items-center">
                 <span className="text-3xl font-bold text-orange-500 hover:text-orange-600 transition-colors">
@@ -199,7 +248,7 @@ export default function SignInPage() {
               </div>
             </div>
 
-          <div className="p-4 sm:p-8">
+          <div className="p-4 sm:p-6">
             {/* Message d'erreur amélioré */}
             {error && (
               <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm">
@@ -210,59 +259,105 @@ export default function SignInPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e: any) => setEmail(e.target.value)}
-                  placeholder="votre@email.com"
-                  required
-                  disabled={isLoading || isRedirecting.current}
-                />
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 space-y-2">
+                <p className="text-xs text-blue-900/80 text-center font-medium">
+                  Connexion rapide avec Google
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-11 text-sm sm:text-base font-semibold bg-white"
+                  onClick={handleGoogleSignIn}
+                  disabled={isLoading || isGoogleLoading || isCheckingProviders || isRedirecting.current || !isGoogleAvailable}
+                >
+                  {isCheckingProviders ? (
+                    <span className="flex items-center gap-2">
+                      <span className="animate-spin">⏳</span>
+                      <span>Vérification Google...</span>
+                    </span>
+                  ) : isGoogleLoading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="animate-spin">⏳</span>
+                      <span>Redirection vers Google...</span>
+                    </span>
+                  ) : !isGoogleAvailable ? (
+                    <span className="flex items-center gap-2">
+                      <span>⚠️</span>
+                      <span>Google indisponible</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <span>🔵</span>
+                      <span>Continuer avec Google</span>
+                    </span>
+                  )}
+                </Button>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Mot de passe *</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e: any) => setPassword(e.target.value)}
-                    placeholder="Votre mot de passe"
-                    required
-                    className="pr-12"
-                    disabled={isLoading || isRedirecting.current}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                    disabled={isLoading || isRedirecting.current}
-                  >
-                    {showPassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center" aria-hidden>
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white px-2 text-muted-foreground">Ou avec votre email</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <Link href="/auth/forgot-password" className="text-sm text-primary hover:underline font-medium">
-                  Mot de passe oublié ?
-                </Link>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e: any) => setEmail(e.target.value)}
+                    placeholder="votre@email.com"
+                    required
+                    disabled={isLoading || isGoogleLoading || isRedirecting.current}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">Mot de passe *</Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      name="password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e: any) => setPassword(e.target.value)}
+                      placeholder="Votre mot de passe"
+                      required
+                      className="pr-12"
+                      disabled={isLoading || isGoogleLoading || isRedirecting.current}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      disabled={isLoading || isGoogleLoading || isRedirecting.current}
+                    >
+                      {showPassword ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Link href="/auth/forgot-password" className="text-sm text-primary hover:underline font-medium">
+                    Mot de passe oublié ?
+                  </Link>
+                </div>
               </div>
 
-              <Button 
-                type="submit" 
-                className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all" 
-                disabled={isLoading || isRedirecting.current}
+              <Button
+                type="submit"
+                className="w-full h-11 sm:h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                disabled={isLoading || isGoogleLoading || isRedirecting.current}
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">

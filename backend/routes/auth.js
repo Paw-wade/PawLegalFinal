@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const { OAuth2Client } = require('google-auth-library');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
@@ -15,6 +16,21 @@ const generateToken = (id) => {
     // Session longue configurable (ex: 90d) pour limiter les reconnexions fréquentes.
     expiresIn: process.env.JWT_EXPIRES_IN || '90d'
   });
+};
+
+const getDaysRemainingForUser = (user) => {
+  if (!user || user.role === 'admin' || user.role === 'superadmin' || user.profilComplete) {
+    return null;
+  }
+  const daysSinceCreation = Math.floor(
+    (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  return Math.max(0, 7 - daysSinceCreation);
+};
+
+const getGoogleClient = () => {
+  if (!process.env.GOOGLE_CLIENT_ID) return null;
+  return new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 };
 
 // Mot de passe temporaire par défaut envoyé par SMS lors de la création de compte
@@ -229,6 +245,94 @@ router.post(
         success: false,
         message: 'Erreur serveur lors de la connexion',
         error: error.message
+      });
+    }
+  }
+);
+
+// @route   POST /api/auth/google-login
+// @desc    Connecter un utilisateur via Google (échange idToken -> token API)
+// @access  Public
+router.post(
+  '/google-login',
+  [body('idToken').notEmpty().withMessage('Le token Google est requis')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Erreurs de validation',
+          errors: errors.array(),
+        });
+      }
+
+      const googleClient = getGoogleClient();
+      if (!googleClient || !process.env.GOOGLE_CLIENT_ID) {
+        return res.status(500).json({
+          success: false,
+          message: 'Connexion Google non configurée sur le serveur.',
+        });
+      }
+
+      const { idToken } = req.body;
+      const ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload();
+
+      if (!payload?.email) {
+        return res.status(401).json({
+          success: false,
+          message: 'Impossible de récupérer un email depuis Google.',
+        });
+      }
+
+      const email = String(payload.email).trim().toLowerCase();
+      const user = await User.findOne({ email });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'Aucun compte Ada Papers n’est associé à cet email Google.',
+        });
+      }
+
+      if (!user.isActive) {
+        return res.status(401).json({
+          success: false,
+          message: 'Compte désactivé. Contactez l’administrateur.',
+        });
+      }
+
+      const token = generateToken(user._id);
+      const daysRemaining = getDaysRemainingForUser(user);
+
+      return res.json({
+        success: true,
+        message: 'Connexion Google réussie',
+        token,
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          phoneVerified: user.phoneVerified,
+          needsPasswordSetup: user.needsPasswordSetup,
+          profilComplete: user.profilComplete || false,
+          createdAt: user.createdAt,
+          daysRemaining,
+        },
+      });
+    } catch (error) {
+      console.error('Erreur lors de la connexion Google:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur lors de la connexion Google',
+        error: error.message,
       });
     }
   }
