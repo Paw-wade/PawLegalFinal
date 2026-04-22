@@ -59,7 +59,7 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/sms', label: 'SMS', icon: Smartphone },
   { href: '/admin/carousel', label: 'Carrousel home', icon: Image },
   { href: '/admin/cms', label: 'CMS', icon: FileEdit },
-  { href: '/admin/recours', label: 'Répertoire des recours', icon: FolderOpen, roles: ['admin', 'superadmin'] },
+  { href: '/admin/recours', label: 'Documentation', icon: FolderOpen, roles: ['admin', 'superadmin'] },
   { href: '/admin/logs', label: 'Logs', icon: ScrollText, roles: ['superadmin'] },
   { href: '/admin/corbeille', label: 'Corbeille', icon: Trash2 },
   { href: '/forum', label: 'Forum', icon: MessageSquare },

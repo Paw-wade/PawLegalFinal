@@ -21,40 +21,44 @@ function isSuperadmin(user) {
   return user.role === 'superadmin';
 }
 
-// Types de recours par défaut inspirés des types de dossiers connus
+// Thèmes de recours autorisés (affichés dans le répertoire)
 const DEFAULT_RECOURS_TYPES = [
   {
-    code: 'OQTF',
-    label: 'Recours contre OQTF',
-    description: 'Modèles pour contester une Obligation de Quitter le Territoire Français.',
+    code: 'REFERE_MESURES_UTILES',
+    label: 'Référé mesure utiles',
+    description: 'Modèles de référé mesures utiles pour demandes urgentes.',
   },
   {
-    code: 'REFUS_TITRE',
-    label: 'Recours contre refus de titre de séjour',
-    description: 'Modèles de recours gracieux et contentieux après un refus de titre de séjour.',
+    code: 'REFERE_SUSPENSION',
+    label: 'Référé suspension',
+    description: 'Modèles de référé suspension contre décisions administratives.',
   },
   {
-    code: 'REFUS_VISA',
-    label: 'Recours contre refus de visa',
-    description: 'Modèles pour la CRRV et les recours devant le tribunal administratif.',
+    code: 'RECOURS_ANNULATION',
+    label: 'Recours en annulation',
+    description: 'Modèles de recours en annulation devant la juridiction compétente.',
   },
   {
-    code: 'REGROUPEMENT_FAMILIAL',
-    label: 'Recours regroupement familial',
-    description: 'Recours contre les décisions défavorables en matière de regroupement familial.',
+    code: 'COMMUNICATION_MOTIFS',
+    label: 'Communication des motifs',
+    description: 'Modèles de demande de communication des motifs de décision.',
   },
   {
-    code: 'ASYL',
-    label: 'Recours asile / OFPRA / CNDA',
-    description: 'Modèles de recours contre les décisions de l’OFPRA et appels devant la CNDA.',
+    code: 'FORMULAIRE_CERFA',
+    label: 'Formulaire CERFA',
+    description: 'Formulaires CERFA officiels à joindre ou compléter dans les dossiers.',
   },
   {
-    code: 'NAT_FR',
-    label: 'Recours nationalité française',
-    description: 'Recours contre les refus de naturalisation ou d’enregistrement.',
+    code: 'LEGISLATION',
+    label: 'Législation',
+    description: 'Textes législatifs et réglementaires utiles aux recours.',
+  },
+  {
+    code: 'AUTRES_DOCUMENTS',
+    label: 'Autres documents',
+    description: 'Documents complémentaires divers liés aux démarches de recours.',
   },
 ];
-
 // GET /recours/types - liste des types de recours visibles pour l'utilisateur
 router.get('/recours/types', async (req, res) => {
   try {
@@ -63,20 +67,18 @@ router.get('/recours/types', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
 
-    // Si aucun type n'existe encore, initialiser avec les types par défaut
-    const existingCount = await RecoursType.countDocuments({});
-    if (existingCount === 0) {
-      for (const t of DEFAULT_RECOURS_TYPES) {
-        const code = t.code.toUpperCase();
-        const already = await RecoursType.findOne({ code });
-        if (!already) {
-          await RecoursType.create({
-            code,
-            label: t.label,
-            description: t.description,
-            restrictedToSuperadmin: false,
-          });
-        }
+    // Compléter automatiquement les types par défaut manquants.
+    // (utile même si la base contient déjà des types créés manuellement)
+    for (const t of DEFAULT_RECOURS_TYPES) {
+      const code = t.code.toUpperCase();
+      const already = await RecoursType.findOne({ code });
+      if (!already) {
+        await RecoursType.create({
+          code,
+          label: t.label,
+          description: t.description,
+          restrictedToSuperadmin: false,
+        });
       }
     }
 
@@ -93,12 +95,12 @@ router.get('/recours/types', async (req, res) => {
   }
 });
 
-// POST /recours/types - création d'un type (superadmin uniquement)
+// POST /recours/types - création d'un type (admin/superadmin)
 router.post('/recours/types', async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user || !isSuperadmin(user)) {
-      return res.status(403).json({ success: false, message: 'Seul un super administrateur peut créer un type de recours' });
+    if (!user || !isAdmin(user)) {
+      return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
 
     const { code, label, description, restrictedToSuperadmin } = req.body;
@@ -111,11 +113,12 @@ router.post('/recours/types', async (req, res) => {
       return res.status(409).json({ success: false, message: 'Un type de recours avec ce code existe déjà' });
     }
 
+    const canRestrictToSuperadmin = isSuperadmin(user);
     const type = await RecoursType.create({
       code: code.toUpperCase().trim(),
       label: label.trim(),
       description: description || '',
-      restrictedToSuperadmin: !!restrictedToSuperadmin,
+      restrictedToSuperadmin: canRestrictToSuperadmin ? !!restrictedToSuperadmin : false,
     });
 
     return res.status(201).json({ success: true, type });

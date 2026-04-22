@@ -666,6 +666,7 @@ router.put(
     body('lastName').optional().trim().notEmpty().withMessage('Le nom ne peut pas être vide'),
     body('email').optional().isEmail().normalizeEmail().withMessage('Email invalide'),
     body('phone').optional().trim(),
+    body('password').optional().isLength({ min: 8 }).withMessage('Le mot de passe doit contenir au moins 8 caractères'),
     body('role').optional().isIn(['client', 'admin', 'superadmin', 'partenaire']).withMessage('Rôle invalide'),
     body('partenaireInfo.typeOrganisme')
       .optional()
@@ -698,6 +699,7 @@ router.put(
         lastName,
         email,
         phone,
+        password,
         role,
         dateNaissance,
         lieuNaissance,
@@ -716,6 +718,7 @@ router.put(
         isActive,
         partenaireInfo
       } = req.body;
+      const changedFields = Object.keys(req.body || {});
 
       // Vérifier si l'email est déjà utilisé par un autre utilisateur
       if (email && email !== user.email) {
@@ -732,6 +735,12 @@ router.put(
       if (firstName) user.firstName = firstName;
       if (lastName) user.lastName = lastName;
       if (phone !== undefined) user.phone = phone;
+      if (password !== undefined && password !== null && String(password).trim() !== '') {
+        user.password = String(password);
+        user.needsPasswordSetup = false;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+      }
       if (role) user.role = role;
       if (dateNaissance) user.dateNaissance = dateNaissance;
       if (lieuNaissance !== undefined) user.lieuNaissance = lieuNaissance;
@@ -774,7 +783,7 @@ router.put(
           ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
           userAgent: req.get('user-agent'),
           metadata: {
-            updatedFields: Object.keys(updateData),
+            updatedFields: changedFields,
             updatedUser: {
               id: user._id.toString(),
               email: user.email,
