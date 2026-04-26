@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRef } from 'react';
 import Link from 'next/link';
 import { userAPI, smsPreferencesAPI, pushAPI } from '@/lib/api';
+import { ensurePushSubscription } from '@/lib/pushClient';
 import { mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
@@ -110,6 +111,7 @@ export default function ComptePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingPushTest, setIsSendingPushTest] = useState(false);
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
@@ -449,6 +451,30 @@ export default function ComptePage() {
       setError(error?.response?.data?.message || 'Impossible d’envoyer le push test.');
     } finally {
       setIsSendingPushTest(false);
+    }
+  };
+
+  const handleEnablePush = async () => {
+    setError(null);
+    setSuccess(null);
+    setIsEnablingPush(true);
+    try {
+      const result = await ensurePushSubscription({ requestPermission: true });
+      if (result.ok) {
+        setSuccess('Notifications push activées sur cet appareil.');
+      } else if (result.reason === 'permission_required') {
+        setError('Veuillez autoriser les notifications dans votre navigateur.');
+      } else if (result.reason === 'denied') {
+        setError('Notifications refusées dans le navigateur (paramètres à modifier).');
+      } else if (result.reason === 'server_not_configured') {
+        setError('Serveur push non configuré (clés VAPID manquantes).');
+      } else {
+        setError('Ce navigateur ne supporte pas les notifications push.');
+      }
+    } catch (error: any) {
+      setError(error?.response?.data?.message || 'Impossible d’activer les notifications push.');
+    } finally {
+      setIsEnablingPush(false);
     }
   };
 
@@ -1123,6 +1149,15 @@ export default function ComptePage() {
 
               <div className="flex justify-end pt-4">
                 <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isEnablingPush}
+                    onClick={handleEnablePush}
+                    className="px-6 py-3 border-2"
+                  >
+                    {isEnablingPush ? 'Activation...' : 'Activer les notifications push'}
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"

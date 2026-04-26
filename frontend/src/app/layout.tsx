@@ -17,6 +17,14 @@ export const metadata: Metadata = {
   description:
     "Ada Papers - Service d'Accompagnement aux démarches administratives pour vos titres de séjour, visas et démarches liées au droit des étrangers et du travail.",
   manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Ada Papers',
+  },
+  icons: {
+    apple: '/ada-papers-logo.png',
+  },
 };
 
 export default function RootLayout({

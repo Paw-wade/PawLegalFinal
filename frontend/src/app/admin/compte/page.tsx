@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { userAPI, smsPreferencesAPI, pushAPI } from '@/lib/api';
+import { ensurePushSubscription } from '@/lib/pushClient';
 import { mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
@@ -120,6 +121,7 @@ export default function AdminComptePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingPushTest, setIsSendingPushTest] = useState(false);
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
   const [pushStatus, setPushStatus] = useState<
     'checking' | 'enabled' | 'denied' | 'default' | 'unsupported' | 'server_not_configured'
   >('checking');
@@ -450,6 +452,35 @@ export default function AdminComptePage() {
     }
   };
 
+  const handleEnablePush = async () => {
+    setError(null);
+    setSuccess(null);
+    setIsEnablingPush(true);
+    try {
+      const result = await ensurePushSubscription({ requestPermission: true });
+      if (result.ok) {
+        setPushStatus('enabled');
+        setSuccess('Notifications push activées sur cet appareil.');
+      } else if (result.reason === 'permission_required') {
+        setPushStatus('default');
+        setError('Veuillez autoriser les notifications dans votre navigateur.');
+      } else if (result.reason === 'denied') {
+        setPushStatus('denied');
+        setError('Notifications refusées dans le navigateur (paramètres à modifier).');
+      } else if (result.reason === 'server_not_configured') {
+        setPushStatus('server_not_configured');
+        setError('Serveur push non configuré (clés VAPID manquantes).');
+      } else {
+        setPushStatus('unsupported');
+        setError('Ce navigateur ne supporte pas les notifications push.');
+      }
+    } catch (error: any) {
+      setError(error?.response?.data?.message || 'Impossible d’activer les notifications push.');
+    } finally {
+      setIsEnablingPush(false);
+    }
+  };
+
   const pushStatusLabel =
     pushStatus === 'enabled'
       ? 'Activé'
@@ -507,6 +538,15 @@ export default function AdminComptePage() {
               <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${pushStatusClasses}`}>
                 Push: {pushStatusLabel}
               </span>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isEnablingPush}
+                onClick={handleEnablePush}
+                className="w-full sm:w-auto px-4 py-2 border-2 text-xs sm:text-sm"
+              >
+                {isEnablingPush ? 'Activation...' : 'Activer les notifications push'}
+              </Button>
               <Button
                 type="button"
                 variant="outline"

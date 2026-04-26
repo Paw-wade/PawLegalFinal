@@ -263,19 +263,19 @@ router.post(
         await Notification.create({
           user: requestedFrom,
           type: 'document_request',
-          title: isUrgent 
+          titre: isUrgent 
             ? `🔴 Demande urgente de document - Dossier ${dossier.numero || dossier._id}`
             : `📄 Demande de document - Dossier ${dossier.numero || dossier._id}`,
           message: `Un document de type "${documentTypeLabel}" est requis pour votre dossier ${dossier.numero || dossier._id}.${message ? `\n\nMessage: ${message}` : ''}`,
-          data: {
+          lien: '/client/documents',
+          metadata: {
             documentRequestId: documentRequest._id,
             dossierId: dossierId,
             dossierNumero: dossier.numero,
             documentType: documentType,
             documentTypeLabel: documentTypeLabel,
             isUrgent: isUrgent || false
-          },
-          priority: isUrgent ? 'high' : 'normal'
+          }
         });
         console.log(`✅ Notification créée pour le client ${clientUser.email}`);
       } catch (notifError) {
@@ -669,7 +669,7 @@ router.post(
           {
             user: requestedFromId,
             type: 'document_request',
-            'data.documentRequestId': documentRequest._id.toString(),
+            'metadata.documentRequestId': documentRequest._id.toString(),
             lu: false
           },
           {
@@ -712,15 +712,15 @@ router.post(
           await Notification.create({
             user: requestedById,
             type: 'document_received',
-            title: `📥 Document reçu - Dossier ${dossierNumero}`,
+            titre: `📥 Document reçu - Dossier ${dossierNumero}`,
             message: `Le document "${document.nom}" a été uploadé.`,
-            data: {
+            lien: `/admin/dossiers/${dossierId}`,
+            metadata: {
               documentRequestId: documentRequest._id.toString(),
               documentId: documentId.toString(),
               dossierId: dossierId,
               dossierNumero: dossierNumero
-            },
-            priority: 'normal'
+            }
           });
 
           // Pas de SMS ici: on conserve uniquement la notification in-app admin.
