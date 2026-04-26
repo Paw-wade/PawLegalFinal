@@ -175,7 +175,9 @@ router.get('/', async (req, res) => {
 router.post(
   '/',
   [
-    body('date').notEmpty().withMessage('La date est requise'),
+    body('date').optional().notEmpty().withMessage('La date ne peut pas être vide'),
+    body('dates').optional().isArray({ min: 1 }).withMessage('Les dates doivent être un tableau non vide'),
+    body('dates.*').optional().isISO8601().withMessage('Chaque date doit être valide'),
     body('heures').isArray().withMessage('Les heures doivent être un tableau'),
     body('heures.*').trim().notEmpty().withMessage('Chaque heure doit être valide'),
     body('motifFermeture').optional().trim()
@@ -191,7 +193,7 @@ router.post(
         });
       }
 
-      const { date, heures, motifFermeture } = req.body;
+      const { date, dates, heures, motifFermeture } = req.body;
       
       console.log('📅 Requête de fermeture de créneaux:', {
         date,
@@ -200,10 +202,12 @@ router.post(
         user: req.user?.email
       });
       
-      if (!date) {
+      const hasSingleDate = Boolean(date);
+      const hasDatesArray = Array.isArray(dates) && dates.length > 0;
+      if (!hasSingleDate && !hasDatesArray) {
         return res.status(400).json({
           success: false,
-          message: 'La date est requise'
+          message: 'La date (ou la liste de dates) est requise'
         });
       }
       
@@ -214,53 +218,66 @@ router.post(
         });
       }
       
-      const targetDate = new Date(date);
-      targetDate.setHours(0, 0, 0, 0);
+      const rawDates = hasDatesArray ? dates : [date];
+      const targetDates = rawDates.map((d) => {
+        const dt = new Date(d);
+        dt.setHours(0, 0, 0, 0);
+        return dt;
+      }).filter((dt) => !isNaN(dt.getTime()));
+
+      if (targetDates.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Aucune date valide fournie'
+        });
+      }
 
       const creneauxCrees = [];
 
-      for (const heure of heures) {
-        try {
-          // Vérifier si le créneau existe déjà
-          let creneau = await Creneau.findOne({
-            date: targetDate,
-            heure: heure
-          });
-
-          if (creneau) {
-            // Mettre à jour le créneau existant
-            creneau.ferme = true;
-            if (motifFermeture) creneau.motifFermeture = motifFermeture;
-            await creneau.save();
-            console.log(`✅ Créneau ${heure} mis à jour (fermé)`);
-          } else {
-            // Créer un nouveau créneau fermé
-            creneau = await Creneau.create({
-              date: targetDate,
-              heure: heure,
-              ferme: true,
-              motifFermeture: motifFermeture || ''
-            });
-            console.log(`✅ Créneau ${heure} créé (fermé)`);
-          }
-
-          creneauxCrees.push(creneau);
-        } catch (creneauError) {
-          // Si erreur d'unicité (index unique), mettre à jour le créneau existant
-          if (creneauError.code === 11000) {
-            const creneau = await Creneau.findOne({
+      for (const targetDate of targetDates) {
+        for (const heure of heures) {
+          try {
+            // Vérifier si le créneau existe déjà
+            let creneau = await Creneau.findOne({
               date: targetDate,
               heure: heure
             });
+
             if (creneau) {
+              // Mettre à jour le créneau existant
               creneau.ferme = true;
               if (motifFermeture) creneau.motifFermeture = motifFermeture;
               await creneau.save();
-              creneauxCrees.push(creneau);
+              console.log(`✅ Créneau ${heure} mis à jour (fermé) pour ${targetDate.toISOString().split('T')[0]}`);
+            } else {
+              // Créer un nouveau créneau fermé
+              creneau = await Creneau.create({
+                date: targetDate,
+                heure: heure,
+                ferme: true,
+                motifFermeture: motifFermeture || ''
+              });
+              console.log(`✅ Créneau ${heure} créé (fermé) pour ${targetDate.toISOString().split('T')[0]}`);
             }
-          } else {
-            console.error(`Erreur lors de la fermeture du créneau ${heure}:`, creneauError);
-            throw creneauError;
+
+            creneauxCrees.push(creneau);
+          } catch (creneauError) {
+            // Si erreur d'unicité (index unique), mettre à jour le créneau existant
+            if (creneauError.code === 11000) {
+              const creneau = await Creneau.findOne({
+                date: targetDate,
+                heure: heure
+              });
+              if (creneau) {
+                creneau.ferme = true;
+                if (motifFermeture) creneau.motifFermeture = motifFermeture;
+                await creneau.save();
+                creneauxCrees.push(creneau);
+              }
+            } else {
+              console.error(`Erreur lors de la fermeture du créneau ${heure}:`, creneauError);
+              throw creneauError;
+            }
           }
         }
       }

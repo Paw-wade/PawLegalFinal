@@ -1,5 +1,6 @@
 // sendSMS.js
 const twilio = require('twilio');
+const { sendPushToUser } = require('./utils/pushService');
 
 // Variables d'environnement
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -183,6 +184,35 @@ function canReceiveSMS(user, smsType) {
   return true;
 }
 
+function resolvePushUrl(type, data = {}, options = {}) {
+  if (data.url && typeof data.url === 'string') return data.url;
+
+  const context = String(options.context || '').toLowerCase();
+  if (context === 'message') return '/client/messages';
+  if (context === 'appointment') return '/client/rendez-vous';
+  if (context === 'dossier' || context === 'document') return '/client/dossiers';
+  if (context === 'task') return '/admin/tasks';
+
+  if (type && type.startsWith('appointment_')) return '/client/rendez-vous';
+  if (type === 'message_received') return '/client/messages';
+  if (type && (type.startsWith('dossier_') || type.startsWith('document_') || type.startsWith('tarification_') || type === 'frais_tarification_exoneres')) {
+    return '/client/dossiers';
+  }
+  if (type && type.startsWith('task_')) return '/admin/tasks';
+
+  return '/client/notifications';
+}
+
+function resolvePushTitle(type, data = {}) {
+  if (data.title && typeof data.title === 'string') return data.title;
+
+  if (type && type.startsWith('appointment_')) return 'Rendez-vous';
+  if (type === 'message_received') return 'Nouveau message';
+  if (type && (type.startsWith('dossier_') || type.startsWith('document_'))) return 'Mise à jour dossier';
+  if (type && type.startsWith('task_')) return 'Tâche';
+  return 'Ada Papers';
+}
+
 /**
  * Envoie un SMS de notification avec template et historique
  * @param {string} to - numéro du destinataire
@@ -271,6 +301,41 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
   // Envoyer le SMS
   let result;
   let historyRecord;
+
+  // Priorité au push: si un push est envoyé, on n'envoie pas de SMS.
+  // Exception: conserver systématiquement le SMS pour l'envoi de code/mot de passe.
+  const shouldPreferPush =
+    options.preferPush !== false &&
+    Boolean(options.userId) &&
+    type !== 'password_reset_temp' &&
+    type !== 'otp';
+
+  if (shouldPreferPush) {
+    try {
+      const pushPayload = {
+        title: resolvePushTitle(type, data),
+        body: message,
+        url: resolvePushUrl(type, data, options),
+        type
+      };
+      const pushResult = await sendPushToUser(options.userId, pushPayload);
+      if (pushResult && pushResult.sent > 0) {
+        console.log(
+          `✅ Push envoyé (${pushResult.sent}) pour ${type}; SMS non envoyé (userId=${options.userId})`
+        );
+        return {
+          success: true,
+          skipped: true,
+          reason: 'push_sent',
+          pushSent: pushResult.sent,
+          message: 'Notification push envoyée; SMS ignoré.'
+        };
+      }
+    } catch (pushError) {
+      console.error('⚠️ Échec envoi push prioritaire, fallback SMS:', pushError?.message || pushError);
+      // fallback SMS si le push échoue
+    }
+  }
   
   try {
     result = await sendSMS(to, message);
