@@ -102,8 +102,13 @@ const authOptions: NextAuthOptions = {
             idToken: account.id_token,
           }),
         });
-        if (!response.ok) return false;
         const data = await response.json();
+        // Si l'email Google n'est pas encore connu côté backend,
+        // rediriger vers l'inscription pour éviter un AccessDenied opaque.
+        if (response.status === 404) {
+          return '/auth/signup';
+        }
+        if (!response.ok) return false;
         return Boolean(data?.success && data?.token && data?.user);
       } catch (error) {
         console.error('Erreur validation Google signIn callback:', error);
