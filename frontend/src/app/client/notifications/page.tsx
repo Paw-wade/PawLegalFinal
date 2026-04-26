@@ -142,6 +142,8 @@ function NotificationsContent() {
       appointment_created: '📅',
       appointment_updated: '📅',
       appointment_cancelled: '❌',
+      appointment_reminder: '⏰',
+      document_request_reminder: '📎',
       message_received: '💬',
       tarification_choice_requested: '💶',
       tarification_payment_reminder: '💶',
@@ -164,6 +166,8 @@ function NotificationsContent() {
       appointment_created: 'bg-teal-50 border border-teal-300/70',
       appointment_updated: 'bg-teal-50 border border-teal-300/70',
       appointment_cancelled: 'bg-red-50 border border-red-300/70',
+      appointment_reminder: 'bg-cyan-50 border border-cyan-300/70',
+      document_request_reminder: 'bg-orange-50 border border-orange-300/70',
       message_received: 'bg-pink-50 border border-pink-300/70',
       tarification_choice_requested: 'bg-amber-50 border border-amber-300/70',
       tarification_payment_reminder: 'bg-amber-50 border border-amber-300/70',
@@ -180,7 +184,14 @@ function NotificationsContent() {
     if (type.startsWith('dossier_')) return 'dossiers';
     if (type.startsWith('appointment_')) return 'rendezvous';
     if (type === 'message_received') return 'messages';
-    if (type === 'document_uploaded') return 'documents';
+    if (
+      type === 'document_uploaded' ||
+      type === 'document_request' ||
+      type === 'document_received' ||
+      type === 'document_request_reminder'
+    ) {
+      return 'documents';
+    }
     return 'autres';
   };
 

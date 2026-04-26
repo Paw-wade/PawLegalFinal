@@ -89,6 +89,8 @@ export default function AdminMessagesPage() {
   const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+  /** Dossier lié à l'envoi depuis le modal (indépendant du filtre de liste) */
+  const [composeDossierId, setComposeDossierId] = useState<string>('');
   const [selectedExpediteurId, setSelectedExpediteurId] = useState<string>('');
   const [selectedDestinataireId, setSelectedDestinataireId] = useState<string>('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
@@ -266,7 +268,8 @@ export default function AdminMessagesPage() {
   const getUsersByCategory = () => {
     const admins = users.filter(user => user.role === 'admin' || user.role === 'superadmin');
     const clients = users.filter(user => user.role === 'client');
-    return { admins, clients };
+    const partenaires = users.filter(user => user.role === 'partenaire');
+    return { admins, clients, partenaires };
   };
 
   const toggleCopieSelection = (userId: string) => {
@@ -300,18 +303,15 @@ export default function AdminMessagesPage() {
       setIsSubmitting(false);
       return;
     }
-    if (!selectedDossierId) {
-      setError('Veuillez sélectionner un dossier lié au message');
-      setIsSubmitting(false);
-      return;
-    }
 
     try {
       const formDataToSend = new FormData();
       formDataToSend.append('sujet', formData.sujet);
       formDataToSend.append('contenu', formData.contenu);
       formDataToSend.append('destinataire', formData.destinataire);
-      formDataToSend.append('dossierId', selectedDossierId);
+      if (composeDossierId) {
+        formDataToSend.append('dossierId', composeDossierId);
+      }
       
       formData.copie.forEach(copieId => {
         formDataToSend.append('copie', copieId);
@@ -326,6 +326,7 @@ export default function AdminMessagesPage() {
         setToast({ message: '✅ Message envoyé avec succès.', type: 'success' });
         setShowComposeModal(false);
         setFormData({ sujet: '', contenu: '', destinataire: '', copie: [] });
+        setComposeDossierId('');
         setAttachments([]);
         loadMessages();
       }
@@ -551,7 +552,7 @@ export default function AdminMessagesPage() {
   // Grouper les messages par dossier (pour l'affichage non-thread)
   const messagesByDossier = !isThreadView ? messages.reduce((acc: any, message: any) => {
     const dossierId = message.dossierId?._id?.toString() || message.dossierId?.toString() || message.dossier?._id?.toString() || message.dossier?.toString() || 'sans-dossier';
-    const dossierTitre = message.dossierId?.titre || message.dossier?.titre || message.dossierId?.numero || message.dossier?.numero || null;
+    const dossierTitre = message.dossierId?.titre || message.dossier?.titre || message.dossierId?.numero || message.dossier?.numero || 'Hors dossier';
     
     if (!acc[dossierId]) {
       acc[dossierId] = {
@@ -580,7 +581,7 @@ export default function AdminMessagesPage() {
             </div>
             <div className="flex flex-col gap-2 items-end">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground font-medium">Dossier :</span>
+                <span className="text-sm text-muted-foreground font-medium">Filtrer par dossier :</span>
                 <select
                   value={selectedDossierId}
                   onChange={(e) => setSelectedDossierId(e.target.value)}
@@ -594,15 +595,10 @@ export default function AdminMessagesPage() {
                   ))}
                 </select>
               </div>
-              <Button onClick={() => setShowComposeModal(true)} disabled={!selectedDossierId} className="shadow-md">
+              <Button onClick={() => { setComposeDossierId(''); setShowComposeModal(true); }} className="shadow-md">
                 <span className="mr-2">✉️</span>
                 Nouveau message
               </Button>
-              {!selectedDossierId && (
-                <p className="text-xs text-amber-600 max-w-xs text-right">
-                  Sélectionnez un dossier pour envoyer un message
-                </p>
-              )}
             </div>
           </div>
 
@@ -951,8 +947,8 @@ export default function AdminMessagesPage() {
                       </Link>
                     )}
                     {dossierGroup.dossierId === 'sans-dossier' && (
-                      <div className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold">
-                        ⚠️ Ce message n'est pas lié à un dossier
+                      <div className="px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-xs font-medium">
+                        Message général
                       </div>
                     )}
                   </div>
@@ -1261,7 +1257,16 @@ export default function AdminMessagesPage() {
             <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
                 <h2 className="text-2xl font-bold">Nouveau message</h2>
-                <button onClick={() => setShowComposeModal(false)} className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">×</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowComposeModal(false);
+                    setComposeDossierId('');
+                  }}
+                  className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  ×
+                </button>
               </div>
               <form onSubmit={handleSendMessage} className="p-6 space-y-5">
                 {/* Destinataire principal */}
@@ -1270,7 +1275,7 @@ export default function AdminMessagesPage() {
                   <p className="text-xs text-muted-foreground mb-3">Sélectionnez un seul destinataire</p>
                   <div className="mt-2 border border-input rounded-lg p-4 max-h-64 overflow-y-auto bg-background">
                     {(() => {
-                      const { admins, clients } = getUsersByCategory();
+                      const { admins, clients, partenaires } = getUsersByCategory();
                       const currentUserId = (session?.user as any)?.id;
                       
                       return (
@@ -1278,7 +1283,7 @@ export default function AdminMessagesPage() {
                           {clients.length > 0 && (
                             <div>
                               <h3 className="font-semibold text-sm text-foreground mb-2 pb-2 border-b border-border">
-                                👤 Utilisateurs ({clients.length})
+                                👤 Clients ({clients.length})
                               </h3>
                               <div className="space-y-2">
                                 {clients.map((user) => {
@@ -1307,6 +1312,46 @@ export default function AdminMessagesPage() {
                                       </div>
                                       <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">
                                         Client
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {partenaires.length > 0 && (
+                            <div>
+                              <h3 className="font-semibold text-sm text-foreground mb-2 pb-2 border-b border-border">
+                                🤝 Partenaires ({partenaires.length})
+                              </h3>
+                              <div className="space-y-2">
+                                {partenaires.map((user) => {
+                                  const userId = user._id || user.id;
+                                  const isSelected = formData.destinataire === userId;
+                                  return (
+                                    <label
+                                      key={userId}
+                                      className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-accent transition-colors ${
+                                        isSelected ? 'bg-primary/10 border-2 border-primary' : 'border border-transparent'
+                                      }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name="destinataire"
+                                        value={userId}
+                                        checked={isSelected}
+                                        onChange={() => handleDestinataireChange(userId)}
+                                        className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
+                                      />
+                                      <div className="flex-1">
+                                        <div className="font-medium text-sm">
+                                          {user.firstName} {user.lastName}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">{user.email}</div>
+                                      </div>
+                                      <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-900">
+                                        Partenaire
                                       </span>
                                     </label>
                                   );
@@ -1357,7 +1402,7 @@ export default function AdminMessagesPage() {
                             </div>
                           )}
 
-                          {admins.length === 0 && clients.length === 0 && (
+                          {admins.length === 0 && clients.length === 0 && partenaires.length === 0 && (
                             <p className="text-sm text-muted-foreground text-center py-4">
                               Aucun utilisateur disponible
                             </p>
@@ -1368,15 +1413,35 @@ export default function AdminMessagesPage() {
                   </div>
                 </div>
 
+                <div>
+                  <Label htmlFor="compose-dossier">Lier à un dossier (optionnel)</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Laissez vide pour un échange général hors dossier.
+                  </p>
+                  <select
+                    id="compose-dossier"
+                    value={composeDossierId}
+                    onChange={(e) => setComposeDossierId(e.target.value)}
+                    className="mt-1 w-full px-3 py-2 border border-input rounded-md text-sm bg-background"
+                  >
+                    <option value="">Aucun dossier</option>
+                    {dossiers.map((dossier) => (
+                      <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
+                        {dossier.titre || dossier.numero || 'Dossier'} – {dossier.numero}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Copie (CC) */}
                 <div>
                   <Label htmlFor="copie">Copie (CC) - Optionnel</Label>
                   <p className="text-xs text-muted-foreground mb-3">Vous pouvez mettre d'autres personnes en copie</p>
                   <div className="mt-2 border border-input rounded-lg p-4 max-h-64 overflow-y-auto bg-background">
                     {(() => {
-                      const { admins, clients } = getUsersByCategory();
+                      const { admins, clients, partenaires } = getUsersByCategory();
                       const currentUserId = (session?.user as any)?.id;
-                      const allUsers = [...clients, ...admins].filter(user => 
+                      const allUsers = [...clients, ...partenaires, ...admins].filter(user => 
                         (user._id || user.id) !== currentUserId && 
                         (user._id || user.id) !== formData.destinataire
                       );
@@ -1395,6 +1460,14 @@ export default function AdminMessagesPage() {
                             const userId = user._id || user.id;
                             const isInCopie = formData.copie.includes(userId);
                             const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+                            const isPartenaire = user.role === 'partenaire';
+                            const roleLabel = isAdmin
+                              ? user.role === 'superadmin'
+                                ? 'Super Admin'
+                                : 'Admin'
+                              : isPartenaire
+                                ? 'Partenaire'
+                                : 'Client';
                             return (
                               <label
                                 key={userId}
@@ -1415,9 +1488,9 @@ export default function AdminMessagesPage() {
                                   <div className="text-xs text-muted-foreground">{user.email}</div>
                                 </div>
                                 <span className={`text-xs px-2 py-1 rounded-full ${
-                                  isAdmin ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                                  isAdmin ? 'bg-blue-100 text-blue-800' : isPartenaire ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-800'
                                 }`}>
-                                  {isAdmin ? (user.role === 'superadmin' ? 'Super Admin' : 'Admin') : 'Client'}
+                                  {roleLabel}
                                 </span>
                               </label>
                             );
@@ -1485,7 +1558,15 @@ export default function AdminMessagesPage() {
                   )}
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button type="button" variant="outline" onClick={() => setShowComposeModal(false)} disabled={isSubmitting}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowComposeModal(false);
+                      setComposeDossierId('');
+                    }}
+                    disabled={isSubmitting}
+                  >
                     Annuler
                   </Button>
                   <Button type="submit" disabled={isSubmitting || !formData.destinataire}>

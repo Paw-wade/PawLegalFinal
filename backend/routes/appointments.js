@@ -684,7 +684,7 @@ router.patch(
         }));
 
         if (adminNotifications.length > 0) {
-          await Notification.insertMany(adminNotifications);
+          await Notification.insertManyWithPush(adminNotifications);
           console.log(`✅ Notifications d'annulation envoyées à ${adminNotifications.length} administrateur(s)`);
         }
       } catch (adminNotifError) {

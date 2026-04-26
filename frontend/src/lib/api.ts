@@ -1090,8 +1090,8 @@ export const creneauxAPI = {
   getAllCreneaux: (params?: { date?: string; ferme?: boolean }) =>
     api.get('/creneaux', { params }),
   
-  // Admin - Fermer des créneaux
-  closeSlots: (data: { date: string; heures: string[]; motifFermeture?: string }) =>
+  // Admin - Fermer des créneaux (date unique ou plusieurs dates)
+  closeSlots: (data: { date?: string; dates?: string[]; heures: string[]; motifFermeture?: string }) =>
     api.post('/creneaux', data),
   
   // Admin - Rouvrir un créneau

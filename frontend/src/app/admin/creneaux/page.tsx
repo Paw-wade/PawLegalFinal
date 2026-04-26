@@ -62,6 +62,7 @@ export default function AdminCreneauxPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [selectedHeures, setSelectedHeures] = useState<string[]>([]);
+  const [selectedDatesToClose, setSelectedDatesToClose] = useState<string[]>([]);
   const [motifFermeture, setMotifFermeture] = useState('');
 
   // Heures disponibles par défaut
@@ -81,6 +82,31 @@ export default function AdminCreneauxPage() {
       return null;
     }
   };
+
+  const getWeekDates = (baseDate: string) => {
+    const ref = new Date(baseDate);
+    if (isNaN(ref.getTime())) return [];
+    const day = ref.getDay(); // 0 = dimanche
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const monday = new Date(ref);
+    monday.setDate(ref.getDate() + mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+
+    return Array.from({ length: 7 }, (_, index) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + index);
+      return d.toISOString().split('T')[0];
+    });
+  };
+
+  const weekDates = getWeekDates(selectedDate);
+
+  const formatDayLabel = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('fr-FR', {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit'
+    });
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -240,6 +266,10 @@ export default function AdminCreneauxPage() {
   };
 
   const handleCloseSlots = async () => {
+    if (selectedDatesToClose.length === 0) {
+      setError('Veuillez sélectionner au moins un jour de la semaine');
+      return;
+    }
     if (selectedHeures.length === 0) {
       setError('Veuillez sélectionner au moins un créneau à fermer');
       return;
@@ -249,13 +279,13 @@ export default function AdminCreneauxPage() {
     setError(null);
     try {
       console.log('Fermeture des créneaux:', {
-        date: selectedDate,
+        dates: selectedDatesToClose,
         heures: selectedHeures,
         motifFermeture: motifFermeture.trim() || undefined
       });
       
       const response = await creneauxAPI.closeSlots({
-        date: selectedDate,
+        dates: selectedDatesToClose,
         heures: selectedHeures,
         motifFermeture: motifFermeture.trim() || undefined
       });
@@ -264,12 +294,13 @@ export default function AdminCreneauxPage() {
       
       if (response.data.success) {
         // Afficher un message de succès temporaire
-        const successMessage = response.data.message || `${selectedHeures.length} créneau(x) fermé(s) avec succès`;
+        const successMessage = response.data.message || `${selectedHeures.length * selectedDatesToClose.length} créneau(x) fermé(s) avec succès`;
         setError(null);
         
         // Fermer le modal et réinitialiser d'abord
         setShowCloseModal(false);
         setSelectedHeures([]);
+        setSelectedDatesToClose([]);
         setMotifFermeture('');
         
         // Recharger les créneaux immédiatement
@@ -370,41 +401,54 @@ export default function AdminCreneauxPage() {
     }
   });
 
-  // Pour le modal de fermeture, on doit charger tous les créneaux (fermés et non fermés) pour savoir lesquels sont déjà fermés
-  const [allCreneauxForDate, setAllCreneauxForDate] = useState<any[]>([]);
+  // Pour le modal de fermeture, on charge les créneaux de toute la semaine
+  const [allCreneauxForWeek, setAllCreneauxForWeek] = useState<Record<string, any[]>>({});
 
   useEffect(() => {
-    if (!selectedDate || isNaN(new Date(selectedDate).getTime())) {
-      return;
-    }
-    const loadAllCreneaux = async () => {
+    if (!showCloseModal || weekDates.length === 0) return;
+
+    const loadWeekCreneaux = async () => {
       try {
-        const response = await creneauxAPI.getAllCreneaux({ date: selectedDate });
-        if (response.data.success) {
-          setAllCreneauxForDate(response.data.creneaux || []);
-        }
+        const results = await Promise.all(
+          weekDates.map(async (date) => {
+            const response = await creneauxAPI.getAllCreneaux({ date });
+            return {
+              date,
+              creneaux: response.data.success ? (response.data.creneaux || []) : []
+            };
+          })
+        );
+
+        const mapped = results.reduce((acc, item) => {
+          acc[item.date] = item.creneaux;
+          return acc;
+        }, {} as Record<string, any[]>);
+        setAllCreneauxForWeek(mapped);
       } catch (err) {
-        console.error('Erreur lors du chargement de tous les créneaux:', err);
+        console.error('Erreur lors du chargement des créneaux hebdomadaires:', err);
       }
     };
-    loadAllCreneaux();
-  }, [selectedDate]);
 
-  const heuresFermees = allCreneauxForDate
-    .filter(c => {
-      if (!c.date || !selectedDate) return false;
-      const creneauDate = formatDateToString(c.date);
-      const selectedDateStr = formatDateToString(selectedDate);
-      if (!creneauDate || !selectedDateStr) return false;
-      return creneauDate === selectedDateStr && (c.ferme === true || c.ferme === 'true');
-    })
-    .map(c => c.heure);
+    loadWeekCreneaux();
+  }, [showCloseModal, selectedDate]);
+
+  const getHeuresFermeesForDate = (date: string) => {
+    const dayCreneaux = allCreneauxForWeek[date] || [];
+    return dayCreneaux
+      .filter((c) => {
+        if (!c.date) return false;
+        const creneauDate = formatDateToString(c.date);
+        if (!creneauDate) return false;
+        return creneauDate === date && (c.ferme === true || c.ferme === 'true');
+      })
+      .map((c) => c.heure);
+  };
   
   console.log('📊 Créneaux fermés pour la date:', {
     selectedDate,
     totalCreneauxCharges: creneaux.length,
     creneauxFermes: creneauxFermesPourDate.length,
-    heuresFermees: heuresFermees,
+    heuresFermees: getHeuresFermeesForDate(selectedDate),
     creneauxFermesPourDate: creneauxFermesPourDate.map(c => ({ heure: c.heure, date: c.date, ferme: c.ferme })),
     creneauxDetails: creneaux.map(c => ({
       heure: c.heure,
@@ -613,6 +657,7 @@ export default function AdminCreneauxPage() {
                 onClick={() => {
                   setShowCloseModal(false);
                   setSelectedHeures([]);
+                  setSelectedDatesToClose([]);
                   setMotifFermeture('');
                   setError(null);
                 }}
@@ -636,38 +681,120 @@ export default function AdminCreneauxPage() {
 
             <div className="mb-6">
               <Label className="text-base font-semibold mb-3 block">
+                📆 Jours de la semaine à fermer
+              </Label>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="text-xs px-3 py-1"
+                  onClick={() => setSelectedDatesToClose(weekDates)}
+                >
+                  Toute la semaine
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="text-xs px-3 py-1"
+                  onClick={() => setSelectedDatesToClose([selectedDate])}
+                >
+                  Jour sélectionné
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="text-xs px-3 py-1"
+                  onClick={() => setSelectedDatesToClose([])}
+                >
+                  Réinitialiser
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {weekDates.map((date) => {
+                  const isSelected = selectedDatesToClose.includes(date);
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedDatesToClose(selectedDatesToClose.filter((d) => d !== date));
+                        } else {
+                          setSelectedDatesToClose([...selectedDatesToClose, date]);
+                        }
+                      }}
+                      className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                        isSelected
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-white border-gray-300 hover:border-primary'
+                      }`}
+                    >
+                      {formatDayLabel(date)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <Label className="text-base font-semibold mb-3 block">
+                📊 Horaires de toute la semaine
+              </Label>
+              <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                {weekDates.map((date) => {
+                  const heuresFermeesDate = getHeuresFermeesForDate(date);
+                  return (
+                    <div key={`week-${date}`} className="border rounded-lg p-3">
+                      <p className="text-sm font-semibold mb-2">{formatDayLabel(date)}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {heuresDisponibles.map((heure) => {
+                          const isClosed = heuresFermeesDate.includes(heure);
+                          return (
+                            <span
+                              key={`${date}-${heure}`}
+                              className={`text-xs px-2 py-1 rounded ${
+                                isClosed
+                                  ? 'bg-red-100 text-red-700 border border-red-200'
+                                  : 'bg-green-100 text-green-700 border border-green-200'
+                              }`}
+                            >
+                              {heure}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <Label className="text-base font-semibold mb-3 block">
                 ⏰ Sélectionner les créneaux à fermer
               </Label>
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                 {heuresDisponibles.map((heure) => {
                   const isSelected = selectedHeures.includes(heure);
-                  const isAlreadyClosed = heuresFermees.includes(heure);
                   
                   return (
                     <button
                       key={heure}
                       type="button"
                       onClick={() => {
-                        if (isAlreadyClosed) return;
                         if (isSelected) {
                           setSelectedHeures(selectedHeures.filter(h => h !== heure));
                         } else {
                           setSelectedHeures([...selectedHeures, heure]);
                         }
                       }}
-                      disabled={isAlreadyClosed}
                       className={`p-3 rounded-lg border-2 transition-all font-medium ${
-                        isAlreadyClosed
-                          ? 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed opacity-50'
-                          : isSelected
+                        isSelected
                           ? 'bg-primary text-white border-primary shadow-md scale-105'
                           : 'bg-white border-gray-300 hover:border-primary hover:shadow-md hover:scale-105'
                       }`}
                     >
                       {heure}
-                      {isAlreadyClosed && (
-                        <span className="block text-xs mt-1 font-normal">(Fermé)</span>
-                      )}
                     </button>
                   );
                 })}
@@ -686,10 +813,10 @@ export default function AdminCreneauxPage() {
               />
             </div>
 
-            {selectedHeures.length > 0 && (
+            {selectedHeures.length > 0 && selectedDatesToClose.length > 0 && (
               <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg">
                 <p className="text-sm font-semibold text-blue-900 mb-1">
-                  ✓ <strong>{selectedHeures.length}</strong> créneau{selectedHeures.length > 1 ? 'x' : ''} sélectionné{selectedHeures.length > 1 ? 's' : ''}
+                  ✓ <strong>{selectedDatesToClose.length}</strong> jour{selectedDatesToClose.length > 1 ? 's' : ''} × <strong>{selectedHeures.length}</strong> créneau{selectedHeures.length > 1 ? 'x' : ''} = <strong>{selectedDatesToClose.length * selectedHeures.length}</strong> fermeture{selectedDatesToClose.length * selectedHeures.length > 1 ? 's' : ''}
                 </p>
                 <p className="text-xs text-blue-700">
                   {selectedHeures.sort().join(', ')}
@@ -709,6 +836,7 @@ export default function AdminCreneauxPage() {
                 onClick={() => {
                   setShowCloseModal(false);
                   setSelectedHeures([]);
+                  setSelectedDatesToClose([]);
                   setMotifFermeture('');
                   setError(null);
                 }} 
@@ -719,7 +847,7 @@ export default function AdminCreneauxPage() {
               </Button>
               <Button 
                 onClick={handleCloseSlots} 
-                disabled={isLoading || selectedHeures.length === 0}
+                disabled={isLoading || selectedHeures.length === 0 || selectedDatesToClose.length === 0}
                 className="min-w-[180px] bg-primary hover:bg-primary/90 shadow-md"
               >
                 {isLoading ? (
@@ -730,7 +858,7 @@ export default function AdminCreneauxPage() {
                 ) : (
                   <>
                     <span className="mr-2">🔒</span>
-                    Fermer {selectedHeures.length} créneau{selectedHeures.length > 1 ? 'x' : ''}
+                    Fermer {selectedDatesToClose.length * selectedHeures.length} créneau{selectedDatesToClose.length * selectedHeures.length > 1 ? 'x' : ''}
                   </>
                 )}
               </Button>

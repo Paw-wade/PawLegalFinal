@@ -22,6 +22,8 @@ const notificationSchema = new mongoose.Schema({
       'appointment_created',
       'appointment_updated',
       'appointment_cancelled',
+      'appointment_reminder',
+      'document_request_reminder',
       'message_received',
       'message_read',
       'message_sent',
@@ -91,10 +93,12 @@ notificationSchema.pre('save', function (next) {
   next();
 });
 
-notificationSchema.post('save', async function (doc) {
-  if (!this._wasNew) return;
+/** Même charge utile que le hook save ; réutilisable après insertMany (qui ne déclenche pas les hooks). */
+async function dispatchWebPushForNotificationDoc(doc) {
+  const userId = doc?.user?._id ?? doc?.user;
+  if (!userId || !doc?._id) return;
   try {
-    await sendPushToUser(doc.user, {
+    await sendPushToUser(userId, {
       title: doc.titre || 'Nouvelle notification',
       body: doc.message || '',
       url: doc.lien || '/client/notifications',
@@ -109,7 +113,22 @@ notificationSchema.post('save', async function (doc) {
   } catch (error) {
     console.error('Erreur envoi push sur création notification:', error?.message || error);
   }
+}
+
+notificationSchema.post('save', async function (doc) {
+  if (!this._wasNew) return;
+  await dispatchWebPushForNotificationDoc(doc);
 });
+
+notificationSchema.statics.insertManyWithPush = async function insertManyWithPush(docs, options) {
+  if (!Array.isArray(docs) || docs.length === 0) return [];
+  const inserted = await this.insertMany(docs, options);
+  const list = Array.isArray(inserted) ? inserted : [inserted];
+  for (const d of list) {
+    await dispatchWebPushForNotificationDoc(d);
+  }
+  return inserted;
+};
 
 module.exports = mongoose.model('Notification', notificationSchema);
 
