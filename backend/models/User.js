@@ -173,6 +173,36 @@ const userSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  // Abonnements Web Push du navigateur (PWA)
+  pushPreferences: {
+    enabled: {
+      type: Boolean,
+      default: true, // Activé par défaut pour tous les comptes
+    },
+  },
+  pushSubscriptions: [{
+    endpoint: {
+      type: String,
+      trim: true,
+    },
+    keys: {
+      p256dh: { type: String, trim: true },
+      auth: { type: String, trim: true },
+    },
+    userAgent: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    lastSeenAt: {
+      type: Date,
+      default: Date.now,
+    },
+  }],
   // Réinitialisation de mot de passe (token temporaire)
   resetPasswordToken: {
     type: String,

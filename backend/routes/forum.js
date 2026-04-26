@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const ForumThread = require('../models/ForumThread');
 const ForumPost = require('../models/ForumPost');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -139,6 +140,31 @@ router.post(
         lastReplyBy: req.user.id,
       });
 
+      // Notifier les admins d'une nouvelle question forum
+      try {
+        const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: true }).select('_id');
+        const adminIds = admins
+          .map((a) => a._id?.toString())
+          .filter((id) => id && id !== req.user.id.toString());
+        if (adminIds.length > 0) {
+          await Notification.insertMany(
+            adminIds.map((userId) => ({
+              user: userId,
+              type: 'forum_thread_created',
+              titre: '🆕 Nouvelle question sur le forum',
+              message: `Un nouvel utilisateur a publié: "${title}".`,
+              lien: `/forum/${thread._id}`,
+              metadata: {
+                threadId: thread._id.toString(),
+                theme,
+              },
+            }))
+          );
+        }
+      } catch (notifError) {
+        console.error('Erreur notification forum_thread_created:', notifError);
+      }
+
       res.status(201).json({ success: true, data: thread });
     } catch (error) {
       console.error('Erreur lors de la création de la discussion:', error);
@@ -216,6 +242,45 @@ router.post(
       thread.lastReplyAt = new Date();
       thread.lastReplyBy = req.user.id;
       await thread.save();
+
+      // Notifier le créateur du thread + participants (hors auteur de la réponse)
+      try {
+        const recipientIds = new Set();
+        const replyAuthorId = req.user.id.toString();
+        const threadCreatorId = thread.createdBy?.toString();
+        if (threadCreatorId && threadCreatorId !== replyAuthorId) {
+          recipientIds.add(threadCreatorId);
+        }
+
+        const participantIds = await ForumPost.distinct('createdBy', {
+          thread: threadId,
+          isDeleted: false,
+        });
+        for (const pid of participantIds) {
+          const id = pid?.toString();
+          if (id && id !== replyAuthorId) {
+            recipientIds.add(id);
+          }
+        }
+
+        if (recipientIds.size > 0) {
+          await Notification.insertMany(
+            Array.from(recipientIds).map((userId) => ({
+              user: userId,
+              type: 'forum_reply_created',
+              titre: '💬 Nouvelle réponse sur le forum',
+              message: `Nouvelle réponse dans "${thread.title}".`,
+              lien: `/forum/${thread._id}`,
+              metadata: {
+                threadId: thread._id.toString(),
+                postId: post._id.toString(),
+              },
+            }))
+          );
+        }
+      } catch (notifError) {
+        console.error('Erreur notification forum_reply_created:', notifError);
+      }
 
       res.status(201).json({ success: true, data: post });
     } catch (error) {

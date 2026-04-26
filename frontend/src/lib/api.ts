@@ -853,6 +853,14 @@ export const notificationsAPI = {
     api.delete('/notifications'),
 };
 
+export const pushAPI = {
+  getPublicKey: () => api.get('/push/public-key'),
+  subscribe: (subscription: PushSubscriptionJSON) =>
+    api.post('/push/subscribe', { subscription }),
+  unsubscribe: (endpoint: string) => api.post('/push/unsubscribe', { endpoint }),
+  sendTest: () => api.post('/push/test'),
+};
+
 export const messagesAPI = {
   // Récupérer les messages (retourne aussi les threads)
   getMessages: (params?: { type?: 'all' | 'received' | 'sent' | 'unread'; dossierId?: string; expediteurId?: string; destinataireId?: string }) =>

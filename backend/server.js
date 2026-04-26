@@ -401,6 +401,16 @@ try {
   console.log('⚠️ Route /api/notifications non trouvée');
 }
 
+// Route Web Push (abonnements navigateur)
+try {
+  if (require.resolve('./routes/push')) {
+    app.use('/api/push', require('./routes/push'));
+    console.log('✅ Route /api/push enregistrée');
+  }
+} catch (e) {
+  console.log('⚠️ Route /api/push non trouvée');
+}
+
 // Route corbeille
 try {
   const trashRouter = require('./routes/trash');

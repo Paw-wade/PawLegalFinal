@@ -1,0 +1,17 @@
+{
+  "name": "Ada Papers",
+  "short_name": "Ada Papers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#f97316",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/ada-papers-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+

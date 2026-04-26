@@ -18,6 +18,11 @@ const recoursTypeSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    order: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
     restrictedToSuperadmin: {
       type: Boolean,
       default: false,
