@@ -237,6 +237,18 @@ export default function AdminDossierDetailPage() {
     try {
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
+      const extFromMime = (mime?: string) => {
+        const value = String(mime || '').toLowerCase();
+        if (value.includes('pdf')) return '.pdf';
+        if (value.includes('wordprocessingml')) return '.docx';
+        if (value.includes('msword')) return '.doc';
+        if (value.includes('spreadsheetml')) return '.xlsx';
+        if (value.includes('ms-excel')) return '.xls';
+        if (value.includes('jpeg')) return '.jpg';
+        if (value.includes('png')) return '.png';
+        return '';
+      };
+      const hasExtension = (name: string) => /\.[a-z0-9]{2,8}$/i.test(name);
 
       for (const doc of documents) {
         const docId = doc._id || doc.id;
@@ -245,7 +257,12 @@ export default function AdminDossierDetailPage() {
         const response = await documentsAPI.downloadDocument(docId);
         const blob = new Blob([response.data]);
         const fallbackName = `document-${docId}`;
-        const fileName = String(doc.nom || doc.nomFichier || fallbackName).trim() || fallbackName;
+        const baseName = String(doc.nom || doc.nomFichier || fallbackName).trim() || fallbackName;
+        const sourceName = String(doc.nomFichier || '').trim();
+        const sourceExtMatch = sourceName.match(/(\.[a-z0-9]{2,8})$/i);
+        const sourceExt = sourceExtMatch ? sourceExtMatch[1] : '';
+        const inferredExt = sourceExt || extFromMime(doc.typeMime);
+        const fileName = hasExtension(baseName) ? baseName : `${baseName}${inferredExt}`;
         zip.file(fileName, blob);
       }
 
@@ -305,6 +322,13 @@ export default function AdminDossierDetailPage() {
   }
 
   const currentUserId = (session?.user as any)?._id || (session?.user as any)?.id || null;
+  const displayStatutLabel = (() => {
+    const rawStatut = dossier?.statut;
+    const customStep = (dossier?.etapesSupplementaires || []).find(
+      (step: any) => step?.id === rawStatut || step?.label === rawStatut
+    );
+    return customStep?.label || getStatutLabel(rawStatut);
+  })();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
@@ -763,7 +787,7 @@ export default function AdminDossierDetailPage() {
                 {/* Statuts et informations rapides */}
                 <div className="flex flex-wrap items-center gap-3">
                   <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getStatutColor(dossier.statut)}`}>
-                    {getStatutLabel(dossier.statut)}
+                    {displayStatutLabel}
                   </span>
                   {dossier.priorite && (
                     <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getPrioriteColor(dossier.priorite)}`}>

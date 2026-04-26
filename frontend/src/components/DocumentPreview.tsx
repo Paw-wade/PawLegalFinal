@@ -25,6 +25,12 @@ function isImageDoc(doc: { typeMime?: string; nom: string }) {
   return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(doc.nom || '');
 }
 
+function isWordDoc(doc: { typeMime?: string; nom: string }) {
+  const mime = (doc.typeMime || '').toLowerCase();
+  if (mime.includes('word') || mime.includes('officedocument.wordprocessingml.document')) return true;
+  return /\.(docx?|odt)$/i.test(doc.nom || '');
+}
+
 export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,9 +66,10 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
 
       const canPdf = isPdfDoc(document);
       const canImg = isImageDoc(document);
+      const canWord = isWordDoc(document);
 
-      if (!canPdf && !canImg) {
-        setError("La prévisualisation n'est disponible que pour les PDF et les images.");
+      if (!canPdf && !canImg && !canWord) {
+        setError("La prévisualisation n'est disponible que pour les PDF, images et fichiers Word.");
         setIsLoading(false);
         return;
       }
@@ -74,7 +81,16 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
         return;
       }
 
-      const url = `${getApiBaseUrl()}/user/documents/${encodeURIComponent(documentId)}/preview`;
+      const baseUrl = getApiBaseUrl();
+      const url = `${baseUrl}/user/documents/${encodeURIComponent(documentId)}/preview`;
+
+      if (canWord) {
+        const securePreviewUrl = `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+        const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(securePreviewUrl)}`;
+        setPreviewUrl(officeViewerUrl);
+        setIsLoading(false);
+        return;
+      }
 
       try {
         const response = await fetch(url, {
@@ -150,7 +166,8 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
 
   const isPDF = isPdfDoc(document);
   const isImage = isImageDoc(document);
-  const canPreview = isPDF || isImage;
+  const isWord = isWordDoc(document);
+  const canPreview = isPDF || isImage || isWord;
 
   const openBlobInNewTab = () => {
     if (previewUrl?.startsWith('blob:')) {
@@ -168,7 +185,7 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-2xl flex-shrink-0">
-              {isPDF ? '📄' : isImage ? '🖼️' : '📎'}
+              {isPDF ? '📄' : isImage ? '🖼️' : isWord ? '📝' : '📎'}
             </span>
             <div className="min-w-0">
               <h3 className="font-semibold text-lg truncate">{document.nom}</h3>
@@ -241,6 +258,13 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
                       alert('Erreur lors du téléchargement du document');
                     }
                   }}
+                />
+              ) : isWord ? (
+                <iframe
+                  src={previewUrl}
+                  title={document.nom}
+                  className="w-full h-[75vh] rounded-lg border border-gray-300 bg-white"
+                  allow="fullscreen"
                 />
               ) : isImage ? (
                 <img

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { sendPushToUser } = require('../utils/pushService');
 
 const notificationSchema = new mongoose.Schema({
   user: {
@@ -60,6 +61,31 @@ const notificationSchema = new mongoose.Schema({
 // Index pour améliorer les performances
 notificationSchema.index({ user: 1, lu: 1, createdAt: -1 });
 notificationSchema.index({ user: 1, createdAt: -1 });
+
+notificationSchema.pre('save', function (next) {
+  this._wasNew = this.isNew;
+  next();
+});
+
+notificationSchema.post('save', async function (doc) {
+  if (!this._wasNew) return;
+  try {
+    await sendPushToUser(doc.user, {
+      title: doc.titre || 'Nouvelle notification',
+      body: doc.message || '',
+      url: doc.lien || '/client/notifications',
+      icon: '/ada-papers-logo.png',
+      badge: '/ada-papers-logo.png',
+      tag: `notif-${doc._id}`,
+      metadata: {
+        notificationId: String(doc._id),
+        type: doc.type,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur envoi push sur création notification:', error?.message || error);
+  }
+});
 
 module.exports = mongoose.model('Notification', notificationSchema);
 

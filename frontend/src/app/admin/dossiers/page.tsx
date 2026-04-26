@@ -704,36 +704,42 @@ export default function AdminDossiersPage() {
       return;
     }
 
-    if (!directFileInputRef.current?.files?.[0]) {
+    const selectedFiles = Array.from(directFileInputRef.current?.files || []);
+    if (selectedFiles.length === 0) {
       setDirectUploadError('Veuillez sélectionner un fichier');
       return;
     }
-    if (!directUploadData.nom.trim()) {
+    if (selectedFiles.length === 1 && !directUploadData.nom.trim()) {
       setDirectUploadError('Veuillez saisir un nom de document');
       return;
     }
 
     setDirectUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('document', directFileInputRef.current.files[0]);
-      formData.append('nom', directUploadData.nom.trim());
-      formData.append('description', directUploadData.description.trim());
-      formData.append('categorie', directUploadData.categorie);
-      formData.append('dossierId', dossierId);
+      const createdDocs: any[] = [];
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append('document', file);
+        formData.append('nom', selectedFiles.length === 1 ? directUploadData.nom.trim() : file.name);
+        formData.append('description', directUploadData.description.trim());
+        formData.append('categorie', directUploadData.categorie);
+        formData.append('dossierId', dossierId);
 
-      const response = await documentsAPI.uploadDocument(formData);
-      if (!response?.data?.success) {
-        throw new Error(response?.data?.message || 'Erreur lors du téléversement du document');
+        const response = await documentsAPI.uploadDocument(formData);
+        if (!response?.data?.success) {
+          throw new Error(response?.data?.message || 'Erreur lors du téléversement du document');
+        }
+        if (response.data.document) {
+          createdDocs.push(response.data.document);
+        }
       }
 
-      const createdDoc = response.data.document;
-      if (createdDoc) {
+      if (createdDocs.length > 0) {
         setDossierDocuments((prev) => {
           const current = prev[dossierId] || [];
           return {
             ...prev,
-            [dossierId]: [createdDoc, ...current]
+            [dossierId]: [...createdDocs.reverse(), ...current]
           };
         });
       }
@@ -745,7 +751,13 @@ export default function AdminDossiersPage() {
       setActiveDirectUploadDossierId(null);
       await loadDossierDocuments();
       setExpandedDocumentSections((prev) => new Set(prev).add(dossierId));
-      setToast({ message: '✅ Document ajouté avec succès au dossier.', type: 'success' });
+      setToast({
+        message:
+          selectedFiles.length > 1
+            ? `✅ ${selectedFiles.length} documents ajoutés avec succès au dossier.`
+            : '✅ Document ajouté avec succès au dossier.',
+        type: 'success',
+      });
     } catch (err: any) {
       console.error('Erreur upload direct depuis la liste (admin):', err);
       setDirectUploadError(err.response?.data?.message || err.message || 'Erreur lors du téléversement du document');
@@ -3356,11 +3368,12 @@ export default function AdminDossiersPage() {
                             >
                               {directUploadError && <p className="text-xs text-red-600">{directUploadError}</p>}
                               <div>
-                                <label className="text-[11px] md:text-sm font-medium">Fichier *</label>
+                                <label className="text-[11px] md:text-sm font-medium">Fichier(s) *</label>
                                 <input
                                   ref={directFileInputRef}
                                   type="file"
                                   accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                                  multiple
                                   className="mt-1 w-full text-xs md:text-sm"
                                   onChange={(e) => {
                                     const file = e.target.files?.[0];
@@ -3378,7 +3391,6 @@ export default function AdminDossiersPage() {
                                   value={directUploadData.nom}
                                   onChange={(e) => setDirectUploadData((prev) => ({ ...prev, nom: e.target.value }))}
                                   className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm"
-                                  required
                                 />
                               </div>
                               <div>

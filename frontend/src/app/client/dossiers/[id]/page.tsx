@@ -295,28 +295,31 @@ export default function DossierDetailPage() {
     e.preventDefault();
     setDirectUploadError(null);
 
-    if (!directFileInputRef.current?.files?.[0]) {
+    const selectedFiles = Array.from(directFileInputRef.current?.files || []);
+    if (selectedFiles.length === 0) {
       setDirectUploadError('Veuillez sélectionner un fichier');
       return;
     }
 
-    if (!directUploadData.nom.trim()) {
+    if (selectedFiles.length === 1 && !directUploadData.nom.trim()) {
       setDirectUploadError('Veuillez saisir un nom de document');
       return;
     }
 
     setDirectUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('document', directFileInputRef.current.files[0]);
-      formData.append('nom', directUploadData.nom.trim());
-      formData.append('description', directUploadData.description.trim());
-      formData.append('categorie', directUploadData.categorie);
-      formData.append('dossierId', dossierId);
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append('document', file);
+        formData.append('nom', selectedFiles.length === 1 ? directUploadData.nom.trim() : file.name);
+        formData.append('description', directUploadData.description.trim());
+        formData.append('categorie', directUploadData.categorie);
+        formData.append('dossierId', dossierId);
 
-      const response = await documentsAPI.uploadDocument(formData);
-      if (!response?.data?.success) {
-        throw new Error(response?.data?.message || 'Erreur lors du téléversement');
+        const response = await documentsAPI.uploadDocument(formData);
+        if (!response?.data?.success) {
+          throw new Error(response?.data?.message || 'Erreur lors du téléversement');
+        }
       }
 
       setDirectUploadData({ nom: '', description: '', categorie: 'autre' });
@@ -1093,11 +1096,12 @@ export default function DossierDetailPage() {
                     <p className="text-sm text-red-600">{directUploadError}</p>
                   )}
                   <div>
-                    <label className="text-sm font-medium">Fichier *</label>
+                    <label className="text-sm font-medium">Fichier(s) *</label>
                     <input
                       ref={directFileInputRef}
                       type="file"
                       accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                      multiple
                       className="mt-1 w-full text-sm"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -1116,7 +1120,6 @@ export default function DossierDetailPage() {
                       onChange={(e) => setDirectUploadData((prev) => ({ ...prev, nom: e.target.value }))}
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       placeholder="Ex: Contrat signé"
-                      required
                     />
                   </div>
                   <div>

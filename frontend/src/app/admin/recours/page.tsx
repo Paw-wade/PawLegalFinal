@@ -3,15 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { recoursAPI } from '@/lib/recoursAPI';
-import { dossiersAPI, documentsAPI } from '@/lib/api';
+import { documentsAPI } from '@/lib/api';
 import { Toast } from '@/components/Toast';
 
 type RecoursType = {
   _id: string;
   code: string;
   label: string;
+  order?: number;
   description?: string;
   restrictedToSuperadmin?: boolean;
 };
@@ -53,6 +53,12 @@ const buildSecureFileUrl = (rawUrl: string): string => {
   return url;
 };
 
+const isWordLikeFile = (mimeType?: string, fileName?: string) => {
+  const mime = (mimeType || '').toLowerCase();
+  if (mime.includes('word') || mime.includes('officedocument.wordprocessingml.document')) return true;
+  return /\.(docx?|odt)$/i.test(fileName || '');
+};
+
 export default function RecoursDirectoryPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -61,10 +67,8 @@ export default function RecoursDirectoryPage() {
   const [templates, setTemplates] = useState<RecoursTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSending, setIsSending] = useState<string | null>(null);
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
-  const [dossierIdForSend, setDossierIdForSend] = useState<string>('');
-  const [dossiersForSend, setDossiersForSend] = useState<any[]>([]);
+  const [movingTemplateId, setMovingTemplateId] = useState<string | null>(null);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [showTypeForm, setShowTypeForm] = useState(false);
   const [typeLabel, setTypeLabel] = useState('');
@@ -76,6 +80,8 @@ export default function RecoursDirectoryPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [templateTitle, setTemplateTitle] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
+  const [previewTemplate, setPreviewTemplate] = useState<RecoursTemplate | null>(null);
+  const [previewTargetTypeId, setPreviewTargetTypeId] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   useEffect(() => {
@@ -90,20 +96,7 @@ export default function RecoursDirectoryPage() {
       return;
     }
     loadTypes();
-    loadDossiersForSend();
   }, [session, status, router]);
-
-  const loadDossiersForSend = async () => {
-    try {
-      const res = await dossiersAPI.getAllDossiers();
-      if (res.data?.success) {
-        setDossiersForSend(res.data.dossiers || []);
-      }
-    } catch (e) {
-      console.error('Erreur loadDossiersForSend:', e);
-      setDossiersForSend([]);
-    }
-  };
 
   const loadTypes = async () => {
     setIsLoading(true);
@@ -151,84 +144,6 @@ export default function RecoursDirectoryPage() {
     await loadTemplates(typeId);
   };
 
-  const handleSendToDossier = async (templateId: string) => {
-    const rawInput = dossierIdForSend.trim();
-    if (!rawInput) {
-      alert('Veuillez saisir un numéro ou un ID de dossier.');
-      return;
-    }
-    setIsSending(templateId);
-    try {
-      // Permettre la recherche par numéro de dossier ou id
-      let dossierId = rawInput;
-      const selectedByDisplay = dossiersForSend.find((d: any) => {
-        const id = String(d._id || d.id || '');
-        const numero = String(d.numero || d.numeroDossier || '').trim();
-        const titre = String(d.titre || 'Sans titre').trim();
-        const display = numero ? `${numero} - ${titre}` : `${id} - ${titre}`;
-        return display === rawInput;
-      });
-      if (selectedByDisplay) {
-        dossierId = String(selectedByDisplay._id || selectedByDisplay.id || dossierId);
-      }
-      if (!dossierId.match(/^[0-9a-fA-F]{24}$/)) {
-        // tenter de récupérer par numéro de dossier (vue admin: tous les dossiers)
-        try {
-          const res = await dossiersAPI.getAllDossiers({ search: dossierId });
-          const dossiers = res.data?.dossiers || [];
-          const match = dossiers.find(
-            (d: any) =>
-              String(d.numero || '').trim().toLowerCase() === dossierId.toLowerCase() ||
-              String(d.numeroDossier || '').trim().toLowerCase() === dossierId.toLowerCase() ||
-              `${String(d.numero || d.numeroDossier || '').trim()} - ${String(d.titre || 'Sans titre').trim()}`.toLowerCase() === dossierId.toLowerCase() ||
-              String(d._id || d.id || '') === dossierId
-          );
-          if (match) {
-            dossierId = match._id || match.id;
-          } else {
-            alert("Dossier introuvable. Vérifiez l'ID ou le numéro saisi.");
-            return;
-          }
-        } catch {
-          // en cas d'échec du endpoint admin, tentative fallback
-          try {
-            const fallback = await dossiersAPI.getMyDossiers();
-            const dossiers = fallback.data?.dossiers || [];
-            const match = dossiers.find(
-              (d: any) =>
-                String(d.numero || '').trim().toLowerCase() === dossierId.toLowerCase() ||
-                String(d.numeroDossier || '').trim().toLowerCase() === dossierId.toLowerCase() ||
-                `${String(d.numero || d.numeroDossier || '').trim()} - ${String(d.titre || 'Sans titre').trim()}`.toLowerCase() === dossierId.toLowerCase() ||
-                String(d._id || d.id || '') === dossierId
-            );
-            if (match) {
-              dossierId = match._id || match.id;
-            } else {
-              alert("Dossier introuvable. Vérifiez l'ID ou le numéro saisi.");
-              return;
-            }
-          } catch {
-            alert("Impossible de rechercher le dossier pour l'instant. Réessayez.");
-            return;
-          }
-        }
-      }
-
-      const res = await recoursAPI.sendTemplateToDossier(templateId, { dossierId });
-      if (res.data?.success) {
-        setToast({ message: '✅ Modèle envoyé avec succès vers le dossier.', type: 'success' });
-        setDossierIdForSend('');
-      } else {
-        setToast({ message: res.data?.message || "Erreur lors de l'envoi vers le dossier", type: 'error' });
-      }
-    } catch (e: any) {
-      console.error('Erreur handleSendToDossier:', e);
-      setToast({ message: e.response?.data?.message || "Erreur lors de l'envoi vers le dossier", type: 'error' });
-    } finally {
-      setIsSending(null);
-    }
-  };
-
   const handleDeleteTemplate = async (templateId: string, title: string) => {
     const ok = window.confirm(`Supprimer définitivement le modèle "${title}" ?`);
     if (!ok) return;
@@ -247,6 +162,25 @@ export default function RecoursDirectoryPage() {
       setToast({ message: e.response?.data?.message || 'Erreur lors de la suppression du modèle', type: 'error' });
     } finally {
       setDeletingTemplateId(null);
+    }
+  };
+
+  const handleMoveTemplateType = async (templateId: string, targetTypeId: string) => {
+    if (!targetTypeId || !templateId) return;
+    setMovingTemplateId(templateId);
+    try {
+      const res = await recoursAPI.moveTemplateToType(templateId, { typeId: targetTypeId });
+      if (res.data?.success) {
+        await loadTemplates(selectedTypeId);
+        setToast({ message: '✅ Document déplacé vers le nouveau thème.', type: 'success' });
+      } else {
+        setToast({ message: res.data?.message || 'Erreur lors du déplacement du document', type: 'error' });
+      }
+    } catch (e: any) {
+      console.error('Erreur déplacement modèle recours:', e);
+      setToast({ message: e.response?.data?.message || 'Erreur lors du déplacement du document', type: 'error' });
+    } finally {
+      setMovingTemplateId(null);
     }
   };
 
@@ -281,7 +215,7 @@ export default function RecoursDirectoryPage() {
       }
 
       const newType: RecoursType = res.data.type;
-      const nextTypes = [...types, newType].sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+      const nextTypes = [...types, newType].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       setTypes(nextTypes);
       setSelectedTypeId(newType._id);
       await loadTemplates(newType._id);
@@ -295,6 +229,53 @@ export default function RecoursDirectoryPage() {
       setToast({ message, type: 'error' });
     } finally {
       setCreatingType(false);
+    }
+  };
+
+  const handleReorderType = async (typeId: string, direction: 'up' | 'down') => {
+    const idx = types.findIndex((t) => t._id === typeId);
+    if (idx < 0) return;
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= types.length) return;
+
+    const next = [...types];
+    const temp = next[idx];
+    next[idx] = next[targetIdx];
+    next[targetIdx] = temp;
+    setTypes(next);
+
+    try {
+      await recoursAPI.reorderTypes(next.map((t) => t._id));
+      setToast({ message: '✅ Ordre des thèmes mis à jour.', type: 'success' });
+    } catch (e: any) {
+      console.error('Erreur réorganisation des thèmes:', e);
+      setToast({ message: e.response?.data?.message || 'Erreur lors de la réorganisation des thèmes', type: 'error' });
+      await loadTypes();
+    }
+  };
+
+  const handleDeleteType = async (type: RecoursType) => {
+    const ok = window.confirm(`Supprimer le thème "${type.label}" ?`);
+    if (!ok) return;
+
+    try {
+      const res = await recoursAPI.deleteType(type._id);
+      if (!res.data?.success) {
+        setToast({ message: res.data?.message || 'Erreur lors de la suppression du thème', type: 'error' });
+        return;
+      }
+
+      const remaining = types.filter((t) => t._id !== type._id);
+      setTypes(remaining);
+      if (selectedTypeId === type._id) {
+        const fallback = remaining[0]?._id || null;
+        setSelectedTypeId(fallback);
+        await loadTemplates(fallback);
+      }
+      setToast({ message: '✅ Thème supprimé avec succès.', type: 'success' });
+    } catch (e: any) {
+      console.error('Erreur suppression thème:', e);
+      setToast({ message: e.response?.data?.message || 'Erreur lors de la suppression du thème', type: 'error' });
     }
   };
 
@@ -333,26 +314,58 @@ export default function RecoursDirectoryPage() {
                   Type de document
                 </p>
                 <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-                  {types.map((type) => (
-                    <button
+                  {types.map((type, index) => (
+                    <div
                       key={type._id}
-                      type="button"
-                      onClick={() => handleSelectType(type._id)}
-                      className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                      className={`group w-full px-2 py-1.5 rounded-md text-sm transition-colors ${
                         selectedTypeId === type._id
-                          ? 'bg-primary text-white'
-                          : 'bg-white text-gray-800 hover:bg-gray-100'
+                          ? 'bg-primary/10 border border-primary/20'
+                          : 'bg-white border border-gray-200'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium truncate">{type.label}</span>
-                        {type.restrictedToSuperadmin && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold">
-                            Superadmin
-                          </span>
-                        )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectType(type._id)}
+                          className="flex-1 text-left min-w-0"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium whitespace-normal break-words">{type.label}</span>
+                            {type.restrictedToSuperadmin && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold">
+                                Superadmin
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleReorderType(type._id, 'up')}
+                          disabled={index === 0}
+                          className="h-6 w-6 rounded border border-gray-300 text-[11px] hover:bg-gray-100 disabled:opacity-40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+                          title="Monter"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleReorderType(type._id, 'down')}
+                          disabled={index === types.length - 1}
+                          className="h-6 w-6 rounded border border-gray-300 text-[11px] hover:bg-gray-100 disabled:opacity-40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+                          title="Descendre"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteType(type)}
+                          className="h-6 w-6 rounded border border-red-300 text-[11px] text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+                          title="Supprimer le thème"
+                        >
+                          ✕
+                        </button>
                       </div>
-                    </button>
+                    </div>
                   ))}
                   {types.length === 0 && !isLoading && (
                     <p className="text-xs text-muted-foreground">
@@ -411,27 +424,6 @@ export default function RecoursDirectoryPage() {
 
             {/* Colonne droite : modèles */}
             <div className="md:col-span-3">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={dossierIdForSend}
-                    onChange={(e) => setDossierIdForSend(e.target.value)}
-                    placeholder="Choisir un dossier (N° - Titre) ou saisir un ID"
-                    className="w-full sm:w-64 border rounded-md px-3 py-1.5 text-sm"
-                    list="recours-dossiers-list"
-                  />
-                  <datalist id="recours-dossiers-list">
-                    {dossiersForSend.map((d: any) => {
-                      const id = String(d._id || d.id || '');
-                      const numero = String(d.numero || d.numeroDossier || '').trim();
-                      const titre = String(d.titre || 'Sans titre').trim();
-                      const display = numero ? `${numero} - ${titre}` : `${id} - ${titre}`;
-                      return <option key={id} value={display} />;
-                    })}
-                  </datalist>
-                </div>
-              </div>
 
               {/* Formulaire d'upload de modèle de recours */}
               {showUploadForm && (
@@ -604,14 +596,16 @@ export default function RecoursDirectoryPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-                        <Link href={buildSecureFileUrl(tpl.fileUrl)} target="_blank" rel="noopener noreferrer">
-                          <button
-                            type="button"
-                            className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100"
-                          >
-                            👁️ Ouvrir
-                          </button>
-                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPreviewTemplate(tpl);
+                            setPreviewTargetTypeId(tpl.type?._id || selectedTypeId || '');
+                          }}
+                          className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100"
+                        >
+                          👁️ Ouvrir
+                        </button>
                         <a href={buildSecureFileUrl(tpl.fileUrl)} download className="inline-block">
                           <button
                             type="button"
@@ -622,17 +616,8 @@ export default function RecoursDirectoryPage() {
                         </a>
                         <button
                           type="button"
-                          onClick={() => handleSendToDossier(tpl._id)}
-                          disabled={isSending === tpl._id || !dossierIdForSend.trim()}
-                          className="px-3 py-1.5 text-xs rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
-                          title={!dossierIdForSend.trim() ? "Saisissez d'abord un ID ou N° de dossier" : 'Envoyer le modèle vers le dossier'}
-                        >
-                          {isSending === tpl._id ? 'Envoi...' : '📤 Envoyer vers un dossier'}
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => handleDeleteTemplate(tpl._id, tpl.title)}
-                          disabled={deletingTemplateId === tpl._id}
+                          disabled={deletingTemplateId === tpl._id || movingTemplateId === tpl._id}
                           className="px-3 py-1.5 text-xs rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
                           title="Supprimer ce modèle"
                         >
@@ -653,6 +638,78 @@ export default function RecoursDirectoryPage() {
           type={toast.type}
           onClose={() => setToast(null)}
         />
+      )}
+      {previewTemplate && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 p-3 sm:p-6 flex items-center justify-center"
+          onClick={() => setPreviewTemplate(null)}
+        >
+          <div
+            className="w-full max-w-6xl h-[88vh] bg-white rounded-xl shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-b">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {previewTemplate.title || previewTemplate.fileName}
+              </p>
+              <div className="flex items-center gap-2">
+                <select
+                  value={previewTargetTypeId}
+                  onChange={(e) => setPreviewTargetTypeId(e.target.value)}
+                  disabled={movingTemplateId === previewTemplate._id}
+                  className="px-2.5 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 bg-white disabled:opacity-60"
+                  title="Choisir un thème de destination"
+                >
+                  {types.map((type) => (
+                    <option key={type._id} value={type._id}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!previewTargetTypeId || previewTargetTypeId === previewTemplate.type?._id) return;
+                    void handleMoveTemplateType(previewTemplate._id, previewTargetTypeId);
+                    setPreviewTemplate(null);
+                  }}
+                  disabled={
+                    movingTemplateId === previewTemplate._id ||
+                    !previewTargetTypeId ||
+                    previewTargetTypeId === previewTemplate.type?._id
+                  }
+                  className="px-2.5 py-1 rounded-md border border-gray-300 text-xs hover:bg-gray-100 disabled:opacity-60"
+                >
+                  Déplacer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTemplate(null)}
+                  className="px-2.5 py-1 rounded-md border border-gray-300 text-xs hover:bg-gray-100"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-gray-100">
+              {isWordLikeFile(previewTemplate.mimeType, previewTemplate.fileName) ? (
+                <iframe
+                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(
+                    buildSecureFileUrl(previewTemplate.fileUrl)
+                  )}`}
+                  title={previewTemplate.title || previewTemplate.fileName}
+                  className="w-full h-full border-0"
+                />
+              ) : (
+                <iframe
+                  src={buildSecureFileUrl(previewTemplate.fileUrl)}
+                  title={previewTemplate.title || previewTemplate.fileName}
+                  className="w-full h-full border-0"
+                />
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

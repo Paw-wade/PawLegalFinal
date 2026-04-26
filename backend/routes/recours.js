@@ -73,10 +73,12 @@ router.get('/recours/types', async (req, res) => {
       const code = t.code.toUpperCase();
       const already = await RecoursType.findOne({ code });
       if (!already) {
+        const count = await RecoursType.countDocuments();
         await RecoursType.create({
           code,
           label: t.label,
           description: t.description,
+          order: count,
           restrictedToSuperadmin: false,
         });
       }
@@ -87,7 +89,16 @@ router.get('/recours/types', async (req, res) => {
       query.restrictedToSuperadmin = { $ne: true };
     }
 
-    const types = await RecoursType.find(query).sort({ label: 1 }).lean();
+    // Réparer automatiquement les ordres manquants/dupliqués.
+    const ordered = await RecoursType.find(query).sort({ order: 1, label: 1 });
+    for (let i = 0; i < ordered.length; i += 1) {
+      if (ordered[i].order !== i) {
+        ordered[i].order = i;
+        await ordered[i].save();
+      }
+    }
+
+    const types = await RecoursType.find(query).sort({ order: 1, label: 1 }).lean();
     return res.json({ success: true, types });
   } catch (error) {
     console.error('Erreur lors de la récupération des types de recours:', error);
@@ -114,16 +125,94 @@ router.post('/recours/types', async (req, res) => {
     }
 
     const canRestrictToSuperadmin = isSuperadmin(user);
+    const count = await RecoursType.countDocuments();
     const type = await RecoursType.create({
       code: code.toUpperCase().trim(),
       label: label.trim(),
       description: description || '',
+      order: count,
       restrictedToSuperadmin: canRestrictToSuperadmin ? !!restrictedToSuperadmin : false,
     });
 
     return res.status(201).json({ success: true, type });
   } catch (error) {
     console.error('Erreur lors de la création du type de recours:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// PATCH /recours/types/reorder - réordonner les thèmes (admin/superadmin)
+router.patch('/recours/types/reorder', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user || !isAdmin(user)) {
+      return res.status(403).json({ success: false, message: 'Accès refusé' });
+    }
+
+    const orderedTypeIds = Array.isArray(req.body?.orderedTypeIds) ? req.body.orderedTypeIds : [];
+    if (orderedTypeIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'La liste ordonnée des thèmes est requise' });
+    }
+
+    const types = await RecoursType.find({ _id: { $in: orderedTypeIds } });
+    if (types.length !== orderedTypeIds.length) {
+      return res.status(400).json({ success: false, message: 'Un ou plusieurs thèmes sont introuvables' });
+    }
+
+    for (let i = 0; i < orderedTypeIds.length; i += 1) {
+      await RecoursType.updateOne({ _id: orderedTypeIds[i] }, { $set: { order: i } });
+    }
+
+    return res.json({ success: true, message: 'Ordre des thèmes mis à jour' });
+  } catch (error) {
+    console.error('Erreur lors de la réorganisation des types de recours:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// DELETE /recours/types/:id - supprimer un thème (admin/superadmin)
+router.delete('/recours/types/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user || !isAdmin(user)) {
+      return res.status(403).json({ success: false, message: 'Accès refusé' });
+    }
+
+    const { id } = req.params;
+    const type = await RecoursType.findById(id);
+    if (!type) {
+      return res.status(404).json({ success: false, message: 'Type de recours introuvable' });
+    }
+
+    if (type.restrictedToSuperadmin && !isSuperadmin(user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Seul un super administrateur peut supprimer ce thème',
+      });
+    }
+
+    const linkedTemplates = await RecoursTemplate.countDocuments({ type: type._id });
+    if (linkedTemplates > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Impossible de supprimer ce thème car il contient encore des documents',
+      });
+    }
+
+    await type.deleteOne();
+
+    // Recompacte l'ordre après suppression.
+    const remaining = await RecoursType.find().sort({ order: 1, label: 1 });
+    for (let i = 0; i < remaining.length; i += 1) {
+      if (remaining[i].order !== i) {
+        remaining[i].order = i;
+        await remaining[i].save();
+      }
+    }
+
+    return res.json({ success: true, message: 'Thème supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de la suppression du type de recours:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
@@ -253,6 +342,52 @@ router.patch('/recours/templates/:id/share', async (req, res) => {
     return res.json({ success: true, template });
   } catch (error) {
     console.error('Erreur lors de la mise à jour du partage du modèle de recours:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// PATCH /recours/templates/:id/type - déplacer un modèle vers un autre type
+router.patch('/recours/templates/:id/type', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user || !isAdmin(user)) {
+      return res.status(403).json({ success: false, message: 'Accès refusé' });
+    }
+
+    const { id } = req.params;
+    const { typeId } = req.body;
+    if (!typeId) {
+      return res.status(400).json({ success: false, message: 'Le nouveau type est requis' });
+    }
+
+    const template = await RecoursTemplate.findById(id);
+    if (!template) {
+      return res.status(404).json({ success: false, message: 'Modèle de recours introuvable' });
+    }
+
+    const targetType = await RecoursType.findById(typeId);
+    if (!targetType) {
+      return res.status(404).json({ success: false, message: 'Type de recours introuvable' });
+    }
+
+    if (targetType.restrictedToSuperadmin && !isSuperadmin(user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Seul un super administrateur peut déplacer vers ce type',
+      });
+    }
+
+    template.type = targetType._id;
+    await template.save();
+    await template.populate('type', 'code label restrictedToSuperadmin');
+
+    return res.json({
+      success: true,
+      message: 'Modèle déplacé avec succès',
+      template,
+    });
+  } catch (error) {
+    console.error('Erreur lors du déplacement du modèle de recours:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

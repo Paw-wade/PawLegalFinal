@@ -4,7 +4,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { collaborativeDraftsAPI, forumAPI } from '@/lib/api';
+import { collaborativeDraftsAPI, dossierDocumentDraftsAPI, forumAPI } from '@/lib/api';
 import {
   LayoutDashboard,
   Users,
@@ -103,10 +103,21 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
       return;
     }
     try {
-      const collabRes = await collaborativeDraftsAPI.getGlobalCount();
-      const c =
-        collabRes.data?.success && typeof collabRes.data.count === 'number' ? collabRes.data.count : 0;
-      setPrepDraftCount(c);
+      // Même logique que la page "Documents en préparation":
+      // total = brouillons Word + brouillons éditeur riche.
+      const settled = await Promise.allSettled([
+        dossierDocumentDraftsAPI.list(),
+        collaborativeDraftsAPI.getGlobalList(),
+      ]);
+      const wordCount =
+        settled[0].status === 'fulfilled' && settled[0].value.data?.success
+          ? (settled[0].value.data.drafts || []).length
+          : 0;
+      const collabCount =
+        settled[1].status === 'fulfilled' && settled[1].value.data?.success
+          ? (settled[1].value.data.drafts || []).length
+          : 0;
+      setPrepDraftCount(wordCount + collabCount);
     } catch (err: any) {
       if (err?.response?.status !== 404) console.error('Erreur compteur documents en préparation:', err);
       setPrepDraftCount(0);

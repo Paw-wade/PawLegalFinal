@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { userAPI, smsPreferencesAPI } from '@/lib/api';
+import { userAPI, smsPreferencesAPI, pushAPI } from '@/lib/api';
 import { mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
@@ -119,6 +119,10 @@ export default function AdminComptePage() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingPushTest, setIsSendingPushTest] = useState(false);
+  const [pushStatus, setPushStatus] = useState<
+    'checking' | 'enabled' | 'denied' | 'default' | 'unsupported' | 'server_not_configured'
+  >('checking');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
@@ -193,6 +197,48 @@ export default function AdminComptePage() {
       loadProfile();
     }
   }, [status, session]);
+
+  useEffect(() => {
+    const checkPushStatus = async () => {
+      if (typeof window === 'undefined') return;
+      if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+        setPushStatus('unsupported');
+        return;
+      }
+
+      const permission = Notification.permission;
+      if (permission === 'denied') {
+        setPushStatus('denied');
+        return;
+      }
+      if (permission === 'default') {
+        setPushStatus('default');
+        return;
+      }
+
+      try {
+        const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription) {
+          setPushStatus('enabled');
+          return;
+        }
+      } catch {
+        // On continue pour vérifier la config serveur même si la souscription n'est pas lisible.
+      }
+
+      try {
+        await pushAPI.getPublicKey();
+        setPushStatus('default');
+      } catch {
+        setPushStatus('server_not_configured');
+      }
+    };
+
+    if (status === 'authenticated') {
+      checkPushStatus();
+    }
+  }, [status]);
 
   const loadProfile = async () => {
     setIsLoading(true);
@@ -381,6 +427,49 @@ export default function AdminComptePage() {
     }
   };
 
+  const handlePushTest = async () => {
+    setError(null);
+    setSuccess(null);
+    setIsSendingPushTest(true);
+    try {
+      const response = await pushAPI.sendTest();
+      const sent = Number(response?.data?.result?.sent || 0);
+      if (sent > 0) {
+        setSuccess(`Push test envoyé (${sent} appareil${sent > 1 ? 's' : ''}).`);
+      } else {
+        setSuccess('Test envoyé, mais aucun appareil abonné actif n’a été trouvé.');
+      }
+      setTimeout(() => setSuccess(null), 3500);
+    } catch (error: any) {
+      setError(error?.response?.data?.message || 'Impossible d’envoyer le push test.');
+    } finally {
+      setIsSendingPushTest(false);
+      if (typeof window !== 'undefined' && Notification.permission === 'granted') {
+        setPushStatus('enabled');
+      }
+    }
+  };
+
+  const pushStatusLabel =
+    pushStatus === 'enabled'
+      ? 'Activé'
+      : pushStatus === 'denied'
+        ? 'Refusé'
+        : pushStatus === 'default'
+          ? 'À autoriser'
+          : pushStatus === 'unsupported'
+            ? 'Non supporté'
+            : pushStatus === 'server_not_configured'
+              ? 'Serveur non configuré'
+              : 'Vérification...';
+
+  const pushStatusClasses =
+    pushStatus === 'enabled'
+      ? 'bg-green-100 text-green-800 border-green-200'
+      : pushStatus === 'denied' || pushStatus === 'server_not_configured'
+        ? 'bg-red-100 text-red-800 border-red-200'
+        : 'bg-amber-100 text-amber-800 border-amber-200';
+
   if (status === 'loading' || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -411,6 +500,22 @@ export default function AdminComptePage() {
                 Mon Compte
               </h1>
               <p className="text-muted-foreground text-sm sm:text-lg">Gérez vos informations personnelles et votre sécurité</p>
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${pushStatusClasses}`}>
+                Push: {pushStatusLabel}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSendingPushTest}
+                onClick={handlePushTest}
+                className="w-full sm:w-auto px-4 py-2 border-2 text-xs sm:text-sm"
+              >
+                {isSendingPushTest ? 'Envoi du push...' : 'Envoyer push test'}
+              </Button>
             </div>
           </div>
         </div>
@@ -903,6 +1008,15 @@ export default function AdminComptePage() {
               </div>
 
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-4 border-t border-gray-200">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSendingPushTest}
+                  onClick={handlePushTest}
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                >
+                  {isSendingPushTest ? 'Envoi du push...' : 'Envoyer push test'}
+                </Button>
                 <Button
                   type="button"
                   variant="outline"

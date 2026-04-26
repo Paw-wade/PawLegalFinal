@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { useRef } from 'react';
 import Link from 'next/link';
-import { userAPI, smsPreferencesAPI } from '@/lib/api';
+import { userAPI, smsPreferencesAPI, pushAPI } from '@/lib/api';
 import { mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
@@ -109,6 +109,7 @@ export default function ComptePage() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingPushTest, setIsSendingPushTest] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
@@ -428,6 +429,26 @@ export default function ComptePage() {
       setError(error.response?.data?.message || 'Erreur lors du changement de mot de passe');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePushTest = async () => {
+    setError(null);
+    setSuccess(null);
+    setIsSendingPushTest(true);
+    try {
+      const response = await pushAPI.sendTest();
+      const sent = Number(response?.data?.result?.sent || 0);
+      if (sent > 0) {
+        setSuccess(`Push test envoyé (${sent} appareil${sent > 1 ? 's' : ''}).`);
+      } else {
+        setSuccess('Test envoyé, mais aucun appareil abonné actif n’a été trouvé.');
+      }
+      setTimeout(() => setSuccess(null), 3500);
+    } catch (error: any) {
+      setError(error?.response?.data?.message || 'Impossible d’envoyer le push test.');
+    } finally {
+      setIsSendingPushTest(false);
     }
   };
 
@@ -1101,9 +1122,20 @@ export default function ComptePage() {
               </div>
 
               <div className="flex justify-end pt-4">
-                <Button type="submit" disabled={isSaving} className="px-8 py-3">
-                  {isSaving ? 'Enregistrement...' : 'Enregistrer les préférences'}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSendingPushTest}
+                    onClick={handlePushTest}
+                    className="px-6 py-3 border-2"
+                  >
+                    {isSendingPushTest ? 'Envoi du push...' : 'Envoyer push test'}
+                  </Button>
+                  <Button type="submit" disabled={isSaving} className="px-8 py-3">
+                    {isSaving ? 'Enregistrement...' : 'Enregistrer les préférences'}
+                  </Button>
+                </div>
               </div>
             </form>
           </div>
