@@ -147,7 +147,7 @@ router.post(
           .map((a) => a._id?.toString())
           .filter((id) => id && id !== req.user.id.toString());
         if (adminIds.length > 0) {
-          await Notification.insertMany(
+          await Notification.insertManyWithPush(
             adminIds.map((userId) => ({
               user: userId,
               type: 'forum_thread_created',
@@ -264,7 +264,7 @@ router.post(
         }
 
         if (recipientIds.size > 0) {
-          await Notification.insertMany(
+          await Notification.insertManyWithPush(
             Array.from(recipientIds).map((userId) => ({
               user: userId,
               type: 'forum_reply_created',

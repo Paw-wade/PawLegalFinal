@@ -82,6 +82,9 @@ function MessagesContent() {
   const [isReplying, setIsReplying] = useState(false);
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+  const [composeDossierId, setComposeDossierId] = useState<string>('');
+  /** Admin ciblé pour un nouveau message (optionnel — sinon tous les admins) */
+  const [composeDestinataireId, setComposeDestinataireId] = useState<string>('');
   const [users, setUsers] = useState<any[]>([]);
   const [selectedExpediteurId, setSelectedExpediteurId] = useState<string>('');
   const [selectedDestinataireId, setSelectedDestinataireId] = useState<string>('');
@@ -145,9 +148,6 @@ function MessagesContent() {
       if (response.data.success) {
         const list = response.data.dossiers || [];
         setDossiers(list);
-        if (!selectedDossierId && list.length === 1) {
-          setSelectedDossierId(list[0]._id || list[0].id);
-        }
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des dossiers pour la messagerie:', err);
@@ -170,17 +170,16 @@ function MessagesContent() {
     setIsSubmitting(true);
     setError(null);
 
-    if (!selectedDossierId) {
-      setError('Vous devez sélectionner un dossier pour envoyer un message.');
-      setIsSubmitting(false);
-      return;
-    }
-
     try {
       const formDataToSend = new FormData();
       formDataToSend.append('sujet', formData.sujet);
       formDataToSend.append('contenu', formData.contenu);
-      formDataToSend.append('dossierId', selectedDossierId);
+      if (composeDossierId) {
+        formDataToSend.append('dossierId', composeDossierId);
+      }
+      if (composeDestinataireId) {
+        formDataToSend.append('destinataire', composeDestinataireId);
+      }
 
       attachments.forEach((file) => {
         formDataToSend.append('piecesJointes', file);
@@ -191,6 +190,8 @@ function MessagesContent() {
         setToast({ message: '✅ Message envoyé avec succès.', type: 'success' });
         setShowComposeModal(false);
         setFormData({ sujet: '', contenu: '' });
+        setComposeDestinataireId('');
+        setComposeDossierId('');
         setAttachments([]);
         loadMessages();
       }
@@ -495,13 +496,13 @@ function MessagesContent() {
             </div>
             <div className="flex flex-col gap-2 items-end">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground font-medium">Dossier :</span>
+                <span className="text-sm text-muted-foreground font-medium">Filtrer par dossier :</span>
                 <select
                   value={selectedDossierId}
                   onChange={(e) => setSelectedDossierId(e.target.value)}
                   className="px-4 py-2 border border-input rounded-lg text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 max-w-xs"
                 >
-                  <option value="">Sélectionnez un dossier</option>
+                  <option value="">Tous les messages</option>
                   {dossiers.map((dossier) => (
                     <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
                       {dossier.titre || dossier.numero || 'Dossier'} – {dossier.numero}
@@ -509,15 +510,17 @@ function MessagesContent() {
                   ))}
                 </select>
               </div>
-              <Button onClick={() => setShowComposeModal(true)} disabled={!selectedDossierId} className="shadow-md">
+              <Button
+                onClick={() => {
+                  setComposeDestinataireId('');
+                  setComposeDossierId('');
+                  setShowComposeModal(true);
+                }}
+                className="shadow-md"
+              >
                 <span className="mr-2">✉️</span>
                 Nouveau message
               </Button>
-              {!selectedDossierId && (
-                <p className="text-xs text-amber-600 max-w-xs text-right">
-                  Sélectionnez un dossier pour envoyer un message
-                </p>
-              )}
             </div>
           </div>
 
@@ -682,7 +685,7 @@ function MessagesContent() {
                       </div>
                       <div>
                         <h2 className="text-lg font-bold text-foreground">
-                          {dossierGroup.dossierTitre || 'Sans dossier'}
+                          {dossierGroup.dossierTitre || 'Hors dossier'}
                         </h2>
                         <p className="text-sm text-muted-foreground">
                           {dossierGroup.messages.length} message{dossierGroup.messages.length > 1 ? 's' : ''}
@@ -697,8 +700,8 @@ function MessagesContent() {
                       </Link>
                     )}
                     {dossierGroup.dossierId === 'sans-dossier' && (
-                      <div className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold">
-                        ⚠️ Ce message n'est pas lié à un dossier
+                      <div className="px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-xs font-medium">
+                        Message général
                       </div>
                     )}
                   </div>
@@ -976,9 +979,57 @@ function MessagesContent() {
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
                 <h2 className="text-2xl font-bold">Nouveau message</h2>
-                <button onClick={() => setShowComposeModal(false)} className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">×</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowComposeModal(false);
+                    setComposeDossierId('');
+                    setComposeDestinataireId('');
+                  }}
+                  className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  ×
+                </button>
               </div>
               <form onSubmit={handleSendMessage} className="p-6 space-y-5">
+                <div>
+                  <Label htmlFor="compose-dest">Destinataire (optionnel)</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Par défaut, votre message est adressé à toute l&apos;équipe administrative. Vous pouvez cibler un administrateur.
+                  </p>
+                  <select
+                    id="compose-dest"
+                    value={composeDestinataireId}
+                    onChange={(e) => setComposeDestinataireId(e.target.value)}
+                    className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background"
+                  >
+                    <option value="">Toute l&apos;équipe administrative</option>
+                    {users.map((u) => {
+                      const uid = u._id || u.id;
+                      return (
+                        <option key={uid} value={uid}>
+                          {u.firstName} {u.lastName} ({u.email})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="compose-dossier">Lier à un dossier (optionnel)</Label>
+                  <select
+                    id="compose-dossier"
+                    value={composeDossierId}
+                    onChange={(e) => setComposeDossierId(e.target.value)}
+                    className="mt-1 w-full px-3 py-2 border border-input rounded-md text-sm bg-background"
+                  >
+                    <option value="">Aucun dossier</option>
+                    {dossiers.map((dossier) => (
+                      <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
+                        {dossier.titre || dossier.numero || 'Dossier'} – {dossier.numero}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <Label htmlFor="sujet">Sujet *</Label>
                   <Input
@@ -1036,7 +1087,16 @@ function MessagesContent() {
                   )}
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button type="button" variant="outline" onClick={() => setShowComposeModal(false)} disabled={isSubmitting}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowComposeModal(false);
+                      setComposeDossierId('');
+                      setComposeDestinataireId('');
+                    }}
+                    disabled={isSubmitting}
+                  >
                     Annuler
                   </Button>
                   <Button type="submit" disabled={isSubmitting}>

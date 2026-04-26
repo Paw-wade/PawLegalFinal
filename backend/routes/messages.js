@@ -492,7 +492,7 @@ router.post(
         destinatairesIds = [destinataireId];
 
         // Déterminer le type de message
-        if (destinataireUser.role === 'client') {
+        if (destinataireUser.role === 'client' || destinataireUser.role === 'partenaire') {
           typeMessage = 'admin_to_user';
         } else if (destinataireUser.role === 'admin' || destinataireUser.role === 'superadmin') {
           typeMessage = 'admin_to_admin';
@@ -797,10 +797,10 @@ router.post(
               messageData.dossierId = inheritedDossierId;
               console.log('📎 DossierId hérité du message parent:', inheritedDossierId.toString());
             } else {
-              console.error('❌ Impossible d\'extraire le dossierId du message parent');
+              console.warn('⚠️ Message parent sans dossierId exploitable — réponse sans dossier.');
             }
           } else {
-            console.error('❌ Le message parent n\'a pas de dossierId');
+            console.log('📎 Message parent sans dossier — fil de discussion hors dossier.');
           }
           console.log('📎 Message parent trouvé:', messageParent, 'threadId:', threadId, 'dossierId hérité:', messageData.dossierId?.toString());
         } else {
@@ -817,21 +817,12 @@ router.post(
         messageData.dossierId = new mongoose.Types.ObjectId(dossierId);
       }
 
-      // Pour les réponses, le dossierId n'est pas obligatoire (il sera hérité du parent si disponible)
-      // Pour les nouveaux messages (non-réponses), le dossierId est requis
-      if (!messageData.dossierId && !messageParent) {
-        console.error('❌ Aucun dossierId fourni pour ce nouveau message. Le dossierId est requis pour les nouveaux messages.');
-        return res.status(400).json({
-          success: false,
-          message: 'Le message doit être lié à un dossier. Veuillez sélectionner un dossier.'
-        });
-      }
-      
-      // Si c'est une réponse mais qu'aucun dossierId n'a été hérité, permettre l'envoi sans dossier
-      if (!messageData.dossierId && messageParent) {
-        console.warn('⚠️ Réponse envoyée sans dossierId. Le message sera créé sans dossier lié.');
-        // Ne pas bloquer l'envoi, mais définir dossierId à null explicitement
+      // Dossier optionnel (stocké null si absent)
+      if (!messageData.dossierId) {
         messageData.dossierId = null;
+        if (messageParent) {
+          console.warn('⚠️ Réponse sans dossier lié.');
+        }
       }
 
       // Générer un threadId si nécessaire (nouveau fil)
@@ -903,9 +894,12 @@ router.post(
               type: 'message_received',
               titre: 'Nouveau message',
               message: `${expediteurName} vous a envoyé un message : "${sujet}"`,
-              lien: destinatairePrincipal.role === 'client' 
-                ? `/client/messages/${nouveauMessage._id}` 
-                : `/admin/messages/${nouveauMessage._id}`,
+              lien:
+                destinatairePrincipal.role === 'client'
+                  ? `/client/messages/${nouveauMessage._id}`
+                  : destinatairePrincipal.role === 'partenaire'
+                    ? `/partenaire/messages/${nouveauMessage._id}`
+                    : `/admin/messages/${nouveauMessage._id}`,
               metadata: {
                 messageId: nouveauMessage._id.toString(),
                 expediteurId: userIdObj.toString(),

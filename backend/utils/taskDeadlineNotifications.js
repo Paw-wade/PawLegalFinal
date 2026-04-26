@@ -234,7 +234,7 @@ async function checkOverdueTasks() {
 
       if (notifications.length > 0) {
         try {
-          await Notification.insertMany(notifications);
+          await Notification.insertManyWithPush(notifications);
           notificationsSent += notifications.length;
           console.log(`✅ ${notifications.length} notifications créées pour la tâche en retard: ${taskTitle}`);
         } catch (notifError) {

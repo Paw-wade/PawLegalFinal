@@ -6,6 +6,8 @@ const mongoose = require('mongoose');
 const Document = require('../models/Document');
 const User = require('../models/User');
 const Log = require('../models/Log');
+const Dossier = require('../models/Dossier');
+const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -605,6 +607,45 @@ router.post('/', (req, res, next) => {
     console.log('📤 Création du document...');
     const document = await Document.create(documentData);
     console.log('✅ Document créé avec succès:', document._id);
+
+    // Notifier le client (push + in-app) quand un tiers ajoute un document à son dossier
+    if (documentData.dossierId) {
+      try {
+        const dossier = await Dossier.findById(documentData.dossierId)
+          .select('user clientEmail titre numero')
+          .lean();
+        if (dossier) {
+          let clientUserId = dossier.user ? dossier.user.toString() : null;
+          if (!clientUserId && dossier.clientEmail) {
+            const linked = await User.findOne({
+              email: String(dossier.clientEmail).trim().toLowerCase(),
+            })
+              .select('_id')
+              .lean();
+            if (linked?._id) clientUserId = linked._id.toString();
+          }
+          const uploaderId = String(req.user.id);
+          const isOwnClientUpload = clientUserId && clientUserId === uploaderId;
+          if (clientUserId && !isOwnClientUpload) {
+            const dossierTitle = dossier.titre || dossier.numero || 'votre dossier';
+            await Notification.create({
+              user: clientUserId,
+              type: 'document_uploaded',
+              titre: 'Nouveau document sur votre dossier',
+              message: `« ${document.nom} » a été ajouté au dossier « ${dossierTitle} ».`,
+              lien: `/client/dossiers/${dossier._id}`,
+              metadata: {
+                dossierId: dossier._id.toString(),
+                documentId: document._id.toString(),
+                uploadedBy: uploaderId,
+              },
+            });
+          }
+        }
+      } catch (pushNotifError) {
+        console.error('⚠️ Notification client document_uploaded:', pushNotifError?.message || pushNotifError);
+      }
+    }
 
     // Logger l'action
     try {

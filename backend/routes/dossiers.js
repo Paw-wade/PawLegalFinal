@@ -112,7 +112,10 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
     for (const userInfo of usersToNotify) {
       const skipClientPing =
         (changes.skipClientEtapesOnlyNotify === true && userInfo.role === 'client') ||
-        (changes.skipClientTarificationOnlyNotify === true && userInfo.role === 'client');
+        (changes.skipClientTarificationOnlyNotify === true && userInfo.role === 'client') ||
+        (changes.onlyAssignmentChanged === true &&
+          userInfo.role === 'client' &&
+          changes.newAssignedTo);
       const skipClientSmsBecauseStandby =
         userInfo.role === 'client' && !!dossier.isStandby;
 
@@ -161,6 +164,33 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
     }
     
     console.log(`✅ Notifications envoyées à ${usersToNotify.length} utilisateur(s) pour la modification du dossier ${dossier._id}`);
+
+    // Client : notif dédiée quand un référent (assignedTo) est défini ou modifié
+    const oldA = changes.oldAssignedTo != null ? String(changes.oldAssignedTo) : '';
+    const newA = changes.newAssignedTo != null ? String(changes.newAssignedTo) : '';
+    const assignmentChanged = oldA !== newA;
+    if (assignmentChanged && newA && dossier.user) {
+      const clientId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
+      let assigneeLabel = "un membre de l'équipe";
+      if (dossier.assignedTo) {
+        const at = dossier.assignedTo;
+        const name = `${at.firstName || ''} ${at.lastName || ''}`.trim();
+        if (name) assigneeLabel = name;
+        else if (at.email) assigneeLabel = at.email;
+      }
+      await createNotification(
+        clientId,
+        'dossier_assigned',
+        'Référent assigné à votre dossier',
+        `Votre dossier « ${dossierTitle} » est suivi par ${assigneeLabel}.`,
+        `/client/dossiers/${dossier._id}`,
+        {
+          dossierId: dossier._id.toString(),
+          assignedTo: newA,
+          modifiedBy: modifier._id ? modifier._id.toString() : modifier.id.toString(),
+        }
+      );
+    }
   } catch (error) {
     console.error('❌ Erreur lors de la notification de modification:', error);
     // Ne pas bloquer la modification si la notification échoue
@@ -919,6 +949,24 @@ router.post(
             `/client/dossiers`,
             { dossierId: dossier._id.toString(), titre: normalizedTitre || 'Sans titre' }
           );
+
+          if (dossier.assignedTo) {
+            const assignee = await User.findById(dossier.assignedTo).select('firstName lastName email');
+            const assigneeLabel = assignee
+              ? `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() || assignee.email || 'Votre équipe'
+              : 'Votre équipe';
+            await createNotification(
+              targetUserId,
+              'dossier_assigned',
+              'Référent assigné à votre dossier',
+              `Le cabinet vous a assigné un référent pour le dossier « ${normalizedTitre || 'Sans titre'} » : ${assigneeLabel}.`,
+              `/client/dossiers/${dossier._id}`,
+              {
+                dossierId: dossier._id.toString(),
+                assignedTo: dossier.assignedTo.toString(),
+              }
+            );
+          }
         }
       }
 
@@ -2689,6 +2737,24 @@ router.put(
         dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson &&
         !standbyFieldsChanged;
 
+      const onlyAssignmentChanged =
+        dossierSnapshotBeforeUpdate.assignedTo !== dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.titre === dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
+        dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson &&
+        !standbyFieldsChanged &&
+        dossierSnapshotBeforeUpdate.fraisExoneres === dossierSnapshotAfterUpdate.fraisExoneres &&
+        dossierSnapshotBeforeUpdate.fraisExoneresMotif === dossierSnapshotAfterUpdate.fraisExoneresMotif &&
+        dossierSnapshotBeforeUpdate.montantTarificationFixe === dossierSnapshotAfterUpdate.montantTarificationFixe &&
+        dossierSnapshotBeforeUpdate.paiementTarificationEffectue === dossierSnapshotAfterUpdate.paiementTarificationEffectue;
+
       await dossier.save();
 
       if (shouldUnsetMontantTarificationFixeFields) {
@@ -2700,7 +2766,10 @@ router.put(
 
       // Recharger le dossier avec les données peuplées pour les notifications
       const dossierForNotification = await Dossier.findById(dossier._id)
-        .populate('user', 'firstName lastName email phone profilePhoto');
+        .populate('user', 'firstName lastName email phone profilePhoto')
+        .populate('assignedTo', 'firstName lastName email');
+
+      const newAssignedToResolved = dossierSnapshotAfterUpdate.assignedTo || null;
 
       // Notifier toutes les parties concernées lors d'une modification
       // Cette fonction gère les notifications pour tous les rôles (admin, consulat, avocat)
@@ -2708,7 +2777,8 @@ router.put(
         oldStatut,
         newStatut: statut,
         oldAssignedTo,
-        newAssignedTo: assignedTo,
+        newAssignedTo: newAssignedToResolved,
+        onlyAssignmentChanged,
         skipSms:
           skipMontantSilentNotify ||
           onlyTitreRenamed ||

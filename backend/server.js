@@ -566,12 +566,21 @@ const startServer = async () => {
       // Démarrer le système de vérification des échéances de tâches
       try {
         const { checkTaskDeadlines, checkOverdueTasks } = require('./utils/taskDeadlineNotifications');
-        
+        const {
+          checkAppointmentTomorrowReminders,
+          checkPendingDocumentRequestReminders,
+          checkTarificationPaymentDueReminders,
+        } = require('./utils/clientReminders');
+
         // Vérifier immédiatement au démarrage
         console.log('⏰ Vérification initiale des échéances de tâches...');
         await checkTaskDeadlines();
         console.log('🔔 Vérification initiale des tâches en retard...');
         await checkOverdueTasks();
+        console.log('📅 Rappels clients (RDV J-1, demandes de documents)...');
+        await checkAppointmentTomorrowReminders();
+        await checkPendingDocumentRequestReminders();
+        await checkTarificationPaymentDueReminders();
         
         // Vérifier toutes les 24 heures (à minuit)
         const scheduleDeadlineCheck = () => {
@@ -585,10 +594,16 @@ const startServer = async () => {
           setTimeout(() => {
             checkTaskDeadlines();
             checkOverdueTasks();
+            checkAppointmentTomorrowReminders();
+            checkPendingDocumentRequestReminders();
+            checkTarificationPaymentDueReminders();
             // Répéter toutes les 24 heures
             setInterval(() => {
               checkTaskDeadlines();
               checkOverdueTasks();
+              checkAppointmentTomorrowReminders();
+              checkPendingDocumentRequestReminders();
+              checkTarificationPaymentDueReminders();
             }, 24 * 60 * 60 * 1000);
           }, msUntilMidnight);
         };

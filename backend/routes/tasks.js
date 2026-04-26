@@ -704,7 +704,7 @@ router.put(
           }));
           
           if (notifications.length > 0) {
-            await Notification.insertMany(notifications);
+            await Notification.insertManyWithPush(notifications);
           }
         } catch (notifError) {
           console.error('Erreur lors de la création des notifications:', notifError);
