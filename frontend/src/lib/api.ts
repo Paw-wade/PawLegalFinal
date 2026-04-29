@@ -30,6 +30,23 @@ const api = axios.create({
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_RETRIES = 2;
 
+const FORUM_VISITOR_ID_KEY = 'forumVisitorId';
+
+const getForumVisitorId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  let visitorId = window.localStorage.getItem(FORUM_VISITOR_ID_KEY);
+  if (!visitorId) {
+    visitorId = `v_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    window.localStorage.setItem(FORUM_VISITOR_ID_KEY, visitorId);
+  }
+  return visitorId;
+};
+
+const getForumHeaders = () => {
+  const visitorId = getForumVisitorId();
+  return visitorId ? { 'x-forum-visitor-id': visitorId } : {};
+};
+
 // Fonction utilitaire pour récupérer le token (NextAuth + localStorage + session)
 export const getAuthToken = async (): Promise<string | null> => {
   if (typeof window === 'undefined') return null;
@@ -107,10 +124,7 @@ export const getAuthToken = async (): Promise<string | null> => {
       }
     }
 
-    // Ne pas afficher d'avertissement en production
-    if (IS_DEV) {
-      console.warn('⚠️ Aucun token trouvé');
-    }
+    // Absence de token normale sur pages publiques : on évite le bruit console.
     cachedToken = null;
     cachedTokenAt = Date.now();
     return null;
@@ -1038,18 +1052,18 @@ export const mediaAPI = {
 export const forumAPI = {
   // Lister les discussions (optionnel : theme pour filtrer par thème)
   listThreads: (params?: { page?: number; limit?: number; theme?: string; statusFilter?: 'pinned' | 'resolved' | 'archived'; q?: string }) =>
-    api.get('/forum/threads', { params }),
+    api.get('/forum/threads', { params, headers: getForumHeaders() }),
 
   // Récupérer une discussion et ses réponses
   getThread: (id: string) =>
-    api.get(`/forum/threads/${id}`),
+    api.get(`/forum/threads/${id}`, { headers: getForumHeaders() }),
 
   // Créer une nouvelle discussion (theme requis : titre-sejour-etudiant, titre-sejour-salarie, regroupement-familial, demande-visa, autres)
   createThread: (data: { title: string; body: string; theme?: string; tags?: string[]; guestName?: string }) =>
     api.post('/forum/threads', data),
 
   // Répondre à une discussion
-  replyToThread: (id: string, data: { body: string; guestName?: string }) =>
+  replyToThread: (id: string, data: { body: string; guestName?: string; parentPostId?: string }) =>
     api.post(`/forum/threads/${id}/posts`, data),
 
   // Admin - mettre à jour une discussion (statut / épinglage)
@@ -1060,13 +1074,17 @@ export const forumAPI = {
   deletePostAsAdmin: (postId: string) =>
     api.delete(`/forum/posts/${postId}`),
 
-  // Admin - valider / dévalider une réponse
-  verifyPostAsAdmin: (postId: string, isVerified: boolean) =>
-    api.patch(`/forum/posts/${postId}/verify`, { isVerified }),
+  // Admin - modérer une réponse (approuver / désapprouver)
+  verifyPostAsAdmin: (postId: string, data: { isVerified?: boolean; isRejected?: boolean }) =>
+    api.patch(`/forum/posts/${postId}/verify`, data),
 
   // Aimer / retirer son like sur une réponse
   toggleLikePost: (postId: string) =>
-    api.post(`/forum/posts/${postId}/like`),
+    api.post(`/forum/posts/${postId}/like`, {}, { headers: getForumHeaders() }),
+
+  // Aimer / retirer son like sur une discussion
+  toggleLikeThread: (threadId: string) =>
+    api.post(`/forum/threads/${threadId}/like`, {}, { headers: getForumHeaders() }),
 
   // Mettre en signet / retirer un signet sur une discussion
   toggleBookmarkThread: (threadId: string) =>

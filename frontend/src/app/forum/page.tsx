@@ -24,6 +24,8 @@ interface ForumThread {
     role?: string;
   };
   guestName?: string;
+  likesCount?: number;
+  liked?: boolean;
 }
 
 interface ThreadsResponse {
@@ -495,24 +497,10 @@ export default function ForumPage() {
                             <p className="mt-1 text-xs md:text-sm text-gray-600 line-clamp-2 break-words">
                               {thread.body}
                             </p>
-                            <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-1 text-[11px] md:text-xs text-gray-500">
+                            <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 text-[11px] md:text-xs text-gray-500">
                               <span className="break-words">
                                 {thread.repliesCount || 0} réponse{thread.repliesCount === 1 ? '' : 's'} •{' '}
                                 {thread.viewsCount || 0} vue{thread.viewsCount === 1 ? '' : 's'}
-                              </span>
-                              <span className="flex flex-wrap items-center gap-1">
-                                <span className="break-words">
-                                  Par{' '}
-                                  {thread.createdBy
-                                    ? `${thread.createdBy.prenom || ''} ${thread.createdBy.nom || ''}`.trim() || 'Auteur inconnu'
-                                    : thread.guestName || 'Auteur anonyme'}
-                                </span>
-                                <span>•</span>
-                                <span>
-                                  {thread.createdAt
-                                    ? new Date(thread.createdAt).toLocaleDateString('fr-FR')
-                                    : ''}
-                                </span>
                               </span>
                             </div>
                           </div>
@@ -547,38 +535,89 @@ export default function ForumPage() {
                           </div>
                         </div>
                         </Link>
-                        <div className="mt-2 relative inline-block w-fit" ref={openShareId === thread._id ? shareMenuRef : null}>
-                          <button
-                            type="button"
-                            onClick={() => setOpenShareId((prev) => (prev === thread._id ? null : thread._id))}
-                            className="list-none cursor-pointer px-2 py-1 text-xs rounded border border-green-300 text-green-700 hover:bg-green-50 inline-flex items-center gap-1"
-                          >
-                            Partager
-                          </button>
-                          {openShareId === thread._id && (
-                          <div className="absolute left-1/2 -translate-x-1/2 z-20 mt-1 w-[min(85vw,220px)] rounded-md border border-gray-200 bg-white shadow-md p-1">
+                        <div className="mt-2 flex flex-col gap-2">
+                          <span className="flex flex-wrap items-center gap-1 text-[11px] md:text-xs text-gray-500">
+                            <span className="break-words">
+                              Par{' '}
+                              {thread.createdBy
+                                ? `${thread.createdBy.prenom || ''} ${thread.createdBy.nom || ''}`.trim() || 'Auteur inconnu'
+                                : thread.guestName || 'Auteur anonyme'}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              {thread.createdAt
+                                ? new Date(thread.createdAt).toLocaleDateString('fr-FR')
+                                : ''}
+                            </span>
+                          </span>
+                          <div className="relative mt-1 flex w-full justify-end gap-2" ref={openShareId === thread._id ? shareMenuRef : null}>
                             <button
                               type="button"
                               onClick={async () => {
-                                await copyThreadLink(thread);
-                                setOpenShareId(null);
+                                try {
+                                  const res = await forumAPI.toggleLikeThread(thread._id);
+                                  if (res.data?.success) {
+                                    const updated = res.data.data as { likesCount: number; liked: boolean };
+                                    setThreads((prev) =>
+                                      prev.map((t) =>
+                                        t._id === thread._id
+                                          ? { ...t, likesCount: updated.likesCount, liked: updated.liked }
+                                          : t
+                                      )
+                                    );
+                                    setSidebarThreads((prev) =>
+                                      prev.map((t) =>
+                                        t._id === thread._id
+                                          ? { ...t, likesCount: updated.likesCount, liked: updated.liked }
+                                          : t
+                                      )
+                                    );
+                                  }
+                                } catch (err) {
+                                  console.error('Erreur lors du like de la discussion:', err);
+                                }
                               }}
-                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100"
+                              className={`list-none cursor-pointer px-1.5 py-0.5 text-[11px] rounded border inline-flex items-center gap-1 ${
+                                thread.liked
+                                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                                  : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                              }`}
                             >
-                              Copier le lien
+                              <span>👍</span>
+                              <span>{thread.likesCount || 0}</span>
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                shareThreadOnWhatsapp(thread);
-                                setOpenShareId(null);
-                              }}
-                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100 text-green-700"
+                              onClick={() => setOpenShareId((prev) => (prev === thread._id ? null : thread._id))}
+                              className="list-none cursor-pointer px-1.5 py-0.5 text-[11px] rounded border border-green-300 text-green-700 hover:bg-green-50 inline-flex items-center gap-1"
                             >
-                              WhatsApp
+                              Partager
                             </button>
+                            {openShareId === thread._id && (
+                            <div className="fixed left-1/2 top-1/2 z-40 w-[170px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border border-gray-200 bg-white shadow-md p-1">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await copyThreadLink(thread);
+                                  setOpenShareId(null);
+                                }}
+                                className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100 whitespace-normal break-words"
+                              >
+                                Copier le lien
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  shareThreadOnWhatsapp(thread);
+                                  setOpenShareId(null);
+                                }}
+                                className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100 text-green-700 whitespace-normal break-words"
+                              >
+                                WhatsApp
+                              </button>
+                            </div>
+                            )}
                           </div>
-                          )}
                         </div>
                       </div>
                   ))}

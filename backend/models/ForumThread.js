@@ -64,6 +64,10 @@ const forumThreadSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  likedByKeys: [{
+    type: String,
+    trim: true,
+  }],
 });
 
 forumThreadSchema.pre('save', function(next) {

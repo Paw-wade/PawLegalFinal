@@ -6,6 +6,11 @@ const forumPostSchema = new mongoose.Schema({
     ref: 'ForumThread',
     required: true,
   },
+  parentPost: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ForumPost',
+    default: null,
+  },
   body: {
     type: String,
     required: [true, 'Le contenu est requis'],
@@ -45,6 +50,10 @@ const forumPostSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  isRejected: {
+    type: Boolean,
+    default: false,
+  },
   verifiedAt: {
     type: Date,
   },
@@ -52,10 +61,21 @@ const forumPostSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
+  rejectedAt: {
+    type: Date,
+  },
+  rejectedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
   // Liste des utilisateurs qui ont aimé cette réponse
   likes: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
+  }],
+  likedByKeys: [{
+    type: String,
+    trim: true,
   }],
 });
 
