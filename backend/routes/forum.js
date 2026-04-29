@@ -9,6 +9,13 @@ const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
+const optionalProtect = (req, res, next) => {
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    return protect(req, res, next);
+  }
+  return next();
+};
+
 // Helpers
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
@@ -114,14 +121,15 @@ router.get('/threads', async (req, res) => {
   }
 });
 
-// POST /api/forum/threads - Créer une nouvelle discussion (connecté uniquement)
+// POST /api/forum/threads - Créer une nouvelle discussion (publique, avec ou sans connexion)
 router.post(
   '/threads',
-  protect,
+  optionalProtect,
   [
     body('title').isString().isLength({ min: 5, max: 200 }).withMessage('Le titre doit contenir entre 5 et 200 caractères'),
     body('body').isString().isLength({ min: 10 }).withMessage('Le contenu doit contenir au moins 10 caractères'),
     body('theme').optional().isIn(THEMES).withMessage('Thème invalide'),
+    body('guestName').optional().isString().isLength({ max: 120 }).withMessage('Nom invité invalide'),
   ],
   handleValidationErrors,
   async (req, res) => {
@@ -129,15 +137,18 @@ router.post(
       const { title, body: content, tags } = req.body;
       const themeRaw = req.body.theme != null ? String(req.body.theme).trim() : '';
       const theme = themeRaw && THEMES.includes(themeRaw) ? themeRaw : 'autres';
+      const guestName = (req.body.guestName || '').toString().trim();
+      const authorId = req.user?.id || null;
 
       const thread = await ForumThread.create({
         title,
         body: content,
-        createdBy: req.user.id,
+        createdBy: authorId,
+        guestName: authorId ? '' : (guestName || 'Visiteur'),
         theme,
         tags: Array.isArray(tags) ? tags : [],
         lastReplyAt: new Date(),
-        lastReplyBy: req.user.id,
+        lastReplyBy: authorId || null,
       });
 
       // Notifier les admins d'une nouvelle question forum
@@ -145,14 +156,15 @@ router.post(
         const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: true }).select('_id');
         const adminIds = admins
           .map((a) => a._id?.toString())
-          .filter((id) => id && id !== req.user.id.toString());
+          .filter((id) => id && id !== (authorId ? authorId.toString() : ''));
         if (adminIds.length > 0) {
+          const authorLabel = authorId ? 'Un utilisateur' : `Un visiteur${guestName ? ` (${guestName})` : ''}`;
           await Notification.insertManyWithPush(
             adminIds.map((userId) => ({
               user: userId,
               type: 'forum_thread_created',
               titre: '🆕 Nouvelle question sur le forum',
-              message: `Un nouvel utilisateur a publié: "${title}".`,
+              message: `${authorLabel} a publié: "${title}".`,
               lien: `/forum/${thread._id}`,
               metadata: {
                 threadId: thread._id.toString(),
@@ -191,7 +203,8 @@ router.get('/threads/:id', async (req, res) => {
     const posts = await ForumPost.find({ thread: threadId, isDeleted: false })
       .sort({ createdAt: 1 })
       .limit(50)
-      .populate('createdBy', 'prenom nom role');
+      .populate('createdBy', 'prenom nom role')
+      .populate('verifiedBy', 'prenom nom role');
 
     res.json({
       success: true,
@@ -209,15 +222,18 @@ router.get('/threads/:id', async (req, res) => {
 // POST /api/forum/threads/:id/posts - Répondre à une discussion
 router.post(
   '/threads/:id/posts',
-  protect,
+  optionalProtect,
   [
     body('body').isString().isLength({ min: 2 }).withMessage('Le contenu doit contenir au moins 2 caractères'),
+    body('guestName').optional().isString().isLength({ max: 120 }).withMessage('Nom invité invalide'),
   ],
   handleValidationErrors,
   async (req, res) => {
     try {
       const threadId = req.params.id;
       const { body: content } = req.body;
+      const guestName = (req.body.guestName || '').toString().trim();
+      const authorId = req.user?.id || null;
 
       const thread = await ForumThread.findById(threadId);
       if (!thread) {
@@ -235,18 +251,19 @@ router.post(
       const post = await ForumPost.create({
         thread: threadId,
         body: content,
-        createdBy: req.user.id,
+        createdBy: authorId,
+        guestName: authorId ? '' : (guestName || 'Visiteur'),
       });
 
       thread.repliesCount += 1;
       thread.lastReplyAt = new Date();
-      thread.lastReplyBy = req.user.id;
+      thread.lastReplyBy = authorId || null;
       await thread.save();
 
       // Notifier le créateur du thread + participants (hors auteur de la réponse)
       try {
         const recipientIds = new Set();
-        const replyAuthorId = req.user.id.toString();
+        const replyAuthorId = authorId ? authorId.toString() : null;
         const threadCreatorId = thread.createdBy?.toString();
         if (threadCreatorId && threadCreatorId !== replyAuthorId) {
           recipientIds.add(threadCreatorId);
@@ -367,6 +384,55 @@ router.delete(
       res.json({ success: true, message: 'Réponse supprimée' });
     } catch (error) {
       console.error('Erreur lors de la suppression de la réponse (admin):', error);
+      res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+  }
+);
+
+// PATCH /api/forum/posts/:id/verify - Valider / invalider une réponse (admin)
+router.patch(
+  '/posts/:id/verify',
+  protect,
+  authorize('admin', 'superadmin'),
+  [
+    body('isVerified')
+      .isBoolean()
+      .withMessage("Le champ isVerified doit être un booléen"),
+  ],
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const postId = req.params.id;
+      const { isVerified } = req.body;
+
+      const post = await ForumPost.findById(postId);
+      if (!post || post.isDeleted) {
+        return res.status(404).json({ success: false, message: 'Réponse introuvable' });
+      }
+
+      post.isVerified = isVerified;
+      if (isVerified) {
+        post.verifiedAt = new Date();
+        post.verifiedBy = req.user._id;
+      } else {
+        post.verifiedAt = null;
+        post.verifiedBy = null;
+      }
+
+      await post.save();
+      await post.populate('verifiedBy', 'prenom nom role');
+
+      return res.json({
+        success: true,
+        data: {
+          _id: post._id,
+          isVerified: !!post.isVerified,
+          verifiedAt: post.verifiedAt || null,
+          verifiedBy: post.verifiedBy || null,
+        },
+      });
+    } catch (error) {
+      console.error('Erreur lors de la validation d’une réponse forum:', error);
       res.status(500).json({ success: false, message: 'Erreur serveur' });
     }
   }
