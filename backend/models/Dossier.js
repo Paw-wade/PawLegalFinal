@@ -104,6 +104,27 @@ const dossierSchema = new mongoose.Schema({
     ref: 'User',
     required: false // Le membre de l'équipe à qui le dossier est assigné (déprécié, utiliser teamMembers)
   },
+  assignmentHistory: [{
+    from: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: false
+    },
+    to: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: false
+    },
+    changedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    changedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   // Équipe de traitement du dossier
   teamMembers: [{
     type: mongoose.Schema.Types.ObjectId,

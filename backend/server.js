@@ -566,6 +566,7 @@ const startServer = async () => {
       // Démarrer le système de vérification des échéances de tâches
       try {
         const { checkTaskDeadlines, checkOverdueTasks } = require('./utils/taskDeadlineNotifications');
+        const { checkAdminAgendaNotifications } = require('./utils/adminAgendaNotifications');
         const {
           checkAppointmentTomorrowReminders,
           checkPendingDocumentRequestReminders,
@@ -577,6 +578,8 @@ const startServer = async () => {
         await checkTaskDeadlines();
         console.log('🔔 Vérification initiale des tâches en retard...');
         await checkOverdueTasks();
+        console.log('🗓️ Vérification initiale des actions à prévoir (admin)...');
+        await checkAdminAgendaNotifications();
         console.log('📅 Rappels clients (RDV J-1, demandes de documents)...');
         await checkAppointmentTomorrowReminders();
         await checkPendingDocumentRequestReminders();
@@ -594,6 +597,7 @@ const startServer = async () => {
           setTimeout(() => {
             checkTaskDeadlines();
             checkOverdueTasks();
+            checkAdminAgendaNotifications();
             checkAppointmentTomorrowReminders();
             checkPendingDocumentRequestReminders();
             checkTarificationPaymentDueReminders();
@@ -601,6 +605,7 @@ const startServer = async () => {
             setInterval(() => {
               checkTaskDeadlines();
               checkOverdueTasks();
+              checkAdminAgendaNotifications();
               checkAppointmentTomorrowReminders();
               checkPendingDocumentRequestReminders();
               checkTarificationPaymentDueReminders();

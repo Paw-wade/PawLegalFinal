@@ -312,9 +312,20 @@ router.get('/', async (req, res) => {
       const rootMessage = threadMessages.find(m => !m.messageParent) || threadMessages[0];
       const lastMessage = threadMessages[threadMessages.length - 1];
       
-      // Déterminer si le thread est non lu (au moins un message non lu)
+      // Déterminer si le thread est non lu pour MOI:
+      // uniquement sur les messages que je reçois (destinataire principal ou en copie)
       const hasUnreadMessage = threadMessages.some(m => {
-        return !m.lu?.some((l) => 
+        const isRecipient =
+          (Array.isArray(m.destinataires) && m.destinataires.some((d) =>
+            (d?._id?.toString() || d?.toString()) === userId.toString()
+          )) ||
+          (Array.isArray(m.copie) && m.copie.some((c) =>
+            (c?._id?.toString() || c?.toString()) === userId.toString()
+          ));
+
+        if (!isRecipient) return false;
+
+        return !m.lu?.some((l) =>
           (l.user?._id?.toString() || l.user?.toString()) === userId.toString()
         );
       });

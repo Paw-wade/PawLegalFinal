@@ -489,9 +489,28 @@ router.get('/dossier/:dossierId', async (req, res) => {
     }
     
     // Récupérer tous les documents du dossier
-    const documents = await Document.find({ dossierId: dossierId })
+    const rawDocuments = await Document.find({ dossierId: dossierId })
       .populate('user', 'firstName lastName email')
       .sort({ createdAt: -1 });
+
+    const documents = await Promise.all(
+      rawDocuments.map(async (doc) => {
+        if (req.user.role !== 'client') return doc;
+
+        const canViewContent = await canClientViewDocumentContent(doc, req.user);
+        if (canViewContent) return doc;
+
+        const docObj = doc.toObject();
+        return {
+          ...docObj,
+          isConfidentialForClient: true,
+          canPreview: false,
+          canDownload: false,
+          confidentialReason: undefined,
+          cheminFichier: undefined
+        };
+      })
+    );
     
     res.json({
       success: true,
@@ -566,9 +585,10 @@ router.post('/', (req, res, next) => {
       });
     }
 
-    const { nom, description, categorie, dossierId } = req.body;
+    const { nom, description, categorie, dossierId, visibleToClient, confidentialReason } = req.body;
     const effectiveUserId = req.user.id;
     const safeCategorie = normalizeCategorie(categorie);
+    const uploaderIsCabinet = isCabinetStaff(req.user.role);
 
     console.log('📤 Données du document:', {
       userId: effectiveUserId,
@@ -589,7 +609,12 @@ router.post('/', (req, res, next) => {
       typeMime: req.file.mimetype,
       taille: req.file.size,
       description: description || '',
-      categorie: safeCategorie
+      categorie: safeCategorie,
+      visibleToClient: uploaderIsCabinet ? parseBoolean(visibleToClient, true) : true,
+      confidentialReason:
+        uploaderIsCabinet && parseBoolean(visibleToClient, true) === false
+          ? String(confidentialReason || '').trim()
+          : ''
     };
 
     // Ajouter dossierId seulement s'il est fourni et valide
@@ -712,6 +737,24 @@ router.post('/', (req, res, next) => {
 // Rôles cabinet avec accès lecture à tous les documents
 const isCabinetStaff = (role) =>
   role === 'admin' || role === 'superadmin' || role === 'secretaire';
+
+const parseBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') return true;
+    if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off') return false;
+  }
+  return fallback;
+};
+
+const canClientViewDocumentContent = async (document, user) => {
+  if (!document || !user || user.role !== 'client') return true;
+  const isDossierOwnerClient = await canClientAccessDocumentViaOwningDossier(document, user);
+  if (!isDossierOwnerClient) return true;
+  return document.visibleToClient !== false;
+};
 
 /**
  * Client : accès aux pièces du dossier si même règle que GET /user/dossiers/:id
@@ -845,6 +888,16 @@ router.get('/:id/preview', async (req, res) => {
       });
     }
 
+    if (user.role === 'client') {
+      const canViewContent = await canClientViewDocumentContent(document, user);
+      if (!canViewContent) {
+        return res.status(403).json({
+          success: false,
+          message: 'Ce document est confidentiel et réservé à l’administration.'
+        });
+      }
+    }
+
     // Gérer Cloudinary (URL http/https) ET stockage local (chemin disque)
     const fileUrl = document.cheminFichier;
     let contentType = document.typeMime || 'application/octet-stream';
@@ -962,6 +1015,16 @@ router.get('/:id/download', async (req, res) => {
         success: false,
         message: 'Accès non autorisé à ce document'
       });
+    }
+
+    if (req.user.role === 'client') {
+      const canViewContent = await canClientViewDocumentContent(document, req.user);
+      if (!canViewContent) {
+        return res.status(403).json({
+          success: false,
+          message: 'Ce document est confidentiel et réservé à l’administration.'
+        });
+      }
     }
 
     const fileUrl = document.cheminFichier;

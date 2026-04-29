@@ -37,7 +37,7 @@ const documentRequestSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'sent', 'received'],
+    enum: ['pending', 'sent', 'received', 'cancelled'],
     default: 'pending'
   },
   document: {

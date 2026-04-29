@@ -766,7 +766,7 @@ router.patch(
   '/:id/status',
   authorize('admin', 'superadmin'),
   [
-    body('status').isIn(['pending', 'sent', 'received']).withMessage('Statut invalide')
+    body('status').isIn(['pending', 'sent', 'received', 'cancelled']).withMessage('Statut invalide')
   ],
   async (req, res) => {
     try {
@@ -792,6 +792,8 @@ router.patch(
       documentRequest.status = status;
       if (status === 'received') {
         documentRequest.receivedAt = new Date();
+      } else if (status === 'pending' || status === 'cancelled') {
+        documentRequest.receivedAt = null;
       }
       await documentRequest.save();
 
@@ -815,5 +817,89 @@ router.patch(
     }
   }
 );
+
+// @route   PATCH /api/document-requests/:id/cancel
+// @desc    Annuler une demande de document (admin)
+// @access  Private/Admin
+router.patch('/:id/cancel', authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const documentRequest = await DocumentRequest.findById(req.params.id);
+    if (!documentRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Demande de document non trouvée'
+      });
+    }
+
+    documentRequest.status = 'cancelled';
+    documentRequest.receivedAt = null;
+    await documentRequest.save();
+
+    await documentRequest.populate('dossier', 'titre numero');
+    await documentRequest.populate('requestedBy', 'firstName lastName email');
+    await documentRequest.populate('requestedFrom', 'firstName lastName email phone');
+    await documentRequest.populate('document', 'nom typeMime taille');
+
+    return res.json({
+      success: true,
+      message: 'Demande de document annulée avec succès',
+      documentRequest
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'annulation de la demande:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @route   PATCH /api/document-requests/:id/remove-document
+// @desc    Supprimer le document reçu et remettre la demande en attente (admin)
+// @access  Private/Admin
+router.patch('/:id/remove-document', authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const documentRequest = await DocumentRequest.findById(req.params.id);
+    if (!documentRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Demande de document non trouvée'
+      });
+    }
+
+    if (!documentRequest.document) {
+      return res.status(400).json({
+        success: false,
+        message: 'Aucun document reçu à supprimer pour cette demande'
+      });
+    }
+
+    await Document.findByIdAndDelete(documentRequest.document);
+
+    documentRequest.document = null;
+    documentRequest.status = 'pending';
+    documentRequest.sentAt = null;
+    documentRequest.receivedAt = null;
+    await documentRequest.save();
+
+    await documentRequest.populate('dossier', 'titre numero');
+    await documentRequest.populate('requestedBy', 'firstName lastName email');
+    await documentRequest.populate('requestedFrom', 'firstName lastName email phone');
+
+    return res.json({
+      success: true,
+      message: 'Document reçu supprimé avec succès',
+      documentRequest
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors de la suppression du document reçu:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
 
 module.exports = router;

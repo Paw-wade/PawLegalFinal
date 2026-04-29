@@ -50,7 +50,9 @@ export default function AdminDocumentsPage() {
     nom: '',
     description: '',
     categorie: 'autre',
-    dossierId: ''
+    dossierId: '',
+    visibleToClient: true,
+    confidentialReason: ''
   });
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [isLoadingDossiers, setIsLoadingDossiers] = useState(false);
@@ -141,6 +143,10 @@ export default function AdminDocumentsPage() {
       formData.append('nom', uploadData.nom);
       formData.append('description', uploadData.description);
       formData.append('categorie', uploadData.categorie);
+      formData.append('visibleToClient', String(uploadData.visibleToClient));
+      if (!uploadData.visibleToClient && uploadData.confidentialReason.trim()) {
+        formData.append('confidentialReason', uploadData.confidentialReason.trim());
+      }
       if (uploadData.dossierId && uploadData.dossierId.trim() !== '') {
         formData.append('dossierId', uploadData.dossierId);
       }
@@ -148,7 +154,7 @@ export default function AdminDocumentsPage() {
       const response = await documentsAPI.uploadDocument(formData);
       if (response.data.success) {
         setSuccess('Document téléversé avec succès !');
-        setUploadData({ nom: '', description: '', categorie: 'autre', dossierId: '' });
+        setUploadData({ nom: '', description: '', categorie: 'autre', dossierId: '', visibleToClient: true, confidentialReason: '' });
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
@@ -398,7 +404,7 @@ export default function AdminDocumentsPage() {
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => {
                   setShowUploadForm(false);
-                  setUploadData({ nom: '', description: '', categorie: 'autre', dossierId: '' });
+                  setUploadData({ nom: '', description: '', categorie: 'autre', dossierId: '', visibleToClient: true, confidentialReason: '' });
                   if (fileInputRef.current) {
                     fileInputRef.current.value = '';
                   }
@@ -448,6 +454,33 @@ export default function AdminDocumentsPage() {
               </select>
             </div>
           </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={uploadData.visibleToClient}
+                    onChange={(e) =>
+                      setUploadData({
+                        ...uploadData,
+                        visibleToClient: e.target.checked,
+                        confidentialReason: e.target.checked ? '' : uploadData.confidentialReason
+                      })
+                    }
+                    className="mt-1"
+                  />
+                  <span className="text-sm text-amber-900">
+                    Rendre ce document accessible au client
+                  </span>
+                </label>
+                {!uploadData.visibleToClient && (
+                  <textarea
+                    value={uploadData.confidentialReason}
+                    onChange={(e) => setUploadData({ ...uploadData, confidentialReason: e.target.value })}
+                    className="mt-2 flex min-h-[72px] w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-sm"
+                    placeholder="Raison confidentielle (optionnel, visible admin uniquement)"
+                  />
+                )}
+              </div>
         </div>
 
         {/* Liste des documents groupés par dossier */}

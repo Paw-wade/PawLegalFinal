@@ -112,21 +112,14 @@ export default function PartenaireMessageDetailPage() {
           setThreadMessages([fetchedMessage]);
         }
 
-        // Marquer comme lu automatiquement à l'ouverture (uniquement si l'utilisateur est destinataire ou en copie)
+        // Marquer comme lu automatiquement à l'ouverture
         const userId = (session?.user as any)?.id?.toString?.();
-        const isDestinataire = fetchedMessage.destinataires?.some(
-          (d: any) => (d?._id?.toString?.() || d?.toString?.()) === userId
-        );
-        const isEnCopie = fetchedMessage.copie?.some(
-          (c: any) => (c?._id?.toString?.() || c?.toString?.()) === userId
-        );
-        const canMark = !!(userId && (isDestinataire || isEnCopie));
         const isRead = fetchedMessage.lu?.some((l: any) => {
           const luUserId = l?.user?._id?.toString?.() || l?.user?.toString?.();
           return luUserId === userId;
         });
 
-        if (canMark && !isRead) {
+        if (userId && !isRead) {
           // Supprimer le badge "Nouveau" immédiatement côté UI
           setMessage((prev: any) => {
             if (!prev) return prev;

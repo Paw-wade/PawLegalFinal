@@ -1289,7 +1289,7 @@ export const documentRequestsAPI = {
   // Récupérer les demandes de documents
   getRequests: (params?: {
     dossierId?: string;
-    status?: 'pending' | 'sent' | 'received';
+    status?: 'pending' | 'sent' | 'received' | 'cancelled';
     userId?: string;
   }) => {
     return api.get('/document-requests', { params });
@@ -1306,8 +1306,18 @@ export const documentRequestsAPI = {
   },
 
   // Mettre à jour le statut d'une demande (admin)
-  updateStatus: (id: string, status: 'pending' | 'sent' | 'received') => {
+  updateStatus: (id: string, status: 'pending' | 'sent' | 'received' | 'cancelled') => {
     return api.patch(`/document-requests/${id}/status`, { status });
+  },
+
+  // Annuler une demande (admin)
+  cancelRequest: (id: string) => {
+    return api.patch(`/document-requests/${id}/cancel`);
+  },
+
+  // Supprimer le document reçu lié à une demande (admin)
+  removeReceivedDocument: (id: string) => {
+    return api.patch(`/document-requests/${id}/remove-document`);
   },
 };
 

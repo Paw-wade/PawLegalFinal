@@ -204,6 +204,7 @@ const downloadUserProfile = (user: any) => {
 
 function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose: () => void; userId: string | null; onUpdate: () => void }) {
   const { data: session } = useSession();
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -390,6 +391,18 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                       <p className="text-muted-foreground">{user?.email}</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const targetUserId = (user?._id || user?.id || userId || '').toString();
+                          if (!targetUserId) return;
+                          onClose();
+                          router.push(`/admin/messages?action=send&destinataireId=${encodeURIComponent(targetUserId)}`);
+                        }}
+                        className="bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                      >
+                        ✉️ Envoyer un message
+                      </Button>
                       <Button 
                         variant="outline"
                         onClick={() => {

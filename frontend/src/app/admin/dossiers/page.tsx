@@ -320,12 +320,14 @@ export default function AdminDossiersPage() {
   const [dossierSortEtapes, setDossierSortEtapes] = useState<'default' | 'etape_date_asc' | 'etape_date_desc'>('default');
   const isSuperadmin = (session?.user as any)?.role === 'superadmin';
 
-  // Toujours proposer un minimum de 3 actions avant toute "édition des étapes".
-  const DEFAULT_ADMIN_ETAPES = [
-    { id: 'en_cours', label: 'Accepté', ordre: 0 },
-    { id: 'refuse', label: 'Refusé', ordre: 1 },
-    { id: 'annule', label: 'Archivé', ordre: 2 },
+  // Étapes de base pour garder un workflow cohérent même sans étapes personnalisées.
+  const DEFAULT_ADMIN_ETAPES: any[] = [
+    { id: 'recu', label: 'Reçu', ordre: 0 },
+    { id: 'en_cours', label: 'En cours', ordre: 1 },
+    { id: 'refuse', label: 'Refusé', ordre: 2 },
+    { id: 'annule', label: 'Archivé', ordre: 3 },
   ];
+  const DEFAULT_ADMIN_ETAPES_IDS = new Set(DEFAULT_ADMIN_ETAPES.map((s) => String(s.id)));
 
   /** Aligne la valeur affichée du select sur les ids des étapes (ex. accepte → en_cours). */
   const normalizeStatutForAdminSelect = (statut: string | undefined) => {
@@ -354,7 +356,7 @@ export default function AdminDossiersPage() {
       addedBy: s?.addedBy,
     }));
 
-    // Conserver l'ordre des étapes custom (mais toujours avec les 3 étapes par défaut en tête).
+    // Conserver l'ordre des étapes custom.
     const customExtra = normalizedCustom
       .filter((s: any) => !defaultIds.has(String(s.id)))
       .sort((a: any, b: any) => (a.ordre ?? 0) - (b.ordre ?? 0));
@@ -369,6 +371,11 @@ export default function AdminDossiersPage() {
     const matched = effectiveEtapes.find((etape: any) => adminSelectStatutMatchesEtape(statut, etape));
     if (matched?.label) return String(matched.label);
     return getStatutLabel(statut);
+  };
+
+  const getProgressEtapes = (dossier: any) => {
+    const edited = getEditedEtapesOnly(dossier?.etapesSupplementaires);
+    return edited.filter((step: any) => !DEFAULT_ADMIN_ETAPES_IDS.has(String(step?.id || '')));
   };
 
   const maskStrict = (value: string, fallback: string = '—') => {
@@ -421,7 +428,9 @@ export default function AdminDossiersPage() {
   const [directUploadData, setDirectUploadData] = useState({
     nom: '',
     description: '',
-    categorie: 'autre'
+    categorie: 'autre',
+    visibleToClient: true,
+    confidentialReason: ''
   });
   const [directUploadError, setDirectUploadError] = useState<string | null>(null);
   const [directUploading, setDirectUploading] = useState(false);
@@ -724,6 +733,10 @@ export default function AdminDossiersPage() {
         formData.append('description', directUploadData.description.trim());
         formData.append('categorie', directUploadData.categorie);
         formData.append('dossierId', dossierId);
+        formData.append('visibleToClient', String(directUploadData.visibleToClient));
+        if (!directUploadData.visibleToClient && directUploadData.confidentialReason.trim()) {
+          formData.append('confidentialReason', directUploadData.confidentialReason.trim());
+        }
 
         const response = await documentsAPI.uploadDocument(formData);
         if (!response?.data?.success) {
@@ -744,7 +757,7 @@ export default function AdminDossiersPage() {
         });
       }
 
-      setDirectUploadData({ nom: '', description: '', categorie: 'autre' });
+      setDirectUploadData({ nom: '', description: '', categorie: 'autre', visibleToClient: true, confidentialReason: '' });
       if (directFileInputRef.current) {
         directFileInputRef.current.value = '';
       }
@@ -1270,7 +1283,8 @@ export default function AdminDossiersPage() {
         updateData.notificationMessage = notificationMessage.trim();
       }
 
-      if (exonererFraisTarification && showStatutModal.newStatut === 'en_cours') {
+      // Les statuts par défaut (Reçu / En cours / Refusé / Archivé) ne doivent pas déclencher la tarification.
+      if (exonererFraisTarification && showStatutModal.newStatut === 'en_cours' && !DEFAULT_ADMIN_ETAPES_IDS.has(String(showStatutModal.newStatut))) {
         updateData.fraisExoneres = true;
         if (fraisExoneresMotifInput.trim()) {
           updateData.fraisExoneresMotif = fraisExoneresMotifInput.trim();
@@ -1532,6 +1546,24 @@ export default function AdminDossiersPage() {
   if (!session || ((session.user as any)?.role !== 'admin' && (session.user as any)?.role !== 'superadmin')) {
     return null;
   }
+
+  const getRawStatut = (d: any) => String(d?.statut || '').trim();
+  const isArchivedDossier = (d: any) => {
+    const rawStatut = getRawStatut(d);
+    return !!d?.estArchive || rawStatut === 'annule';
+  };
+  const isClosedDossier = (d: any) => {
+    const rawStatut = getRawStatut(d);
+    if (isArchivedDossier(d)) return false;
+    return (
+      !!d?.estCloture ||
+      rawStatut === 'decision_favorable' ||
+      rawStatut === 'decision_defavorable' ||
+      rawStatut === 'gain_cause' ||
+      rawStatut === 'rejet' ||
+      rawStatut === 'refuse'
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -2096,7 +2128,7 @@ export default function AdminDossiersPage() {
                   <p className="text-2xl font-bold text-yellow-900">
                     {dossiers.filter((d: any) => {
                       const hasClient = !!d.user; // dossier créé par un utilisateur
-                      const rawStatut = d.statut || '';
+                      const rawStatut = getRawStatut(d);
                       const initialStatut =
                         !rawStatut ||
                         rawStatut === 'recu' ||
@@ -2105,9 +2137,8 @@ export default function AdminDossiersPage() {
                         hasClient &&
                         initialStatut &&
                         !d.isStandby &&
-                        !d.estCloture &&
-                        !d.estArchive &&
-                        rawStatut !== 'annule'
+                        !isClosedDossier(d) &&
+                        !isArchivedDossier(d)
                       );
                     }).length}
                   </p>
@@ -2126,20 +2157,16 @@ export default function AdminDossiersPage() {
                   <p className="text-2xl font-bold text-blue-900">
                     {dossiers.filter((d: any) => {
                       const hasClient = !!d.user;
-                      const rawStatut = d.statut || '';
+                      const rawStatut = getRawStatut(d);
                       const initialStatut =
                         hasClient &&
                         (!rawStatut ||
                           rawStatut === 'recu' ||
                           rawStatut === 'en_attente_onboarding');
-                      const isRefused = rawStatut === 'refuse';
-                      const isArchived = rawStatut === 'annule';
                       return (
                         !d.isStandby &&
-                        !d.estCloture &&
-                        !d.estArchive &&
-                        !isArchived &&
-                        !isRefused &&
+                        !isClosedDossier(d) &&
+                        !isArchivedDossier(d) &&
                         !initialStatut
                       );
                     }).length}
@@ -2156,7 +2183,7 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-violet-700 font-semibold mb-1 uppercase tracking-wide">Stand-by</p>
                   <p className="text-2xl font-bold text-violet-900">
-                    {dossiers.filter((d: any) => !!d.isStandby && !d.estCloture && !d.estArchive).length}
+                    {dossiers.filter((d: any) => !!d.isStandby && !isClosedDossier(d) && !isArchivedDossier(d)).length}
                   </p>
                 </button>
                 <button
@@ -2170,7 +2197,7 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-green-700 font-semibold mb-1 uppercase tracking-wide">Clôturés</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {dossiers.filter((d: any) => d.estCloture).length}
+                    {dossiers.filter((d: any) => isClosedDossier(d)).length}
                   </p>
                 </button>
                 <button
@@ -2184,7 +2211,7 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
                   <p className="text-2xl font-bold text-red-900">
-                    {dossiers.filter((d: any) => d.estArchive || d.statut === 'annule' || d.statut === 'refuse').length}
+                    {dossiers.filter((d: any) => isArchivedDossier(d)).length}
                   </p>
                 </button>
               </div>
@@ -2282,7 +2309,7 @@ export default function AdminDossiersPage() {
                   if (statusFilter === 'pending') {
                     // Dossiers créés par un utilisateur dont le statut n'a pas encore été édité par l'admin
                     const hasClient = !!d.user;
-                    const rawStatut = d.statut || '';
+                    const rawStatut = getRawStatut(d);
                     const initialStatut =
                       !rawStatut ||
                       rawStatut === 'recu' ||
@@ -2291,45 +2318,34 @@ export default function AdminDossiersPage() {
                       !hasClient ||
                       !initialStatut ||
                       d.isStandby ||
-                      d.estCloture ||
-                      d.estArchive ||
-                      rawStatut === 'annule'
+                      isClosedDossier(d) ||
+                      isArchivedDossier(d)
                     ) {
                       return false;
                     }
                   } else if (statusFilter === 'in_progress') {
                     // Tous les autres dossiers non clôturés / non archivés
                     const hasClient = !!d.user;
-                    const rawStatut = d.statut || '';
+                    const rawStatut = getRawStatut(d);
                     const initialStatut =
                       hasClient &&
                       (!rawStatut ||
                         rawStatut === 'recu' ||
                         rawStatut === 'en_attente_onboarding');
-                    const isRefused = rawStatut === 'refuse';
-                    const isArchived = rawStatut === 'annule';
                     if (
                       initialStatut ||
                       d.isStandby ||
-                      isRefused ||
-                      isArchived ||
-                      d.estCloture ||
-                      d.estArchive
+                      isClosedDossier(d) ||
+                      isArchivedDossier(d)
                     ) {
                       return false;
                     }
                   } else if (statusFilter === 'standby') {
-                    if (!d.isStandby || d.estCloture || d.estArchive) return false;
+                    if (!d.isStandby || isClosedDossier(d) || isArchivedDossier(d)) return false;
                   } else if (statusFilter === 'closed') {
-                    if (!d.estCloture) return false;
+                    if (!isClosedDossier(d)) return false;
                   } else if (statusFilter === 'archived') {
-                    if (
-                      !(
-                        d.estArchive ||
-                        (d.statut || '') === 'annule' ||
-                        (d.statut || '') === 'refuse'
-                      )
-                    ) return false;
+                    if (!isArchivedDossier(d)) return false;
                   }
 
                   // Filtre par utilisateur
@@ -2749,7 +2765,7 @@ export default function AdminDossiersPage() {
 
                     {/* Avancement : uniquement les étapes définies dans « Éditer les étapes » (pas Accepté / Refusé / Archivé) */}
                     {(() => {
-                      const editedEtapes = getEditedEtapesOnly(dossier?.etapesSupplementaires);
+                      const editedEtapes = getProgressEtapes(dossier);
                       const progress = getDossierProgressFromEditedEtapes(dossier.statut, editedEtapes);
                       const currentEtapeIdx = editedEtapes.findIndex((step) =>
                         customEtapeMatchesStatut(step, dossier.statut || '')
@@ -3415,6 +3431,33 @@ export default function AdminDossiersPage() {
                                   className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm min-h-[56px]"
                                 />
                               </div>
+                              <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5">
+                                <label className="flex items-start gap-2 cursor-pointer text-[11px] md:text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={directUploadData.visibleToClient}
+                                    onChange={(e) =>
+                                      setDirectUploadData((prev) => ({
+                                        ...prev,
+                                        visibleToClient: e.target.checked,
+                                        confidentialReason: e.target.checked ? '' : prev.confidentialReason,
+                                      }))
+                                    }
+                                    className="mt-0.5"
+                                  />
+                                  <span className="font-medium text-amber-900">Rendre ce document accessible au client</span>
+                                </label>
+                                {!directUploadData.visibleToClient && (
+                                  <textarea
+                                    value={directUploadData.confidentialReason}
+                                    onChange={(e) =>
+                                      setDirectUploadData((prev) => ({ ...prev, confidentialReason: e.target.value }))
+                                    }
+                                    className="mt-2 w-full rounded-md border border-amber-200 bg-white px-2.5 py-1.5 text-xs md:text-sm min-h-[52px]"
+                                    placeholder="Raison confidentielle (optionnel)"
+                                  />
+                                )}
+                              </div>
                               <div className="flex justify-end gap-2 pt-1">
                                 <Button
                                   type="button"
@@ -3878,7 +3921,7 @@ export default function AdminDossiersPage() {
                             onChange={(e) => handleChangeStatut(dossier._id || dossier.id, e.target.value)}
                             className="text-xs px-2 py-1.5 rounded-md border border-gray-300 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors w-full"
                             disabled={isLoading}
-                            title="Étape actuelle du dossier (y compris Accepté, Refusé, Archivé). La barre « étapes éditées » utilise uniquement les étapes définies dans la fiche dossier."
+                            title="Étape actuelle du dossier. Les options proviennent uniquement des étapes définies dans la fiche dossier."
                           >
                             {(() => {
                               const effectiveEtapes = getEffectiveEtapes(dossier);
@@ -4261,7 +4304,7 @@ export default function AdminDossiersPage() {
                 <span className="font-medium">Nouveau statut :</span> <span className="text-primary font-semibold">{getStatutLabel(showStatutModal.newStatut)}</span>
               </p>
             </div>
-            {showStatutModal.newStatut === 'en_cours' && (
+            {showStatutModal.newStatut === 'en_cours' && !DEFAULT_ADMIN_ETAPES_IDS.has(String(showStatutModal.newStatut)) && (
               <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/80 p-4">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
