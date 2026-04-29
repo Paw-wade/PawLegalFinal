@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { forumAPI } from '@/lib/api';
@@ -61,9 +61,29 @@ export default function ForumPage() {
   const [createStep, setCreateStep] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [openShareId, setOpenShareId] = useState<string | null>(null);
+  const shareMenuRef = useRef<HTMLDivElement | null>(null);
 
   const userRole = (session?.user as any)?.role || 'client';
   const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!shareMenuRef.current) return;
+      if (!shareMenuRef.current.contains(event.target as Node)) {
+        setOpenShareId(null);
+      }
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenShareId(null);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, []);
 
   // Débounce de la recherche pour éviter trop d'appels API
   useEffect(() => {
@@ -200,14 +220,14 @@ export default function ForumPage() {
   const copyThreadLink = async (thread: ForumThread) => {
     const url = getThreadUrl(thread);
     if (navigator?.clipboard) {
-      const message = `Vous êtes invité(e) à participer à cette discussion sur https://www.adapapers.fr/\nQuestion: ${getExcerpt(thread.body || thread.title || '')}\nLien: ${url}`;
+      const message = `Vous êtes invité(e) à participer à cette discussion sur ${url}\nQuestion: ${getExcerpt(thread.body || thread.title || '')}\nhttps://www.adapapers.fr/`;
       await navigator.clipboard.writeText(message);
     }
   };
 
   const shareThreadOnWhatsapp = (thread: ForumThread) => {
     const url = getThreadUrl(thread);
-    const text = `Vous êtes invité(e) à participer à cette discussion sur https://www.adapapers.fr/\nQuestion: ${getExcerpt(thread.body || thread.title || '')}\nLien: ${url}`;
+    const text = `Vous êtes invité(e) à participer à cette discussion sur ${url}\nQuestion: ${getExcerpt(thread.body || thread.title || '')}\nhttps://www.adapapers.fr/`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -527,27 +547,39 @@ export default function ForumPage() {
                           </div>
                         </div>
                         </Link>
-                        <details className="mt-2 relative inline-block w-fit">
-                          <summary className="list-none cursor-pointer px-2 py-1 text-xs rounded border border-green-300 text-green-700 hover:bg-green-50 inline-flex items-center gap-1">
+                        <div className="mt-2 relative inline-block w-fit" ref={openShareId === thread._id ? shareMenuRef : null}>
+                          <button
+                            type="button"
+                            onClick={() => setOpenShareId((prev) => (prev === thread._id ? null : thread._id))}
+                            className="list-none cursor-pointer px-2 py-1 text-xs rounded border border-green-300 text-green-700 hover:bg-green-50 inline-flex items-center gap-1"
+                          >
                             Partager
-                          </summary>
-                          <div className="absolute right-0 z-10 mt-1 min-w-[150px] rounded-md border border-gray-200 bg-white shadow-md p-1">
+                          </button>
+                          {openShareId === thread._id && (
+                          <div className="absolute left-1/2 -translate-x-1/2 z-20 mt-1 w-[min(85vw,220px)] rounded-md border border-gray-200 bg-white shadow-md p-1">
                             <button
                               type="button"
-                              onClick={() => void copyThreadLink(thread)}
+                              onClick={async () => {
+                                await copyThreadLink(thread);
+                                setOpenShareId(null);
+                              }}
                               className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100"
                             >
                               Copier le lien
                             </button>
                             <button
                               type="button"
-                              onClick={() => shareThreadOnWhatsapp(thread)}
+                              onClick={() => {
+                                shareThreadOnWhatsapp(thread);
+                                setOpenShareId(null);
+                              }}
                               className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100 text-green-700"
                             >
                               WhatsApp
                             </button>
                           </div>
-                        </details>
+                          )}
+                        </div>
                       </div>
                   ))}
                 </div>

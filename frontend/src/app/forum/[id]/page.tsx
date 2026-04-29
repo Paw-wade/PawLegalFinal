@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -79,6 +79,8 @@ export default function ForumThreadPage() {
   const [updatingThread, setUpdatingThread] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [verifyingPostId, setVerifyingPostId] = useState<string | null>(null);
+  const [openShareId, setOpenShareId] = useState<string | null>(null);
+  const shareMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [allThreads, setAllThreads] = useState<ForumThread[]>([]);
   const [loadingThreads, setLoadingThreads] = useState<boolean>(true);
@@ -88,6 +90,24 @@ export default function ForumThreadPage() {
   const currentUserId = (session?.user as any)?._id || (session?.user as any)?.id || null;
 
   const [isBookmarked, setIsBookmarked] = useState(false);
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!shareMenuRef.current) return;
+      if (!shareMenuRef.current.contains(event.target as Node)) {
+        setOpenShareId(null);
+      }
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenShareId(null);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, []);
 
   useEffect(() => {
     if (!threadId) return;
@@ -392,17 +412,23 @@ export default function ForumThreadPage() {
                             )}
                           </span>
                         </div>
-                        <details className="mt-2 relative inline-block w-fit">
-                          <summary className="list-none cursor-pointer px-2 py-1 text-xs rounded border border-green-300 text-green-700 hover:bg-green-50 inline-flex items-center gap-1">
+                        <div className="mt-2 relative inline-block w-fit" ref={openShareId === 'thread' ? shareMenuRef : null}>
+                          <button
+                            type="button"
+                            onClick={() => setOpenShareId((prev) => (prev === 'thread' ? null : 'thread'))}
+                            className="list-none cursor-pointer px-2 py-1 text-xs rounded border border-green-300 text-green-700 hover:bg-green-50 inline-flex items-center gap-1"
+                          >
                             Partager
-                          </summary>
-                          <div className="absolute right-0 z-10 mt-1 min-w-[150px] rounded-md border border-gray-200 bg-white shadow-md p-1">
+                          </button>
+                          {openShareId === 'thread' && (
+                          <div className="absolute left-1/2 -translate-x-1/2 z-20 mt-1 w-[min(85vw,220px)] rounded-md border border-gray-200 bg-white shadow-md p-1">
                             <button
                               type="button"
                               onClick={async () => {
                                 const url = getThreadUrl();
-                                const message = `Vous êtes invité(e) à participer à cette discussion sur https://www.adapapers.fr/\nQuestion: ${getExcerpt(thread.body || thread.title || '')}\nLien: ${url}`;
+                                const message = `Vous êtes invité(e) à participer à cette discussion sur ${url}\nQuestion: ${getExcerpt(thread.body || thread.title || '')}\nhttps://www.adapapers.fr/`;
                                 if (navigator?.clipboard) await navigator.clipboard.writeText(message);
+                                setOpenShareId(null);
                               }}
                               className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100"
                             >
@@ -410,17 +436,20 @@ export default function ForumThreadPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() =>
+                              onClick={() => {
                                 shareOnWhatsapp(
-                                  `Vous êtes invité(e) à participer à cette discussion sur https://www.adapapers.fr/\nQuestion: ${getExcerpt(thread.body || thread.title || '')}\nLien: ${getThreadUrl()}`
-                                )
-                              }
+                                  `Vous êtes invité(e) à participer à cette discussion sur ${getThreadUrl()}\nQuestion: ${getExcerpt(thread.body || thread.title || '')}\nhttps://www.adapapers.fr/`
+                                );
+                                setOpenShareId(null);
+                              }}
+                              
                               className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100 text-green-700"
                             >
                               WhatsApp
                             </button>
                           </div>
-                        </details>
+                          )}
+                        </div>
                       </div>
                       <div className="flex flex-col items-start sm:items-end gap-1 text-[10px] md:text-xs text-gray-700">
                         {/* Badges de statut visibles pour tout le monde */}
@@ -597,18 +626,24 @@ export default function ForumThreadPage() {
                                     )}
                                   </div>
                                 </div>
-                                <details className="mt-2 relative inline-block w-fit">
-                                  <summary className="list-none cursor-pointer px-2 py-1 text-xs rounded border border-green-300 text-green-700 hover:bg-green-50 inline-flex items-center gap-1">
+                                <div className="mt-2 relative inline-block w-fit" ref={openShareId === `post-${post._id}` ? shareMenuRef : null}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setOpenShareId((prev) => (prev === `post-${post._id}` ? null : `post-${post._id}`))}
+                                    className="list-none cursor-pointer px-2 py-1 text-xs rounded border border-green-300 text-green-700 hover:bg-green-50 inline-flex items-center gap-1"
+                                  >
                                     Partager
-                                  </summary>
-                                  <div className="absolute right-0 z-10 mt-1 min-w-[150px] rounded-md border border-gray-200 bg-white shadow-md p-1">
+                                  </button>
+                                  {openShareId === `post-${post._id}` && (
+                                  <div className="absolute left-1/2 -translate-x-1/2 z-20 mt-1 w-[min(85vw,220px)] rounded-md border border-gray-200 bg-white shadow-md p-1">
                                     <button
                                       type="button"
                                       onClick={async () => {
                                         const base = getThreadUrl();
                                         const url = `${base}#reponse-${post._id}`;
-                                        const message = `Vous êtes invité(e) à participer à cette discussion sur https://www.adapapers.fr/\nRéponse: ${getExcerpt(post.body || '')}\nLien: ${url}`;
+                                        const message = `Vous êtes invité(e) à participer à cette discussion sur ${url}\nRéponse: ${getExcerpt(post.body || '')}\nhttps://www.adapapers.fr/`;
                                         if (navigator?.clipboard) await navigator.clipboard.writeText(message);
+                                        setOpenShareId(null);
                                       }}
                                       className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100"
                                     >
@@ -616,17 +651,19 @@ export default function ForumThreadPage() {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() =>
+                                      onClick={() => {
                                         shareOnWhatsapp(
-                                          `Vous êtes invité(e) à participer à cette discussion sur https://www.adapapers.fr/\nRéponse: ${getExcerpt(post.body || '')}\nLien: ${getThreadUrl()}#reponse-${post._id}`
-                                        )
-                                      }
+                                          `Vous êtes invité(e) à participer à cette discussion sur ${getThreadUrl()}#reponse-${post._id}\nRéponse: ${getExcerpt(post.body || '')}\nhttps://www.adapapers.fr/`
+                                        );
+                                        setOpenShareId(null);
+                                      }}
                                       className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100 text-green-700"
                                     >
                                       WhatsApp
                                     </button>
                                   </div>
-                                </details>
+                                  )}
+                                </div>
                               </div>
                               {isAdmin && (
                                 <div className="flex flex-row sm:flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
