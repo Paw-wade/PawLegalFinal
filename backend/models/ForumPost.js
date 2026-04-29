@@ -14,7 +14,13 @@ const forumPostSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: false,
+  },
+  guestName: {
+    type: String,
+    trim: true,
+    maxlength: [120, 'Le nom ne peut pas dépasser 120 caractères'],
+    default: '',
   },
   createdAt: {
     type: Date,
@@ -32,6 +38,17 @@ const forumPostSchema = new mongoose.Schema({
     type: Date,
   },
   deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  isVerified: {
+    type: Boolean,
+    default: false,
+  },
+  verifiedAt: {
+    type: Date,
+  },
+  verifiedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },

@@ -15,7 +15,13 @@ const forumThreadSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: false,
+  },
+  guestName: {
+    type: String,
+    trim: true,
+    maxlength: [120, 'Le nom ne peut pas dépasser 120 caractères'],
+    default: '',
   },
   createdAt: {
     type: Date,

@@ -24,6 +24,7 @@ interface ForumThread {
     nom?: string;
     role?: string;
   };
+  guestName?: string;
 }
 
 interface ForumPost {
@@ -35,9 +36,17 @@ interface ForumPost {
     nom?: string;
     role?: string;
   };
+  guestName?: string;
   likes?: string[];
   likesCount?: number;
   liked?: boolean;
+  isVerified?: boolean;
+  verifiedAt?: string;
+  verifiedBy?: {
+    prenom?: string;
+    nom?: string;
+    role?: string;
+  };
 }
 
 interface ThreadResponse {
@@ -48,10 +57,10 @@ interface ThreadResponse {
   };
 }
 
-const getAuthorLabel = (user?: { prenom?: string; nom?: string; role?: string }) => {
-  if (!user) return 'Auteur anonyme';
+const getAuthorLabel = (user?: { prenom?: string; nom?: string; role?: string }, guestName?: string) => {
+  if (!user) return guestName || 'Auteur anonyme';
   const fullName = `${user.prenom || ''} ${user.nom || ''}`.trim();
-  return fullName || 'Auteur anonyme';
+  return fullName || guestName || 'Auteur anonyme';
 };
 
 export default function ForumThreadPage() {
@@ -65,9 +74,11 @@ export default function ForumThreadPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [replyBody, setReplyBody] = useState('');
+  const [replyGuestName, setReplyGuestName] = useState('');
   const [sending, setSending] = useState(false);
   const [updatingThread, setUpdatingThread] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [verifyingPostId, setVerifyingPostId] = useState<string | null>(null);
 
   const [allThreads, setAllThreads] = useState<ForumThread[]>([]);
   const [loadingThreads, setLoadingThreads] = useState<boolean>(true);
@@ -178,11 +189,15 @@ export default function ForumThreadPage() {
     try {
       setSending(true);
       setError(null);
-      const response = await forumAPI.replyToThread(threadId, { body: replyBody.trim() });
+      const response = await forumAPI.replyToThread(threadId, {
+        body: replyBody.trim(),
+        guestName: status === 'authenticated' ? undefined : replyGuestName.trim(),
+      });
       const created = response.data?.data as ForumPost;
       if (created) {
         setPosts((prev) => [...prev, created]);
         setReplyBody('');
+        setReplyGuestName('');
         try {
           await forumAPI.markThreadRead(threadId);
           if (typeof window !== 'undefined') {
@@ -198,6 +213,21 @@ export default function ForumThreadPage() {
     } finally {
       setSending(false);
     }
+  };
+
+  const getThreadUrl = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${origin}/forum/${threadId}`;
+  };
+
+  const getExcerpt = (raw: string, max = 180) => {
+    const normalized = (raw || '').replace(/\s+/g, ' ').trim();
+    if (normalized.length <= max) return normalized;
+    return `${normalized.slice(0, max).trimEnd()}...`;
+  };
+
+  const shareOnWhatsapp = (text: string) => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const handleAdminUpdateThread = async (updates: { status?: 'open' | 'closed' | 'archived' | 'resolved'; isPinned?: boolean }) => {
@@ -233,11 +263,40 @@ export default function ForumThreadPage() {
     }
   };
 
+  const handleAdminVerifyPost = async (postId: string, isVerified: boolean) => {
+    if (!postId) return;
+    try {
+      setVerifyingPostId(postId);
+      setError(null);
+      const response = await forumAPI.verifyPostAsAdmin(postId, isVerified);
+      const updated = response.data?.data;
+      if (updated) {
+        setPosts((prev) =>
+          prev.map((p) =>
+            p._id === postId
+              ? {
+                  ...p,
+                  isVerified: !!updated.isVerified,
+                  verifiedAt: updated.verifiedAt || undefined,
+                  verifiedBy: updated.verifiedBy || undefined,
+                }
+              : p
+          )
+        );
+      }
+    } catch (err) {
+      console.error('Erreur lors de la validation de la réponse (admin):', err);
+      setError("Impossible de mettre à jour l'état de validation.");
+    } finally {
+      setVerifyingPostId(null);
+    }
+  };
+
   return (
     <>
       <Header variant="home" />
       <main className="min-h-screen bg-gray-50">
-        <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
           <div className="mb-4">
             <Link
               href="/forum"
@@ -246,6 +305,28 @@ export default function ForumThreadPage() {
               ← Retour au forum
             </Link>
           </div>
+
+          {status !== 'authenticated' && (
+            <section className="mb-4 sm:mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <p className="text-sm text-gray-700">
+                Créez un compte pour être informé des réponses à cette discussion et des nouvelles discussions du forum.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  href="/auth/signup"
+                  className="inline-flex items-center justify-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-black transition-colors"
+                >
+                  Créer un compte
+                </Link>
+                <Link
+                  href="/auth/signin"
+                  className="inline-flex items-center justify-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Se connecter
+                </Link>
+              </div>
+            </section>
+          )}
 
           <div className="lg:grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)] lg:gap-6 items-start">
             {/* Colonne principale */}
@@ -259,28 +340,33 @@ export default function ForumThreadPage() {
               ) : (
                 <>
                   {/* En-tête de la discussion */}
-                  <section className="mb-6 bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-                    <div className="flex items-start justify-between gap-3">
+                  <section className="mb-4 sm:mb-6 rounded-xl border border-gray-200 bg-white shadow-sm p-4 sm:p-5">
+                    <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
+                        <div className="mb-2">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 border border-gray-200 text-[11px] font-semibold">
+                            Question principale
+                          </span>
+                        </div>
                         <div className="flex flex-wrap items-center gap-2 mb-2">
                           <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs border border-slate-200">
                             {getThemeLabel(thread.theme)}
                           </span>
-                          <h1 className="text-xl md:text-2xl font-semibold text-gray-900">
+                          <h1 className="text-xl md:text-2xl font-semibold text-gray-900 break-words">
                             {thread.title}
                           </h1>
                         </div>
-                        <p className="mt-2 text-sm text-gray-700">
+                        <p className="mt-2 text-sm sm:text-[15px] text-gray-800 leading-relaxed">
                           {thread.body}
                         </p>
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] md:text-xs text-gray-500">
-                          <span>
+                        <div className="mt-3 flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2 text-[11px] md:text-xs text-gray-500">
+                          <span className="break-words">
                             {thread.repliesCount || posts.length} réponse{(thread.repliesCount || posts.length) === 1 ? '' : 's'} •{' '}
                             {thread.viewsCount || 0} vue{thread.viewsCount === 1 ? '' : 's'}
                           </span>
-                          <span className="flex items-center gap-2">
-                            <span>
-                              Par {getAuthorLabel(thread.createdBy)} •{' '}
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="break-words">
+                              Par {getAuthorLabel(thread.createdBy, thread.guestName)} •{' '}
                               {thread.createdAt
                                 ? new Date(thread.createdAt).toLocaleDateString('fr-FR')
                                 : ''}
@@ -306,8 +392,37 @@ export default function ForumThreadPage() {
                             )}
                           </span>
                         </div>
+                        <details className="mt-2 relative inline-block w-fit">
+                          <summary className="list-none cursor-pointer px-2 py-1 text-xs rounded border border-green-300 text-green-700 hover:bg-green-50 inline-flex items-center gap-1">
+                            Partager
+                          </summary>
+                          <div className="absolute right-0 z-10 mt-1 min-w-[150px] rounded-md border border-gray-200 bg-white shadow-md p-1">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const url = getThreadUrl();
+                                const message = `Vous êtes invité(e) à participer à cette discussion sur https://www.adapapers.fr/\nQuestion: ${getExcerpt(thread.body || thread.title || '')}\nLien: ${url}`;
+                                if (navigator?.clipboard) await navigator.clipboard.writeText(message);
+                              }}
+                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100"
+                            >
+                              Copier le lien
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                shareOnWhatsapp(
+                                  `Vous êtes invité(e) à participer à cette discussion sur https://www.adapapers.fr/\nQuestion: ${getExcerpt(thread.body || thread.title || '')}\nLien: ${getThreadUrl()}`
+                                )
+                              }
+                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100 text-green-700"
+                            >
+                              WhatsApp
+                            </button>
+                          </div>
+                        </details>
                       </div>
-                      <div className="flex flex-col items-end gap-1 text-[10px] md:text-xs text-gray-700">
+                      <div className="flex flex-col items-start sm:items-end gap-1 text-[10px] md:text-xs text-gray-700">
                         {/* Badges de statut visibles pour tout le monde */}
                         <div className="flex flex-wrap gap-1 justify-end">
                           {thread.status === 'open' && (
@@ -338,7 +453,7 @@ export default function ForumThreadPage() {
                         </div>
                         {/* Actions admin sous les badges */}
                         {isAdmin && (
-                          <div className="mt-1 flex flex-wrap gap-1">
+                          <div className="mt-1 flex flex-wrap gap-1 justify-start sm:justify-end">
                             <button
                               type="button"
                               disabled={updatingThread}
@@ -392,15 +507,20 @@ export default function ForumThreadPage() {
                   </section>
 
                   {/* Liste des réponses */}
-                  <section className="mb-8 bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-                    <h2 className="text-sm md:text-base font-semibold mb-3">Réponses</h2>
+                  <section className="mb-6 sm:mb-8 bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5">
+                    <div className="mb-3 sm:mb-4 flex items-center justify-between gap-2">
+                      <h2 className="text-sm md:text-base font-semibold">Réponses</h2>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium">
+                        {posts.length} total
+                      </span>
+                    </div>
                     {posts.length === 0 ? (
                       <p className="text-sm text-gray-600">
                         Aucune réponse pour le moment. Soyez le premier à répondre.
                       </p>
                     ) : (
                       <div className="space-y-4">
-                        {posts.map((post) => {
+                        {posts.map((post, index) => {
                           const likesCount = post.likesCount ?? (post.likes ? post.likes.length : 0);
                           const hasLiked =
                             !!currentUserId &&
@@ -413,15 +533,21 @@ export default function ForumThreadPage() {
                           return (
                             <div
                               key={post._id}
-                              className="border border-gray-100 rounded-lg px-3 py-2 text-sm bg-gray-50 flex items-start justify-between gap-3"
+                              id={`reponse-${post._id}`}
+                              className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 flex flex-col sm:flex-row items-start justify-between gap-3"
                             >
                               <div className="flex-1 min-w-0">
-                                <p className="text-gray-800 whitespace-pre-line">
+                                <div className="mb-1.5">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-700 text-[10px] font-semibold">
+                                    Réponse #{index + 1}
+                                  </span>
+                                </div>
+                                <p className="text-gray-800 whitespace-pre-line break-words">
                                   {post.body}
                                 </p>
-                                <div className="mt-2 flex items-center justify-between text-[11px] text-gray-500">
-                                  <span>
-                                    Par {getAuthorLabel(post.createdBy)} •{' '}
+                                <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] text-gray-500">
+                                  <span className="break-words">
+                                    Par {getAuthorLabel(post.createdBy, post.guestName)} •{' '}
                                     {post.createdAt
                                       ? new Date(post.createdAt).toLocaleString('fr-FR', {
                                           dateStyle: 'short',
@@ -430,6 +556,11 @@ export default function ForumThreadPage() {
                                       : ''}
                                   </span>
                                   <div className="flex items-center gap-2">
+                                    {post.isVerified && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-semibold">
+                                        Vérifiée
+                                      </span>
+                                    )}
                                     {session && (
                                       <button
                                         type="button"
@@ -466,16 +597,60 @@ export default function ForumThreadPage() {
                                     )}
                                   </div>
                                 </div>
+                                <details className="mt-2 relative inline-block w-fit">
+                                  <summary className="list-none cursor-pointer px-2 py-1 text-xs rounded border border-green-300 text-green-700 hover:bg-green-50 inline-flex items-center gap-1">
+                                    Partager
+                                  </summary>
+                                  <div className="absolute right-0 z-10 mt-1 min-w-[150px] rounded-md border border-gray-200 bg-white shadow-md p-1">
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const base = getThreadUrl();
+                                        const url = `${base}#reponse-${post._id}`;
+                                        const message = `Vous êtes invité(e) à participer à cette discussion sur https://www.adapapers.fr/\nRéponse: ${getExcerpt(post.body || '')}\nLien: ${url}`;
+                                        if (navigator?.clipboard) await navigator.clipboard.writeText(message);
+                                      }}
+                                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100"
+                                    >
+                                      Copier le lien
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        shareOnWhatsapp(
+                                          `Vous êtes invité(e) à participer à cette discussion sur https://www.adapapers.fr/\nRéponse: ${getExcerpt(post.body || '')}\nLien: ${getThreadUrl()}#reponse-${post._id}`
+                                        )
+                                      }
+                                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-gray-100 text-green-700"
+                                    >
+                                      WhatsApp
+                                    </button>
+                                  </div>
+                                </details>
                               </div>
                               {isAdmin && (
-                                <button
-                                  type="button"
-                                  disabled={deletingPostId === post._id}
-                                  onClick={() => handleAdminDeletePost(post._id)}
-                                  className="text-[10px] text-red-600 hover:text-red-700 disabled:opacity-60"
-                                >
-                                  {deletingPostId === post._id ? 'Suppression...' : 'Supprimer'}
-                                </button>
+                                <div className="flex flex-row sm:flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
+                                  <button
+                                    type="button"
+                                    disabled={verifyingPostId === post._id}
+                                    onClick={() => handleAdminVerifyPost(post._id, !post.isVerified)}
+                                    className="text-[10px] text-emerald-700 hover:text-emerald-800 disabled:opacity-60"
+                                  >
+                                    {verifyingPostId === post._id
+                                      ? 'Mise à jour...'
+                                      : post.isVerified
+                                        ? 'Retirer Vérifiée'
+                                        : 'Marquer Vérifiée'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={deletingPostId === post._id}
+                                    onClick={() => handleAdminDeletePost(post._id)}
+                                    className="text-[10px] text-red-600 hover:text-red-700 disabled:opacity-60"
+                                  >
+                                    {deletingPostId === post._id ? 'Suppression...' : 'Supprimer'}
+                                  </button>
+                                </div>
                               )}
                             </div>
                           );
@@ -485,35 +660,30 @@ export default function ForumThreadPage() {
                   </section>
 
                   {/* Formulaire de réponse */}
-                  <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                  <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5">
                     <h2 className="text-sm md:text-base font-semibold mb-3">Répondre à cette discussion</h2>
                     {thread.status === 'resolved' || thread.status === 'closed' || thread.status === 'archived' ? (
                       <p className="text-sm text-gray-700">
                         Cette discussion est marquée comme {thread.status === 'resolved' ? 'résolue' : 'fermée'} et n&apos;accepte plus de nouvelles réponses.
                         {isAdmin && ' Vous pouvez la rouvrir via les actions administrateur ci-dessus.'}
                       </p>
-                    ) : status !== 'authenticated' ? (
-                      <div className="text-sm text-gray-700 space-y-3">
-                        <p>
-                          Vous devez être connecté pour répondre. Connectez-vous ou créez un compte pour participer à la discussion.
-                        </p>
-                        <div className="flex flex-wrap gap-3">
-                          <Link
-                            href="/auth/signin"
-                            className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 transition-colors"
-                          >
-                            Se connecter
-                          </Link>
-                          <Link
-                            href="/auth/signup"
-                            className="inline-flex items-center justify-center px-4 py-2 rounded-md border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
-                          >
-                            Créer un compte
-                          </Link>
-                        </div>
-                      </div>
                     ) : (
                       <form onSubmit={handleSendReply} className="space-y-3">
+                        {status !== 'authenticated' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Votre nom (optionnel)
+                            </label>
+                            <input
+                              type="text"
+                              value={replyGuestName}
+                              onChange={(e) => setReplyGuestName(e.target.value)}
+                              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                              maxLength={120}
+                              placeholder="Ex. : Awa"
+                            />
+                          </div>
+                        )}
                         <div>
                           <textarea
                             value={replyBody}
@@ -562,7 +732,7 @@ export default function ForumThreadPage() {
                           <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] text-slate-600 mr-1">
                             {getThemeLabel(t.theme)}
                           </span>
-                          <div className="truncate mt-0.5">{t.title}</div>
+                        <div className="break-words mt-0.5">{t.title}</div>
                           <div className="text-[11px] text-gray-500 flex justify-between gap-2">
                             <span>{t.repliesCount || 0} rep.</span>
                             <span>

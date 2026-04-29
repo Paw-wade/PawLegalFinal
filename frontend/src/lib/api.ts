@@ -1045,11 +1045,11 @@ export const forumAPI = {
     api.get(`/forum/threads/${id}`),
 
   // Créer une nouvelle discussion (theme requis : titre-sejour-etudiant, titre-sejour-salarie, regroupement-familial, demande-visa, autres)
-  createThread: (data: { title: string; body: string; theme?: string; tags?: string[] }) =>
+  createThread: (data: { title: string; body: string; theme?: string; tags?: string[]; guestName?: string }) =>
     api.post('/forum/threads', data),
 
   // Répondre à une discussion
-  replyToThread: (id: string, data: { body: string }) =>
+  replyToThread: (id: string, data: { body: string; guestName?: string }) =>
     api.post(`/forum/threads/${id}/posts`, data),
 
   // Admin - mettre à jour une discussion (statut / épinglage)
@@ -1059,6 +1059,10 @@ export const forumAPI = {
   // Admin - supprimer une réponse
   deletePostAsAdmin: (postId: string) =>
     api.delete(`/forum/posts/${postId}`),
+
+  // Admin - valider / dévalider une réponse
+  verifyPostAsAdmin: (postId: string, isVerified: boolean) =>
+    api.patch(`/forum/posts/${postId}/verify`, { isVerified }),
 
   // Aimer / retirer son like sur une réponse
   toggleLikePost: (postId: string) =>
