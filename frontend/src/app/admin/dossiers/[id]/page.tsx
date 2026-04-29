@@ -56,6 +56,7 @@ export default function AdminDossierDetailPage() {
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [documentRequests, setDocumentRequests] = useState<any[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [requestActionLoadingId, setRequestActionLoadingId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const [isExportingZip, setIsExportingZip] = useState(false);
@@ -224,6 +225,48 @@ export default function AdminDossierDetailPage() {
       console.error('Erreur lors du chargement des documents:', err);
     } finally {
       setIsLoadingDocuments(false);
+    }
+  };
+
+  const handleCancelDocumentRequest = async (requestId: string) => {
+    const confirmCancel = window.confirm('Confirmer l’annulation de cette demande de document ?');
+    if (!confirmCancel) return;
+
+    try {
+      setRequestActionLoadingId(requestId);
+      const response = await documentRequestsAPI.cancelRequest(requestId);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Impossible d’annuler la demande');
+      }
+      await loadDocumentRequests();
+    } catch (err: any) {
+      console.error('Erreur lors de l’annulation de la demande:', err);
+      alert(err.response?.data?.message || err.message || 'Erreur lors de l’annulation de la demande');
+    } finally {
+      setRequestActionLoadingId(null);
+    }
+  };
+
+  const handleDeleteReceivedDocument = async (request: any) => {
+    const requestId = request?._id || request?.id;
+    if (!requestId) return;
+
+    const confirmDelete = window.confirm('Supprimer le document reçu et remettre la demande en attente ?');
+    if (!confirmDelete) return;
+
+    try {
+      setRequestActionLoadingId(requestId);
+      const response = await documentRequestsAPI.removeReceivedDocument(requestId);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Impossible de supprimer le document reçu');
+      }
+      await loadDocumentRequests();
+      await loadDocuments();
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression du document reçu:', err);
+      alert(err.response?.data?.message || err.message || 'Erreur lors de la suppression du document reçu');
+    } finally {
+      setRequestActionLoadingId(null);
     }
   };
 
@@ -1304,12 +1347,38 @@ export default function AdminDossierDetailPage() {
                         <span className={`inline-block mt-2 px-2 py-1 rounded text-xs font-semibold ${
                           request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                           request.status === 'received' ? 'bg-green-100 text-green-800' :
+                          request.status === 'cancelled' ? 'bg-gray-200 text-gray-700' :
                           'bg-blue-100 text-blue-800'
                         }`}>
                           {request.status === 'pending' ? 'En attente' :
                            request.status === 'received' ? '✅ Document reçu' :
+                           request.status === 'cancelled' ? 'Annulée' :
                            'Envoyé'}
                         </span>
+
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {request.status === 'pending' && (
+                            <Button
+                              variant="outline"
+                              className="text-xs h-8"
+                              disabled={requestActionLoadingId === (request._id || request.id)}
+                              onClick={() => handleCancelDocumentRequest(request._id || request.id)}
+                            >
+                              {requestActionLoadingId === (request._id || request.id) ? 'Annulation...' : 'Annuler la demande'}
+                            </Button>
+                          )}
+
+                          {request.status === 'received' && request.document && (
+                            <Button
+                              variant="outline"
+                              className="text-xs h-8 border-red-200 text-red-700 hover:bg-red-50"
+                              disabled={requestActionLoadingId === (request._id || request.id)}
+                              onClick={() => handleDeleteReceivedDocument(request)}
+                            >
+                              {requestActionLoadingId === (request._id || request.id) ? 'Suppression...' : 'Supprimer le document reçu'}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -113,9 +113,7 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
       const skipClientPing =
         (changes.skipClientEtapesOnlyNotify === true && userInfo.role === 'client') ||
         (changes.skipClientTarificationOnlyNotify === true && userInfo.role === 'client') ||
-        (changes.onlyAssignmentChanged === true &&
-          userInfo.role === 'client' &&
-          changes.newAssignedTo);
+        (changes.onlyAssignmentChanged === true && userInfo.role === 'client');
       const skipClientSmsBecauseStandby =
         userInfo.role === 'client' && !!dossier.isStandby;
 
@@ -165,32 +163,7 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
     
     console.log(`✅ Notifications envoyées à ${usersToNotify.length} utilisateur(s) pour la modification du dossier ${dossier._id}`);
 
-    // Client : notif dédiée quand un référent (assignedTo) est défini ou modifié
-    const oldA = changes.oldAssignedTo != null ? String(changes.oldAssignedTo) : '';
-    const newA = changes.newAssignedTo != null ? String(changes.newAssignedTo) : '';
-    const assignmentChanged = oldA !== newA;
-    if (assignmentChanged && newA && dossier.user) {
-      const clientId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
-      let assigneeLabel = "un membre de l'équipe";
-      if (dossier.assignedTo) {
-        const at = dossier.assignedTo;
-        const name = `${at.firstName || ''} ${at.lastName || ''}`.trim();
-        if (name) assigneeLabel = name;
-        else if (at.email) assigneeLabel = at.email;
-      }
-      await createNotification(
-        clientId,
-        'dossier_assigned',
-        'Référent assigné à votre dossier',
-        `Votre dossier « ${dossierTitle} » est suivi par ${assigneeLabel}.`,
-        `/client/dossiers/${dossier._id}`,
-        {
-          dossierId: dossier._id.toString(),
-          assignedTo: newA,
-          modifiedBy: modifier._id ? modifier._id.toString() : modifier.id.toString(),
-        }
-      );
-    }
+    // NOTE métier : les changements d'assignation ne doivent pas être notifiés au client.
   } catch (error) {
     console.error('❌ Erreur lors de la notification de modification:', error);
     // Ne pas bloquer la modification si la notification échoue
@@ -322,6 +295,11 @@ router.post(
         assignedTo: assignedTo || null,
         rendezVous: rendezVousId ? [rendezVousId] : []
       });
+
+      if (assignedTo) {
+        dossier.teamMembers = Array.from(new Set([...(dossier.teamMembers || []).map((id) => id.toString()), assignedTo.toString()]));
+        await dossier.save();
+      }
 
       // Si le dossier est créé depuis un rendez-vous, lier le rendez-vous au dossier
       if (rendezVousId) {
@@ -829,6 +807,11 @@ router.post(
         rendezVous: rendezVousId ? [rendezVousId] : []
       });
 
+      if (assignedTo) {
+        dossier.teamMembers = Array.from(new Set([...(dossier.teamMembers || []).map((id) => id.toString()), assignedTo.toString()]));
+        await dossier.save();
+      }
+
       // Logger l'action
       try {
         const Log = require('../models/Log');
@@ -950,23 +933,7 @@ router.post(
             { dossierId: dossier._id.toString(), titre: normalizedTitre || 'Sans titre' }
           );
 
-          if (dossier.assignedTo) {
-            const assignee = await User.findById(dossier.assignedTo).select('firstName lastName email');
-            const assigneeLabel = assignee
-              ? `${assignee.firstName || ''} ${assignee.lastName || ''}`.trim() || assignee.email || 'Votre équipe'
-              : 'Votre équipe';
-            await createNotification(
-              targetUserId,
-              'dossier_assigned',
-              'Référent assigné à votre dossier',
-              `Le cabinet vous a assigné un référent pour le dossier « ${normalizedTitre || 'Sans titre'} » : ${assigneeLabel}.`,
-              `/client/dossiers/${dossier._id}`,
-              {
-                dossierId: dossier._id.toString(),
-                assignedTo: dossier.assignedTo.toString(),
-              }
-            );
-          }
+          // NOTE métier : pas de notification client sur l'assignation du dossier.
         }
       }
 
@@ -2627,6 +2594,7 @@ router.put(
 
       // Gérer l'assignation
       if (assignedTo !== undefined) {
+        const previousAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
         if (assignedTo === '' || assignedTo === null) {
           dossier.assignedTo = null;
         } else {
@@ -2645,6 +2613,22 @@ router.put(
             });
           }
           dossier.assignedTo = assignedTo;
+          // Un référent assigné doit aussi faire partie de l'équipe dossier.
+          const memberIds = (dossier.teamMembers || []).map((id) => id.toString());
+          if (!memberIds.includes(assignedTo.toString())) {
+            dossier.teamMembers = [...(dossier.teamMembers || []), assignedTo];
+          }
+        }
+
+        const nextAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
+        if (previousAssignedTo !== nextAssignedTo) {
+          dossier.assignmentHistory = dossier.assignmentHistory || [];
+          dossier.assignmentHistory.push({
+            from: previousAssignedTo,
+            to: nextAssignedTo,
+            changedBy: req.user.id,
+            changedAt: new Date()
+          });
         }
       }
 

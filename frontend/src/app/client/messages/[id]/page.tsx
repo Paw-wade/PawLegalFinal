@@ -115,19 +115,12 @@ export default function ClientMessageDetailPage() {
         }
 
         const userId = (session?.user as any)?.id?.toString?.();
-        const isDestinataire = fetchedMessage.destinataires?.some(
-          (d: any) => (d?._id?.toString?.() || d?.toString?.()) === userId
-        );
-        const isEnCopie = fetchedMessage.copie?.some(
-          (c: any) => (c?._id?.toString?.() || c?.toString?.()) === userId
-        );
-        const canMark = !!(userId && (isDestinataire || isEnCopie));
         const isRead = fetchedMessage.lu?.some((l: any) => {
           const luUserId = l?.user?._id?.toString?.() || l?.user?.toString?.();
           return luUserId === userId;
         });
 
-        if (canMark && !isRead) {
+        if (userId && !isRead) {
           setMessage((prev: any) => {
             if (!prev) return prev;
             const alreadyRead = prev.lu?.some((l: any) => {

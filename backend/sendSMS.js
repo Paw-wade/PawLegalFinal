@@ -310,6 +310,47 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
     type !== 'password_reset_temp' &&
     type !== 'otp';
 
+  // Règle métier: pour "nouveau message", jamais de SMS client.
+  // On tente le push si possible, puis on s'arrête sans fallback SMS.
+  if (type === 'message_received') {
+    try {
+      if (options.userId) {
+        const pushPayload = {
+          title: resolvePushTitle(type, data),
+          body: message,
+          url: resolvePushUrl(type, data, options),
+          type
+        };
+        const pushResult = await sendPushToUser(options.userId, pushPayload);
+        return {
+          success: true,
+          skipped: true,
+          reason: pushResult?.sent > 0 ? 'push_sent_sms_skipped' : 'push_unavailable_sms_skipped',
+          pushSent: pushResult?.sent || 0,
+          message: pushResult?.sent > 0
+            ? 'Notification push envoyée; SMS ignoré.'
+            : 'Push indisponible; SMS ignoré selon la règle métier.'
+        };
+      }
+      return {
+        success: true,
+        skipped: true,
+        reason: 'sms_disabled_for_message_received',
+        pushSent: 0,
+        message: 'SMS désactivé pour les notifications de nouveau message.'
+      };
+    } catch (pushError) {
+      console.error('⚠️ Échec push (message_received), SMS tout de même ignoré:', pushError?.message || pushError);
+      return {
+        success: true,
+        skipped: true,
+        reason: 'push_error_sms_skipped',
+        pushSent: 0,
+        message: 'Erreur push; SMS ignoré selon la règle métier.'
+      };
+    }
+  }
+
   if (shouldPreferPush) {
     try {
       const pushPayload = {

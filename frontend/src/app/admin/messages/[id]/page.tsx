@@ -61,6 +61,7 @@ export default function AdminMessageDetailPage() {
   const [messageNotifications, setMessageNotifications] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [showReplyModal, setShowReplyModal] = useState(false);
+  const [replyToMessage, setReplyToMessage] = useState<any>(null);
   const [showCreateDossierModal, setShowCreateDossierModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreatingDossier, setIsCreatingDossier] = useState(false);
@@ -112,6 +113,29 @@ export default function AdminMessageDetailPage() {
       }
     }
   }, [message]);
+
+  const openReplyForMessage = (targetMsg: any) => {
+    const currentUserId = (session?.user as any)?.id?.toString?.() || '';
+    const targetExpediteurId = targetMsg?.expediteur?._id?.toString?.() || targetMsg?.expediteur?.id?.toString?.() || '';
+
+    let defaultDestinataire = targetExpediteurId;
+    if (targetExpediteurId === currentUserId) {
+      const firstOtherDest = (targetMsg?.destinataires || []).find((d: any) => {
+        const dId = d?._id?.toString?.() || d?.toString?.();
+        return dId && dId !== currentUserId;
+      });
+      defaultDestinataire = firstOtherDest?._id?.toString?.() || firstOtherDest?.toString?.() || '';
+    }
+
+    setReplyToMessage(targetMsg);
+    setReplyData({
+      sujet: `Re: ${targetMsg?.sujet || message?.sujet || ''}`,
+      contenu: '',
+      destinataire: defaultDestinataire,
+      copie: [],
+    });
+    setShowReplyModal(true);
+  };
 
   const loadMessage = async () => {
     if (!messageId) return;
@@ -193,20 +217,12 @@ export default function AdminMessageDetailPage() {
             }
           }
         } else {
-          // Pour les messages internes, uniquement si l'utilisateur est destinataire ou en copie
-          const isDestinataire = fetchedMessage.destinataires?.some(
-            (d: any) => (d?._id?.toString?.() || d?.toString?.()) === userId
-          );
-          const isEnCopie = fetchedMessage.copie?.some(
-            (c: any) => (c?._id?.toString?.() || c?.toString?.()) === userId
-          );
-          const canMark = !!(userId && (isDestinataire || isEnCopie));
           const isRead = fetchedMessage.lu?.some((l: any) => {
             const luUserId = l?.user?._id?.toString?.() || l?.user?.toString?.();
             return luUserId === userId;
           });
 
-          if (canMark && !isRead) {
+          if (userId && !isRead) {
             // Supprimer le badge "Nouveau" immédiatement côté UI
             setMessage((prev: any) => {
               if (!prev) return prev;
@@ -265,8 +281,13 @@ export default function AdminMessageDetailPage() {
     setIsSubmitting(true);
     setError(null);
 
-    if (!replyData.destinataire) {
-      setError('Veuillez sélectionner un destinataire');
+    const autoDestinataire =
+      replyToMessage?.expediteur?._id?.toString?.() ||
+      replyToMessage?.expediteur?.id?.toString?.() ||
+      replyData.destinataire;
+
+    if (!autoDestinataire) {
+      setError('Impossible de déterminer automatiquement le destinataire de la réponse');
       setIsSubmitting(false);
       return;
     }
@@ -275,13 +296,13 @@ export default function AdminMessageDetailPage() {
       const formDataToSend = new FormData();
       formDataToSend.append('sujet', replyData.sujet);
       formDataToSend.append('contenu', replyData.contenu);
-      formDataToSend.append('destinataire', replyData.destinataire);
+      formDataToSend.append('destinataire', autoDestinataire);
       replyData.copie.forEach(cc => {
         formDataToSend.append('copie', cc);
       });
 
-      // Le message parent est le message auquel on répond
-      const messageParentId = message._id || message.id;
+      // Le message parent est le message sélectionné dans le fil (ou fallback message courant)
+      const messageParentId = replyToMessage?._id || replyToMessage?.id || message._id || message.id;
       if (messageParentId) {
         formDataToSend.append('messageParent', messageParentId);
       }
@@ -304,6 +325,7 @@ export default function AdminMessageDetailPage() {
       if (response.data.success) {
         alert('Réponse envoyée avec succès !');
         setShowReplyModal(false);
+        setReplyToMessage(null);
         setReplyData({ sujet: '', contenu: '', destinataire: '', copie: [] });
         setAttachments([]);
         // Recharger le message pour voir les notifications
@@ -413,7 +435,7 @@ export default function AdminMessageDetailPage() {
           </Link>
           <div className="flex gap-2">
           {isReceived && (
-            <Button onClick={() => setShowReplyModal(true)}>
+            <Button onClick={() => openReplyForMessage(message)}>
               Répondre
             </Button>
           )}
@@ -526,6 +548,14 @@ export default function AdminMessageDetailPage() {
                           </div>
                         )}
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openReplyForMessage(msg)}
+                        className="ml-3 shrink-0"
+                      >
+                        Répondre
+                      </Button>
                     </div>
                     
                     <div className="mb-4">
@@ -810,7 +840,7 @@ export default function AdminMessageDetailPage() {
             <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
                 <h2 className="text-2xl font-bold">Répondre</h2>
-                <button onClick={() => setShowReplyModal(false)} className="text-muted-foreground hover:text-foreground text-2xl leading-none">×</button>
+                <button onClick={() => { setShowReplyModal(false); setReplyToMessage(null); }} className="text-muted-foreground hover:text-foreground text-2xl leading-none">×</button>
               </div>
               <form onSubmit={handleReply} className="p-6 space-y-4">
                 {error && (
@@ -819,23 +849,12 @@ export default function AdminMessageDetailPage() {
                   </div>
                 )}
 
-                <div>
-                  <Label htmlFor="reply-destinataire">Destinataire *</Label>
-                  <select
-                    id="reply-destinataire"
-                    value={replyData.destinataire}
-                    onChange={(e) => setReplyData({ ...replyData, destinataire: e.target.value })}
-                    required
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">Sélectionner un destinataire</option>
-                    {expediteur && (
-                      <option value={expediteur._id || expediteur.id}>
-                        {expediteur.firstName} {expediteur.lastName} ({expediteur.email})
-                      </option>
-                    )}
-                  </select>
-                </div>
+                {replyToMessage && (
+                  <div className="p-3 rounded-md border border-primary/20 bg-primary/5 text-sm">
+                    <span className="font-semibold">Réponse automatique à :</span>{' '}
+                    {replyToMessage?.expediteur?.firstName} {replyToMessage?.expediteur?.lastName} ({replyToMessage?.expediteur?.email})
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="reply-sujet">Sujet *</Label>
@@ -892,10 +911,10 @@ export default function AdminMessageDetailPage() {
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button type="button" variant="outline" onClick={() => setShowReplyModal(false)} disabled={isSubmitting}>
+                  <Button type="button" variant="outline" onClick={() => { setShowReplyModal(false); setReplyToMessage(null); }} disabled={isSubmitting}>
                     Annuler
                   </Button>
-                  <Button type="submit" disabled={isSubmitting || !replyData.destinataire}>
+                  <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? 'Envoi...' : 'Envoyer la réponse'}
                   </Button>
                 </div>

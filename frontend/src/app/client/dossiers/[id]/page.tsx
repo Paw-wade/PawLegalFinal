@@ -1175,54 +1175,63 @@ export default function DossierDetailPage() {
                 <p className="text-sm text-muted-foreground">Aucun document</p>
               ) : (
                 <div className="space-y-2">
-                  {documents.map((doc: any) => (
-                    <div
-                      key={doc._id || doc.id}
-                      className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
-                    >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="text-lg flex-shrink-0">📄</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{doc.nom}</p>
+                  {documents.map((doc: any) => {
+                    const isConfidentialForClient = !!doc?.isConfidentialForClient || doc?.visibleToClient === false;
+                    return (
+                      <div
+                        key={doc._id || doc.id}
+                        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span className="text-lg flex-shrink-0">📄</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{doc.nom}</p>
+                          </div>
                         </div>
+                        {isConfidentialForClient ? (
+                          <div className="text-xs font-semibold text-red-700">
+                            Accès non autorisé à ce document
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                              variant="outline"
+                              className="text-xs min-h-[40px] flex-1 sm:flex-none min-w-0"
+                              onClick={() => {
+                                setSelectedDocumentForPreview(doc);
+                                setShowDocumentPreviewModal(true);
+                              }}
+                            >
+                              👁️ Voir
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="text-xs min-h-[40px] flex-1 sm:flex-none min-w-0"
+                              onClick={async () => {
+                                try {
+                                  const response = await documentsAPI.downloadDocument(doc._id || doc.id);
+                                  const blob = new Blob([response.data]);
+                                  const url = window.URL.createObjectURL(blob);
+                                  const link = document.createElement('a');
+                                  link.href = url;
+                                  link.download = doc.nom;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  window.URL.revokeObjectURL(url);
+                                } catch (error) {
+                                  console.error('Erreur lors du téléchargement:', error);
+                                  alert('Erreur lors du téléchargement du document');
+                                }
+                              }}
+                            >
+                              ⬇️ Télécharger
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Button
-                          variant="outline"
-                          className="text-xs min-h-[40px] flex-1 sm:flex-none min-w-0"
-                          onClick={() => {
-                            setSelectedDocumentForPreview(doc);
-                            setShowDocumentPreviewModal(true);
-                          }}
-                        >
-                          👁️ Voir
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="text-xs min-h-[40px] flex-1 sm:flex-none min-w-0"
-                          onClick={async () => {
-                            try {
-                              const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                              const blob = new Blob([response.data]);
-                              const url = window.URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.href = url;
-                              link.download = doc.nom;
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                              window.URL.revokeObjectURL(url);
-                            } catch (error) {
-                              console.error('Erreur lors du téléchargement:', error);
-                              alert('Erreur lors du téléchargement du document');
-                            }
-                          }}
-                        >
-                          ⬇️ Télécharger
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
