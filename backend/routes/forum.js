@@ -1,5 +1,6 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const jwt = require('jsonwebtoken');
 
 const ForumThread = require('../models/ForumThread');
 const ForumPost = require('../models/ForumPost');
@@ -10,10 +11,34 @@ const { protect, authorize } = require('../middleware/auth');
 const router = express.Router();
 
 const optionalProtect = (req, res, next) => {
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-    return protect(req, res, next);
+  try {
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      const token = req.headers.authorization.split(' ')[1];
+      if (!token) return next();
+
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-here');
+        if (decoded?.id) {
+          return User.findById(decoded.id)
+            .select('-password')
+            .lean()
+            .then((dbUser) => {
+              if (dbUser && dbUser.isActive) {
+                req.user = { ...dbUser, id: String(dbUser._id) };
+              }
+              return next();
+            })
+            .catch(() => next());
+        }
+      } catch {
+        // Token invalide/expiré: on continue en mode invité pour les routes publiques forum.
+        return next();
+      }
+    }
+    return next();
+  } catch {
+    return next();
   }
-  return next();
 };
 
 // Helpers
@@ -31,12 +56,48 @@ const THEMES = ['titre-sejour-etudiant', 'titre-sejour-salarie', 'regroupement-f
 // Filtres statut autorisés
 const STATUS_FILTERS = ['pinned', 'resolved', 'archived'];
 
+const getForumLikeKey = (req) => {
+  if (req.user?.id) {
+    return `user:${req.user.id.toString()}`;
+  }
+  const rawVisitorId = req.headers['x-forum-visitor-id'];
+  const visitorId = Array.isArray(rawVisitorId) ? rawVisitorId[0] : rawVisitorId;
+  const normalized = typeof visitorId === 'string' ? visitorId.trim() : '';
+  if (/^v_[A-Za-z0-9_-]{8,120}$/.test(normalized)) {
+    return `guest:${normalized}`;
+  }
+  return null;
+};
+
+const decorateThreadWithLikeState = (threadDoc, actorKey) => {
+  const data = threadDoc?.toObject ? threadDoc.toObject() : threadDoc;
+  const likedByKeys = Array.isArray(data?.likedByKeys) ? data.likedByKeys : [];
+  return {
+    ...data,
+    likesCount: likedByKeys.length,
+    liked: !!actorKey && likedByKeys.includes(actorKey),
+  };
+};
+
+const decoratePostWithLikeState = (postDoc, actorKey) => {
+  const data = postDoc?.toObject ? postDoc.toObject() : postDoc;
+  const likedByKeys = Array.isArray(data?.likedByKeys) ? data.likedByKeys : [];
+  const legacyLikes = Array.isArray(data?.likes) ? data.likes : [];
+  const actorUserId = actorKey && actorKey.startsWith('user:') ? actorKey.slice(5) : '';
+  const hasLegacyLike = !!actorUserId && legacyLikes.some((id) => id?.toString?.() === actorUserId);
+  return {
+    ...data,
+    likesCount: likedByKeys.length + legacyLikes.length,
+    liked: (!!actorKey && likedByKeys.includes(actorKey)) || hasLegacyLike,
+  };
+};
+
 // GET /api/forum/threads - Liste des discussions (publique)
 // Options :
 // - ?theme=xxx
 // - ?statusFilter=pinned|resolved|archived
 // - ?q=mot-clé (recherche dans titre, corps et réponses)
-router.get('/threads', async (req, res) => {
+router.get('/threads', optionalProtect, async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
@@ -108,9 +169,12 @@ router.get('/threads', async (req, res) => {
       ForumThread.countDocuments(filter),
     ]);
 
+    const actorKey = getForumLikeKey(req);
+    const threadsWithLikes = threads.map((thread) => decorateThreadWithLikeState(thread, actorKey));
+
     res.json({
       success: true,
-      data: threads,
+      data: threadsWithLikes,
       page,
       totalPages: Math.ceil(total / limit),
       total,
@@ -186,7 +250,7 @@ router.post(
 );
 
 // GET /api/forum/threads/:id - Détails d'une discussion + premiers posts (public)
-router.get('/threads/:id', async (req, res) => {
+router.get('/threads/:id', optionalProtect, async (req, res) => {
   try {
     const threadId = req.params.id;
 
@@ -204,13 +268,18 @@ router.get('/threads/:id', async (req, res) => {
       .sort({ createdAt: 1 })
       .limit(50)
       .populate('createdBy', 'prenom nom role')
-      .populate('verifiedBy', 'prenom nom role');
+      .populate('verifiedBy', 'prenom nom role')
+      .populate('rejectedBy', 'prenom nom role');
+
+    const actorKey = getForumLikeKey(req);
+    const threadWithLikes = decorateThreadWithLikeState(thread, actorKey);
+    const postsWithLikes = posts.map((post) => decoratePostWithLikeState(post, actorKey));
 
     res.json({
       success: true,
       data: {
-        thread,
-        posts,
+        thread: threadWithLikes,
+        posts: postsWithLikes,
       },
     });
   } catch (error) {
@@ -226,6 +295,7 @@ router.post(
   [
     body('body').isString().isLength({ min: 2 }).withMessage('Le contenu doit contenir au moins 2 caractères'),
     body('guestName').optional().isString().isLength({ max: 120 }).withMessage('Nom invité invalide'),
+    body('parentPostId').optional().isMongoId().withMessage('parentPostId invalide'),
   ],
   handleValidationErrors,
   async (req, res) => {
@@ -234,6 +304,8 @@ router.post(
       const { body: content } = req.body;
       const guestName = (req.body.guestName || '').toString().trim();
       const authorId = req.user?.id || null;
+      const parentPostIdRaw = req.body.parentPostId;
+      const parentPostId = typeof parentPostIdRaw === 'string' && parentPostIdRaw.trim() ? parentPostIdRaw.trim() : null;
 
       const thread = await ForumThread.findById(threadId);
       if (!thread) {
@@ -248,8 +320,24 @@ router.post(
         });
       }
 
+      let parentPost = null;
+      if (parentPostId) {
+        parentPost = await ForumPost.findOne({
+          _id: parentPostId,
+          thread: threadId,
+          isDeleted: false,
+        }).select('_id');
+        if (!parentPost) {
+          return res.status(400).json({
+            success: false,
+            message: 'La réponse parente est introuvable.',
+          });
+        }
+      }
+
       const post = await ForumPost.create({
         thread: threadId,
+        parentPost: parentPost ? parentPost._id : null,
         body: content,
         createdBy: authorId,
         guestName: authorId ? '' : (guestName || 'Visiteur'),
@@ -396,39 +484,89 @@ router.patch(
   authorize('admin', 'superadmin'),
   [
     body('isVerified')
+      .optional()
       .isBoolean()
       .withMessage("Le champ isVerified doit être un booléen"),
+    body('isRejected')
+      .optional()
+      .isBoolean()
+      .withMessage("Le champ isRejected doit être un booléen"),
   ],
   handleValidationErrors,
   async (req, res) => {
     try {
       const postId = req.params.id;
-      const { isVerified } = req.body;
+      const hasIsVerified = typeof req.body.isVerified === 'boolean';
+      const hasIsRejected = typeof req.body.isRejected === 'boolean';
+      const { isVerified, isRejected } = req.body;
+
+      if (!hasIsVerified && !hasIsRejected) {
+        return res.status(400).json({
+          success: false,
+          message: "Veuillez fournir isVerified ou isRejected.",
+        });
+      }
+      if (hasIsVerified && hasIsRejected && isVerified && isRejected) {
+        return res.status(400).json({
+          success: false,
+          message: "Une réponse ne peut pas être approuvée et désapprouvée en même temps.",
+        });
+      }
 
       const post = await ForumPost.findById(postId);
       if (!post || post.isDeleted) {
         return res.status(404).json({ success: false, message: 'Réponse introuvable' });
       }
 
-      post.isVerified = isVerified;
-      if (isVerified) {
+      if (hasIsVerified) {
+        post.isVerified = isVerified;
+      }
+      if (hasIsRejected) {
+        post.isRejected = isRejected;
+      }
+
+      if (post.isVerified) {
         post.verifiedAt = new Date();
         post.verifiedBy = req.user._id;
       } else {
         post.verifiedAt = null;
         post.verifiedBy = null;
       }
+      if (post.isRejected) {
+        post.rejectedAt = new Date();
+        post.rejectedBy = req.user._id;
+      } else {
+        post.rejectedAt = null;
+        post.rejectedBy = null;
+      }
+
+      // Un seul état de modération actif à la fois.
+      if (post.isVerified && post.isRejected) {
+        if (hasIsVerified && !hasIsRejected) {
+          post.isRejected = false;
+          post.rejectedAt = null;
+          post.rejectedBy = null;
+        } else {
+          post.isVerified = false;
+          post.verifiedAt = null;
+          post.verifiedBy = null;
+        }
+      }
 
       await post.save();
       await post.populate('verifiedBy', 'prenom nom role');
+      await post.populate('rejectedBy', 'prenom nom role');
 
       return res.json({
         success: true,
         data: {
           _id: post._id,
           isVerified: !!post.isVerified,
+          isRejected: !!post.isRejected,
           verifiedAt: post.verifiedAt || null,
           verifiedBy: post.verifiedBy || null,
+          rejectedAt: post.rejectedAt || null,
+          rejectedBy: post.rejectedBy || null,
         },
       });
     } catch (error) {
@@ -439,24 +577,35 @@ router.patch(
 );
 
 // POST /api/forum/posts/:id/like - Aimer / retirer son like sur une réponse
-router.post('/posts/:id/like', protect, async (req, res) => {
+router.post('/posts/:id/like', optionalProtect, async (req, res) => {
   try {
     const postId = req.params.id;
-    const userId = req.user.id;
+    const actorKey = getForumLikeKey(req);
+    if (!actorKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant de visiteur manquant. Rechargez la page.',
+      });
+    }
 
     const post = await ForumPost.findById(postId);
     if (!post || post.isDeleted) {
       return res.status(404).json({ success: false, message: 'Réponse introuvable' });
     }
 
-    const hasLiked = post.likes?.some((id) => id.toString() === userId.toString());
+    const likedByKeys = Array.isArray(post.likedByKeys) ? post.likedByKeys : [];
+    const legacyLikes = Array.isArray(post.likes) ? post.likes : [];
+    const actorUserId = actorKey.startsWith('user:') ? actorKey.slice(5) : '';
+    const hasLegacyLike = !!actorUserId && legacyLikes.some((id) => id?.toString?.() === actorUserId);
+    const hasLiked = likedByKeys.includes(actorKey) || hasLegacyLike;
 
     if (hasLiked) {
-      // Retirer le like
-      post.likes = post.likes.filter((id) => id.toString() !== userId.toString());
+      post.likedByKeys = likedByKeys.filter((key) => key !== actorKey);
+      if (hasLegacyLike) {
+        post.likes = legacyLikes.filter((id) => id?.toString?.() !== actorUserId);
+      }
     } else {
-      // Ajouter le like
-      post.likes = [...(post.likes || []), userId];
+      post.likedByKeys = [...likedByKeys, actorKey];
     }
 
     await post.save();
@@ -470,12 +619,50 @@ router.post('/posts/:id/like', protect, async (req, res) => {
         createdBy: post.createdBy,
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
-        likesCount: (post.likes || []).length,
+        likesCount: (post.likedByKeys || []).length + (post.likes || []).length,
         liked: !hasLiked,
       },
     });
   } catch (error) {
     console.error('Erreur lors du like de la réponse:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// POST /api/forum/threads/:id/like - Aimer / retirer son like sur une discussion (public)
+router.post('/threads/:id/like', optionalProtect, async (req, res) => {
+  try {
+    const threadId = req.params.id;
+    const actorKey = getForumLikeKey(req);
+    if (!actorKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant de visiteur manquant. Rechargez la page.',
+      });
+    }
+
+    const thread = await ForumThread.findById(threadId);
+    if (!thread) {
+      return res.status(404).json({ success: false, message: 'Discussion introuvable' });
+    }
+
+    const likedByKeys = Array.isArray(thread.likedByKeys) ? thread.likedByKeys : [];
+    const hasLiked = likedByKeys.includes(actorKey);
+    thread.likedByKeys = hasLiked
+      ? likedByKeys.filter((key) => key !== actorKey)
+      : [...likedByKeys, actorKey];
+    await thread.save();
+
+    return res.json({
+      success: true,
+      data: {
+        _id: thread._id,
+        likesCount: (thread.likedByKeys || []).length,
+        liked: !hasLiked,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur lors du like de la discussion:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
