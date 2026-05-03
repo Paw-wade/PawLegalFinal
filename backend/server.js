@@ -25,6 +25,16 @@ app.use(
       return callback(null, false);
     },
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+      'x-forum-visitor-id',
+    ],
+    maxAge: 86400,
   })
 );
 app.use(express.json());
