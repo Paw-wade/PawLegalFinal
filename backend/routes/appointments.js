@@ -3,6 +3,13 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const RendezVous = require('../models/RendezVous');
 const { protect, authorize } = require('../middleware/auth');
+const {
+  handleImpersonation,
+  getEffectiveUserId,
+  getEffectiveRole,
+  getEffectiveUser,
+  forbidImpersonationWrite,
+} = require('../middleware/impersonation');
 const { sendNotificationSMS } = require('../sendSMS');
 
 /** Libellés des motifs (formulaire public) — pour les notifications admin. */
@@ -285,7 +292,7 @@ router.post(
 // @desc    Récupérer tous les rendez-vous (admin) ou les rendez-vous d'un utilisateur spécifique
 // @access  Private (Admin ou utilisateur récupérant ses propres rendez-vous)
 // IMPORTANT: Cette route DOIT être définie AVANT router.get('/:id') pour éviter les conflits
-router.get('/admin', protect, async (req, res) => {
+router.get('/admin', protect, handleImpersonation, async (req, res) => {
   try {
     console.log('📥 Requête GET /api/appointments/admin reçue:', {
       user: req.user?.email,
@@ -294,19 +301,21 @@ router.get('/admin', protect, async (req, res) => {
     });
     
     const { statut, date, userId, includeArchived } = req.query;
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const role = getEffectiveRole(req);
+    const isAdmin = role === 'admin' || role === 'superadmin';
     let query = {};
 
     // Si l'utilisateur n'est pas admin, il ne peut récupérer que ses propres rendez-vous
     if (!isAdmin) {
-      if (userId && userId !== req.user.id.toString()) {
+      const effId = getEffectiveUserId(req);
+      if (userId && userId !== effId) {
         return res.status(403).json({
           success: false,
           message: 'Vous n\'avez pas l\'autorisation de voir les rendez-vous d\'autres utilisateurs'
         });
       }
       // Forcer userId à l'ID de l'utilisateur connecté
-      query.user = req.user.id;
+      query.user = effId;
     } else {
       // Admin peut voir tous les rendez-vous ou filtrer par userId
     if (userId) {
@@ -387,7 +396,7 @@ router.get('/admin', protect, async (req, res) => {
 // @route   GET /api/appointments
 // @desc    Récupérer les rendez-vous de l'utilisateur connecté
 // @access  Private
-router.get('/', protect, async (req, res) => {
+router.get('/', protect, handleImpersonation, async (req, res) => {
   try {
     console.log('📅 GET /api/appointments - Requête reçue:', {
       user: req.user?.email,
@@ -395,8 +404,8 @@ router.get('/', protect, async (req, res) => {
       path: req.path
     });
     
-    const targetUserId = req.user.id;
-    const targetUserEmail = req.user.email;
+    const targetUserId = getEffectiveUserId(req);
+    const targetUserEmail = (getEffectiveUser(req) || req.user)?.email;
     
     console.log('📅 Récupération des rendez-vous pour l\'utilisateur:', targetUserId);
     
@@ -426,7 +435,7 @@ router.get('/', protect, async (req, res) => {
 // @route   GET /api/appointments/:id
 // @desc    Récupérer un rendez-vous par ID
 // @access  Private
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', protect, handleImpersonation, async (req, res) => {
   try {
     const rendezVous = await RendezVous.findById(req.params.id)
       .populate('user', 'firstName lastName email');
@@ -438,13 +447,15 @@ router.get('/:id', protect, async (req, res) => {
       });
     }
 
-    // Vérifier les permissions : propriétaire ou admin
-    const isOwner = rendezVous.user && rendezVous.user.toString() === req.user.id;
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const effId = getEffectiveUserId(req);
+    const effUser = getEffectiveUser(req) || req.user;
+    const role = getEffectiveRole(req);
+    const isOwner = rendezVous.user && rendezVous.user.toString() === effId;
+    const isAdmin = role === 'admin' || role === 'superadmin';
     
     if (!isOwner && !isAdmin) {
       // Vérifier aussi par email si pas d'utilisateur connecté mais rendez-vous créé avec email
-      if (!rendezVous.user && rendezVous.email !== req.user.email) {
+      if (!rendezVous.user && rendezVous.email !== effUser?.email) {
         return res.status(403).json({
           success: false,
           message: 'Vous n\'avez pas l\'autorisation de voir ce rendez-vous'
@@ -468,8 +479,9 @@ router.get('/:id', protect, async (req, res) => {
 // @route   PUT /api/appointments/:id/archive
 // @desc    Archiver ou désarchiver un rendez-vous (admin)
 // @access  Private (Admin)
-router.put('/:id/archive', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.put('/:id/archive', protect, handleImpersonation, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const { archived } = req.body;
     const rendezVous = await RendezVous.findById(req.params.id);
 
@@ -507,8 +519,9 @@ router.put('/:id/archive', protect, authorize('admin', 'superadmin'), async (req
 // @route   DELETE /api/appointments/:id
 // @desc    Supprimer un rendez-vous (admin seulement)
 // @access  Private (Admin)
-router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.delete('/:id', protect, handleImpersonation, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const rendezVous = await RendezVous.findById(req.params.id);
 
     if (!rendezVous) {
@@ -540,8 +553,10 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
 router.patch(
   '/:id/cancel',
   protect,
+  handleImpersonation,
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       console.log('📅 Route d\'annulation appelée:', {
         method: req.method,
         originalUrl: req.originalUrl,
@@ -560,16 +575,16 @@ router.patch(
         });
       }
 
-      // Vérifier que l'utilisateur est le propriétaire du rendez-vous
-      if (rendezVous.user && rendezVous.user.toString() !== req.user.id) {
+      const effId = getEffectiveUserId(req);
+      const effUser = getEffectiveUser(req) || req.user;
+      if (rendezVous.user && rendezVous.user.toString() !== effId) {
         return res.status(403).json({
           success: false,
           message: 'Vous n\'avez pas l\'autorisation d\'annuler ce rendez-vous'
         });
       }
 
-      // Vérifier aussi par email si pas d'utilisateur connecté mais rendez-vous créé avec email
-      if (!rendezVous.user && rendezVous.email !== req.user.email) {
+      if (!rendezVous.user && rendezVous.email !== effUser?.email) {
         return res.status(403).json({
           success: false,
           message: 'Vous n\'avez pas l\'autorisation d\'annuler ce rendez-vous'
@@ -712,6 +727,7 @@ router.patch(
 router.put(
   '/:id',
   protect,
+  handleImpersonation,
   [
     body('date').optional().isISO8601().withMessage('Date invalide'),
     body('heure').optional().trim(),
@@ -721,6 +737,7 @@ router.put(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -740,7 +757,6 @@ router.put(
         });
       }
 
-      // Vérifier que l'utilisateur est le propriétaire du rendez-vous
       const effectiveUserId = getEffectiveUserId(req);
       const effectiveUser = getEffectiveUser(req);
       
@@ -885,6 +901,7 @@ router.put(
 router.patch(
   '/:id',
   protect,
+  handleImpersonation,
   authorize('admin', 'superadmin'),
   [
     body('statut').optional().isIn(['en_attente', 'confirme', 'annule', 'termine']).withMessage('Statut invalide'),
@@ -897,6 +914,7 @@ router.patch(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({

@@ -2,6 +2,7 @@ const express = require('express');
 const { body, validationResult, query } = require('express-validator');
 const CmsContent = require('../models/CmsContent');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 const router = express.Router();
 
@@ -94,7 +95,9 @@ router.get(
 );
 
 // Toutes les routes suivantes nécessitent une authentification admin
-router.use(protect, authorize('admin', 'superadmin'));
+router.use(protect);
+router.use(handleImpersonation);
+router.use(authorize('admin', 'superadmin'));
 
 // @route   GET /api/content
 // @desc    Lister les entrées CMS
@@ -154,6 +157,7 @@ router.post(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -226,6 +230,7 @@ router.put(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -303,6 +308,7 @@ router.put(
 // @access  Private (admin)
 router.delete('/:id', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const existing = await CmsContent.findById(req.params.id);
 
     if (!existing) {
@@ -352,6 +358,7 @@ router.delete('/:id', async (req, res) => {
 // @access  Private (admin)
 router.patch('/:id/publish', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const existing = await CmsContent.findById(req.params.id);
 
     if (!existing) {
@@ -402,6 +409,7 @@ router.patch('/:id/publish', async (req, res) => {
 // @access  Private (admin)
 router.patch('/:id/unpublish', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const existing = await CmsContent.findById(req.params.id);
 
     if (!existing) {

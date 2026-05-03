@@ -7,9 +7,11 @@ const CollaborativeDraft = require('../models/CollaborativeDraft');
 const Dossier = require('../models/Dossier');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveUserId } = require('../middleware/impersonation');
 
 // Middleware auth
 router.use(protect);
+router.use(handleImpersonation);
 
 function isAdmin(user) {
   return ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'].includes(
@@ -62,7 +64,7 @@ const DEFAULT_RECOURS_TYPES = [
 // GET /recours/types - liste des types de recours visibles pour l'utilisateur
 router.get('/recours/types', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -109,7 +111,7 @@ router.get('/recours/types', async (req, res) => {
 // POST /recours/types - création d'un type (admin/superadmin)
 router.post('/recours/types', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -144,7 +146,7 @@ router.post('/recours/types', async (req, res) => {
 // PATCH /recours/types/reorder - réordonner les thèmes (admin/superadmin)
 router.patch('/recours/types/reorder', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -173,7 +175,7 @@ router.patch('/recours/types/reorder', async (req, res) => {
 // DELETE /recours/types/:id - supprimer un thème (admin/superadmin)
 router.delete('/recours/types/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -220,7 +222,7 @@ router.delete('/recours/types/:id', async (req, res) => {
 // GET /recours/templates - lister les modèles selon les droits
 router.get('/recours/templates', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -259,7 +261,7 @@ router.get('/recours/templates', async (req, res) => {
 // POST /recours/templates - créer un modèle de recours (upload déjà géré ailleurs)
 router.post('/recours/templates', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -312,7 +314,7 @@ router.post('/recours/templates', async (req, res) => {
 // PATCH /recours/templates/:id/share - mettre à jour le partage
 router.patch('/recours/templates/:id/share', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -349,7 +351,7 @@ router.patch('/recours/templates/:id/share', async (req, res) => {
 // PATCH /recours/templates/:id/type - déplacer un modèle vers un autre type
 router.patch('/recours/templates/:id/type', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -395,7 +397,7 @@ router.patch('/recours/templates/:id/type', async (req, res) => {
 // DELETE /recours/templates/:id - supprimer un modèle de recours
 router.delete('/recours/templates/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -428,7 +430,7 @@ router.delete('/recours/templates/:id', async (req, res) => {
 // POST /recours/templates/:id/send-to-dossier - créer un document en préparation à partir d'un modèle
 router.post('/recours/templates/:id/send-to-dossier', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }

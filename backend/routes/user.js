@@ -5,6 +5,7 @@ const multer = require('multer');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveUserId, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 const router = express.Router();
 
@@ -98,13 +99,14 @@ router.use((req, res, next) => {
 
 // Toutes les routes nécessitent une authentification
 router.use(protect);
+router.use(handleImpersonation);
 
 // @route   GET /api/user/profile
 // @desc    Récupérer le profil de l'utilisateur effectif
 // @access  Private
 router.get('/profile', async (req, res) => {
   try {
-    const effectiveUserId = req.user.id;
+    const effectiveUserId = getEffectiveUserId(req);
     const user = await User.findById(effectiveUserId);
     
     if (!user) {
@@ -141,6 +143,7 @@ router.put(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -172,7 +175,7 @@ router.put(
         smsPreferences
       } = req.body;
       
-      const effectiveUserId = req.user.id;
+      const effectiveUserId = getEffectiveUserId(req);
       const user = await User.findById(effectiveUserId);
       
       if (!user) {
@@ -276,7 +279,8 @@ router.put(
 // @access  Private
 router.post('/profile/deactivate', async (req, res) => {
   try {
-    const effectiveUserId = req.user.id;
+    if (forbidImpersonationWrite(req, res)) return;
+    const effectiveUserId = getEffectiveUserId(req);
     const user = await User.findById(effectiveUserId);
 
     if (!user) {
@@ -321,6 +325,7 @@ router.put(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -330,7 +335,7 @@ router.put(
         });
       }
 
-      const effectiveUserId = req.user.id;
+      const effectiveUserId = getEffectiveUserId(req);
       const user = await User.findById(effectiveUserId);
 
       if (!user) {
@@ -393,6 +398,7 @@ router.put(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({

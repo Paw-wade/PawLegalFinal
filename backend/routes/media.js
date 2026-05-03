@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 const router = express.Router();
 
@@ -64,7 +65,9 @@ const upload = multer({
 });
 
 // Toutes les routes média nécessitent un admin
-router.use(protect, authorize('admin', 'superadmin'));
+router.use(protect);
+router.use(handleImpersonation);
+router.use(authorize('admin', 'superadmin'));
 
 // @route   POST /api/media/hero
 // @desc    Téléverser un média (image ou vidéo) pour le carrousel du hero
@@ -92,6 +95,7 @@ router.post('/hero', (req, res, next) => {
   });
 }, async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     if (!req.file) {
       return res.status(400).json({
         success: false,

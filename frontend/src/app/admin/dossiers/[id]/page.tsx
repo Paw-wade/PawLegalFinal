@@ -1,12 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, userAPI } from '@/lib/api';
+import {
+  adminIdFromSession,
+  getLinkedClientUserId,
+  startDossierClientImpersonation,
+  stopDossierClientImpersonation,
+  isDossierClientImpersonating,
+} from '@/lib/dossierImpersonation';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import { SUGGESTED_STEPS_BY_CATEGORY, DossierCategorie } from '@/lib/dossierStepsConfig';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
@@ -45,7 +52,9 @@ export default function AdminDossierDetailPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const dossierId = params?.id as string;
+  const vueClient = searchParams.get('vueClient') === '1';
   
   const [dossier, setDossier] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -71,6 +80,7 @@ export default function AdminDossierDetailPage() {
   const [savingTitre, setSavingTitre] = useState(false);
   const [titreEditError, setTitreEditError] = useState<string | null>(null);
   const [strictPrivacyMode, setStrictPrivacyMode] = useState(false);
+  const clientImpersonationSyncKey = useRef<string | null>(null);
 
   const maskStrict = (value: string, fallback: string = 'N/A') => {
     if (!strictPrivacyMode) return value || fallback;
@@ -122,6 +132,39 @@ export default function AdminDossierDetailPage() {
     const stored = localStorage.getItem(`adminDossiersStrictPrivacy:${currentUserId}`);
     setStrictPrivacyMode(stored === 'true');
   }, [session]);
+
+  /** Vue admin complète : quitter l’impersonation si elle était active (retour données admin). */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (vueClient) return;
+    if (!isDossierClientImpersonating()) return;
+    stopDossierClientImpersonation();
+    clientImpersonationSyncKey.current = null;
+    if (dossierId) {
+      loadDossier();
+      loadMessagesForDossier();
+      loadDocumentRequests();
+      loadDocuments();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vueClient, dossierId]);
+
+  /** Vue client : une seule synchro impersonation + rechargement par dossier. */
+  useEffect(() => {
+    if (typeof window === 'undefined' || !vueClient || !dossier || status !== 'authenticated') return;
+    const clientId = getLinkedClientUserId(dossier);
+    const adminId = adminIdFromSession(session);
+    if (!clientId || !adminId) return;
+    const key = `${dossierId}:${clientId}`;
+    if (clientImpersonationSyncKey.current === key) return;
+    clientImpersonationSyncKey.current = key;
+    startDossierClientImpersonation(clientId, adminId);
+    loadDossier();
+    loadMessagesForDossier();
+    loadDocumentRequests();
+    loadDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vueClient, dossierId, dossier?._id, dossier?.user, status]);
 
   // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
@@ -358,6 +401,76 @@ export default function AdminDossierDetailPage() {
             <Link href="/admin/dossiers">
               <Button variant="outline">Retour à la liste des dossiers</Button>
             </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  const goClientPreviewFromDetail = (mode: 'detail' | 'tarif') => {
+    const clientId = getLinkedClientUserId(dossier);
+    const adminId = adminIdFromSession(session);
+    if (!clientId) {
+      window.alert("Aucun compte client n'est lié à ce dossier.");
+      return;
+    }
+    if (!adminId) return;
+    startDossierClientImpersonation(clientId, adminId);
+    const id = String(dossier._id || dossier.id || dossierId);
+    if (mode === 'tarif') {
+      router.push(`/admin/dossiers/${id}/tarification-vue-client`);
+    } else {
+      router.push(`/admin/dossiers/${id}?vueClient=1`);
+    }
+  };
+
+  /** Aperçu « vue client » : même composant détail que l’espace client, sans panneaux admin. */
+  if (vueClient) {
+    const id = String(dossier._id || dossier.id || dossierId);
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
+        <main className="mx-auto w-full max-w-[100vw] overflow-x-hidden px-3 py-4 sm:max-w-4xl sm:px-4 sm:py-8">
+          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+            <p className="min-w-0 leading-snug">
+              <strong>Aperçu vue client</strong> — les appels API utilisent l&apos;impersonation du titulaire : vous
+              voyez les mêmes données que le client (dossier, messages, documents filtrés). Lecture seule côté interface
+              admin.
+            </p>
+            <div className="flex flex-shrink-0 flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  stopDossierClientImpersonation();
+                  router.replace(`/admin/dossiers/${id}`);
+                }}
+                className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800"
+              >
+                Quitter l&apos;aperçu
+              </button>
+            </div>
+          </div>
+          <div className="mb-4 flex flex-wrap gap-2 text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                stopDossierClientImpersonation();
+                router.push(`/admin/dossiers?dossierId=${encodeURIComponent(id)}`);
+              }}
+              className="font-medium text-orange-700 underline-offset-2 hover:underline"
+            >
+              Vue simplifiée
+            </button>
+            <span className="text-gray-300">|</span>
+            <button
+              type="button"
+              onClick={() => goClientPreviewFromDetail('tarif')}
+              className="font-medium text-orange-700 underline-offset-2 hover:underline"
+            >
+              Tarification (vue client)
+            </button>
+          </div>
+          <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-lg sm:p-8">
+            <DossierDetailView dossier={dossier} variant="client" dossierFiles={documents} />
           </div>
         </main>
       </div>
@@ -661,6 +774,20 @@ export default function AdminDossierDetailPage() {
             <Link href="/admin/dossiers" className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 transition-colors">
               Vue liste complète
             </Link>
+            <button
+              type="button"
+              onClick={() => goClientPreviewFromDetail('detail')}
+              className="inline-flex items-center gap-2 text-xs font-semibold text-violet-700 hover:text-violet-900 transition-colors"
+            >
+              Vue client (aperçu)
+            </button>
+            <button
+              type="button"
+              onClick={() => goClientPreviewFromDetail('tarif')}
+              className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-700 hover:text-emerald-900 transition-colors"
+            >
+              Tarif vue client
+            </button>
             <button
               type="button"
               onClick={() => {

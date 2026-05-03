@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveUserId, getEffectiveRole, forbidImpersonationWrite } = require('../middleware/impersonation');
 const { body, validationResult } = require('express-validator');
 const Note = require('../models/Note');
 const User = require('../models/User');
@@ -25,9 +26,9 @@ const createNotification = async (userId, type, titre, message, lien, metadata =
 // @route   GET /api/notes
 // @desc    Récupérer toutes les notes d'équipe (pour l'utilisateur connecté)
 // @access  Private
-router.get('/', protect, async (req, res) => {
+router.get('/', protect, handleImpersonation, async (req, res) => {
   try {
-    const user = req.user;
+    const user = { id: getEffectiveUserId(req), role: getEffectiveRole(req) };
     
     // Récupérer les notes où :
     // 1. destinataires est vide (note pour toute l'équipe) ET l'utilisateur est admin/superadmin
@@ -83,7 +84,7 @@ router.get('/', protect, async (req, res) => {
 // @route   GET /api/notes/:id
 // @desc    Récupérer une note par ID
 // @access  Private
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', protect, handleImpersonation, async (req, res) => {
   try {
     const note = await Note.findById(req.params.id)
       .populate('createdBy', 'firstName lastName email role')
@@ -96,8 +97,7 @@ router.get('/:id', protect, async (req, res) => {
       });
     }
 
-    // Vérifier les permissions
-    const user = req.user;
+    const user = { id: getEffectiveUserId(req), role: getEffectiveRole(req) };
     const canView = note.destinataires.length === 0 
       ? (user.role === 'admin' || user.role === 'superadmin' || 
          user.role === 'avocat' || user.role === 'assistant' ||
@@ -133,6 +133,7 @@ router.get('/:id', protect, async (req, res) => {
 router.post(
   '/',
   protect,
+  handleImpersonation,
   authorize('admin', 'superadmin'),
   [
     body('titre').trim().notEmpty().withMessage('Le titre est requis'),
@@ -142,6 +143,7 @@ router.post(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -214,7 +216,7 @@ router.post(
 // @route   PUT /api/notes/:id/read
 // @desc    Marquer une note comme lue
 // @access  Private
-router.put('/:id/read', protect, async (req, res) => {
+router.put('/:id/read', protect, handleImpersonation, async (req, res) => {
   try {
     const note = await Note.findById(req.params.id);
 
@@ -225,8 +227,7 @@ router.put('/:id/read', protect, async (req, res) => {
       });
     }
 
-    // Vérifier les permissions
-    const user = req.user;
+    const user = { id: getEffectiveUserId(req), role: getEffectiveRole(req) };
     const canView = note.destinataires.length === 0 
       ? (user.role === 'admin' || user.role === 'superadmin' || 
          user.role === 'avocat' || user.role === 'assistant' ||
@@ -273,6 +274,7 @@ router.put('/:id/read', protect, async (req, res) => {
 router.put(
   '/:id',
   protect,
+  handleImpersonation,
   authorize('admin', 'superadmin'),
   [
     body('titre').optional().trim().notEmpty().withMessage('Le titre ne peut pas être vide'),
@@ -282,6 +284,7 @@ router.put(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -340,8 +343,9 @@ router.put(
 // @route   DELETE /api/notes/:id
 // @desc    Supprimer une note
 // @access  Private/Admin
-router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.delete('/:id', protect, handleImpersonation, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const note = await Note.findById(req.params.id);
 
     if (!note) {

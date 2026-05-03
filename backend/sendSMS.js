@@ -303,8 +303,19 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
   let historyRecord;
 
   // Priorité au push: si un push est envoyé, on n'envoie pas de SMS.
-  // Exception: conserver systématiquement le SMS pour l'envoi de code/mot de passe.
+  // Exceptions: OTP / mot de passe temporaire, et **communications tarifaires** (relance paiement,
+  // choix de formule, exonération, montant fixe) où le SMS doit toujours partir en complément ou à la place
+  // du seul push — sinon les clients avec Web Push actif ne recevaient plus le SMS.
+  const isTarificationBillingSms =
+    type === 'tarification_payment_reminder' ||
+    type === 'tarification_choice_reminder' ||
+    type === 'frais_tarification_exoneres' ||
+    (type === 'manual' &&
+      (options.context === 'tarification_reminder' ||
+        options.context === 'tarification_payment_reminder'));
+
   const shouldPreferPush =
+    !isTarificationBillingSms &&
     options.preferPush !== false &&
     Boolean(options.userId) &&
     type !== 'password_reset_temp' &&

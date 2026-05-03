@@ -9,6 +9,12 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const Dossier = require('../models/Dossier');
 const { protect, authorize } = require('../middleware/auth');
+const {
+  handleImpersonation,
+  getEffectiveUserId,
+  getEffectiveUser,
+  getEffectiveRole,
+} = require('../middleware/impersonation');
 const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 
 // Configuration de multer pour les pièces jointes
@@ -39,15 +45,7 @@ const upload = multer({
 
 // Middleware d'authentification pour toutes les routes
 router.use(protect);
-
-// Fonctions utilitaires pour obtenir l'utilisateur effectif
-const getEffectiveUser = (req) => {
-  return req.user || null;
-};
-
-const getEffectiveUserId = (req) => {
-  return req.user?.id || req.user?._id || null;
-};
+router.use(handleImpersonation);
 
 // IMPORTANT: Les routes spécifiques (comme /unread-count, /users) doivent être définies AVANT les routes paramétrées (/:id)
 // pour éviter que Express ne les intercepte avec le paramètre :id
@@ -57,7 +55,7 @@ const getEffectiveUserId = (req) => {
 // @access  Private
 router.get('/unread-count', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = getEffectiveUserId(req);
     
     const count = await MessageInterne.countDocuments({
       $or: [
@@ -87,7 +85,7 @@ router.get('/unread-count', async (req, res) => {
 // @access  Private (tous les utilisateurs authentifiés)
 router.get('/users', async (req, res) => {
   try {
-    const userRole = req.user.role;
+    const userRole = getEffectiveRole(req);
     const isClient = userRole === 'client';
     const isAdmin = userRole === 'admin' || userRole === 'superadmin';
     const isPartenaire = userRole === 'partenaire';
@@ -135,7 +133,7 @@ router.get('/', async (req, res) => {
       path: req.path
     });
     
-    const userId = req.user.id;
+    const userId = getEffectiveUserId(req);
     const { 
       type = 'all', 
       dossierId, 
@@ -187,7 +185,7 @@ router.get('/', async (req, res) => {
       query.dossierId = dossierIdObj;
       
       // Si partenaire et dossierId fourni, vérifier l'accès au dossier
-      if (req.user.role === 'partenaire') {
+      if (getEffectiveRole(req) === 'partenaire') {
         const Dossier = require('../models/Dossier');
         const dossier = await Dossier.findById(dossierIdObj)
           .populate('transmittedTo.partenaire', '_id');
@@ -197,7 +195,7 @@ router.get('/', async (req, res) => {
             if (!trans || !trans.partenaire) return false;
             const transPartenaireId = trans.partenaire._id ? trans.partenaire._id.toString() : trans.partenaire.toString();
             // Accepter pending et accepted, mais pas refused
-            return transPartenaireId === req.user.id.toString() && trans.status !== 'refused';
+            return transPartenaireId === String(userId) && trans.status !== 'refused';
           });
           
           if (!hasAccess) {
@@ -211,6 +209,25 @@ router.get('/', async (req, res) => {
           return res.status(403).json({
             success: false,
             message: 'Accès non autorisé aux messages de ce dossier'
+          });
+        }
+      } else if (req.impersonateUserId) {
+        const Dossier = require('../models/Dossier');
+        const dossier = await Dossier.findById(dossierIdObj).select('user clientEmail');
+        if (!dossier) {
+          return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+        }
+        const vid = String(getEffectiveUserId(req));
+        const own = dossier.user && dossier.user.toString() === vid;
+        const em = (req.impersonateTargetUser?.email || '').trim().toLowerCase();
+        const byEmail =
+          dossier.clientEmail &&
+          em &&
+          String(dossier.clientEmail).trim().toLowerCase() === em;
+        if (!own && !byEmail) {
+          return res.status(403).json({
+            success: false,
+            message: 'Accès non autorisé aux messages de ce dossier (aperçu client)',
           });
         }
       }
@@ -418,6 +435,13 @@ router.post(
           success: false,
           message: 'Erreur de validation',
           errors: errors.array()
+        });
+      }
+
+      if (req.impersonateUserId) {
+        return res.status(403).json({
+          success: false,
+          message: "Envoi de message désactivé pendant l'aperçu client (impersonation).",
         });
       }
 

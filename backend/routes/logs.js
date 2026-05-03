@@ -3,12 +3,14 @@ const mongoose = require('mongoose');
 const PDFDocument = require('pdfkit');
 const Log = require('../models/Log');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, forbidImpersonationWrite } = require('../middleware/impersonation');
 const { createDocumentWithHeader } = require('../utils/documentHeader');
 
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification
 router.use(protect);
+router.use(handleImpersonation);
 
 // @route   GET /api/logs/dlog/pdf
 // @desc    Générer et télécharger le DLOG en PDF pour une date donnée (SuperAdmin seulement)

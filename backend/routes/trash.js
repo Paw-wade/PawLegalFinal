@@ -10,9 +10,11 @@ const Task = require('../models/Task');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveUserId, getEffectiveRole, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 // Toutes les routes nécessitent une authentification
 router.use(protect);
+router.use(handleImpersonation);
 
 // Mapping des types d'éléments vers leurs modèles
 const modelMap = {
@@ -31,8 +33,8 @@ const modelMap = {
 // @access  Private
 router.get('/', async (req, res) => {
   try {
-    const userRole = req.user.role;
-    const userId = req.user._id;
+    const userRole = getEffectiveRole(req);
+    const userId = getEffectiveUserId(req);
     
     // Construire le filtre selon le rôle
     let filter = {};
@@ -106,9 +108,10 @@ router.get('/', async (req, res) => {
 // @access  Private
 router.post('/restore/:id', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const trashId = req.params.id;
-    const userId = req.user._id;
-    const userRole = req.user.role;
+    const userId = getEffectiveUserId(req);
+    const userRole = getEffectiveRole(req);
     
     // Récupérer l'élément de la corbeille
     const trashItem = await Trash.findById(trashId)
@@ -186,9 +189,10 @@ router.post('/restore/:id', async (req, res) => {
 // @access  Private
 router.delete('/:id', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const trashId = req.params.id;
-    const userId = req.user._id;
-    const userRole = req.user.role;
+    const userId = getEffectiveUserId(req);
+    const userRole = getEffectiveRole(req);
     
     // Récupérer l'élément de la corbeille
     const trashItem = await Trash.findById(trashId)
@@ -238,6 +242,7 @@ router.delete('/:id', async (req, res) => {
 // @access  Private/Admin
 router.post('/empty', authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const result = await Trash.deleteMany({});
     
     res.json({
@@ -260,8 +265,8 @@ router.post('/empty', authorize('admin', 'superadmin'), async (req, res) => {
 // @access  Private
 router.get('/stats', async (req, res) => {
   try {
-    const userRole = req.user.role;
-    const userId = req.user._id;
+    const userRole = getEffectiveRole(req);
+    const userId = getEffectiveUserId(req);
     
     // Construire le filtre selon le rôle
     let filter = {};

@@ -9,6 +9,11 @@ const Log = require('../models/Log');
 const Dossier = require('../models/Dossier');
 const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
+const {
+  handleImpersonation,
+  getEffectiveUserId,
+  getEffectiveRole,
+} = require('../middleware/impersonation');
 
 const router = express.Router();
 const BACKEND_ROOT = path.resolve(__dirname, '..');
@@ -330,16 +335,17 @@ const upload = multer({
 
 // Toutes les routes nécessitent une authentification
 router.use(protect);
+router.use(handleImpersonation);
 
 // @route   GET /api/user/documents
 // @desc    Récupérer tous les documents de l'utilisateur connecté
 // @access  Private (tous les rôles authentifiés)
 router.get('/', async (req, res) => {
   try {
-    const targetUserId = req.user.id;
-    const targetUserEmail = req.user.email;
-    
-    console.log('📄 Récupération des documents pour l\'utilisateur:', targetUserId, 'Rôle:', req.user.role);
+    const targetUserId = getEffectiveUserId(req);
+    const targetUserEmail = (req.impersonateTargetUser || req.user).email;
+
+    console.log('📄 Récupération des documents pour l\'utilisateur:', targetUserId, 'Rôle:', getEffectiveRole(req), req.impersonateUserId ? '[IMPERSONATION]' : '');
     
     const documents = await Document.find({ user: targetUserId })
       .populate('dossierId', 'titre numero categorie statut')
@@ -456,16 +462,21 @@ router.get('/dossier/:dossierId', async (req, res) => {
       });
     }
     
+    const viewerId = getEffectiveUserId(req);
+    const viewerRole = getEffectiveRole(req);
+    const viewerEmail = (req.impersonateTargetUser?.email || req.user.email || '').trim().toLowerCase();
+    const isImpersonating = !!req.impersonateUserId;
+
     // Vérifier l'accès (aligné sur GET /user/dossiers/:id pour le client)
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
-    const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const isAdmin = !isImpersonating && (req.user.role === 'admin' || req.user.role === 'superadmin');
+    const isOwner = dossier.user && dossier.user.toString() === String(viewerId);
+    const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === String(viewerId);
     const isClientByEmail =
-      req.user.role === 'client' &&
+      viewerRole === 'client' &&
       dossier.clientEmail &&
-      req.user.email &&
-      String(dossier.clientEmail).trim().toLowerCase() === String(req.user.email).trim().toLowerCase();
-    const isPartenaire = req.user.role === 'partenaire';
+      viewerEmail &&
+      String(dossier.clientEmail).trim().toLowerCase() === viewerEmail;
+    const isPartenaire = viewerRole === 'partenaire';
     
     let hasAccess = isAdmin || isOwner || isAssigned || isClientByEmail;
     
@@ -476,7 +487,7 @@ router.get('/dossier/:dossierId', async (req, res) => {
           if (!trans || !trans.partenaire) return false;
           const transPartenaireId = trans.partenaire._id ? trans.partenaire._id.toString() : trans.partenaire.toString();
           // Accepter pending et accepted, mais pas refused
-          return transPartenaireId === req.user.id.toString() && trans.status !== 'refused';
+          return transPartenaireId === String(viewerId) && trans.status !== 'refused';
         });
       }
     }
@@ -493,11 +504,13 @@ router.get('/dossier/:dossierId', async (req, res) => {
       .populate('user', 'firstName lastName email')
       .sort({ createdAt: -1 });
 
+    const clientViewer = req.impersonateTargetUser || req.user;
+
     const documents = await Promise.all(
       rawDocuments.map(async (doc) => {
-        if (req.user.role !== 'client') return doc;
+        if (viewerRole !== 'client') return doc;
 
-        const canViewContent = await canClientViewDocumentContent(doc, req.user);
+        const canViewContent = await canClientViewDocumentContent(doc, clientViewer);
         if (canViewContent) return doc;
 
         const docObj = doc.toObject();

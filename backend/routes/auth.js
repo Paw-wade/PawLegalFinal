@@ -1,13 +1,14 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 const { OAuth2Client } = require('google-auth-library');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveUserId, forbidImpersonationWrite } = require('../middleware/impersonation');
 const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
+const { sendTransactionalEmail, isTransactionalEmailConfigured } = require('../utils/email');
 
 const router = express.Router();
 // Générer un token JWT
@@ -407,31 +408,27 @@ Ada Papers`;
         <p>Ada Papers</p>
       `;
 
-      // Essayer d'envoyer l'email si la configuration SMTP est présente
+      // Brevo (API) en priorité, SMTP en repli si défini
       let emailSent = false;
       try {
-        const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM } = process.env;
-        if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS && EMAIL_FROM) {
-          const transporter = nodemailer.createTransport({
-            host: SMTP_HOST,
-            port: Number(SMTP_PORT),
-            secure: Number(SMTP_PORT) === 465,
-            auth: {
-              user: SMTP_USER,
-              pass: SMTP_PASS,
-            },
-          });
-
-          await transporter.sendMail({
-            from: EMAIL_FROM,
+        if (!isTransactionalEmailConfigured()) {
+          console.warn(
+            '⚠️ Email non configuré (BREVO_API_KEY + expéditeur, ou SMTP complet). Lien:',
+            resetUrl
+          );
+        } else {
+          const toName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+          const result = await sendTransactionalEmail({
             to: user.email,
+            toName: toName || undefined,
             subject,
             text,
             html,
           });
-          emailSent = true;
-        } else {
-          console.warn('⚠️ SMTP non configuré, impossible d\'envoyer l\'email de réinitialisation. Lien:', resetUrl);
+          emailSent = Boolean(result.sent);
+          if (!result.sent) {
+            console.error('❌ Échec envoi email de réinitialisation:', result);
+          }
         }
       } catch (emailError) {
         console.error('❌ Erreur lors de l\'envoi de l\'email de réinitialisation:', emailError);
@@ -664,12 +661,14 @@ router.post(
 router.post(
   '/setup-password',
   protect,
+  handleImpersonation,
   [
     body('password').isLength({ min: 8 }).withMessage('Le mot de passe doit contenir au moins 8 caractères'),
     body('email').optional().isEmail().normalizeEmail().withMessage('Email invalide')
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -913,9 +912,9 @@ router.post(
 // @route   GET /api/auth/me
 // @desc    Récupérer l'utilisateur connecté
 // @access  Private
-router.get('/me', protect, async (req, res) => {
+router.get('/me', protect, handleImpersonation, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     
     res.json({
       success: true,

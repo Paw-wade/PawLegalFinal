@@ -6,6 +6,7 @@ const { body, validationResult } = require('express-validator');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const { forbidImpersonationWrite } = require('../middleware/impersonation');
 
 const router = express.Router();
 
@@ -229,6 +230,7 @@ router.post(
 router.get(
   '/',
   require('../middleware/auth').protect,
+  require('../middleware/impersonation').handleImpersonation,
   require('../middleware/auth').authorize('admin', 'superadmin'),
   async (req, res) => {
     try {
@@ -293,6 +295,7 @@ router.get(
 router.get(
   '/:id',
   require('../middleware/auth').protect,
+  require('../middleware/impersonation').handleImpersonation,
   require('../middleware/auth').authorize('admin', 'superadmin'),
   async (req, res) => {
     try {
@@ -369,6 +372,7 @@ router.get(
 router.patch(
   '/:id',
   require('../middleware/auth').protect,
+  require('../middleware/impersonation').handleImpersonation,
   require('../middleware/auth').authorize('admin', 'superadmin'),
   [
     body('lu').optional().isBoolean(),
@@ -377,6 +381,7 @@ router.patch(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -472,6 +477,7 @@ router.patch(
 router.get(
   '/:id/document/:docId',
   require('../middleware/auth').protect,
+  require('../middleware/impersonation').handleImpersonation,
   require('../middleware/auth').authorize('admin', 'superadmin'),
   async (req, res) => {
     try {
@@ -527,6 +533,7 @@ router.get(
 router.post(
   '/:id/create-dossier',
   require('../middleware/auth').protect,
+  require('../middleware/impersonation').handleImpersonation,
   require('../middleware/auth').authorize('admin', 'superadmin'),
   [
     body('titre').trim().notEmpty().withMessage('Le titre est requis'),
@@ -535,6 +542,7 @@ router.post(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({

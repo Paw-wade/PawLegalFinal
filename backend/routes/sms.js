@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, forbidImpersonationWrite } = require('../middleware/impersonation');
 const { sendSMS, sendNotificationSMS, formatPhoneNumber, recordOutboundSms } = require('../sendSMS');
 const User = require('../models/User');
 const Log = require('../models/Log');
@@ -12,6 +13,7 @@ const Log = require('../models/Log');
 router.post(
   '/send',
   protect,
+  handleImpersonation,
   authorize('admin', 'superadmin'),
   [
     body('to').trim().notEmpty().withMessage('Le numéro de téléphone est requis'),
@@ -19,6 +21,7 @@ router.post(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -91,6 +94,7 @@ router.post(
 router.post(
   '/notification',
   protect,
+  handleImpersonation,
   authorize('admin', 'superadmin'),
   [
     body('to').trim().notEmpty().withMessage('Le numéro de téléphone est requis'),
@@ -99,6 +103,7 @@ router.post(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -156,6 +161,7 @@ router.post(
 router.post(
   '/bulk',
   protect,
+  handleImpersonation,
   authorize('admin', 'superadmin'),
   [
     body('recipients').isArray({ min: 1 }).withMessage('Au moins un destinataire est requis'),
@@ -164,6 +170,7 @@ router.post(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -277,6 +284,7 @@ router.post(
 router.post(
   '/format-phone',
   protect,
+  handleImpersonation,
   [
     body('phone').trim().notEmpty().withMessage('Le numéro de téléphone est requis')
   ],

@@ -1,6 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
+const {
+  handleImpersonation,
+  getEffectiveUserId,
+  getEffectiveRole,
+  forbidImpersonationWrite,
+} = require('../middleware/impersonation');
 const { body, validationResult } = require('express-validator');
 const Task = require('../models/Task');
 const User = require('../models/User');
@@ -11,7 +17,7 @@ const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 // @route   GET /api/tasks
 // @desc    Récupérer toutes les tâches (Admin seulement)
 // @access  Private/Admin
-router.get('/', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.get('/', protect, handleImpersonation, authorize('admin', 'superadmin'), async (req, res) => {
   try {
     const { statut, assignedTo, createdBy, dossier, priorite, includeArchived } = req.query;
     
@@ -54,12 +60,12 @@ router.get('/', protect, authorize('admin', 'superadmin'), async (req, res) => {
 // @route   GET /api/tasks/my
 // @desc    Récupérer les tâches assignées à l'utilisateur connecté
 // @access  Private
-router.get('/my', protect, async (req, res) => {
+router.get('/my', protect, handleImpersonation, async (req, res) => {
   try {
     const { statut, priorite, includeArchived } = req.query;
     
     // Filtrer les tâches où l'utilisateur est dans le tableau assignedTo
-    const filter = { assignedTo: req.user.id };
+    const filter = { assignedTo: getEffectiveUserId(req) };
     if (statut) filter.statut = statut;
     if (priorite) filter.priorite = priorite;
     
@@ -92,7 +98,7 @@ router.get('/my', protect, async (req, res) => {
 // @route   GET /api/tasks/dossier/:dossierId
 // @desc    Récupérer les tâches d'un dossier (pour partenaires et admins)
 // @access  Private
-router.get('/dossier/:dossierId', protect, async (req, res) => {
+router.get('/dossier/:dossierId', protect, handleImpersonation, async (req, res) => {
   try {
     const { dossierId } = req.params;
     const { statut, priorite, includeArchived } = req.query;
@@ -106,10 +112,11 @@ router.get('/dossier/:dossierId', protect, async (req, res) => {
       });
     }
 
-    // Vérifier les permissions
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    const isOwner = dossier.user && dossier.user.toString() === req.user.id;
-    const isPartenaire = req.user.role === 'partenaire';
+    const role = getEffectiveRole(req);
+    const uid = getEffectiveUserId(req);
+    const isAdmin = role === 'admin' || role === 'superadmin';
+    const isOwner = dossier.user && dossier.user.toString() === uid;
+    const isPartenaire = role === 'partenaire';
     
     // Pour les partenaires, vérifier que le dossier leur est transmis
     let hasAccess = false;
@@ -118,7 +125,7 @@ router.get('/dossier/:dossierId', protect, async (req, res) => {
     } else if (isPartenaire) {
       const transmission = dossier.transmittedTo?.find((t) => {
         const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
-        return partenaireId === req.user.id;
+        return partenaireId === uid;
       });
       hasAccess = !!transmission && (transmission.status === 'pending' || transmission.status === 'accepted');
     }
@@ -165,7 +172,7 @@ router.get('/dossier/:dossierId', protect, async (req, res) => {
 // @route   GET /api/tasks/:id
 // @desc    Récupérer une tâche par ID
 // @access  Private
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', protect, handleImpersonation, async (req, res) => {
   try {
     const task = await Task.findById(req.params.id)
       .populate('assignedTo', 'firstName lastName email role')
@@ -181,10 +188,11 @@ router.get('/:id', protect, async (req, res) => {
       });
     }
 
-    // Vérifier que l'utilisateur a accès à la tâche (créateur, assigné, ou admin)
-    const isCreator = task.createdBy._id.toString() === req.user.id;
-    const isAssigned = task.assignedTo._id.toString() === req.user.id;
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const uid = getEffectiveUserId(req);
+    const role = getEffectiveRole(req);
+    const isCreator = task.createdBy._id.toString() === uid;
+    const isAssigned = task.assignedTo._id.toString() === uid;
+    const isAdmin = role === 'admin' || role === 'superadmin';
 
     if (!isCreator && !isAssigned && !isAdmin) {
       return res.status(403).json({
@@ -213,6 +221,7 @@ router.get('/:id', protect, async (req, res) => {
 router.post(
   '/',
   protect,
+  handleImpersonation,
   async (req, res, next) => {
     // Autoriser admin, superadmin et partenaire
     const allowedRoles = ['admin', 'superadmin', 'partenaire'];
@@ -232,6 +241,7 @@ router.post(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       console.log('📝 Données reçues pour création de tâche:', {
         titre: req.body.titre,
         assignedTo: req.body.assignedTo,
@@ -494,12 +504,14 @@ router.post(
 router.put(
   '/:id',
   protect,
+  handleImpersonation,
   [
     body('statut').optional().isIn(['a_faire', 'en_cours', 'en_attente', 'termine', 'annule']),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente'])
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -523,12 +535,13 @@ router.put(
       
       console.log('✅ Tâche trouvée:', task.titre);
 
-      // Vérifier les permissions
-      const isCreator = task.createdBy && task.createdBy.toString() === req.user.id;
+      const uid = getEffectiveUserId(req);
+      const role = getEffectiveRole(req);
+      const isCreator = task.createdBy && task.createdBy.toString() === uid;
       const currentAssignedToArray = Array.isArray(task.assignedTo) ? task.assignedTo : [task.assignedTo].filter(Boolean);
-      const isAssigned = currentAssignedToArray.some(id => id.toString() === req.user.id);
-      const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-      const isPartenaire = req.user.role === 'partenaire';
+      const isAssigned = currentAssignedToArray.some(id => id.toString() === uid);
+      const isAdmin = role === 'admin' || role === 'superadmin';
+      const isPartenaire = role === 'partenaire';
       
       // Pour les partenaires, vérifier qu'ils ont accès au dossier de la tâche
       let hasDossierAccess = false;
@@ -537,7 +550,7 @@ router.put(
         if (dossier) {
           const transmission = dossier.transmittedTo?.find((t) => {
             const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
-            return partenaireId === req.user.id;
+            return partenaireId === uid;
           });
           hasDossierAccess = !!transmission && (transmission.status === 'pending' || transmission.status === 'accepted');
         }
@@ -839,11 +852,13 @@ router.put(
 router.post(
   '/:id/notes',
   protect,
+  handleImpersonation,
   [
     body('contenu').trim().notEmpty().withMessage('Le contenu de la note est requis'),
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -861,9 +876,11 @@ router.post(
         });
       }
 
-      const isCreator = task.createdBy && task.createdBy.toString() === req.user.id;
-      const isAssigned = task.assignedTo && task.assignedTo.toString() === req.user.id;
-      const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+      const uid = getEffectiveUserId(req);
+      const role = getEffectiveRole(req);
+      const isCreator = task.createdBy && task.createdBy.toString() === uid;
+      const isAssigned = task.assignedTo && task.assignedTo.toString() === uid;
+      const isAdmin = role === 'admin' || role === 'superadmin';
 
       if (!isCreator && !isAssigned && !isAdmin) {
         return res.status(403).json({
@@ -877,7 +894,7 @@ router.post(
       // Ajouter la note dans l'historique des commentaires
       task.commentaires = task.commentaires || [];
       task.commentaires.push({
-        utilisateur: req.user.id,
+        utilisateur: uid,
         contenu,
         createdAt: new Date(),
       });
@@ -891,7 +908,7 @@ router.post(
         .populate('dossier', 'titre numero statut')
         .populate('commentaires.utilisateur', 'firstName lastName email role');
 
-      const auteur = req.user;
+      const auteur = await User.findById(uid).lean() || req.user;
       const auteurName = `${auteur.firstName || ''} ${auteur.lastName || ''}`.trim() || auteur.email;
 
       // Notification au créateur de la tâche (s'il existe)
@@ -962,8 +979,9 @@ router.post(
 // @route   DELETE /api/tasks/:id
 // @desc    Supprimer une tâche (Admin seulement)
 // @access  Private/Admin
-router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.delete('/:id', protect, handleImpersonation, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const task = await Task.findById(req.params.id);
     if (!task) {
       return res.status(404).json({
@@ -991,8 +1009,9 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
 // @route   POST /api/tasks/check-overdue
 // @desc    Vérifier et notifier les tâches en retard (Admin seulement)
 // @access  Private/Admin
-router.post('/check-overdue', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.post('/check-overdue', protect, handleImpersonation, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const { checkOverdueTasks } = require('../utils/taskDeadlineNotifications');
     const result = await checkOverdueTasks();
     res.json(result);
@@ -1009,8 +1028,9 @@ router.post('/check-overdue', protect, authorize('admin', 'superadmin'), async (
 // @route   PUT /api/tasks/:id/archive
 // @desc    Archiver ou désarchiver une tâche (Admin seulement)
 // @access  Private/Admin
-router.put('/:id/archive', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.put('/:id/archive', protect, handleImpersonation, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const { archived } = req.body;
     
     if (typeof archived !== 'boolean') {

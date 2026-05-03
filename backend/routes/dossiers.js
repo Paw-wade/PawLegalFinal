@@ -5,6 +5,11 @@ const Dossier = require('../models/Dossier');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
+const {
+  handleImpersonation,
+  getEffectiveUserId,
+  getEffectiveRole,
+} = require('../middleware/impersonation');
 
 const router = express.Router();
 
@@ -533,20 +538,23 @@ router.post(
 
 // Toutes les autres routes nécessitent une authentification
 router.use(protect);
+router.use(handleImpersonation);
 
 // @route   GET /api/user/dossiers
 // @desc    Récupérer tous les dossiers de l'utilisateur connecté (tous les rôles)
 // @access  Private (tous les rôles authentifiés)
 router.get('/', async (req, res) => {
   try {
-    const targetUserId = req.user.id;
-    const targetUserEmail = req.user.email;
-    
-    console.log('📁 Récupération des dossiers pour l\'utilisateur:', targetUserId, 'Email:', targetUserEmail, 'Rôle:', req.user.role);
-    
+    const targetUserId = getEffectiveUserId(req);
+    const effUser = req.impersonateTargetUser || req.user;
+    const targetUserEmail = effUser?.email || req.user.email;
+
+    const userRole = getEffectiveRole(req);
+
+    console.log('📁 Récupération des dossiers pour l\'utilisateur:', targetUserId, 'Email:', targetUserEmail, 'Rôle:', userRole, req.impersonateUserId ? '[IMPERSONATION]' : '');
+
     // Construire le filtre pour récupérer les dossiers de l'utilisateur
-    const userRole = req.user.role;
-    const userEmailLower = targetUserEmail ? targetUserEmail.toLowerCase() : '';
+    const userEmailLower = targetUserEmail ? String(targetUserEmail).toLowerCase() : '';
     
     let filter = {};
     
@@ -2164,29 +2172,46 @@ router.get('/:id', async (req, res) => {
     // 3. Il est admin/superadmin
     // 4. Le dossier lui est assigné (assignedTo)
     // 5. Le dossier lui a été transmis (partenaire)
-    const isPartenaire = req.user.role === 'partenaire';
+    const viewerId = getEffectiveUserId(req);
+    const viewerEmail = (req.impersonateTargetUser?.email || req.user.email || '').toLowerCase();
+    const viewerRole = getEffectiveRole(req);
+
+    const isPartenaire = viewerRole === 'partenaire';
     const isTransmittedToPartenaire = dossier.transmittedTo && dossier.transmittedTo.some(
       t => {
         if (!t.partenaire) return false;
         const partenaireId = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
-        return partenaireId === req.user.id.toString();
+        return partenaireId === String(viewerId);
       }
     );
-    
-    // Vérifier chaque condition d'accès
-    const isOwner = dossier.user && dossier.user._id && dossier.user._id.toString() === req.user.id.toString();
-    const isClientByEmail = dossier.clientEmail && dossier.clientEmail.toLowerCase() === req.user.email.toLowerCase();
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    const isAssigned = dossier.assignedTo && dossier.assignedTo._id && dossier.assignedTo._id.toString() === req.user.id.toString();
+
+    const isImpersonating = !!req.impersonateUserId;
+    // En impersonation, ne pas traiter l'appelant comme admin pour l'accès au dossier
+    const isAdmin = !isImpersonating && (req.user.role === 'admin' || req.user.role === 'superadmin');
+
+    // Vérifier chaque condition d'accès (côté « utilisateur effectif »)
+    const isOwner =
+      dossier.user &&
+      dossier.user._id &&
+      dossier.user._id.toString() === String(viewerId);
+    const isClientByEmail =
+      dossier.clientEmail &&
+      viewerEmail &&
+      String(dossier.clientEmail).toLowerCase() === viewerEmail;
+    const isAssigned =
+      dossier.assignedTo &&
+      dossier.assignedTo._id &&
+      dossier.assignedTo._id.toString() === String(viewerId);
     const isTransmitted = isPartenaire && isTransmittedToPartenaire;
     
     let hasAccess = isOwner || isClientByEmail || isAdmin || isAssigned || isTransmitted;
 
     console.log('🔐 Vérification d\'accès au dossier:', {
       dossierId: req.params.id,
-      userId: req.user.id,
-      userEmail: req.user.email,
-      userRole: req.user.role,
+      userId: viewerId,
+      userEmail: viewerEmail,
+      userRole: viewerRole,
+      impersonation: isImpersonating,
       checks: {
         isOwner,
         isClientByEmail,
@@ -2206,8 +2231,8 @@ router.get('/:id', async (req, res) => {
     if (!hasAccess) {
       console.warn('⚠️ Accès refusé au dossier:', {
         dossierId: req.params.id,
-        userId: req.user.id,
-        userRole: req.user.role
+        userId: viewerId,
+        userRole: viewerRole
       });
       return res.status(403).json({
         success: false,
@@ -2224,7 +2249,8 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    const dossierOut = req.user.role === 'partenaire' ? sanitizeDossierForPartenaire(dossier) : dossier;
+    const dossierOut =
+      viewerRole === 'partenaire' ? sanitizeDossierForPartenaire(dossier) : dossier;
 
     res.json({
       success: true,

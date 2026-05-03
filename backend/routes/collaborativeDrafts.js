@@ -6,9 +6,11 @@ const Dossier = require('../models/Dossier');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { protect } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveUserId, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 // Middleware d'auth obligatoire pour toutes les routes
 router.use(protect);
+router.use(handleImpersonation);
 
 // Vérifier si l'utilisateur est admin (ou assimilé) ou partenaire
 function isAdmin(user) {
@@ -83,7 +85,7 @@ function buildGlobalCollaborativeQuery(user, qTrim) {
 // GET /collaborative-drafts/count — tous les brouillons visibles (liste globale)
 router.get('/collaborative-drafts/count', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user) {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
@@ -102,7 +104,7 @@ router.get('/collaborative-drafts/count', async (req, res) => {
 // GET /collaborative-drafts — liste globale (mêmes règles de visibilité que par dossier)
 router.get('/collaborative-drafts', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user) {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
@@ -165,7 +167,7 @@ router.get('/collaborative-drafts', async (req, res) => {
 router.get('/dossiers/:dossierId/drafts', async (req, res) => {
   try {
     const { dossierId } = req.params;
-    const userId = req.user.id;
+    const userId = getEffectiveUserId(req);
 
     const dossier = await Dossier.findById(dossierId);
     if (!dossier) {
@@ -240,9 +242,10 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
 // POST /dossiers/:dossierId/drafts - créer un nouveau brouillon
 router.post('/dossiers/:dossierId/drafts', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const { dossierId } = req.params;
     const { title, content, dueDate: dueDateRaw } = req.body;
-    const userId = req.user.id;
+    const userId = getEffectiveUserId(req);
 
     if (!title || !title.trim()) {
       return res.status(400).json({ success: false, message: 'Le titre est requis' });
@@ -282,9 +285,10 @@ router.post('/dossiers/:dossierId/drafts', async (req, res) => {
 // PATCH /drafts/:draftId - mettre à jour un brouillon (titre + contenu)
 router.patch('/drafts/:draftId', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const { draftId } = req.params;
     const { title, content, dueDate: dueDateRaw } = req.body;
-    const userId = req.user.id;
+    const userId = getEffectiveUserId(req);
 
     const draft = await CollaborativeDraft.findById(draftId).populate('createdBy');
     if (!draft || draft.isArchived) {
@@ -349,9 +353,10 @@ router.patch('/drafts/:draftId', async (req, res) => {
 // PATCH /drafts/:draftId/permissions - mettre à jour les droits
 router.patch('/drafts/:draftId/permissions', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const { draftId } = req.params;
     const { visibleToAdmins, excludedAdminIds, partnerAccess } = req.body;
-    const userId = req.user.id;
+    const userId = getEffectiveUserId(req);
 
     const draft = await CollaborativeDraft.findById(draftId).populate('createdBy');
     if (!draft || draft.isArchived) {
@@ -433,8 +438,9 @@ router.patch('/drafts/:draftId/permissions', async (req, res) => {
 // DELETE /drafts/:draftId - archiver un brouillon
 router.delete('/drafts/:draftId', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const { draftId } = req.params;
-    const userId = req.user.id;
+    const userId = getEffectiveUserId(req);
 
     const draft = await CollaborativeDraft.findById(draftId).populate('createdBy');
     if (!draft || draft.isArchived) {

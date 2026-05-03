@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const Creneau = require('../models/Creneau');
 const RendezVous = require('../models/RendezVous');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 // @route   GET /api/creneaux/available
 // @desc    Récupérer les créneaux disponibles pour une date donnée
@@ -95,6 +96,7 @@ router.get('/available', async (req, res) => {
 
 // Toutes les routes suivantes nécessitent une authentification admin
 router.use(protect);
+router.use(handleImpersonation);
 router.use(authorize('admin', 'superadmin'));
 
 // @route   GET /api/creneaux
@@ -184,6 +186,7 @@ router.post(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -321,6 +324,7 @@ router.post(
 // @access  Private (Admin)
 router.patch('/:id/reopen', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const creneau = await Creneau.findById(req.params.id);
 
     if (!creneau) {
@@ -355,6 +359,7 @@ router.patch('/:id/reopen', async (req, res) => {
 // @access  Private (Admin)
 router.delete('/:id', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const creneau = await Creneau.findById(req.params.id);
 
     if (!creneau) {

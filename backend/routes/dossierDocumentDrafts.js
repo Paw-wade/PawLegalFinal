@@ -6,9 +6,11 @@ const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require('docx');
 const DossierDocumentDraft = require('../models/DossierDocumentDraft');
 const Dossier = require('../models/Dossier');
 const { protect } = require('../middleware/auth');
+const { handleImpersonation, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 const router = express.Router();
 router.use(protect);
+router.use(handleImpersonation);
 
 function isStaff(user) {
   return ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'].includes(
@@ -208,6 +210,7 @@ router.post(
   [body('dossierId').notEmpty(), body('title').trim().notEmpty(), body('body').optional().isString()],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({ success: false, errors: errors.array() });
@@ -250,6 +253,7 @@ router.patch(
   [body('title').optional().trim().notEmpty(), body('body').optional().isString()],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({ success: false, errors: errors.array() });
@@ -297,6 +301,7 @@ router.patch(
 // @route DELETE /api/dossier-document-drafts/:id
 router.delete('/dossier-document-drafts/:id', staffOnly, async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: 'ID invalide' });
     }

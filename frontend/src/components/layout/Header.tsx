@@ -348,7 +348,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               <>
                 <Link
                   href="/"
-                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base sm:text-xl max-w-[55vw] sm:max-w-none truncate"
+                  className="shrink-0 whitespace-nowrap font-bold text-orange-500 transition-colors hover:text-orange-600 text-base sm:text-xl"
                 >
                   Ada Papers
                 </Link>

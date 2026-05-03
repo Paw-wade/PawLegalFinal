@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Temoignage = require('../models/Temoignage');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveUserId, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 // @route   GET /api/temoignages
 // @desc    Récupérer les témoignages validés (public)
@@ -33,6 +34,7 @@ router.get('/', async (req, res) => {
 router.post(
   '/',
   protect,
+  handleImpersonation,
   [
     body('texte')
       .trim()
@@ -56,6 +58,7 @@ router.post(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -66,9 +69,11 @@ router.post(
       }
 
       const { texte, note, nom, role } = req.body;
+      const effId = getEffectiveUserId(req);
+      const effUser = req.impersonateTargetUser || req.user;
 
       // Vérifier si l'utilisateur a déjà soumis un témoignage
-      const existingTemoignage = await Temoignage.findOne({ user: req.user.id });
+      const existingTemoignage = await Temoignage.findOne({ user: effId });
       if (existingTemoignage) {
         return res.status(400).json({
           success: false,
@@ -77,8 +82,8 @@ router.post(
       }
 
       const temoignage = await Temoignage.create({
-        user: req.user.id,
-        nom: nom || `${req.user.firstName} ${req.user.lastName}`,
+        user: effId,
+        nom: nom || `${effUser.firstName} ${effUser.lastName}`,
         role: role || 'Client',
         texte,
         note
@@ -104,7 +109,7 @@ router.post(
 // @route   GET /api/temoignages/admin
 // @desc    Récupérer tous les témoignages (admin)
 // @access  Private (Admin)
-router.get('/admin', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.get('/admin', protect, handleImpersonation, authorize('admin', 'superadmin'), async (req, res) => {
   try {
     const { valide } = req.query;
     let query = {};
@@ -137,6 +142,7 @@ router.get('/admin', protect, authorize('admin', 'superadmin'), async (req, res)
 router.patch(
   '/:id/validate',
   protect,
+  handleImpersonation,
   authorize('admin', 'superadmin'),
   [
     body('valide')
@@ -145,6 +151,7 @@ router.patch(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -192,8 +199,9 @@ router.patch(
 // @route   DELETE /api/temoignages/:id
 // @desc    Supprimer un témoignage (admin)
 // @access  Private (Admin)
-router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.delete('/:id', protect, handleImpersonation, authorize('admin', 'superadmin'), async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const temoignage = await Temoignage.findById(req.params.id);
 
     if (!temoignage) {
@@ -221,9 +229,9 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
 // @route   GET /api/temoignages/my
 // @desc    Récupérer le témoignage de l'utilisateur connecté
 // @access  Private (Client)
-router.get('/my', protect, async (req, res) => {
+router.get('/my', protect, handleImpersonation, async (req, res) => {
   try {
-    const temoignage = await Temoignage.findOne({ user: req.user.id })
+    const temoignage = await Temoignage.findOne({ user: getEffectiveUserId(req) })
       .populate('user', 'firstName lastName');
 
     if (!temoignage) {

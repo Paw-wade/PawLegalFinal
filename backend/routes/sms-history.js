@@ -1,12 +1,20 @@
 const express = require('express');
 const SmsHistory = require('../models/SmsHistory');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification admin
 router.use(protect);
+router.use(handleImpersonation);
 router.use(authorize('admin', 'superadmin'));
+router.use((req, res, next) => {
+  if (req.impersonateUserId && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    if (forbidImpersonationWrite(req, res)) return;
+  }
+  next();
+});
 
 // @route   GET /api/sms-history
 // @desc    Récupérer l'historique des SMS

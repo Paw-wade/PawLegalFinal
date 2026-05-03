@@ -16,8 +16,10 @@ const providers: NextAuthOptions['providers'] = [
         return null;
       }
 
+      const loginUrl = publicApiPath('/auth/login');
+
       try {
-        const response = await fetch(publicApiPath('/auth/login'), {
+        const response = await fetch(loginUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -25,35 +27,72 @@ const providers: NextAuthOptions['providers'] = [
           body: JSON.stringify({
             email: credentials.email,
             password: credentials.password
-          })
+          }),
+          signal: AbortSignal.timeout(20_000),
         });
 
-        const data = await response.json();
+        const ct = response.headers.get('content-type') || '';
+        let data: Record<string, unknown> = {};
+        if (ct.includes('application/json')) {
+          try {
+            data = (await response.json()) as Record<string, unknown>;
+          } catch {
+            console.error('[authorize] JSON invalide depuis', loginUrl, 'status', response.status);
+            throw new Error(
+              "Réponse d'authentification invalide (JSON). Vérifiez que NEXT_PUBLIC_API_URL pointe vers l'API PawLegal."
+            );
+          }
+        } else {
+          const snippet = (await response.text()).slice(0, 200);
+          console.error('[authorize] Réponse non-JSON', response.status, snippet);
+          throw new Error(
+            `Le serveur d'authentification a répondu sans JSON (${response.status}). Vérifiez NEXT_PUBLIC_API_URL.`
+          );
+        }
 
-        if (data.success && data.token) {
+        const token = typeof data.token === 'string' ? data.token : '';
+        const user = data.user as Record<string, unknown> | undefined;
+        const userId = user?.id != null ? String(user.id) : '';
+
+        if (data.success && token && user && userId) {
           // Le token sera stocké côté client après la connexion
           // On le retourne dans l'objet user pour qu'il soit disponible dans les callbacks
           return {
-            id: data.user.id,
-            email: data.user.email,
-            name: `${data.user.firstName} ${data.user.lastName}`,
-            role: data.user.role || 'client',
-            profilComplete: data.user.profilComplete || false,
-            needsPasswordSetup: !!data.user.needsPasswordSetup,
-            daysRemaining: typeof data.user.daysRemaining === 'number' ? data.user.daysRemaining : null,
-            token: data.token
+            id: userId,
+            email: String(user.email ?? ''),
+            name: `${String(user.firstName ?? '')} ${String(user.lastName ?? '')}`.trim() || String(user.email ?? ''),
+            role: (user.role as string) || 'client',
+            profilComplete: Boolean(user.profilComplete),
+            needsPasswordSetup: Boolean(user.needsPasswordSetup),
+            daysRemaining: typeof user.daysRemaining === 'number' ? user.daysRemaining : null,
+            token,
           };
         }
 
-        // Si la réponse contient un message d'erreur, le propager
-        if (data.message) {
-          throw new Error(data.message);
+        // Échec attendu (mauvais mot de passe, compte inactif, etc.) : ne pas lancer d'exception
+        const msg = typeof data.message === 'string' ? data.message : null;
+        if (msg) {
+          console.warn('[authorize] Login refusé:', msg);
+        } else {
+          console.warn('[authorize] Login refusé sans message', { status: response.status, success: data.success });
         }
-
         return null;
       } catch (error: any) {
+        const name = error?.name;
+        const message = String(error?.message || error);
+        if (name === 'AbortError' || name === 'TimeoutError') {
+          console.error('[authorize] Timeout vers', loginUrl);
+          throw new Error(
+            "Délai dépassé en joignant le serveur d'authentification. Vérifiez que le backend est démarré et que NEXT_PUBLIC_API_URL est correct."
+          );
+        }
+        if (name === 'TypeError' && /fetch|network|Failed to fetch/i.test(message)) {
+          console.error('[authorize] Réseau / fetch:', message, loginUrl);
+          throw new Error(
+            "Impossible de joindre le serveur d'authentification. Vérifiez NEXT_PUBLIC_API_URL, le pare-feu et que le backend écoute sur le bon port."
+          );
+        }
         console.error('Erreur de connexion:', error);
-        // Propager l'erreur pour qu'elle soit gérée par NextAuth
         throw error;
       }
     }

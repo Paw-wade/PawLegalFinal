@@ -7,6 +7,7 @@ const ForumPost = require('../models/ForumPost');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveUserId, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 const router = express.Router();
 
@@ -398,7 +399,7 @@ router.post(
 // PATCH /api/forum/threads/:id - Mise à jour par un administrateur (statut, épinglage)
 router.patch(
   '/threads/:id',
-  protect,
+  protect, handleImpersonation,
   authorize('admin', 'superadmin'),
   [
     body('status')
@@ -413,6 +414,7 @@ router.patch(
   handleValidationErrors,
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const threadId = req.params.id;
       const updates = {};
 
@@ -444,10 +446,11 @@ router.patch(
 // DELETE /api/forum/posts/:id - Suppression douce d'une réponse par un administrateur
 router.delete(
   '/posts/:id',
-  protect,
+  protect, handleImpersonation,
   authorize('admin', 'superadmin'),
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const postId = req.params.id;
 
       const post = await ForumPost.findById(postId);
@@ -480,7 +483,7 @@ router.delete(
 // PATCH /api/forum/posts/:id/verify - Valider / invalider une réponse (admin)
 router.patch(
   '/posts/:id/verify',
-  protect,
+  protect, handleImpersonation,
   authorize('admin', 'superadmin'),
   [
     body('isVerified')
@@ -495,6 +498,7 @@ router.patch(
   handleValidationErrors,
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const postId = req.params.id;
       const hasIsVerified = typeof req.body.isVerified === 'boolean';
       const hasIsRejected = typeof req.body.isRejected === 'boolean';
@@ -668,10 +672,10 @@ router.post('/threads/:id/like', optionalProtect, async (req, res) => {
 });
 
 // POST /api/forum/threads/:id/bookmark - Mettre en signet / retirer un signet sur une discussion
-router.post('/threads/:id/bookmark', protect, async (req, res) => {
+router.post('/threads/:id/bookmark', protect, handleImpersonation, async (req, res) => {
   try {
     const threadId = req.params.id;
-    const userId = req.user.id;
+    const userId = getEffectiveUserId(req);
 
     const thread = await ForumThread.findById(threadId);
     if (!thread) {
@@ -715,9 +719,9 @@ router.post('/threads/:id/bookmark', protect, async (req, res) => {
 });
 
 // GET /api/forum/bookmarks - Récupérer les discussions mises en signet par l'utilisateur courant
-router.get('/bookmarks', protect, async (req, res) => {
+router.get('/bookmarks', protect, handleImpersonation, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).populate({
+    const user = await User.findById(getEffectiveUserId(req)).populate({
       path: 'forumBookmarks.thread',
       select: 'title theme status isPinned lastReplyAt repliesCount',
     });
@@ -762,7 +766,7 @@ router.get('/bookmarks', protect, async (req, res) => {
 });
 
 // POST /api/forum/threads/:id/mark-read - Enregistrer que l'utilisateur a consulté le fil (efface le badge)
-router.post('/threads/:id/mark-read', protect, async (req, res) => {
+router.post('/threads/:id/mark-read', protect, handleImpersonation, async (req, res) => {
   try {
     const threadId = req.params.id;
     const thread = await ForumThread.findById(threadId).select('_id');
@@ -770,7 +774,7 @@ router.post('/threads/:id/mark-read', protect, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Discussion introuvable' });
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(getEffectiveUserId(req));
     if (!user) {
       return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
@@ -796,9 +800,9 @@ router.post('/threads/:id/mark-read', protect, async (req, res) => {
 });
 
 // GET /api/forum/unread-count - Mes discussions avec nouvelles réponses non lues + signets avec activité
-router.get('/unread-count', protect, async (req, res) => {
+router.get('/unread-count', protect, handleImpersonation, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = getEffectiveUserId(req);
     const user = await User.findById(userId).select('forumThreadReads forumBookmarks');
     if (!user) {
       return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });

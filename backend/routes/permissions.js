@@ -3,11 +3,13 @@ const { body, validationResult } = require('express-validator');
 const Permission = require('../models/Permission');
 const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification admin
 router.use(protect);
+router.use(handleImpersonation);
 router.use(authorize('admin', 'superadmin'));
 
 // @route   GET /api/permissions/:userId
@@ -64,6 +66,7 @@ router.post(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -235,6 +238,7 @@ router.put(
   ],
   async (req, res) => {
     try {
+      if (forbidImpersonationWrite(req, res)) return;
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({

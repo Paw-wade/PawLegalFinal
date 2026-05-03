@@ -1,11 +1,13 @@
 const express = require('express');
 const Notification = require('../models/Notification');
 const { protect } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveUserId } = require('../middleware/impersonation');
 
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification
 router.use(protect);
+router.use(handleImpersonation);
 
 // @route   GET /api/notifications
 // @desc    Récupérer toutes les notifications de l'utilisateur connecté
@@ -13,8 +15,8 @@ router.use(protect);
 router.get('/', async (req, res) => {
   try {
     const { lu, limit = 50 } = req.query;
-    
-    const filter = { user: req.user.id };
+    const uid = getEffectiveUserId(req);
+    const filter = { user: uid };
     if (lu !== undefined) {
       filter.lu = lu === 'true';
     }
@@ -45,8 +47,9 @@ router.get('/', async (req, res) => {
 // @access  Private
 router.get('/unread', async (req, res) => {
   try {
+    const uid = getEffectiveUserId(req);
     const count = await Notification.countDocuments({
-      user: req.user.id,
+      user: uid,
       lu: false
     });
     
@@ -78,8 +81,7 @@ router.put('/:id/read', async (req, res) => {
       });
     }
     
-    // Vérifier que la notification appartient à l'utilisateur
-    if (notification.user.toString() !== req.user.id.toString()) {
+    if (notification.user.toString() !== getEffectiveUserId(req)) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé à cette notification'
@@ -110,7 +112,7 @@ router.put('/:id/read', async (req, res) => {
 router.put('/read-all', async (req, res) => {
   try {
     await Notification.updateMany(
-      { user: req.user.id, lu: false },
+      { user: getEffectiveUserId(req), lu: false },
       { lu: true }
     );
     
@@ -142,8 +144,7 @@ router.delete('/:id', async (req, res) => {
       });
     }
     
-    // Vérifier que la notification appartient à l'utilisateur
-    if (notification.user.toString() !== req.user.id.toString()) {
+    if (notification.user.toString() !== getEffectiveUserId(req)) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé à cette notification'

@@ -2,12 +2,20 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const SmsTemplate = require('../models/SmsTemplate');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, forbidImpersonationWrite } = require('../middleware/impersonation');
 
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification admin
 router.use(protect);
+router.use(handleImpersonation);
 router.use(authorize('admin', 'superadmin'));
+router.use((req, res, next) => {
+  if (req.impersonateUserId && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    if (forbidImpersonationWrite(req, res)) return;
+  }
+  next();
+});
 
 // @route   GET /api/sms-templates
 // @desc    Récupérer tous les templates SMS

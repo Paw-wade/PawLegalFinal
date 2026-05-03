@@ -1,5 +1,6 @@
 const express = require('express');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveUserId, forbidImpersonationWrite } = require('../middleware/impersonation');
 const User = require('../models/User');
 const { ensureConfigured, sendPushToUser } = require('../utils/pushService');
 
@@ -17,6 +18,7 @@ router.get('/public-key', (req, res) => {
 });
 
 router.use(protect);
+router.use(handleImpersonation);
 
 // Diagnostic de configuration Web Push (admin uniquement)
 router.get('/health', authorize('admin', 'superadmin'), async (req, res) => {
@@ -25,7 +27,7 @@ router.get('/health', authorize('admin', 'superadmin'), async (req, res) => {
     const hasPrivateKey = Boolean(process.env.VAPID_PRIVATE_KEY);
     const configured = ensureConfigured();
 
-    const currentUser = await User.findById(req.user.id).select('pushSubscriptions pushPreferences');
+    const currentUser = await User.findById(getEffectiveUserId(req)).select('pushSubscriptions pushPreferences');
     const subscriptionsCount = Array.isArray(currentUser?.pushSubscriptions)
       ? currentUser.pushSubscriptions.length
       : 0;
@@ -50,6 +52,7 @@ router.get('/health', authorize('admin', 'superadmin'), async (req, res) => {
 
 router.post('/subscribe', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     if (!ensureConfigured()) {
       return res.status(503).json({
         success: false,
@@ -69,7 +72,7 @@ router.post('/subscribe', async (req, res) => {
       });
     }
 
-    const userId = req.user.id;
+    const userId = getEffectiveUserId(req);
     const existing = await User.findOne({
       _id: userId,
       'pushSubscriptions.endpoint': endpoint,
@@ -123,6 +126,7 @@ router.post('/subscribe', async (req, res) => {
 
 router.post('/unsubscribe', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const endpoint = String(req.body?.endpoint || '').trim();
     if (!endpoint) {
       return res.status(400).json({
@@ -132,7 +136,7 @@ router.post('/unsubscribe', async (req, res) => {
     }
 
     await User.updateOne(
-      { _id: req.user.id },
+      { _id: getEffectiveUserId(req) },
       { $pull: { pushSubscriptions: { endpoint } } }
     );
 
@@ -148,6 +152,7 @@ router.post('/unsubscribe', async (req, res) => {
 
 router.post('/test', async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const payload = {
       title: 'Notification test',
       body: 'Web Push Ada Papers est bien activé.',
@@ -156,7 +161,7 @@ router.post('/test', async (req, res) => {
       badge: '/ada-papers-logo.png',
       tag: `push-test-${Date.now()}`,
     };
-    const result = await sendPushToUser(req.user.id, payload);
+    const result = await sendPushToUser(getEffectiveUserId(req), payload);
     return res.json({ success: true, result });
   } catch (error) {
     console.error('Erreur envoi test Web Push:', error);

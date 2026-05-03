@@ -8,10 +8,12 @@ const Dossier = require('../models/Dossier');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveRole, getEffectiveUserId } = require('../middleware/impersonation');
 const { sendNotificationSMS } = require('../sendSMS');
 
 // Toutes les routes nécessitent une authentification
 router.use(protect);
+router.use(handleImpersonation);
 
 // @route   POST /api/document-requests
 // @desc    Créer une demande de document (admin, superadmin, partenaire avec dossier transmis)
@@ -369,7 +371,7 @@ router.get('/', async (req, res) => {
     const { dossierId, status, userId } = req.query;
     const query = {};
 
-    const role = req.user.role;
+    const role = getEffectiveRole(req);
 
     // Si admin, peut voir toutes les demandes ou filtrer par dossier
     if (role === 'admin' || role === 'superadmin') {
@@ -384,7 +386,7 @@ router.get('/', async (req, res) => {
       }
     } else if (role === 'client') {
       // Client: voir uniquement les demandes qui lui sont adressées
-      const targetUserId = req.user.id;
+      const targetUserId = getEffectiveUserId(req);
       query.requestedFrom = targetUserId;
       if (status) {
         query.status = status;
@@ -407,7 +409,7 @@ router.get('/', async (req, res) => {
         const isTransmittedToPartenaire = dossier.transmittedTo && dossier.transmittedTo.some((t) => {
           if (!t.partenaire) return false;
           const pid = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
-          return pid === req.user.id.toString();
+          return pid === String(getEffectiveUserId(req));
         });
         if (!isTransmittedToPartenaire) {
           return res.status(403).json({
@@ -419,7 +421,7 @@ router.get('/', async (req, res) => {
       } else {
         // Sans dossierId explicite, limiter aux dossiers transmis au partenaire
         const dossiersTransmis = await Dossier.find({
-          'transmittedTo.partenaire': req.user.id
+          'transmittedTo.partenaire': getEffectiveUserId(req)
         }).select('_id');
         const dossierIds = dossiersTransmis.map((d) => d._id);
         if (dossierIds.length === 0) {
@@ -486,12 +488,14 @@ router.get('/:id', async (req, res) => {
     }
 
     // Vérifier les permissions
-    const targetUserId = req.user.id;
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const targetUserId = getEffectiveUserId(req);
+    const isImpersonating = !!req.impersonateUserId;
+    const isAdmin = !isImpersonating && (req.user.role === 'admin' || req.user.role === 'superadmin');
     const isRequestedFrom = documentRequest.requestedFrom._id?.toString() === targetUserId.toString() || 
                            documentRequest.requestedFrom.toString() === targetUserId.toString();
-    const isRequestedBy = documentRequest.requestedBy._id?.toString() === req.user.id.toString() ||
-                         documentRequest.requestedBy.toString() === req.user.id.toString();
+    const jwtActorId = String(req.user.id || req.user._id || '');
+    const isRequestedBy = documentRequest.requestedBy._id?.toString() === jwtActorId ||
+                         documentRequest.requestedBy.toString() === jwtActorId;
 
     if (!isAdmin && !isRequestedFrom && !isRequestedBy) {
       return res.status(403).json({

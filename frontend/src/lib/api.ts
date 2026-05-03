@@ -179,6 +179,13 @@ api.interceptors.request.use(
           console.warn('⚠️ Aucun token trouvé pour une requête protégée :', config.url);
         }
       }
+
+      const impersonateUserId = localStorage.getItem('impersonateUserId');
+      const impersonateAdminId = localStorage.getItem('impersonateAdminId');
+      if (impersonateUserId && impersonateAdminId) {
+        (config.headers as Record<string, string>)['X-Impersonate-User-Id'] = impersonateUserId;
+        (config.headers as Record<string, string>)['X-Impersonate-Admin-Id'] = impersonateAdminId;
+      }
       
     }
     return config;

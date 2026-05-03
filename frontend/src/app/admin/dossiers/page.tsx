@@ -27,6 +27,11 @@ import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { Toast } from '@/components/Toast';
 import { QuickComplementTabsForm } from '@/components/dossiers/QuickComplementTabsForm';
+import {
+  adminIdFromSession,
+  getLinkedClientUserId,
+  startDossierClientImpersonation,
+} from '@/lib/dossierImpersonation';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -319,6 +324,29 @@ export default function AdminDossiersPage() {
   /** Tri liste : jalons datés dans `etapesSupplementaires` (front uniquement). */
   const [dossierSortEtapes, setDossierSortEtapes] = useState<'default' | 'etape_date_asc' | 'etape_date_desc'>('default');
   const isSuperadmin = (session?.user as any)?.role === 'superadmin';
+
+  /** Aperçu exact côté client : headers d’impersonation + navigation (détail ou tarification). */
+  const goClientPreview = (dossier: any, mode: 'detail' | 'tarif') => {
+    const clientId = getLinkedClientUserId(dossier);
+    const adminId = adminIdFromSession(session);
+    if (!clientId) {
+      window.alert(
+        "Aucun compte client n'est lié à ce dossier : l'aperçu exact nécessite un utilisateur rattaché (inscrit)."
+      );
+      return;
+    }
+    if (!adminId) {
+      window.alert('Session administrateur introuvable.');
+      return;
+    }
+    startDossierClientImpersonation(clientId, adminId);
+    const id = String(dossier._id || dossier.id || '');
+    if (mode === 'tarif') {
+      router.push(`/admin/dossiers/${id}/tarification-vue-client`);
+    } else {
+      router.push(`/admin/dossiers/${id}?vueClient=1`);
+    }
+  };
 
   // Étapes de base pour garder un workflow cohérent même sans étapes personnalisées.
   const DEFAULT_ADMIN_ETAPES: any[] = [
@@ -2700,6 +2728,28 @@ export default function AdminDossiersPage() {
                         >
                           Voir les détails
                         </Link>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            goClientPreview(dossier, 'detail');
+                          }}
+                          className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md border border-violet-300 bg-violet-50 text-violet-900 text-xs font-semibold hover:bg-violet-100 transition-colors"
+                          title="Voir le dossier comme le client (API + messages/documents filtrés comme le client)"
+                        >
+                          Vue client
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            goClientPreview(dossier, 'tarif');
+                          }}
+                          className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md border border-emerald-300 bg-emerald-50 text-emerald-900 text-xs font-semibold hover:bg-emerald-100 transition-colors"
+                          title="Tarification : données chargées comme pour le client (impersonation)"
+                        >
+                          Tarif client
+                        </button>
                         <button
                           type="button"
                           onClick={(e) => handleToggleStandby(dossier, e)}

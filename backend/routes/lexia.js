@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const { protect, authorize } = require('../middleware/auth');
+const { handleImpersonation, getEffectiveRole, forbidImpersonationWrite } = require('../middleware/impersonation');
 const { LEXIA_SYSTEM_PROMPT } = require('../lib/lexiaSystemPrompt');
 const { searchAndCompose, getKnowledgeDir } = require('../services/lexiaInternal');
 
@@ -149,9 +150,10 @@ async function runAnthropicLexia(trimmed) {
   return { text: lastText || 'Limite d’échanges avec le modèle atteinte.', searched };
 }
 
-router.get('/config', protect, authorize(...LEXIA_ALLOWED_ROLES), (req, res) => {
+router.get('/config', protect, handleImpersonation, authorize(...LEXIA_ALLOWED_ROLES), (req, res) => {
   const knowledgeDir = getKnowledgeDir();
-  const isStaff = req.user.role === 'admin' || req.user.role === 'superadmin';
+  const role = getEffectiveRole(req);
+  const isStaff = role === 'admin' || role === 'superadmin';
   res.json({
     envProvider: normalizeProvider(process.env.LEXIA_PROVIDER),
     anthropicConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
@@ -164,8 +166,9 @@ router.get('/config', protect, authorize(...LEXIA_ALLOWED_ROLES), (req, res) => 
   });
 });
 
-router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) => {
+router.post('/', protect, handleImpersonation, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) => {
   try {
+    if (forbidImpersonationWrite(req, res)) return;
     const incoming = req.body?.messages;
     if (!Array.isArray(incoming) || incoming.length === 0) {
       return res.status(400).json({ error: 'Le tableau messages est requis.' });
