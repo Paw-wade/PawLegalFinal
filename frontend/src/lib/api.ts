@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getPublicApiBaseUrl } from './publicApiUrl';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -8,13 +9,7 @@ let pendingTokenPromise: Promise<string | null> | null = null;
 
 /** URL API terminée par `/api` une seule fois (axios + fetch hors axios). */
 export function getApiBaseUrl(): string {
-  let baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005')
-    .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
-    .trim();
-  baseURL = baseURL.replace(/\/+$/, '');
-  // Evite les doublons (ex: ".../api/api") : on ne garde qu'un seul suffixe "/api"
-  baseURL = baseURL.replace(/(?:\/api)+$/i, '/api');
-  return /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
+  return getPublicApiBaseUrl();
 }
 
 // Même base que getApiBaseUrl : sinon api.get('/logs') tape .../logs au lieu de .../api/logs → 404 en prod

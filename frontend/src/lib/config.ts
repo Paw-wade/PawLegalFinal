@@ -1,8 +1,10 @@
+import { getPublicApiBaseUrl } from './publicApiUrl';
+
 // Configuration de l'application
 
 export const config = {
-  // URL de l'API backend
-  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api',
+  // URL de l'API backend (`NEXT_PUBLIC_API_URL` + `/api`)
+  apiUrl: getPublicApiBaseUrl(),
   
   // URL du frontend (port 3004 = script `next dev` du package.json)
   frontendUrl: process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3004',
@@ -19,7 +21,7 @@ export const config = {
 if (typeof window === 'undefined') {
   // Côté serveur
   if (!process.env.NEXT_PUBLIC_API_URL) {
-    console.warn('⚠️  NEXT_PUBLIC_API_URL n\'est pas défini. Utilisation de la valeur par défaut: http://localhost:3005/api');
+    console.warn('⚠️  NEXT_PUBLIC_API_URL n\'est pas défini. Utilisation de l\'origine par défaut: http://localhost:3005 (chemins sous /api/...)');
   }
 } else {
   // Côté client

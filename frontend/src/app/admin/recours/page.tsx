@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { recoursAPI } from '@/lib/recoursAPI';
 import { documentsAPI } from '@/lib/api';
+import { getPublicApiBaseUrl } from '@/lib/publicApiUrl';
 import { Toast } from '@/components/Toast';
 
 type RecoursType = {
@@ -509,16 +510,7 @@ export default function RecoursDirectoryPage() {
 
                           // construire une URL exploitable pour ouvrir le fichier
                           // on réutilise la route de prévisualisation existante
-                          const rawBaseURL =
-                            process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-                          // Normaliser pour éviter les doublons `/api` (ex: ".../api/" ou ".../api ")
-                          const baseURL = String(rawBaseURL)
-                            .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
-                            .trim()
-                            .replace(/\/+$/, '');
-                          let fileUrl = baseURL.endsWith('/api')
-                            ? `${baseURL}/user/documents/${doc._id}/preview`
-                            : `${baseURL}/api/user/documents/${doc._id}/preview`;
+                          let fileUrl = `${getPublicApiBaseUrl()}/user/documents/${doc._id}/preview`;
 
                           // ajouter le token en query pour les ouvertures directes (nouvel onglet)
                           if (typeof window !== 'undefined') {
