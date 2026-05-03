@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -76,6 +76,19 @@ export default function ClientMessageDetailPage() {
   const [replyData, setReplyData] = useState({ sujet: '', contenu: '' });
   const [attachments, setAttachments] = useState<File[]>([]);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+
+  const { expediteur, isReceived } = useMemo(() => {
+    if (!message) {
+      return { expediteur: null as any, isReceived: false };
+    }
+    const isRecv =
+      message.destinataires?.some(
+        (d: any) =>
+          d._id?.toString() === (session?.user as any)?.id?.toString() ||
+          d.toString() === (session?.user as any)?.id?.toString()
+      ) ?? false;
+    return { expediteur: message.expediteur, isReceived: isRecv };
+  }, [message, session]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -287,13 +300,6 @@ export default function ClientMessageDetailPage() {
   if (!message) {
     return null;
   }
-
-  const expediteur = message.expediteur;
-  const isReceived = message.destinataires?.some(
-    (d: any) =>
-      d._id?.toString() === (session?.user as any)?.id?.toString() ||
-      d.toString() === (session?.user as any)?.id?.toString()
-  );
 
   return (
     <div className="min-h-screen bg-background">
