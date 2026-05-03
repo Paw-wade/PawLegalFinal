@@ -1,13 +1,12 @@
+import { getNextPublicApiOrigin } from './publicApiUrl';
+
 /** URL absolue pour afficher une photo stockée sur le backend (/uploads/...) */
 export function getProfilePhotoAbsoluteUrl(relativePath: string | null | undefined): string | null {
   if (!relativePath || typeof relativePath !== 'string') return null;
   const trimmed = relativePath.trim();
   if (!trimmed) return null;
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
-  const api = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api')
-    .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
-    .trim();
-  const origin = api.replace(/\/?api\/?$/i, '') || 'http://localhost:3005';
+  const origin = getNextPublicApiOrigin();
   const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
   return `${origin}${path}`;
 }

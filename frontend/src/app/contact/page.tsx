@@ -206,10 +206,13 @@ export default function ContactPage() {
         formDataToSend.append('documents', file);
       });
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/contact`, {
-        method: 'POST',
-        body: formDataToSend,
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'}/api/contact`,
+        {
+          method: 'POST',
+          body: formDataToSend,
+        }
+      );
 
       const data = await response.json();
 

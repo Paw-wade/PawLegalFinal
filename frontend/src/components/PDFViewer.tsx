@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { getPublicApiBaseUrl } from '@/lib/publicApiUrl';
 
 interface PDFViewerProps {
   src: string;
@@ -58,13 +59,7 @@ export function PDFViewer({ src, title, documentId, onDownload }: PDFViewerProps
       onDownload();
     } else {
       // Télécharger directement via l'API
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
-      let baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005')
-        .replace(/[\s\u200B-\u200D\uFEFF\xA0]+/g, '')
-        .trim();
-      baseURL = baseURL.replace(/\/+$/, '');
-      const apiBase = /\/api$/i.test(baseURL) ? baseURL : `${baseURL}/api`;
-      const downloadUrl = `${apiBase}/user/documents/${documentId}/download`;
+      const downloadUrl = `${getPublicApiBaseUrl()}/user/documents/${documentId}/download`;
       
       // Créer un lien de téléchargement avec authentification
       const link = document.createElement('a');

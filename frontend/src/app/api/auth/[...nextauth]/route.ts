@@ -1,6 +1,7 @@
 import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
+import { publicApiPath } from '@/lib/publicApiUrl';
 
 // Configuration NextAuth
 const providers: NextAuthOptions['providers'] = [
@@ -16,9 +17,7 @@ const providers: NextAuthOptions['providers'] = [
       }
 
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
-        
-        const response = await fetch(`${API_URL}/auth/login`, {
+        const response = await fetch(publicApiPath('/auth/login'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -92,8 +91,7 @@ const authOptions: NextAuthOptions = {
         return true;
       }
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
-        const response = await fetch(`${API_URL}/auth/google-login`, {
+        const response = await fetch(publicApiPath('/auth/google-login'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -118,8 +116,7 @@ const authOptions: NextAuthOptions = {
     async jwt({ token, user, account, profile }) {
       if ((account?.provider === 'google' || account?.provider === 'google-signup') && account.id_token) {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
-          const response = await fetch(`${API_URL}/auth/google-login`, {
+          const response = await fetch(publicApiPath('/auth/google-login'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

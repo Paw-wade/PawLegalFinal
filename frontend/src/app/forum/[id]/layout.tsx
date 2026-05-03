@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { publicApiPath } from '@/lib/publicApiUrl';
 
 type ThreadPayload = {
   success?: boolean;
@@ -22,7 +23,6 @@ const resolveSiteUrl = () => {
 };
 
 const SITE_URL = resolveSiteUrl();
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api').replace(/\/+$/, '');
 const LOGO_URL = `${SITE_URL}/ada-papers-logo.png`;
 
 function excerpt(text: string, max = 180) {
@@ -35,7 +35,7 @@ function excerpt(text: string, max = 180) {
 async function fetchThread(threadId: string) {
   if (!threadId) return null;
   try {
-    const res = await fetch(`${API_BASE}/forum/threads/${encodeURIComponent(threadId)}`, {
+    const res = await fetch(publicApiPath(`/forum/threads/${encodeURIComponent(threadId)}`), {
       method: 'GET',
       next: { revalidate: 60 },
     });
