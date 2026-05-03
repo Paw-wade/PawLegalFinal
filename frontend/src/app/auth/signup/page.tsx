@@ -2,9 +2,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
 import Link from 'next/link';
-import { otpAPI } from '@/lib/api';
+import { getProviders, signIn, useSession } from 'next-auth/react';
+import { authAPI } from '@/lib/api';
 
 function Button({ 
   children, 
@@ -65,36 +65,76 @@ function Label({ className = '', children, ...props }: any) {
   );
 }
 
-type Step = 'info' | 'otp';
+const REDIRECT_DELAY_MS = 2600;
 
 export default function SignupPage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('info');
+  const { data: session } = useSession();
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGoogleAvailable, setIsGoogleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(0);
-  
+  const [success, setSuccess] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    phone: '',
-    otpCode: '',
     email: '',
+    phone: '',
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const firstNameInputRef = useRef<HTMLInputElement>(null);
-  const lastNameInputRef = useRef<HTMLInputElement>(null);
-  const phoneInputRef = useRef<HTMLInputElement>(null);
-  const otpInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
+    const loadProviders = async () => {
+      try {
+        const providers = await getProviders();
+        setIsGoogleAvailable(Boolean(providers?.['google-signup']));
+      } catch (e) {
+        console.error('Erreur chargement providers NextAuth:', e);
+        setIsGoogleAvailable(false);
+      }
+    };
+    void loadProviders();
+  }, []);
+
+  useEffect(() => {
+    const user: any = session?.user;
+    if (!user) return;
+
+    // Si l'utilisateur existe déjà et est connecté, on redirige vers son espace.
+    if (user.accessToken) {
+      const role = user.role;
+      if (role === 'admin' || role === 'superadmin') {
+        router.replace('/admin');
+      } else if (role === 'partenaire') {
+        router.replace('/partenaire');
+      } else if (user.profilComplete === false) {
+        router.replace('/auth/complete-profile');
+      } else {
+        router.replace('/client');
+      }
+      return;
     }
-  }, [countdown]);
+
+    // Préremplissage des champs depuis Google pour finaliser l'inscription.
+    if (user.googleSignupPending) {
+      setFormData((prev) => ({
+        ...prev,
+        firstName: prev.firstName || user.googleFirstName || '',
+        lastName: prev.lastName || user.googleLastName || '',
+        email: prev.email || user.email || '',
+      }));
+    }
+  }, [session, router]);
 
   const validateField = (name: string, value: string) => {
     setFieldErrors(prev => {
@@ -128,15 +168,6 @@ export default function SignupPage() {
             delete errors.phone;
           }
           break;
-        case 'otpCode':
-          if (!value || value.trim().length === 0) {
-            errors.otpCode = 'Le code OTP est requis';
-          } else if (!/^\d{6}$/.test(value.trim())) {
-            errors.otpCode = 'Le code OTP doit contenir 6 chiffres';
-          } else {
-            delete errors.otpCode;
-          }
-          break;
       }
       
       return errors;
@@ -149,41 +180,55 @@ export default function SignupPage() {
     validateField(name, value);
   };
 
-  const handleSendOTP = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     
     const firstName = formData.firstName.trim();
     const lastName = formData.lastName.trim();
+    const email = formData.email.trim().toLowerCase();
     const cleanedPhone = formData.phone.replace(/\s/g, '');
 
-    if (!firstName || !lastName || !cleanedPhone) {
+    if (!firstName || !lastName || !email || !cleanedPhone) {
       setError('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    // Le fait de cliquer sur "Créer mon compte" vaut acceptation CGU + Politique de confidentialité.
+
+    // Validation simple de l'email côté client
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Veuillez entrer une adresse email valide');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const sendData: any = {
-        firstName: firstName,
-        lastName: lastName,
+      const response = await authAPI.register({
+        firstName,
+        lastName,
+        email,
         phone: cleanedPhone,
-      };
-
-      if (formData.email) {
-        sendData.email = formData.email;
-      }
-
-      const response = await otpAPI.send(sendData);
+      });
 
       if (response.data.success) {
-        setStep('otp');
-        setCountdown(60);
         setError(null);
+        setSuccess(
+          'Vous recevrez un SMS avec votre mot de passe temporaire sous peu. Redirection automatique vers l’accueil…'
+        );
+        if (redirectTimerRef.current) {
+          clearTimeout(redirectTimerRef.current);
+        }
+        redirectTimerRef.current = setTimeout(() => {
+          redirectTimerRef.current = null;
+          router.push('/');
+        }, REDIRECT_DELAY_MS);
       }
     } catch (err: any) {
-      console.error('Erreur lors de l\'envoi de l\'OTP:', err);
+      console.error('Erreur lors de la création du compte:', err);
       
       if (err.response?.data?.message) {
         setError(err.response.data.message);
@@ -193,92 +238,30 @@ export default function SignupPage() {
       } else if (err.message) {
         setError(`Erreur: ${err.message}`);
       } else {
-        setError('Erreur lors de l\'envoi du SMS. Veuillez réessayer.');
+        setError('Erreur lors de la création du compte. Veuillez réessayer.');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleSignup = async () => {
     setError(null);
-    
-    const otpCode = formData.otpCode.trim();
-    
-    if (!otpCode) {
-      setError('Veuillez entrer le code OTP');
-      return;
-    }
-
-    setIsLoading(true);
-
+    setIsGoogleLoading(true);
     try {
-      const cleanedPhone = formData.phone.replace(/\s/g, '');
-      const response = await otpAPI.verify({
-        phone: cleanedPhone,
-        code: otpCode,
-        email: formData.email || undefined,
-      });
-
-      if (response.data.success) {
-        localStorage.setItem('token', response.data.token);
-        
-        const userRole = response.data.user?.role;
-        const profilComplete = response.data.user?.profilComplete;
-        
-        if (response.data.user.needsPasswordSetup) {
-          router.push('/auth/setup-password');
-        } else {
-          if (!profilComplete) {
-            router.push('/auth/complete-profile');
-          } else {
-            router.push('/client');
-          }
-        }
-      }
-    } catch (err: any) {
-      console.error('Erreur lors de la vérification de l\'OTP:', err);
-      
-      if (err.response?.data?.message) {
-        setError(err.response.data.message);
-      } else {
-        setError('Code OTP invalide ou expiré. Veuillez réessayer.');
-      }
-    } finally {
-      setIsLoading(false);
+      await signIn('google-signup', { callbackUrl: '/auth/signup' });
+    } catch (err) {
+      console.error('Erreur lors de la pré-inscription Google:', err);
+      setError('Impossible de continuer avec Google pour le moment.');
+      setIsGoogleLoading(false);
     }
   };
 
-  const handleResendOTP = async () => {
-    if (countdown > 0) return;
-    
-    setError(null);
-    setIsLoading(true);
-
-    try {
-      const cleanedPhone = formData.phone.replace(/\s/g, '');
-      const response = await otpAPI.send({
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        phone: cleanedPhone,
-      });
-
-      if (response.data.success) {
-        setCountdown(60);
-        setError(null);
-      }
-    } catch (err: any) {
-      console.error('Erreur lors du renvoi de l\'OTP:', err);
-      if (err.response?.data?.message) {
-        setError(err.response.data.message);
-      } else {
-        setError('Erreur lors du renvoi du code. Veuillez réessayer.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (!isGoogleLoading) return;
+    const t = setTimeout(() => setIsGoogleLoading(false), 5000);
+    return () => clearTimeout(t);
+  }, [isGoogleLoading]);
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-primary/5 via-background to-primary/10 relative">
@@ -291,9 +274,9 @@ export default function SignupPage() {
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary to-primary/80 items-center justify-center p-12 text-white">
         <div className="max-w-md">
           <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-4">Rejoignez Paw Legal</h1>
+            <h1 className="text-4xl font-bold mb-4">Rejoignez Ada Papers</h1>
             <p className="text-lg text-white/90 mb-6">
-              Créez votre compte et bénéficiez d&apos;un accompagnement juridique personnalisé.
+              Service d&apos;Accompagnement aux démarches administratives.
             </p>
           </div>
           <div className="space-y-4">
@@ -314,8 +297,10 @@ export default function SignupPage() {
             <div className="flex items-start gap-3">
               <span className="text-2xl">✓</span>
               <div>
-                <h3 className="font-semibold mb-1">Accès immédiat</h3>
-                <p className="text-white/80 text-sm">Accédez à votre espace dès l&apos;inscription</p>
+                <h3 className="font-semibold mb-1">Outils et accompagnement</h3>
+                <p className="text-white/80 text-sm">
+                  Accès au calculateur de délais, à un avocat et au forum pour vos questions de titre de séjour.
+                </p>
               </div>
             </div>
           </div>
@@ -328,10 +313,10 @@ export default function SignupPage() {
             <Link href="/" className="inline-block">
               <div className="flex flex-col items-center">
                 <span className="text-3xl font-bold text-orange-500 hover:text-orange-600 transition-colors">
-                  Paw Legal
+                  Ada Papers
                 </span>
                 <p className="text-[10px] text-muted-foreground font-medium mt-1">
-                  Service d&apos;accompagnement juridique
+                  Service d&apos;Accompagnement aux démarches administratives
                 </p>
               </div>
             </Link>
@@ -341,13 +326,10 @@ export default function SignupPage() {
             <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-foreground mb-2">
-                  {step === 'info' ? 'Création de compte' : 'Vérification'}
+                  Création de compte
                 </h1>
                 <p className="text-muted-foreground">
-                  {step === 'info' 
-                    ? 'Créez votre compte Paw Legal'
-                    : 'Entrez le code reçu par SMS'
-                  }
+                  Créez votre compte Ada Papers
                 </p>
               </div>
             </div>
@@ -362,186 +344,182 @@ export default function SignupPage() {
                 </div>
               )}
 
-              {step === 'info' ? (
-                <form onSubmit={handleSendOTP} className="space-y-5">
-                  <div className="space-y-5">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="firstName">Prénom *</Label>
-                        <Input
-                          ref={firstNameInputRef}
-                          id="firstName"
-                          name="firstName"
-                          type="text"
-                          value={formData.firstName}
-                          onChange={handleChange}
-                          onBlur={(e) => validateField('firstName', e.target.value)}
-                          placeholder="Votre prénom"
-                          autoComplete="given-name"
-                          className={fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}
-                        />
-                        {fieldErrors.firstName && (
-                          <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                            <span>⚠️</span>
-                            <span>{fieldErrors.firstName}</span>
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="lastName">Nom *</Label>
-                        <Input
-                          ref={lastNameInputRef}
-                          id="lastName"
-                          name="lastName"
-                          type="text"
-                          value={formData.lastName}
-                          onChange={handleChange}
-                          onBlur={(e) => validateField('lastName', e.target.value)}
-                          placeholder="Votre nom"
-                          autoComplete="family-name"
-                          className={fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}
-                        />
-                        {fieldErrors.lastName && (
-                          <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                            <span>⚠️</span>
-                            <span>{fieldErrors.lastName}</span>
-                          </p>
-                        )}
-                      </div>
+              {success && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mb-6 p-4 bg-emerald-50 border border-emerald-200 border-l-4 border-l-emerald-500 rounded-lg shadow-sm animate-in fade-in duration-300"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl leading-none" aria-hidden>
+                      ✓
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-emerald-900">Compte créé avec succès</p>
+                      <p className="text-sm text-emerald-800 mt-1">{success}</p>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email (optionnel)</Label>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        placeholder="votre.email@exemple.com"
-                        autoComplete="email"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        L'email est optionnel mais recommandé pour la récupération de compte
-                      </p>
-                    </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Numéro de téléphone *</Label>
-                        <Input
-                          ref={phoneInputRef}
-                          id="phone"
-                          name="phone"
-                          type="tel"
-                          value={formData.phone}
-                          onChange={handleChange}
-                          onBlur={(e) => validateField('phone', e.target.value)}
-                          placeholder="07 68 03 33 58"
-                          autoComplete="tel"
-                          className={fieldErrors.phone ? 'border-red-500 focus:border-red-500' : ''}
-                        />
-                        {fieldErrors.phone && (
-                          <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                            <span>⚠️</span>
-                            <span>{fieldErrors.phone}</span>
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          Un code de vérification vous sera envoyé par SMS
-                        </p>
-                      </div>
-
-                      <Button
-                        type="submit"
-                        className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                        disabled={isLoading}
-                      >
-                        {isLoading ? (
-                          <span className="flex items-center gap-2">
-                            <span className="animate-spin">⏳</span>
-                            <span>Envoi en cours...</span>
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            <span>📱</span>
-                            <span>Envoyer le code</span>
-                          </span>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyOTP} className="space-y-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="otpCode">Code de vérification *</Label>
-                    <Input
-                      ref={otpInputRef}
-                      id="otpCode"
-                      name="otpCode"
-                      type="text"
-                      value={formData.otpCode}
-                      onChange={handleChange}
-                      onBlur={(e) => validateField('otpCode', e.target.value)}
-                      placeholder="123456"
-                      maxLength={6}
-                      className={fieldErrors.otpCode ? 'border-red-500 focus:border-red-500 text-center text-2xl tracking-widest' : 'text-center text-2xl tracking-widest'}
-                    />
-                    {fieldErrors.otpCode && (
-                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                        <span>⚠️</span>
-                        <span>{fieldErrors.otpCode}</span>
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Code envoyé au {formData.phone}
-                    </p>
                   </div>
+                </div>
+              )}
 
+              <form onSubmit={handleSubmit} className="space-y-6" aria-busy={isLoading || !!success}>
+                <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 space-y-2">
+                  <p className="text-xs text-blue-900/80 text-center font-medium">
+                    Inscription rapide avec Google
+                  </p>
                   <Button
-                    type="submit"
-                    className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                    disabled={isLoading}
+                    type="button"
+                    variant="outline"
+                    className="w-full h-12 text-base font-semibold bg-white"
+                    onClick={handleGoogleSignup}
+                    disabled={!isGoogleAvailable || isGoogleLoading || isLoading || !!success}
                   >
-                    {isLoading ? (
+                    {isGoogleLoading ? (
                       <span className="flex items-center gap-2">
                         <span className="animate-spin">⏳</span>
-                        <span>Vérification...</span>
+                        <span>Redirection vers Google...</span>
                       </span>
                     ) : (
                       <span className="flex items-center gap-2">
-                        <span>✅</span>
-                        <span>Vérifier le code</span>
+                        <span>🔵</span>
+                        <span>Continuer l&apos;inscription avec Google</span>
                       </span>
                     )}
                   </Button>
+                </div>
 
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={handleResendOTP}
-                      disabled={countdown > 0 || isLoading}
-                      className="text-sm text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
-                    >
-                      {countdown > 0 
-                        ? `Renvoyer le code dans ${countdown}s`
-                        : 'Renvoyer le code'
-                      }
-                    </button>
+                <div className="relative py-1">
+                  <div className="absolute inset-0 flex items-center" aria-hidden>
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-2 text-muted-foreground">Ou inscrivez-vous manuellement</span>
+                  </div>
+                </div>
+
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">Prénom *</Label>
+                      <Input
+                        id="firstName"
+                        name="firstName"
+                        type="text"
+                        value={formData.firstName}
+                        onChange={handleChange}
+                        onBlur={(e) => validateField('firstName', e.target.value)}
+                        placeholder="Votre prénom"
+                        autoComplete="given-name"
+                        disabled={!!success}
+                        className={fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}
+                      />
+                      {fieldErrors.firstName && (
+                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                          <span>⚠️</span>
+                          <span>{fieldErrors.firstName}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Nom *</Label>
+                      <Input
+                        id="lastName"
+                        name="lastName"
+                        type="text"
+                        value={formData.lastName}
+                        onChange={handleChange}
+                        onBlur={(e) => validateField('lastName', e.target.value)}
+                        placeholder="Votre nom"
+                        autoComplete="family-name"
+                        disabled={!!success}
+                        className={fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}
+                      />
+                      {fieldErrors.lastName && (
+                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                          <span>⚠️</span>
+                          <span>{fieldErrors.lastName}</span>
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={() => setStep('info')}
-                      className="text-sm text-muted-foreground hover:text-foreground"
-                    >
-                      &larr; Modifier mes informations
-                    </button>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      placeholder="votre.email@exemple.com"
+                      autoComplete="email"
+                      required
+                      disabled={!!success}
+                    />
                   </div>
-                </form>
-              )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Numéro de téléphone *</Label>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      onBlur={(e) => validateField('phone', e.target.value)}
+                      placeholder="07 68 03 33 58"
+                      autoComplete="tel"
+                      disabled={!!success}
+                      className={fieldErrors.phone ? 'border-red-500 focus:border-red-500' : ''}
+                    />
+                    {fieldErrors.phone && (
+                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                        <span>⚠️</span>
+                        <span>{fieldErrors.phone}</span>
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Une fois votre inscription validée, un SMS contenant votre mot de passe temporaire vous sera envoyé.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-1">
+                  <Button
+                    type="submit"
+                    className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                    disabled={isLoading || !!success}
+                  >
+                    {success ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="animate-pulse">✓</span>
+                        <span>Redirection vers l&apos;accueil…</span>
+                      </span>
+                    ) : isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin">⏳</span>
+                        <span>Envoi en cours...</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <span>Créer mon compte</span>
+                      </span>
+                    )}
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    En créant un compte, vous acceptez les{' '}
+                    <Link href="/cgu" className="text-primary hover:underline font-semibold">
+                      Conditions Générales d&apos;Utilisation
+                    </Link>{' '}
+                    et la{' '}
+                    <Link href="/politique-confidentialite" className="text-primary hover:underline font-semibold">
+                      Politique de confidentialité
+                    </Link>
+                    .
+                  </p>
+                </div>
+              </form>
 
               <div className="mt-6 pt-6 border-t border-border text-center">
                 <p className="text-sm text-muted-foreground">

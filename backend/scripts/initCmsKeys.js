@@ -19,7 +19,7 @@ const connectDB = async () => {
 const defaultCmsKeys = [
   {
     key: 'layout.header.subtitle_home',
-    value: "Service d'accompagnement juridique",
+    value: "Service d'Accompagnement aux démarches administratives",
     locale: 'fr-FR',
     page: 'layout',
     section: 'header',

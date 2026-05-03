@@ -122,11 +122,11 @@ const fixUsers = async () => {
         let password;
 
         if (passwordMode === '1') {
-          // Générer un mot de passe aléatoire
-          password = generatePassword(12);
+          // Utiliser le mot de passe par défaut
+          password = DEFAULT_PASSWORD;
           passwords[user._id.toString()] = password;
         } else if (passwordMode === '2') {
-          password = defaultPassword;
+          password = defaultPassword || DEFAULT_PASSWORD;
         } else {
           // Demander pour chaque compte
           password = await question(

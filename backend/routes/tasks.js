@@ -120,7 +120,7 @@ router.get('/dossier/:dossierId', protect, async (req, res) => {
         const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
         return partenaireId === req.user.id;
       });
-      hasAccess = !!transmission && (transmission.statut === 'pending' || transmission.statut === 'accepted');
+      hasAccess = !!transmission && (transmission.status === 'pending' || transmission.status === 'accepted');
     }
 
     if (!hasAccess) {
@@ -539,7 +539,7 @@ router.put(
             const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
             return partenaireId === req.user.id;
           });
-          hasDossierAccess = !!transmission && (transmission.statut === 'pending' || transmission.statut === 'accepted');
+          hasDossierAccess = !!transmission && (transmission.status === 'pending' || transmission.status === 'accepted');
         }
       }
 
@@ -704,7 +704,7 @@ router.put(
           }));
           
           if (notifications.length > 0) {
-            await Notification.insertMany(notifications);
+            await Notification.insertManyWithPush(notifications);
           }
         } catch (notifError) {
           console.error('Erreur lors de la création des notifications:', notifError);

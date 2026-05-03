@@ -477,7 +477,7 @@ export default function CreateDossierPage() {
       <header className="border-b bg-white/95 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <Link href="/" className="text-2xl font-bold text-primary hover:text-primary/80 transition-colors">Paw Legal</Link>
+            <Link href="/" className="text-2xl font-bold text-primary hover:text-primary/80 transition-colors">Ada Papers</Link>
             <nav className="hidden md:flex items-center gap-6">
               {session ? (
                 <>

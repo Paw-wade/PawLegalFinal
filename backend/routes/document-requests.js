@@ -14,17 +14,18 @@ const { sendNotificationSMS } = require('../sendSMS');
 router.use(protect);
 
 // @route   POST /api/document-requests
-// @desc    Créer une demande de document (admin seulement)
-// @access  Private/Admin
+// @desc    Créer une demande de document (admin, superadmin, partenaire avec dossier transmis)
+// @access  Private
 router.post(
   '/',
-  authorize('admin', 'superadmin'),
   [
     body('dossierId').notEmpty().withMessage('L\'ID du dossier est requis'),
     body('documentType').notEmpty().withMessage('Le type de document est requis'),
     body('documentTypeLabel').notEmpty().withMessage('Le libellé du type de document est requis'),
     body('message').optional().trim(),
-    body('isUrgent').optional().isBoolean()
+    body('isUrgent').optional().isBoolean(),
+    body('skipSms').optional().isBoolean(),
+    body('batchDocumentCount').optional().isInt({ min: 1 }).withMessage('batchDocumentCount invalide')
   ],
   async (req, res) => {
     try {
@@ -37,7 +38,7 @@ router.post(
         });
       }
 
-      const { dossierId, documentType, documentTypeLabel, message, isUrgent } = req.body;
+      const { dossierId, documentType, documentTypeLabel, message, isUrgent, skipSms, batchDocumentCount } = req.body;
 
       // Valider que documentType est dans l'enum autorisé
       const allowedDocumentTypes = ['identite', 'titre_sejour', 'contrat', 'facture', 'passeport', 'justificatif_domicile', 'avis_imposition', 'autre'];
@@ -68,6 +69,32 @@ router.post(
         return res.status(404).json({
           success: false,
           message: 'Dossier non trouvé'
+        });
+      }
+
+      // Vérifier les permissions en fonction du rôle
+      const role = req.user.role;
+      const isAdmin = role === 'admin' || role === 'superadmin';
+      const isPartenaire = role === 'partenaire';
+
+      let hasPermission = false;
+
+      if (isAdmin) {
+        hasPermission = true;
+      } else if (isPartenaire) {
+        // Le partenaire ne peut créer une demande que pour un dossier qui lui est transmis
+        const transmission = dossier.transmittedTo?.find((t) => {
+          const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
+          return partenaireId === req.user.id;
+        });
+
+        hasPermission = !!transmission && (transmission.status === 'pending' || transmission.status === 'accepted');
+      }
+
+      if (!hasPermission) {
+        return res.status(403).json({
+          success: false,
+          message: 'Vous n\'avez pas la permission de créer une demande de document pour ce dossier'
         });
       }
 
@@ -236,19 +263,19 @@ router.post(
         await Notification.create({
           user: requestedFrom,
           type: 'document_request',
-          title: isUrgent 
+          titre: isUrgent 
             ? `🔴 Demande urgente de document - Dossier ${dossier.numero || dossier._id}`
             : `📄 Demande de document - Dossier ${dossier.numero || dossier._id}`,
           message: `Un document de type "${documentTypeLabel}" est requis pour votre dossier ${dossier.numero || dossier._id}.${message ? `\n\nMessage: ${message}` : ''}`,
-          data: {
+          lien: '/client/documents',
+          metadata: {
             documentRequestId: documentRequest._id,
             dossierId: dossierId,
             dossierNumero: dossier.numero,
             documentType: documentType,
             documentTypeLabel: documentTypeLabel,
             isUrgent: isUrgent || false
-          },
-          priority: isUrgent ? 'high' : 'normal'
+          }
         });
         console.log(`✅ Notification créée pour le client ${clientUser.email}`);
       } catch (notifError) {
@@ -256,15 +283,28 @@ router.post(
         // Ne pas bloquer la création de la demande si la notification échoue
       }
 
-      // Envoyer un SMS si configuré
-      if (clientUser.phone) {
+      // Envoyer un SMS si configuré et non explicitement ignoré
+      if (clientUser.phone && !skipSms) {
         try {
+          const dossierRef = dossier.numero || dossier._id.toString();
+          const batchTotal = Math.max(
+            1,
+            Number.parseInt(String(batchDocumentCount), 10) || 1
+          );
+          const isMultiple = batchTotal > 1;
+          const bodyLine1 = isMultiple
+            ? `${batchTotal} documents vous sont demandés.`
+            : `Un document vous est demandé : ${documentTypeLabel}.`;
+
           await sendNotificationSMS(
             clientUser.phone,
             'document_request',
             {
-              dossierNumero: dossier.numero || dossier._id.toString(),
+              dossierNumero: dossierRef,
               documentType: documentTypeLabel,
+              documentsCount: String(batchTotal),
+              isMultiple: isMultiple ? '1' : '',
+              bodyLine1,
               isUrgent: isUrgent || false,
               isUrgentText: isUrgent ? '🔴 URGENT: ' : ''
             },
@@ -279,6 +319,8 @@ router.post(
           console.error('⚠️ Erreur lors de l\'envoi du SMS:', smsError);
           // Ne pas bloquer la création de la demande si le SMS échoue
         }
+      } else if (skipSms) {
+        console.log('ℹ️ SMS ignoré pour cette demande (skipSms=true)');
       }
 
       res.status(201).json({
@@ -327,8 +369,10 @@ router.get('/', async (req, res) => {
     const { dossierId, status, userId } = req.query;
     const query = {};
 
+    const role = req.user.role;
+
     // Si admin, peut voir toutes les demandes ou filtrer par dossier
-    if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+    if (role === 'admin' || role === 'superadmin') {
       if (dossierId) {
         query.dossier = dossierId;
       }
@@ -338,8 +382,8 @@ router.get('/', async (req, res) => {
       if (userId) {
         query.requestedFrom = userId;
       }
-    } else {
-      // Si client, voir uniquement ses demandes
+    } else if (role === 'client') {
+      // Client: voir uniquement les demandes qui lui sont adressées
       const targetUserId = req.user.id;
       query.requestedFrom = targetUserId;
       if (status) {
@@ -348,6 +392,57 @@ router.get('/', async (req, res) => {
       if (dossierId) {
         query.dossier = dossierId;
       }
+    } else if (role === 'partenaire') {
+      // Partenaire: voir les demandes liées aux dossiers qui lui sont transmis
+      // et optionnellement filtrer par dossierId / statut
+      if (dossierId) {
+        // Vérifier que le dossier est bien transmis à ce partenaire
+        const dossier = await Dossier.findById(dossierId).select('transmittedTo');
+        if (!dossier) {
+          return res.status(404).json({
+            success: false,
+            message: 'Dossier non trouvé'
+          });
+        }
+        const isTransmittedToPartenaire = dossier.transmittedTo && dossier.transmittedTo.some((t) => {
+          if (!t.partenaire) return false;
+          const pid = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
+          return pid === req.user.id.toString();
+        });
+        if (!isTransmittedToPartenaire) {
+          return res.status(403).json({
+            success: false,
+            message: 'Accès non autorisé aux demandes de documents pour ce dossier'
+          });
+        }
+        query.dossier = dossierId;
+      } else {
+        // Sans dossierId explicite, limiter aux dossiers transmis au partenaire
+        const dossiersTransmis = await Dossier.find({
+          'transmittedTo.partenaire': req.user.id
+        }).select('_id');
+        const dossierIds = dossiersTransmis.map((d) => d._id);
+        if (dossierIds.length === 0) {
+          return res.json({
+            success: true,
+            count: 0,
+            documentRequests: []
+          });
+        }
+        query.dossier = { $in: dossierIds };
+      }
+
+      if (status) {
+        query.status = status;
+      }
+      // Pour un partenaire, on NE filtre PAS sur requestedFrom, pour qu'il voie
+      // aussi bien les demandes créées par lui que celles créées par un admin.
+    } else {
+      // Autres rôles: par défaut, aucune demande (sécurité stricte)
+      return res.status(403).json({
+        success: false,
+        message: 'Accès non autorisé aux demandes de documents'
+      });
     }
 
     const documentRequests = await DocumentRequest.find(query)
@@ -574,7 +669,7 @@ router.post(
           {
             user: requestedFromId,
             type: 'document_request',
-            'data.documentRequestId': documentRequest._id.toString(),
+            'metadata.documentRequestId': documentRequest._id.toString(),
             lu: false
           },
           {
@@ -617,40 +712,18 @@ router.post(
           await Notification.create({
             user: requestedById,
             type: 'document_received',
-            title: `📥 Document reçu - Dossier ${dossierNumero}`,
-            message: `Le document "${document.nom}" a été envoyé en réponse à votre demande pour le dossier ${dossierNumero}.`,
-            data: {
+            titre: `📥 Document reçu - Dossier ${dossierNumero}`,
+            message: `Le document "${document.nom}" a été uploadé.`,
+            lien: `/admin/dossiers/${dossierId}`,
+            metadata: {
               documentRequestId: documentRequest._id.toString(),
               documentId: documentId.toString(),
               dossierId: dossierId,
               dossierNumero: dossierNumero
-            },
-            priority: 'normal'
+            }
           });
 
-          // Envoyer un SMS à l'admin si configuré
-          if (adminUser.phone) {
-            try {
-              const smsDossierNumero = documentRequest.dossier?.numero || documentRequest.dossier?._id?.toString() || 'N/A';
-              await sendNotificationSMS(
-                adminUser.phone,
-                'document_received',
-                {
-                  dossierNumero: smsDossierNumero,
-                  documentName: document.nom
-                },
-                {
-                  userId: requestedById,
-                  context: 'document_request',
-                  contextId: documentRequest._id.toString()
-                }
-              );
-              console.log(`✅ SMS envoyé à l'admin ${adminUser.email} pour la réception du document`);
-            } catch (smsError) {
-              console.error('⚠️ Erreur lors de l\'envoi du SMS:', smsError);
-              console.error('Stack trace:', smsError.stack);
-            }
-          }
+          // Pas de SMS ici: on conserve uniquement la notification in-app admin.
         }
       } catch (adminNotifError) {
         console.error('⚠️ Erreur lors de la création de la notification admin:', adminNotifError);
@@ -693,7 +766,7 @@ router.patch(
   '/:id/status',
   authorize('admin', 'superadmin'),
   [
-    body('status').isIn(['pending', 'sent', 'received']).withMessage('Statut invalide')
+    body('status').isIn(['pending', 'sent', 'received', 'cancelled']).withMessage('Statut invalide')
   ],
   async (req, res) => {
     try {
@@ -719,6 +792,8 @@ router.patch(
       documentRequest.status = status;
       if (status === 'received') {
         documentRequest.receivedAt = new Date();
+      } else if (status === 'pending' || status === 'cancelled') {
+        documentRequest.receivedAt = null;
       }
       await documentRequest.save();
 
@@ -743,5 +818,88 @@ router.patch(
   }
 );
 
-module.exports = router;
+// @route   PATCH /api/document-requests/:id/cancel
+// @desc    Annuler une demande de document (admin)
+// @access  Private/Admin
+router.patch('/:id/cancel', authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const documentRequest = await DocumentRequest.findById(req.params.id);
+    if (!documentRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Demande de document non trouvée'
+      });
+    }
 
+    documentRequest.status = 'cancelled';
+    documentRequest.receivedAt = null;
+    await documentRequest.save();
+
+    await documentRequest.populate('dossier', 'titre numero');
+    await documentRequest.populate('requestedBy', 'firstName lastName email');
+    await documentRequest.populate('requestedFrom', 'firstName lastName email phone');
+    await documentRequest.populate('document', 'nom typeMime taille');
+
+    return res.json({
+      success: true,
+      message: 'Demande de document annulée avec succès',
+      documentRequest
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'annulation de la demande:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @route   PATCH /api/document-requests/:id/remove-document
+// @desc    Supprimer le document reçu et remettre la demande en attente (admin)
+// @access  Private/Admin
+router.patch('/:id/remove-document', authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const documentRequest = await DocumentRequest.findById(req.params.id);
+    if (!documentRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Demande de document non trouvée'
+      });
+    }
+
+    if (!documentRequest.document) {
+      return res.status(400).json({
+        success: false,
+        message: 'Aucun document reçu à supprimer pour cette demande'
+      });
+    }
+
+    await Document.findByIdAndDelete(documentRequest.document);
+
+    documentRequest.document = null;
+    documentRequest.status = 'pending';
+    documentRequest.sentAt = null;
+    documentRequest.receivedAt = null;
+    await documentRequest.save();
+
+    await documentRequest.populate('dossier', 'titre numero');
+    await documentRequest.populate('requestedBy', 'firstName lastName email');
+    await documentRequest.populate('requestedFrom', 'firstName lastName email phone');
+
+    return res.json({
+      success: true,
+      message: 'Document reçu supprimé avec succès',
+      documentRequest
+    });
+  } catch (error) {
+    console.error('❌ Erreur lors de la suppression du document reçu:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+module.exports = router;

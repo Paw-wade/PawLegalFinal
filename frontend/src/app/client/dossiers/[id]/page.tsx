@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import { History, Clock } from 'lucide-react';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
@@ -25,6 +25,7 @@ export default function DossierDetailPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const dossierId = params?.id as string;
   
   const [dossier, setDossier] = useState<any>(null);
@@ -46,6 +47,29 @@ export default function DossierDetailPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showDirectUploadForm, setShowDirectUploadForm] = useState(false);
+  const [directUploadData, setDirectUploadData] = useState({
+    nom: '',
+    description: '',
+    categorie: 'autre'
+  });
+  const [directUploading, setDirectUploading] = useState(false);
+  const [directUploadError, setDirectUploadError] = useState<string | null>(null);
+  const directFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const shouldOpenUpload = searchParams?.get('openUpload') === '1';
+    if (!shouldOpenUpload) return;
+
+    setShowDirectUploadForm(true);
+    // Laisser le temps au rendu puis scroller sur la zone upload
+    setTimeout(() => {
+      const el = document.getElementById('documents-upload');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 120);
+  }, [searchParams]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -89,33 +113,15 @@ export default function DossierDetailPage() {
     }
   }, [session, status, router, dossierId]);
 
-  // Rafraîchissement automatique toutes les 30 secondes pour le suivi en temps réel
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (session || localStorage.getItem('token')) {
-        loadDossier();
-        loadNotifications();
-        loadMessagesForDossier();
-        loadDocumentRequests();
-        loadDocuments();
-      }
-    }, 30000); // Rafraîchir toutes les 30 secondes
-
-    return () => clearInterval(interval);
-  }, [session, dossierId]);
+  // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
   const loadDocuments = async () => {
     if (!dossierId) return;
     setIsLoadingDocuments(true);
     try {
-      const response = await documentsAPI.getAllDocuments();
+      const response = await dossiersAPI.getDossierDocuments(dossierId);
       if (response.data.success) {
-        const allDocuments = response.data.documents || response.data.data || [];
-        // Filtrer les documents liés à ce dossier
-        const dossierDocuments = allDocuments.filter((doc: any) => 
-          doc.dossierId && (doc.dossierId._id || doc.dossierId).toString() === dossierId.toString()
-        );
-        setDocuments(dossierDocuments);
+        setDocuments(response.data.documents || []);
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des documents:', err);
@@ -285,18 +291,61 @@ export default function DossierDetailPage() {
     }
   };
 
+  const handleDirectUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDirectUploadError(null);
+
+    const selectedFiles = Array.from(directFileInputRef.current?.files || []);
+    if (selectedFiles.length === 0) {
+      setDirectUploadError('Veuillez sélectionner un fichier');
+      return;
+    }
+
+    if (selectedFiles.length === 1 && !directUploadData.nom.trim()) {
+      setDirectUploadError('Veuillez saisir un nom de document');
+      return;
+    }
+
+    setDirectUploading(true);
+    try {
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append('document', file);
+        formData.append('nom', selectedFiles.length === 1 ? directUploadData.nom.trim() : file.name);
+        formData.append('description', directUploadData.description.trim());
+        formData.append('categorie', directUploadData.categorie);
+        formData.append('dossierId', dossierId);
+
+        const response = await documentsAPI.uploadDocument(formData);
+        if (!response?.data?.success) {
+          throw new Error(response?.data?.message || 'Erreur lors du téléversement');
+        }
+      }
+
+      setDirectUploadData({ nom: '', description: '', categorie: 'autre' });
+      if (directFileInputRef.current) {
+        directFileInputRef.current.value = '';
+      }
+      setShowDirectUploadForm(false);
+      await loadDocuments();
+    } catch (err: any) {
+      console.error('Erreur upload direct dossier:', err);
+      setDirectUploadError(err.response?.data?.message || err.message || 'Erreur lors du téléversement du document');
+    } finally {
+      setDirectUploading(false);
+    }
+  };
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Chargement...</p>
+          <p className="text-muted-foreground">Chargement de votre session...</p>
         </div>
       </div>
     );
   }
-
-  if (status === 'unauthenticated') return null;
 
   if (isLoading) {
     return (
@@ -329,24 +378,24 @@ export default function DossierDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
-      <main className="w-full px-4 py-8 overflow-x-hidden">
-        {/* En-tête amélioré */}
-        <div className="mb-6">
-          <Link href="/client/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 max-w-[100vw]">
+      <main className="w-full max-w-[100vw] px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
+        {/* En-tête — sur mobile: colonne, boutons en bas */}
+        <div className="mb-4 sm:mb-6">
+          <Link href="/client/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-3 sm:mb-4 transition-colors min-h-[44px] items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             Retour aux dossiers
           </Link>
           
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6 overflow-hidden">
-            <div className="flex items-start justify-between mb-4">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2 flex-wrap">
-                  <h1 className="text-3xl font-bold text-foreground break-words">{dossier.titre}</h1>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                  <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
                   {(dossier.numero || dossier.numeroDossier) && (
-                    <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-semibold">
+                    <span className="px-2.5 sm:px-3 py-1 bg-primary/10 text-primary rounded-lg text-xs sm:text-sm font-semibold">
                       N° {dossier.numero || dossier.numeroDossier}
                     </span>
                   )}
@@ -355,55 +404,64 @@ export default function DossierDetailPage() {
                   <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
                 )}
                 
-                {/* Barre de progression */}
-                {(() => {
-                  const progress = getDossierProgress(dossier.statut);
-                  return (
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-muted-foreground font-medium">Progression du dossier</span>
-                        <span className="font-bold text-foreground">{progress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                        <div 
-                          className={`h-3 rounded-full transition-all duration-500 ${
-                            progress >= 80 ? 'bg-green-500' : 
-                            progress >= 50 ? 'bg-blue-500' : 
-                            progress >= 25 ? 'bg-yellow-500' : 
-                            'bg-gray-400'
-                          }`}
-                          style={{width: `${Math.min(progress, 100)}%`, maxWidth: '100%'}}
-                        ></div>
-                      </div>
-                    </div>
+                {/* Barre de progression basée uniquement sur les étapes choisies par l'équipe */}
+                {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (() => {
+                  const rawSteps = dossier.etapesSupplementaires;
+                  const currentIndex = rawSteps.findIndex(
+                    (s: any) =>
+                      dossier.statut &&
+                      (dossier.statut === s.id || dossier.statut === s.label)
                   );
-                })()}
-                
-                {/* Timeline */}
-                {(() => {
-                  const steps = getTimelineSteps(dossier.statut);
                   return (
                     <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
-                      <div className="flex items-center gap-2 min-w-max">
-                        {steps.map((step, index) => (
-                          <div key={step.key} className="flex items-center gap-2 flex-shrink-0">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></span>
-                              <span className={`text-[10px] font-medium whitespace-nowrap ${
-                                step.completed ? 'text-green-700' : 'text-gray-400'
-                              }`}>
-                                {step.label}
-                              </span>
+                      <div className="flex items-center gap-2 min-w-max flex-nowrap">
+                        {rawSteps.map((step: any, index: number) => {
+                          const isCurrent =
+                            currentIndex === -1
+                              ? index === rawSteps.length - 1
+                              : index === currentIndex;
+                          const completed = currentIndex === -1 ? false : index <= currentIndex;
+                          const dateLabel =
+                            step.date
+                              ? (typeof step.date === 'string'
+                                  ? step.date
+                                  : new Date(step.date).toLocaleDateString('fr-FR'))
+                              : undefined;
+                          return (
+                            <div key={step._id || step.id || index} className="flex items-center gap-2 flex-shrink-0">
+                              <div className="flex flex-col items-center gap-1">
+                                <span
+                                  className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                    isCurrent
+                                      ? 'bg-blue-500 ring-2 ring-blue-300'
+                                      : completed
+                                      ? 'bg-green-500'
+                                      : 'bg-gray-300'
+                                  }`}
+                                ></span>
+                                <span
+                                  className={`text-[10px] font-medium truncate max-w-[88px] ${
+                                    isCurrent
+                                      ? 'text-blue-700'
+                                      : completed
+                                      ? 'text-green-700'
+                                      : 'text-gray-400'
+                                  }`}
+                                >
+                                  {step.label}
+                                  {dateLabel ? <span className="hidden sm:inline"> ({dateLabel})</span> : null}
+                                </span>
+                              </div>
+                              {index < rawSteps.length - 1 && (
+                                <div
+                                  className={`h-0.5 w-4 sm:w-6 flex-shrink-0 ${
+                                    completed ? 'bg-green-500' : 'bg-gray-300'
+                                  }`}
+                                ></div>
+                              )}
                             </div>
-                            {index < steps.length - 1 && (
-                              <div className={`h-0.5 w-6 flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></div>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -432,22 +490,15 @@ export default function DossierDetailPage() {
                 </div>
               </div>
               
-              <div className="flex flex-col gap-2">
-                <Button variant="outline" onClick={() => {
-                  loadDossier();
-                  loadNotifications();
-                }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="flex flex-row flex-wrap gap-2 sm:flex-col sm:flex-nowrap w-full sm:w-auto">
+                <Button variant="outline" onClick={() => { loadDossier(); loadNotifications(); }} className="min-h-[44px] flex-1 sm:flex-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                   Actualiser
                 </Button>
                 {dossier && !['annule', 'decision_favorable', 'decision_defavorable', 'rejet', 'gain_cause'].includes(dossier.statut) && (
-                  <Button 
-                    variant="outline" 
-                    className="border-red-500 text-red-600 hover:bg-red-50"
-                    onClick={handleCancelDossier}
-                  >
+                  <Button variant="outline" className="min-h-[44px] flex-1 sm:flex-none border-red-500 text-red-600 hover:bg-red-50" onClick={handleCancelDossier}>
                     Annuler le dossier
                   </Button>
                 )}
@@ -476,15 +527,15 @@ export default function DossierDetailPage() {
         </div>
 
         {/* Vue détaillée avec téléchargement et impression */}
-        <DossierDetailView dossier={dossier} variant="client" />
+        <DossierDetailView dossier={dossier} variant="client" dossierFiles={documents} />
 
-        <div className="grid md:grid-cols-3 gap-6 mt-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mt-6 sm:mt-8">
           {/* Informations principales */}
-          <div className="md:col-span-2 space-y-6">
+          <div className="md:col-span-2 space-y-4 sm:space-y-6 min-w-0">
             {/* Statut actuel */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Statut actuel</h2>
-              <div className="flex items-center gap-4">
+            <div id="documents-upload" className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statut actuel</h2>
+              <div className="flex flex-wrap items-center gap-3">
                 <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatutColor(dossier.statut)}`}>
                   {getStatutLabel(dossier.statut)}
                 </span>
@@ -507,16 +558,16 @@ export default function DossierDetailPage() {
 
             {/* Description */}
             {dossier.description && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Description</h2>
+              <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Description</h2>
                 <p className="text-muted-foreground whitespace-pre-wrap">{dossier.description}</p>
               </div>
             )}
 
             {/* Informations complètes du dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">📋 Informations Complètes du Dossier</h2>
-              <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">📋 Informations Complètes du Dossier</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
                 <div>
                   <p className="text-sm text-muted-foreground font-semibold">Numéro de dossier</p>
                   <p className="font-bold text-lg text-primary">{dossier.numero || dossier._id}</p>
@@ -582,10 +633,10 @@ export default function DossierDetailPage() {
             </div>
 
             {/* Coordonnées client complètes */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">👤 Mes Coordonnées</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">👤 Mes Coordonnées</h2>
               {dossier.user ? (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
                     <p className="font-medium">{dossier.user.firstName || 'N/A'}</p>
@@ -702,7 +753,7 @@ export default function DossierDetailPage() {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
                     <p className="font-medium">{dossier.clientPrenom || 'N/A'}</p>
@@ -724,21 +775,21 @@ export default function DossierDetailPage() {
             </div>
 
             {/* Motif et catégorie */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">📑 Motif et Nature du Dossier</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">📑 Motif et Nature du Dossier</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 min-w-0">
+                <div className="min-w-0">
                   <p className="text-sm text-muted-foreground font-semibold">Catégorie principale</p>
-                  <p className="font-medium text-lg">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
+                  <p className="font-medium text-base sm:text-lg break-words hyphens-auto">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm text-muted-foreground font-semibold">Type de demande</p>
-                  <p className="font-medium text-lg">{dossier.type || 'Non spécifié'}</p>
+                  <p className="font-medium text-base sm:text-lg break-words hyphens-auto">{dossier.type || 'Non spécifié'}</p>
                 </div>
                 {dossier.categorie && (
-                  <div className="col-span-2">
+                  <div className="col-span-1 sm:col-span-2 min-w-0">
                     <p className="text-sm text-muted-foreground font-semibold">Code catégorie</p>
-                    <p className="font-medium text-sm text-muted-foreground">{dossier.categorie}</p>
+                    <p className="font-medium text-sm text-muted-foreground break-all">{dossier.categorie}</p>
                   </div>
                 )}
               </div>
@@ -746,8 +797,8 @@ export default function DossierDetailPage() {
 
             {/* Demandes de documents en attente */}
             {documentRequests.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                <h2 className="text-xl font-bold mb-4">📄 Documents demandés</h2>
+              <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">📄 Documents demandés</h2>
                 <div className="space-y-3">
                   {documentRequests.map((request: any) => (
                     <div
@@ -758,8 +809,8 @@ export default function DossierDetailPage() {
                           : 'bg-blue-50 border-blue-500'
                       }`}
                     >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-2">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-lg">{request.isUrgent ? '🔴' : '📄'}</span>
                             <h3 className="font-semibold text-base">
@@ -819,9 +870,9 @@ export default function DossierDetailPage() {
             )}
 
             {/* Historique et Timeline du dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2">
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+                <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2">
                   <History className="w-6 h-6" />
                   Historique et Timeline du dossier
                 </h2>
@@ -850,8 +901,8 @@ export default function DossierDetailPage() {
                     <div className="space-y-4">
                       {history.map((item: any, index: number) => (
                         <div key={index} className="border-l-4 border-primary pl-4 py-3 bg-gray-50/50 rounded-r-lg">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="text-2xl">{getHistoryTypeIcon(item.type)}</span>
                                 <span className="font-semibold text-foreground">{getHistoryTypeLabel(item.type)}</span>
@@ -882,7 +933,7 @@ export default function DossierDetailPage() {
                                 </div>
                               )}
                             </div>
-                            <div className="text-right text-sm text-gray-500 ml-4">
+                            <div className="text-left sm:text-right text-sm text-gray-500 sm:ml-4 flex-shrink-0">
                               <div className="flex items-center gap-1">
                                 <Clock className="w-4 h-4" />
                                 {new Date(item.date).toLocaleDateString('fr-FR', {
@@ -910,17 +961,17 @@ export default function DossierDetailPage() {
 
             {/* Historique des notifications */}
             {notifications.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Notifications récentes</h2>
+              <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Notifications récentes</h2>
                 <div className="space-y-3">
                   {notifications.map((notif) => (
                     <div key={notif._id || notif.id} className="border-l-4 border-primary pl-4 py-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex-1 min-w-0">
                           <h3 className="font-semibold">{notif.titre}</h3>
                           <p className="text-sm text-muted-foreground mt-1">{notif.message}</p>
                         </div>
-                        <span className="text-xs text-muted-foreground ml-4">
+                        <span className="text-xs text-muted-foreground sm:ml-4 flex-shrink-0">
                           {new Date(notif.createdAt).toLocaleDateString('fr-FR', {
                             year: 'numeric',
                             month: 'short',
@@ -937,17 +988,17 @@ export default function DossierDetailPage() {
             )}
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
+          {/* Sidebar — même largeur que le contenu sur mobile */}
+          <div className="space-y-4 sm:space-y-6 min-w-0">
             {/* Actions rapides */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Actions</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Actions</h2>
               <div className="space-y-2">
                 <Link href="/client/documents" className="block">
-                  <Button variant="outline" className="w-full">Voir les documents</Button>
+                  <Button variant="outline" className="w-full min-h-[44px]">Voir les documents</Button>
                 </Link>
                 <Link href="/client/notifications" className="block">
-                  <Button variant="outline" className="w-full">Voir les notifications</Button>
+                  <Button variant="outline" className="w-full min-h-[44px]">Voir les notifications</Button>
                 </Link>
                 <Button 
                   variant="outline" 
@@ -1014,8 +1065,8 @@ export default function DossierDetailPage() {
 
             {/* Assigné à */}
             {dossier.assignedTo && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Assigné à</h2>
+              <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Assigné à</h2>
                 <p className="text-muted-foreground">
                   {dossier.assignedTo.firstName} {dossier.assignedTo.lastName}
                 </p>
@@ -1024,72 +1075,170 @@ export default function DossierDetailPage() {
             )}
 
             {/* Documents du dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">📁 Documents du dossier</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3 sm:mb-4">
+                <h2 className="text-lg sm:text-xl font-bold">📁 Documents du dossier</h2>
+                <Button
+                  variant={showDirectUploadForm ? 'outline' : 'default'}
+                  className="min-h-[44px] w-full sm:w-auto"
+                  onClick={() => {
+                    setShowDirectUploadForm(!showDirectUploadForm);
+                    setDirectUploadError(null);
+                  }}
+                >
+                  {showDirectUploadForm ? 'Fermer' : 'Ajouter un document'}
+                </Button>
+              </div>
+
+              {showDirectUploadForm && (
+                <form onSubmit={handleDirectUpload} className="mb-4 p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50 space-y-3">
+                  {directUploadError && (
+                    <p className="text-sm text-red-600">{directUploadError}</p>
+                  )}
+                  <div>
+                    <label className="text-sm font-medium">Fichier(s) *</label>
+                    <input
+                      ref={directFileInputRef}
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                      multiple
+                      className="mt-1 w-full text-sm"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file && !directUploadData.nom.trim()) {
+                          setDirectUploadData((prev) => ({ ...prev, nom: file.name }));
+                        }
+                      }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Nom du document *</label>
+                    <input
+                      type="text"
+                      value={directUploadData.nom}
+                      onChange={(e) => setDirectUploadData((prev) => ({ ...prev, nom: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      placeholder="Ex: Contrat signé"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Catégorie</label>
+                    <select
+                      value={directUploadData.categorie}
+                      onChange={(e) => setDirectUploadData((prev) => ({ ...prev, categorie: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="identite">Identité</option>
+                      <option value="titre_sejour">Titre de séjour</option>
+                      <option value="contrat">Contrat</option>
+                      <option value="facture">Facture</option>
+                      <option value="autre">Autre</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Description</label>
+                    <textarea
+                      value={directUploadData.description}
+                      onChange={(e) => setDirectUploadData((prev) => ({ ...prev, description: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[72px]"
+                      placeholder="Description (optionnelle)"
+                    />
+                  </div>
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-[44px] w-full sm:w-auto"
+                      onClick={() => {
+                        setShowDirectUploadForm(false);
+                        setDirectUploadError(null);
+                      }}
+                      disabled={directUploading}
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="min-h-[44px] w-full sm:w-auto"
+                      disabled={directUploading}
+                    >
+                      {directUploading ? 'Envoi...' : 'Envoyer le document'}
+                    </Button>
+                  </div>
+                </form>
+              )}
+
               {isLoadingDocuments ? (
                 <p className="text-sm text-muted-foreground">Chargement...</p>
               ) : documents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Aucun document</p>
               ) : (
                 <div className="space-y-2">
-                  {documents.map((doc: any) => (
-                    <div
-                      key={doc._id || doc.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
-                    >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="text-lg">📄</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{doc.nom}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(doc.taille / 1024).toFixed(2)} KB
-                          </p>
+                  {documents.map((doc: any) => {
+                    const isConfidentialForClient = !!doc?.isConfidentialForClient || doc?.visibleToClient === false;
+                    return (
+                      <div
+                        key={doc._id || doc.id}
+                        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span className="text-lg flex-shrink-0">📄</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{doc.nom}</p>
+                          </div>
                         </div>
+                        {isConfidentialForClient ? (
+                          <div className="text-xs font-semibold text-red-700">
+                            Accès non autorisé à ce document
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                              variant="outline"
+                              className="text-xs min-h-[40px] flex-1 sm:flex-none min-w-0"
+                              onClick={() => {
+                                setSelectedDocumentForPreview(doc);
+                                setShowDocumentPreviewModal(true);
+                              }}
+                            >
+                              👁️ Voir
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="text-xs min-h-[40px] flex-1 sm:flex-none min-w-0"
+                              onClick={async () => {
+                                try {
+                                  const response = await documentsAPI.downloadDocument(doc._id || doc.id);
+                                  const blob = new Blob([response.data]);
+                                  const url = window.URL.createObjectURL(blob);
+                                  const link = document.createElement('a');
+                                  link.href = url;
+                                  link.download = doc.nom;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  window.URL.revokeObjectURL(url);
+                                } catch (error) {
+                                  console.error('Erreur lors du téléchargement:', error);
+                                  alert('Erreur lors du téléchargement du document');
+                                }
+                              }}
+                            >
+                              ⬇️ Télécharger
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          className="text-xs h-8"
-                          onClick={() => {
-                            setSelectedDocumentForPreview(doc);
-                            setShowDocumentPreviewModal(true);
-                          }}
-                        >
-                          👁️ Voir
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="text-xs h-8"
-                          onClick={async () => {
-                            try {
-                              const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                              const blob = new Blob([response.data]);
-                              const url = window.URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.href = url;
-                              link.download = doc.nom;
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                              window.URL.revokeObjectURL(url);
-                            } catch (error) {
-                              console.error('Erreur lors du téléchargement:', error);
-                              alert('Erreur lors du téléchargement du document');
-                            }
-                          }}
-                        >
-                          ⬇️ Télécharger
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
 
             {/* Statistiques */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Statistiques</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statistiques</h2>
               <div className="space-y-2">
                 {documents.length > 0 && (
                   <div className="flex justify-between">
@@ -1111,8 +1260,8 @@ export default function DossierDetailPage() {
             </div>
 
             {/* Messagerie liée au dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Messagerie du dossier</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Messagerie du dossier</h2>
               {isLoadingMessages ? (
                 <p className="text-sm text-muted-foreground">Chargement des messages...</p>
               ) : messagesError ? (
@@ -1144,7 +1293,7 @@ export default function DossierDetailPage() {
                     </div>
                   ))}
                   <Link href="/client/messages" className="block mt-2">
-                    <Button variant="outline" className="w-full text-xs">
+                    <Button variant="outline" className="w-full text-xs min-h-[44px]">
                       Voir tous les messages
                     </Button>
                   </Link>

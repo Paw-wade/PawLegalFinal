@@ -20,6 +20,7 @@ export function MessageNotificationModal({ isOpen, onClose, message }: MessageNo
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [replySubject, setReplySubject] = useState('');
   const [replyContent, setReplyContent] = useState('');
+  const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
   const [replyError, setReplyError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -62,6 +63,7 @@ export function MessageNotificationModal({ isOpen, onClose, message }: MessageNo
       : (message?.sujet || 'Message').toString();
     setReplySubject(baseSubject.startsWith('Re:') ? baseSubject : `Re: ${baseSubject}`);
     setReplyContent('');
+    setReplyAttachments([]);
     setReplyError(null);
     setShowReplyForm(false);
   }, [isOpen, message?._id, message?.id]);
@@ -159,6 +161,11 @@ export function MessageNotificationModal({ isOpen, onClose, message }: MessageNo
       if (message?.dossierId) {
         formDataToSend.append('dossierId', message.dossierId.toString());
       }
+
+      // Pièces jointes (multi-fichiers)
+      replyAttachments.forEach((file) => {
+        formDataToSend.append('piecesJointes', file);
+      });
 
       // Admin -> répondre à l'expéditeur (destinataire requis côté admin UI)
       const isAdminContext =
@@ -418,6 +425,7 @@ export function MessageNotificationModal({ isOpen, onClose, message }: MessageNo
                 <button
                   onClick={() => {
                     setShowReplyForm(false);
+                    setReplyAttachments([]);
                     setReplyError(null);
                   }}
                   className="text-gray-400 hover:text-gray-600 text-xl leading-none transition-colors"
@@ -452,6 +460,42 @@ export function MessageNotificationModal({ isOpen, onClose, message }: MessageNo
                     className="w-full min-h-[110px] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-200 focus:border-orange-400 transition-colors"
                     placeholder="Écrivez votre message…"
                   />
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Pièces jointes (max 5 fichiers, 10MB chacun)
+                  </p>
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []) as File[];
+                      if (files.length > 5) {
+                        setReplyError('Maximum 5 fichiers autorisés.');
+                        return;
+                      }
+                      setReplyError(null);
+                      setReplyAttachments(files);
+                    }}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-200 focus:border-orange-400 transition-colors"
+                  />
+                  {replyAttachments.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {replyAttachments.map((file, index) => (
+                        <div key={`${file.name}-${index}`} className="text-xs text-muted-foreground flex items-center justify-between">
+                          <span>📎 {file.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setReplyAttachments(replyAttachments.filter((_, i) => i !== index))}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap gap-2">

@@ -19,6 +19,7 @@ export function DateInput({
   onChange, 
   displayFormat = 'dd/mm/yyyy',
   className = '',
+  id,
   ...props 
 }: DateInputProps) {
   const [displayValue, setDisplayValue] = useState<string>('');
@@ -141,6 +142,7 @@ export function DateInput({
     <div className="relative">
       <input
         type="text"
+        id={id}
         value={displayValue}
         onChange={handleChange}
         onBlur={handleBlur}
@@ -158,6 +160,7 @@ export function DateInput({
         <input
           ref={dateInputRef}
           type="date"
+          id={id ? `${id}-native-date` : undefined}
           value={value || ''}
           onChange={handleNativeDateChange}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30"
@@ -167,6 +170,8 @@ export function DateInput({
             fontSize: '16px'
           }}
           disabled={props.disabled}
+          max={props.max}
+          min={props.min}
           aria-label="Ouvrir le calendrier"
         />
         {/* Icône de calendrier visible (en arrière-plan, non cliquable car l'input est au-dessus) */}

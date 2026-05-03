@@ -21,7 +21,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
   const { data: session } = useSession();
   const router = useRouter();
   const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   
   // Déterminer si l'utilisateur est admin ou partenaire
   const userRole = (session?.user as any)?.role || 'client';
@@ -33,19 +33,14 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
   const showAdminSidebar = variant === 'admin' && isAdmin;
   const showPartenaireSidebar = variant === 'partenaire' && isPartenaire;
 
-  // Fermer la sidebar client sur desktop (large screens)
+  // Fermer la sidebar sur desktop (large screens) pour client, admin, partenaire
   useEffect(() => {
-    if (!showClientSidebar) return;
-    
     const handleResize = () => {
-      if (window.innerWidth >= 1024) {
-        setSidebarOpen(false);
-      }
+      if (window.innerWidth >= 1024) setSidebarOpen(false);
     };
-
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [showClientSidebar]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -54,23 +49,23 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar admin - fixe pour tous les admins */}
+      {/* Sidebar admin - drawer sur mobile, fixe sur desktop */}
       {showAdminSidebar && (
-        <AdminSidebar isOpen={true} onClose={() => setSidebarOpen(false)} />
+        <AdminSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar partenaire - fixe pour tous les partenaires */}
+      {/* Sidebar partenaire - drawer sur mobile, fixe sur desktop */}
       {showPartenaireSidebar && (
-        <PartenaireSidebar />
+        <PartenaireSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       )}
 
       {/* Contenu principal */}
-      <div className={`flex-1 flex flex-col ${(showAdminSidebar || showPartenaireSidebar) ? 'ml-0 lg:ml-64' : ''} transition-all duration-300 min-w-0`}>
+      <div className={`flex-1 flex flex-col ${(showClientSidebar || showAdminSidebar || showPartenaireSidebar) ? 'ml-0 lg:ml-64' : ''} transition-all duration-300 min-w-0`}>
         {/* Header simplifié (sans navigation) */}
         <Header 
           variant={variant} 
           showNav={false}
-          onMenuClick={showClientSidebar ? () => setSidebarOpen(!sidebarOpen) : undefined}
+          onMenuClick={(showClientSidebar || showAdminSidebar || showPartenaireSidebar) ? () => setSidebarOpen(!sidebarOpen) : undefined}
         />
 
         {/* Barre de notification défilante */}
@@ -91,8 +86,8 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
           </>
         )}
 
-        {/* Contenu */}
-        <main className="flex-1 overflow-x-hidden w-full">
+        {/* Contenu — padding mobile et pas de débordement */}
+        <main className="flex-1 overflow-x-hidden w-full max-w-[100vw] px-3 sm:px-4 lg:px-6 pb-6 safe-bottom">
           {children}
         </main>
       </div>

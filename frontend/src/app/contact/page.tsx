@@ -64,6 +64,7 @@ export default function ContactPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [fileErrors, setFileErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement | null>(null);
   
   // Refs pour détecter l'auto-remplissage
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -82,7 +83,7 @@ export default function ContactPage() {
       message: messageInputRef,
     },
     formData,
-    setFormData: (updater) => setFormData(updater),
+    setFormData: (updater) => setFormData(updater as React.SetStateAction<typeof formData>),
   });
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 Mo en bytes
@@ -131,12 +132,6 @@ export default function ContactPage() {
     setFileErrors([]);
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' Ko';
-    return (bytes / (1024 * 1024)).toFixed(2) + ' Mo';
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -156,6 +151,48 @@ export default function ContactPage() {
     // Mettre à jour l'état avec les valeurs réelles
     setFormData(realValues);
 
+    // Validation explicite des champs obligatoires pour afficher un message centralisé
+    if (!realValues.name?.trim()) {
+      setError('Le champ "Nom complet" est obligatoire.');
+      setIsLoading(false);
+      setTimeout(() => {
+        if (errorRef.current) {
+          errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 0);
+      return;
+    }
+    if (!realValues.email?.trim()) {
+      setError('Le champ "Email" est obligatoire.');
+      setIsLoading(false);
+      setTimeout(() => {
+        if (errorRef.current) {
+          errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 0);
+      return;
+    }
+    if (!realValues.subject?.trim()) {
+      setError('Le champ "Sujet" est obligatoire.');
+      setIsLoading(false);
+      setTimeout(() => {
+        if (errorRef.current) {
+          errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 0);
+      return;
+    }
+    if (!realValues.message?.trim()) {
+      setError('Le champ "Message" est obligatoire.');
+      setIsLoading(false);
+      setTimeout(() => {
+        if (errorRef.current) {
+          errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 0);
+      return;
+    }
+
     try {
       const formDataToSend = new FormData();
       formDataToSend.append('name', realValues.name);
@@ -169,10 +206,13 @@ export default function ContactPage() {
         formDataToSend.append('documents', file);
       });
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/contact`, {
-        method: 'POST',
-        body: formDataToSend,
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'}/api/contact`,
+        {
+          method: 'POST',
+          body: formDataToSend,
+        }
+      );
 
       const data = await response.json();
 
@@ -202,29 +242,85 @@ export default function ContactPage() {
       <Header variant="home" />
 
       {/* Hero Section */}
-      <section className="relative py-16 bg-gradient-to-br from-primary/10 via-primary/5 to-background overflow-hidden">
+      <section className="relative py-12 bg-gradient-to-br from-primary/10 via-primary/5 to-background overflow-hidden">
         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
         <div className="container mx-auto px-4 relative z-10">
-          <div className="text-center max-w-4xl mx-auto">
-            <div className="inline-block mb-4 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
+          <div className="text-center max-w-3xl mx-auto">
+            <div className="inline-block mb-3 px-4 py-1.5 bg-primary/10 rounded-full border border-primary/20">
               <span className="text-sm font-medium text-primary">Contactez-nous</span>
             </div>
-            <h1 className="text-5xl font-bold mb-6 text-foreground leading-tight">
+            <h1 className="text-4xl sm:text-5xl font-bold mb-4 text-foreground leading-tight">
               Nous sommes à votre <span className="text-primary">écoute</span>
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Une question ? Un projet ? Contactez notre équipe d'experts juridiques pour un accompagnement personnalisé
             </p>
           </div>
         </div>
       </section>
 
-      <main className="container mx-auto px-4 py-20">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Formulaire - 2 colonnes */}
-            <div className="lg:col-span-2">
-              <div className="bg-white rounded-3xl shadow-xl p-8 lg:p-10 border-2 border-primary/10">
+      <main className="container mx-auto px-4 py-12">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid gap-8 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-start">
+            {/* Informations de contact - colonne gauche */}
+            <div>
+              <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-3xl shadow-xl p-8 border-2 border-primary/20">
+                <h2 className="text-2xl font-bold mb-6 text-foreground">Informations de contact</h2>
+                <div className="space-y-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-xl">📧</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground mb-1 text-sm">Email</p>
+                      <a href="mailto:contact@adapapers.fr" className="text-primary hover:underline text-sm">
+                        contact@adapapers.fr
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-xl">📞</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground mb-1 text-sm">Téléphone</p>
+                      <a href="tel:0768033358" className="text-primary hover:underline text-sm">
+                        07 68 03 33 58
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-xl">🕐</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground mb-1 text-sm">Horaires</p>
+                      <p className="text-muted-foreground text-sm">
+                        Lundi - Vendredi<br />
+                        9h - 18h
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-border">
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Réponse sous 24h pour toutes vos demandes.
+                    </p>
+                    <Link href="/faq">
+                      <Button variant="outline" className="w-full text-sm">
+                        Consulter la FAQ
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Formulaire - colonne droite */}
+            <div>
+              <div className="bg-white rounded-3xl shadow-xl p-8 border-2 border-primary/10">
                 <h2 className="text-3xl font-bold mb-6 text-foreground">Envoyez-nous un message</h2>
 
                 {success && (
@@ -234,7 +330,10 @@ export default function ContactPage() {
                 )}
 
                 {error && (
-                  <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-lg">
+                  <div
+                    ref={errorRef}
+                    className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-lg"
+                  >
                     <p className="text-sm font-medium text-red-800">{error}</p>
                   </div>
                 )}
@@ -364,7 +463,6 @@ export default function ContactPage() {
                                 <span className="text-xl">📄</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
-                                  <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
                                 </div>
                               </div>
                               <button
@@ -396,62 +494,6 @@ export default function ContactPage() {
                     )}
                   </Button>
                 </form>
-              </div>
-            </div>
-
-            {/* Informations de contact - 1 colonne */}
-            <div className="lg:col-span-1">
-              <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-3xl shadow-xl p-8 border-2 border-primary/20 sticky top-24">
-                <h2 className="text-2xl font-bold mb-6 text-foreground">Informations de contact</h2>
-                <div className="space-y-6">
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-2xl">📧</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Email</p>
-                      <a href="mailto:contact@pawlegal.fr" className="text-primary hover:underline text-sm">
-                        contact@pawlegal.fr
-                      </a>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-2xl">📞</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Téléphone</p>
-                      <a href="tel:0768033358" className="text-primary hover:underline text-sm">
-                        07 68 03 33 58
-                      </a>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-2xl">🕐</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground mb-1">Horaires</p>
-                      <p className="text-muted-foreground text-sm">
-                        Lundi - Vendredi<br />
-                        9h - 18h
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="pt-6 border-t border-border">
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Réponse sous 24h pour toutes vos demandes
-                    </p>
-                    <Link href="/faq">
-                      <Button variant="outline" className="w-full">
-                        Consulter la FAQ
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

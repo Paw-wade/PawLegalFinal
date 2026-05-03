@@ -1,9 +1,30 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { collaborativeDraftsAPI, dossierDocumentDraftsAPI, forumAPI } from '@/lib/api';
+import {
+  LayoutDashboard,
+  Users,
+  FolderOpen,
+  CheckSquare,
+  Calendar,
+  Clock,
+  MessageSquare,
+  FileText,
+  PenLine,
+  Star,
+  Bell,
+  Smartphone,
+  Image,
+  FileEdit,
+  ScrollText,
+  Scale,
+  Trash2,
+  User,
+} from 'lucide-react';
 
 interface AdminSidebarProps {
   isOpen?: boolean;
@@ -13,174 +34,236 @@ interface AdminSidebarProps {
 interface MenuItem {
   href: string;
   label: string;
-  icon: string;
+  icon: React.ComponentType<{ className?: string }>;
   roles?: string[];
   badge?: string;
 }
 
 const adminMenuItems: MenuItem[] = [
-  { href: '/admin', label: 'Tableau de bord', icon: '📊' },
-  { href: '/admin/utilisateurs', label: 'Utilisateurs', icon: '👥' },
-  { href: '/admin/dossiers', label: 'Dossiers', icon: '📁' },
-  { href: '/admin/taches', label: 'Tâches', icon: '✅' },
-  { href: '/admin/rendez-vous', label: 'Rendez-vous', icon: '📅' },
-  { href: '/admin/creneaux', label: 'Créneaux', icon: '⏰' },
-  { href: '/admin/messages', label: 'Messages', icon: '💬' },
-  { href: '/admin/documents', label: 'Documents', icon: '📄' },
-  { href: '/admin/temoignages', label: 'Témoignages', icon: '⭐' },
-  { href: '/admin/notifications', label: 'Notifications', icon: '🔔' },
-  { href: '/admin/sms', label: 'SMS', icon: '📱' },
-  { href: '/admin/cms', label: 'CMS', icon: '✏️' },
-  { href: '/admin/logs', label: 'Logs', icon: '📋', roles: ['superadmin'] },
-  { href: '/admin/corbeille', label: 'Corbeille', icon: '🗑️' },
-  { href: '/admin/compte', label: 'Mon Compte', icon: '👤' },
+  { href: '/admin', label: 'Tableau de bord', icon: LayoutDashboard },
+  { href: '/admin/utilisateurs', label: 'Utilisateurs', icon: Users },
+  { href: '/admin/dossiers', label: 'Dossiers', icon: FolderOpen },
+  { href: '/admin/dossiers/tarification', label: 'Dossiers tarification', icon: FolderOpen },
+  { href: '/admin/taches', label: 'Tâches', icon: CheckSquare },
+  { href: '/admin/rendez-vous', label: 'Rendez-vous', icon: Calendar },
+  { href: '/admin/creneaux', label: 'Créneaux', icon: Clock },
+  { href: '/admin/messages', label: 'Messages', icon: MessageSquare },
+  { href: '/admin/documents', label: 'Documents', icon: FileText },
+  {
+    href: '/admin/documents/preparation',
+    label: 'Docs en préparation',
+    icon: PenLine,
+    roles: ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'],
+  },
+  { href: '/admin/temoignages', label: 'Témoignages', icon: Star },
+  { href: '/admin/notifications', label: 'Notifications', icon: Bell },
+  { href: '/admin/sms', label: 'SMS', icon: Smartphone },
+  { href: '/admin/carousel', label: 'Carrousel home', icon: Image },
+  { href: '/admin/cms', label: 'CMS', icon: FileEdit },
+  { href: '/admin/recours', label: 'Documentation', icon: FolderOpen, roles: ['admin', 'superadmin'] },
+  { href: '/admin/lexia', label: 'LEXIA (IA)', icon: Scale, roles: ['admin', 'superadmin'] },
+  { href: '/admin/logs', label: 'Logs', icon: ScrollText, roles: ['superadmin'] },
+  { href: '/admin/corbeille', label: 'Corbeille', icon: Trash2 },
+  { href: '/forum', label: 'Forum', icon: MessageSquare },
+  { href: '/admin/compte', label: 'Mon compte', icon: User },
 ];
 
 export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
   const { data: session } = useSession();
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
+  const [prepDraftCount, setPrepDraftCount] = useState<number>(0);
 
   const userRole = (session?.user as any)?.role || 'client';
-  const isAdmin = userRole === 'admin' || userRole === 'superadmin';
 
-  // Filtrer les items selon les permissions
   const filteredMenuItems = adminMenuItems.filter(item => {
     if (!item.roles) return true;
     return item.roles.includes(userRole);
   });
 
   const isActive = (href: string) => {
-    if (href === '/admin') {
+    if (href === '/admin') return pathname === href;
+    if (href === '/admin/dossiers') {
+      if (pathname.startsWith('/admin/dossiers/tarification')) return false;
+      return pathname === href || pathname.startsWith('/admin/dossiers/');
+    }
+    if (href === '/admin/documents') {
+      if (pathname.startsWith('/admin/documents/preparation')) return false;
       return pathname === href;
+    }
+    if (href === '/admin/documents/preparation') {
+      return pathname.startsWith('/admin/documents/preparation');
     }
     return pathname.startsWith(href);
   };
 
+  const loadPrepDraftCount = useCallback(async () => {
+    const role = (session?.user as any)?.role as string | undefined;
+    const staff = ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'];
+    if (!role || !staff.includes(role)) {
+      setPrepDraftCount(0);
+      return;
+    }
+    try {
+      // Même logique que la page "Documents en préparation":
+      // total = brouillons Word + brouillons éditeur riche.
+      const settled = await Promise.allSettled([
+        dossierDocumentDraftsAPI.list(),
+        collaborativeDraftsAPI.getGlobalList(),
+      ]);
+      const wordCount =
+        settled[0].status === 'fulfilled' && settled[0].value.data?.success
+          ? (settled[0].value.data.drafts || []).length
+          : 0;
+      const collabCount =
+        settled[1].status === 'fulfilled' && settled[1].value.data?.success
+          ? (settled[1].value.data.drafts || []).length
+          : 0;
+      setPrepDraftCount(wordCount + collabCount);
+    } catch (err: any) {
+      if (err?.response?.status !== 404) console.error('Erreur compteur documents en préparation:', err);
+      setPrepDraftCount(0);
+    }
+  }, [session]);
+
+  const loadForumCount = useCallback(async () => {
+    try {
+      const res = await forumAPI.getUnreadThreadsCount();
+      if (res.data?.success && typeof res.data.count === 'number') {
+        setForumUnreadCount(res.data.count);
+      }
+    } catch (err: any) {
+      // Endpoint optionnel selon versions backend: ignorer le 404 proprement.
+      if (err?.response?.status === 404 || err?.isForumUnreadCountNotFound) {
+        setForumUnreadCount(0);
+        return;
+      }
+      console.error('Erreur lors du chargement du nombre de nouvelles discussions forum (admin):', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadForumCount();
+    loadPrepDraftCount();
+  }, [loadForumCount, loadPrepDraftCount, pathname]);
+
+  useEffect(() => {
+    const onForumUnreadUpdated = () => loadForumCount();
+    const onCollaborativeDraftsUpdated = () => loadPrepDraftCount();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('forumUnreadUpdated', onForumUnreadUpdated);
+      window.addEventListener('collaborativeDraftsUpdated', onCollaborativeDraftsUpdated);
+      return () => {
+        window.removeEventListener('forumUnreadUpdated', onForumUnreadUpdated);
+        window.removeEventListener('collaborativeDraftsUpdated', onCollaborativeDraftsUpdated);
+      };
+    }
+  }, [loadForumCount, loadPrepDraftCount]);
+
   return (
     <>
-      {/* Overlay pour mobile */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={onClose}
+          aria-hidden="true"
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — même design que partenaire */}
       <aside
         className={`
-          fixed top-0 left-0 h-full bg-gradient-to-b from-white to-gray-50 border-r border-gray-200 z-50
-          transform transition-all duration-300 ease-in-out
+          w-64 bg-white border-r border-gray-200 flex flex-col
+          fixed top-0 left-0 bottom-0 z-50 lg:bottom-auto lg:h-screen lg:min-h-screen
+          transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
-          ${isCollapsed ? 'w-20' : 'w-64'}
-          flex flex-col shadow-lg
         `}
       >
-        {/* Header de la sidebar */}
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-white">
-          {!isCollapsed && (
-            <Link href="/admin" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-md">
-                <span className="text-white font-bold text-sm">PL</span>
-              </div>
-              <span className="text-lg font-bold text-primary">Paw Legal</span>
-            </Link>
-          )}
-          {isCollapsed && (
-            <Link href="/admin" className="flex items-center justify-center w-full">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-md">
-                <span className="text-white font-bold text-sm">PL</span>
-              </div>
-            </Link>
-          )}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="hidden lg:flex p-2 hover:bg-gray-100 rounded-md transition-colors"
-              aria-label={isCollapsed ? "Agrandir le menu" : "Réduire le menu"}
+        {/* Bande logo alignée avec le header (même hauteur h-16) */}
+        <div className="h-16 shrink-0 flex items-center justify-between px-4 border-b border-gray-200">
+          <div className="flex items-center min-w-0">
+            <Link
+              href="/"
+              className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg tracking-tight"
             >
-              <span className="text-lg">{isCollapsed ? '→' : '←'}</span>
-            </button>
+              Ada Papers
+            </Link>
+            <span className="hidden md:inline ml-2 text-[10px] text-gray-500">
+              {userRole === 'superadmin' ? 'Super administration' : 'Panneau d&apos;administration'}
+            </span>
+          </div>
+          {onClose && (
             <button
               onClick={onClose}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors"
+              className="lg:hidden px-3 py-2 ml-2 min-h-[36px] flex items-center justify-center rounded-full border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
               aria-label="Fermer le menu"
             >
-              <span className="text-2xl">×</span>
+              Fermer
             </button>
-          </div>
+          )}
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+        {/* Navigation — scroll ; déconnexion fixée en bas sur mobile */}
+        <nav className="p-4 space-y-2 flex-1 min-h-0 overflow-y-auto">
           {filteredMenuItems.map((item) => {
+            const Icon = item.icon;
             const active = isActive(item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => {
-                  // Fermer le menu sur mobile après clic
-                  if (window.innerWidth < 1024 && onClose) {
-                    onClose();
-                  }
+                  if (typeof window !== 'undefined' && window.innerWidth < 1024 && onClose) onClose();
                 }}
-                className={`
-                  flex items-center gap-3 px-4 py-3 rounded-lg
-                  transition-all duration-200 group
-                  ${
-                    active
-                      ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-md'
-                      : 'text-gray-700 hover:bg-orange-50 hover:text-orange-600'
-                  }
-                  ${isCollapsed ? 'justify-center' : ''}
-                `}
-                title={isCollapsed ? item.label : undefined}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  active ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
+                }`}
               >
-                <span className={`text-xl flex-shrink-0 ${active ? '' : 'group-hover:scale-110 transition-transform'}`}>
-                  {item.icon}
+                <Icon className="w-5 h-5" />
+                <span className="flex items-center gap-1">
+                  {item.label}
+                  {item.href === '/forum' && forumUnreadCount > 0 && (
+                    <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
+                      {forumUnreadCount > 99 ? '99+' : forumUnreadCount}
+                    </span>
+                  )}
+                  {item.href === '/admin/documents/preparation' && prepDraftCount > 0 && (
+                    <span className="ml-1 text-[11px] font-semibold bg-slate-100 text-slate-800 px-2 py-0.5 rounded-full">
+                      {prepDraftCount > 99 ? '99+' : prepDraftCount}
+                    </span>
+                  )}
                 </span>
-                {!isCollapsed && (
-                  <>
-                    <span className="font-medium flex-1">{item.label}</span>
-                    {item.badge && (
-                      <span className="px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-800 font-semibold">
-                        {item.badge}
-                      </span>
-                    )}
-                    {active && (
-                      <span className="w-2 h-2 bg-white rounded-full flex-shrink-0"></span>
-                    )}
-                  </>
+                {item.badge && (
+                  <span className="ml-auto px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-800 font-semibold">
+                    {item.badge}
+                  </span>
                 )}
               </Link>
             );
           })}
         </nav>
-
-        {/* Footer de la sidebar */}
-        <div className="p-4 border-t border-gray-200 bg-white">
-          {!isCollapsed && (
-            <div className="text-xs text-muted-foreground">
-              <p className="font-semibold text-gray-600 mb-1">
-                {userRole === 'superadmin' ? 'Super Administrateur' : 'Administrateur'}
-              </p>
-              <p className="text-gray-500">
-                {session?.user?.email || 'Non connecté'}
-              </p>
-            </div>
-          )}
-          {isCollapsed && (
-            <div className="flex justify-center">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-bold text-xs">
-                  {(session?.user?.name || 'A')[0].toUpperCase()}
-                </span>
-              </div>
-            </div>
-          )}
+        {/* Bouton de déconnexion — bandeau bas du tiroir mobile */}
+        <div className="shrink-0 border-t border-gray-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_12px_rgba(0,0,0,0.06)] lg:shadow-none">
+          <button
+            type="button"
+            onClick={async () => {
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('token');
+                sessionStorage.removeItem('token');
+                try {
+                  // Déconnexion NextAuth (sinon la session peut rester active)
+                  await signOut({ redirect: false });
+                } catch {
+                  // ignore - redirection forcée juste après
+                }
+                window.location.href = '/';
+              }
+            }}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors min-h-[44px]"
+          >
+            <span>Déconnexion</span>
+          </button>
         </div>
       </aside>
     </>

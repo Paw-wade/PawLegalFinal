@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { documentsAPI } from '@/lib/api';
+import { useState, useEffect, useRef } from 'react';
+import { documentsAPI, getApiBaseUrl, getAuthToken } from '@/lib/api';
 import { PDFViewer } from './PDFViewer';
 
 interface DocumentPreviewProps {
@@ -15,125 +15,190 @@ interface DocumentPreviewProps {
   onClose: () => void;
 }
 
+function isPdfDoc(doc: { typeMime?: string; nom: string }) {
+  if (doc.typeMime?.toLowerCase().includes('pdf')) return true;
+  return /\.pdf$/i.test(doc.nom || '');
+}
+
+function isImageDoc(doc: { typeMime?: string; nom: string }) {
+  if (doc.typeMime?.toLowerCase().includes('image')) return true;
+  return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(doc.nom || '');
+}
+
+function isWordDoc(doc: { typeMime?: string; nom: string }) {
+  const mime = (doc.typeMime || '').toLowerCase();
+  if (mime.includes('word') || mime.includes('officedocument.wordprocessingml.document')) return true;
+  return /\.(docx?|odt)$/i.test(doc.nom || '');
+}
+
 export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const blobRef = useRef<string | null>(null);
 
   const documentId = document._id || document.id;
 
   useEffect(() => {
-    if (isOpen && documentId) {
-      setIsLoading(true);
-      setError(null);
-      
-      const isPDF = document.typeMime?.includes('pdf');
-      const isImage = document.typeMime?.includes('image');
-      
-      if (isPDF || isImage) {
-        // Pour PDF et images, utiliser l'URL directe avec token dans les headers via iframe
-        const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
-        
-        if (!token) {
-          console.error('❌ Aucun token trouvé pour la prévisualisation');
-          setError('Vous devez être connecté pour prévisualiser ce document.');
-          setIsLoading(false);
-          return;
-        }
-        
-        // Utiliser la même logique que api.ts pour éviter le double /api
-        let baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-        // Si baseURL contient déjà /api, ne pas l'ajouter à nouveau
-        const url = baseURL.endsWith('/api') 
-          ? `${baseURL}/user/documents/${documentId}/preview`
-          : `${baseURL}/api/user/documents/${documentId}/preview`;
-        
-        console.log('📄 URL de prévisualisation:', url);
-        console.log('📄 Token présent:', token ? 'Oui' : 'Non');
-        
-        // Pour les PDF dans iframe, on peut utiliser l'URL directement
-        // L'authentification sera gérée par le backend via les cookies ou headers
-        if (isPDF) {
-          // Créer une URL avec token pour l'iframe (le backend doit accepter le token en query param ou via cookie)
-          const previewUrlWithToken = `${url}?token=${encodeURIComponent(token)}`;
-          console.log('📄 URL PDF avec token:', previewUrlWithToken.substring(0, 100) + '...');
-          setPreviewUrl(previewUrlWithToken);
-          setIsLoading(false);
-        } else if (isImage) {
-          // Pour les images, charger le blob
-          console.log('🖼️ Chargement de l\'image avec fetch...');
-          fetch(url, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          })
-            .then(response => {
-              console.log('📄 Réponse fetch:', response.status, response.statusText);
-              if (!response.ok) {
-                if (response.status === 401) {
-                  throw new Error('Token invalide ou expiré. Veuillez vous reconnecter.');
-                } else if (response.status === 403) {
-                  throw new Error('Accès non autorisé à ce document.');
-                } else if (response.status === 404) {
-                  throw new Error('Document non trouvé.');
-                }
-                throw new Error(`Erreur ${response.status}: ${response.statusText}`);
-              }
-              return response.blob();
-            })
-            .then(blob => {
-              console.log('✅ Image chargée avec succès, taille:', blob.size);
-              const objectUrl = URL.createObjectURL(blob);
-              setPreviewUrl(objectUrl);
-              setIsLoading(false);
-            })
-            .catch(err => {
-              console.error('❌ Erreur lors de la prévisualisation:', err);
-              setError(err.message || 'Impossible de prévisualiser ce document.');
-              setIsLoading(false);
-            });
-        }
-      } else {
-        setError('La prévisualisation n\'est disponible que pour les PDF et les images.');
-        setIsLoading(false);
-      }
+    if (!isOpen || !documentId) {
+      return;
     }
 
-    return () => {
-      if (previewUrl && previewUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(previewUrl);
+    let cancelled = false;
+    const abortController = new AbortController();
+
+    const revokeCurrentBlob = () => {
+      if (blobRef.current) {
+        try {
+          URL.revokeObjectURL(blobRef.current);
+        } catch {
+          /* ignore */
+        }
+        blobRef.current = null;
       }
     };
-  }, [isOpen, documentId, document.typeMime]);
+
+    const run = async () => {
+      setIsLoading(true);
+      setError(null);
+      revokeCurrentBlob();
+      setPreviewUrl(null);
+
+      const canPdf = isPdfDoc(document);
+      const canImg = isImageDoc(document);
+      const canWord = isWordDoc(document);
+
+      if (!canPdf && !canImg && !canWord) {
+        setError("La prévisualisation n'est disponible que pour les PDF, images et fichiers Word.");
+        setIsLoading(false);
+        return;
+      }
+
+      const token = await getAuthToken();
+      if (!token) {
+        setError('Vous devez être connecté pour prévisualiser ce document.');
+        setIsLoading(false);
+        return;
+      }
+
+      const baseUrl = getApiBaseUrl();
+      const url = `${baseUrl}/user/documents/${encodeURIComponent(documentId)}/preview`;
+
+      if (canWord) {
+        const securePreviewUrl = `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+        const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(securePreviewUrl)}`;
+        setPreviewUrl(officeViewerUrl);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: 'omit',
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error('Session expirée ou token invalide. Veuillez vous reconnecter.');
+          }
+          if (response.status === 403) {
+            throw new Error('Accès non autorisé à ce document.');
+          }
+          if (response.status === 404) {
+            let detail =
+              'Document ou fichier introuvable. Si le document est ancien, le fichier peut avoir été perdu sur le serveur — importez-le à nouveau.';
+            try {
+              const ct = response.headers.get('content-type');
+              if (ct?.includes('application/json')) {
+                const j = (await response.json()) as { code?: string; message?: string };
+                if (j.code === 'FILE_NOT_FOUND') {
+                  detail =
+                    'Le fichier est absent du dossier de stockage du serveur (uploads). Ré-uploadez le document ou contactez l’administrateur.';
+                } else if (j.code === 'DOCUMENT_NOT_FOUND') {
+                  detail = "Ce document n'existe plus en base de données.";
+                } else if (j.message) {
+                  detail = j.message;
+                }
+              }
+            } catch {
+              /* ignore parse */
+            }
+            throw new Error(detail);
+          }
+          const t = await response.text().catch(() => '');
+          throw new Error(
+            `Erreur ${response.status}${t ? `: ${t.slice(0, 160)}` : ''}`
+          );
+        }
+
+        const blob = await response.blob();
+        if (cancelled) return;
+
+        const objectUrl = URL.createObjectURL(blob);
+        revokeCurrentBlob();
+        blobRef.current = objectUrl;
+        setPreviewUrl(objectUrl);
+      } catch (err: unknown) {
+        if (cancelled || (err instanceof Error && err.name === 'AbortError')) return;
+        const message = err instanceof Error ? err.message : 'Impossible de prévisualiser ce document.';
+        setError(message);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+      abortController.abort();
+      revokeCurrentBlob();
+      setPreviewUrl(null);
+    };
+  }, [isOpen, documentId, document.nom, document.typeMime]);
 
   if (!isOpen) return null;
 
-  const isPDF = document.typeMime?.includes('pdf');
-  const isImage = document.typeMime?.includes('image');
-  const canPreview = isPDF || isImage;
+  const isPDF = isPdfDoc(document);
+  const isImage = isImageDoc(document);
+  const isWord = isWordDoc(document);
+  const canPreview = isPDF || isImage || isWord;
+
+  const openBlobInNewTab = () => {
+    if (previewUrl?.startsWith('blob:')) {
+      window.open(previewUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div 
+      <div
         className="bg-white rounded-lg shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">
-              {isPDF ? '📄' : isImage ? '🖼️' : '📎'}
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-2xl flex-shrink-0">
+              {isPDF ? '📄' : isImage ? '🖼️' : isWord ? '📝' : '📎'}
             </span>
-            <div>
-              <h3 className="font-semibold text-lg">{document.nom}</h3>
-              <p className="text-xs text-muted-foreground">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-lg truncate">{document.nom}</h3>
+              <p className="text-xs text-muted-foreground truncate">
                 {document.typeMime || 'Type inconnu'}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors text-2xl font-bold"
+            className="text-muted-foreground hover:text-foreground transition-colors text-2xl font-bold flex-shrink-0"
+            type="button"
+            aria-label="Fermer"
           >
             ✕
           </button>
@@ -142,26 +207,31 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
         {/* Content */}
         <div className="flex-1 overflow-auto p-4 bg-gray-100">
           {isLoading ? (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center h-full min-h-[200px]">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Chargement de la prévisualisation...</p>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+                <p className="text-muted-foreground">Chargement de la prévisualisation…</p>
               </div>
             </div>
           ) : error ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
+            <div className="flex items-center justify-center h-full min-h-[200px]">
+              <div className="text-center max-w-md px-4">
                 <div className="text-6xl mb-4">⚠️</div>
                 <p className="text-muted-foreground mb-4">{error}</p>
                 <button
+                  type="button"
                   onClick={async () => {
-                    if (!documentId) return;
-                    const url = await documentsAPI.previewDocument(documentId);
-                    window.open(url, '_blank');
+                    try {
+                      const blobUrl = await documentsAPI.previewDocument(documentId || '');
+                      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+                      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Échec de la nouvelle tentative.');
+                    }
                   }}
                   className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
                 >
-                  Ouvrir dans un nouvel onglet
+                  Réessayer dans un nouvel onglet
                 </button>
               </div>
             </div>
@@ -176,63 +246,64 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
                     try {
                       const response = await documentsAPI.downloadDocument(documentId || '');
                       const url = window.URL.createObjectURL(new Blob([response.data]));
-                      const link = document.createElement('a');
+                      const link = window.document.createElement('a');
                       link.href = url;
                       link.setAttribute('download', document.nom);
-                      document.body.appendChild(link);
+                      window.document.body.appendChild(link);
                       link.click();
                       link.remove();
                       window.URL.revokeObjectURL(url);
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                       console.error('Erreur lors du téléchargement:', err);
                       alert('Erreur lors du téléchargement du document');
                     }
                   }}
                 />
+              ) : isWord ? (
+                <iframe
+                  src={previewUrl}
+                  title={document.nom}
+                  className="w-full h-[75vh] rounded-lg border border-gray-300 bg-white"
+                  allow="fullscreen"
+                />
               ) : isImage ? (
                 <img
                   src={previewUrl}
                   alt={document.nom}
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                  className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
                 />
               ) : null}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center h-full min-h-[200px]">
               <div className="text-center">
                 <div className="text-6xl mb-4">📎</div>
                 <p className="text-muted-foreground mb-4">
-                  La prévisualisation n'est pas disponible pour ce type de fichier.
+                  La prévisualisation n&apos;est pas disponible pour ce type de fichier.
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  Veuillez télécharger le fichier pour l'ouvrir.
-                </p>
+                <p className="text-sm text-muted-foreground">Veuillez télécharger le fichier pour l&apos;ouvrir.</p>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t bg-white">
+        <div className="flex items-center justify-between p-4 border-t bg-white gap-2 flex-wrap">
           <p className="text-xs text-muted-foreground">
-            {canPreview ? 'Prévisualisation' : 'Téléchargement requis'}
+            {canPreview ? 'Prévisualisation sécurisée (fichier chargé en mémoire)' : 'Téléchargement requis'}
           </p>
           <div className="flex gap-2">
+            {previewUrl?.startsWith('blob:') && (
+              <button
+                type="button"
+                onClick={openBlobInNewTab}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm transition-colors"
+              >
+                Ouvrir dans un nouvel onglet
+              </button>
+            )}
             <button
-              onClick={() => {
-                const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
-                let baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-                // Si baseURL contient déjà /api, ne pas l'ajouter à nouveau
-                const url = baseURL.endsWith('/api')
-                  ? `${baseURL}/user/documents/${documentId}/preview?token=${encodeURIComponent(token)}`
-                  : `${baseURL}/api/user/documents/${documentId}/preview?token=${encodeURIComponent(token)}`;
-                window.open(url, '_blank');
-              }}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm transition-colors"
-            >
-              Ouvrir dans un nouvel onglet
-            </button>
-            <button
+              type="button"
               onClick={onClose}
               className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 text-sm transition-colors"
             >
@@ -244,4 +315,3 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
     </div>
   );
 }
-

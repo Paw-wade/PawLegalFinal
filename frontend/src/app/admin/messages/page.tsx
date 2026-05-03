@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { messagesAPI, notificationsAPI, dossiersAPI } from '@/lib/api';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -88,18 +89,51 @@ export default function AdminMessagesPage() {
   const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+  /** Dossier lié à l'envoi depuis le modal (indépendant du filtre de liste) */
+  const [composeDossierId, setComposeDossierId] = useState<string>('');
   const [selectedExpediteurId, setSelectedExpediteurId] = useState<string>('');
   const [selectedDestinataireId, setSelectedDestinataireId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+
+  const getAutoDestinataireForDossier = (dossierId: string) => {
+    if (!dossierId) return '';
+    const dossier = dossiers.find((d: any) => (d._id || d.id)?.toString() === dossierId);
+    if (!dossier) return '';
+
+    const directUserId =
+      dossier.user?._id?.toString?.() ||
+      dossier.user?.id?.toString?.() ||
+      dossier.user?.toString?.() ||
+      '';
+    if (directUserId) return directUserId;
+
+    const clientEmail = (dossier.clientEmail || '').toString().trim().toLowerCase();
+    if (!clientEmail) return '';
+    const linkedUser = users.find((u: any) => (u.email || '').toString().trim().toLowerCase() === clientEmail);
+    return ((linkedUser?._id || linkedUser?.id || '') as string).toString();
+  };
+
+  const composeAutoDestinataireId = composeDossierId ? getAutoDestinataireForDossier(composeDossierId) : '';
 
   // Lire les paramètres de l'URL pour filtrer par dossier
   useEffect(() => {
     const dossierIdParam = searchParams?.get('dossierId');
     const actionParam = searchParams?.get('action');
+    const destinataireIdParam = searchParams?.get('destinataireId');
     
     if (dossierIdParam) {
       setSelectedDossierId(dossierIdParam);
       // Si action=view, on veut voir les messages, donc on garde le filtre actuel
       // Si action=send, on pourrait ouvrir le modal de composition, mais pour l'instant on filtre juste
+    }
+
+    if (actionParam === 'send') {
+      setShowComposeModal(true);
+      setComposeDossierId(dossierIdParam || '');
+      setFormData((prev) => ({
+        ...prev,
+        destinataire: destinataireIdParam || prev.destinataire || '',
+      }));
     }
   }, [searchParams]);
 
@@ -151,6 +185,12 @@ export default function AdminMessagesPage() {
         }
         const response = await messagesAPI.getMessages(params);
         if (response.data.success) {
+          const internalMessages = (response.data.messages || []).map((m: any) => ({
+            ...m,
+            isContactMessage: false
+          }));
+          allMessages.push(...internalMessages);
+
           // Utiliser les threads si disponibles, sinon fallback sur messages
           if (response.data.threads && response.data.threads.length > 0) {
             const internalThreads = response.data.threads.map((t: any) => ({ 
@@ -158,13 +198,6 @@ export default function AdminMessagesPage() {
               isContactThread: false 
             }));
             allThreads.push(...internalThreads);
-          } else {
-            // Fallback : créer des threads à partir des messages
-          const internalMessages = (response.data.messages || []).map((m: any) => ({ 
-            ...m, 
-            isContactMessage: false 
-          }));
-          allMessages.push(...internalMessages);
           }
         }
       } catch (err: any) {
@@ -203,7 +236,12 @@ export default function AdminMessagesPage() {
       // Utiliser les threads si disponibles, sinon utiliser les messages
       if (allThreads.length > 0) {
         setThreads(allThreads);
-        setMessages([]);
+        allMessages.sort((a: any, b: any) => {
+          const dateA = new Date(a.createdAt).getTime();
+          const dateB = new Date(b.createdAt).getTime();
+          return dateB - dateA;
+        });
+        setMessages(allMessages);
       } else {
       // Trier par date de création (plus récent en premier)
       allMessages.sort((a: any, b: any) => {
@@ -264,7 +302,8 @@ export default function AdminMessagesPage() {
   const getUsersByCategory = () => {
     const admins = users.filter(user => user.role === 'admin' || user.role === 'superadmin');
     const clients = users.filter(user => user.role === 'client');
-    return { admins, clients };
+    const partenaires = users.filter(user => user.role === 'partenaire');
+    return { admins, clients, partenaires };
   };
 
   const toggleCopieSelection = (userId: string) => {
@@ -293,13 +332,9 @@ export default function AdminMessagesPage() {
     setIsSubmitting(true);
     setError(null);
 
-    if (!formData.destinataire) {
+    const finalDestinataireId = composeAutoDestinataireId || formData.destinataire;
+    if (!finalDestinataireId) {
       setError('Veuillez sélectionner un destinataire');
-      setIsSubmitting(false);
-      return;
-    }
-    if (!selectedDossierId) {
-      setError('Veuillez sélectionner un dossier lié au message');
       setIsSubmitting(false);
       return;
     }
@@ -308,8 +343,10 @@ export default function AdminMessagesPage() {
       const formDataToSend = new FormData();
       formDataToSend.append('sujet', formData.sujet);
       formDataToSend.append('contenu', formData.contenu);
-      formDataToSend.append('destinataire', formData.destinataire);
-      formDataToSend.append('dossierId', selectedDossierId);
+      formDataToSend.append('destinataire', finalDestinataireId);
+      if (composeDossierId) {
+        formDataToSend.append('dossierId', composeDossierId);
+      }
       
       formData.copie.forEach(copieId => {
         formDataToSend.append('copie', copieId);
@@ -321,9 +358,10 @@ export default function AdminMessagesPage() {
 
       const response = await messagesAPI.sendMessage(formDataToSend);
       if (response.data.success) {
-        alert('Message envoyé avec succès !');
+        setToast({ message: '✅ Message envoyé avec succès.', type: 'success' });
         setShowComposeModal(false);
         setFormData({ sujet: '', contenu: '', destinataire: '', copie: [] });
+        setComposeDossierId('');
         setAttachments([]);
         loadMessages();
       }
@@ -348,7 +386,7 @@ export default function AdminMessagesPage() {
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
       console.error('Erreur lors du téléchargement:', err);
-      alert('Erreur lors du téléchargement de la pièce jointe');
+      setToast({ message: 'Erreur lors du téléchargement de la pièce jointe', type: 'error' });
     }
   };
 
@@ -499,7 +537,7 @@ export default function AdminMessagesPage() {
       setSelectedMessages(new Set());
     } catch (err: any) {
       console.error('Erreur lors de la suppression batch:', err);
-      alert('Erreur lors de la suppression des messages');
+      setToast({ message: 'Erreur lors de la suppression des messages', type: 'error' });
     }
   };
 
@@ -513,7 +551,7 @@ export default function AdminMessagesPage() {
       }
     } catch (err: any) {
       console.error('Erreur lors de la suppression:', err);
-      alert('Erreur lors de la suppression du message');
+      setToast({ message: 'Erreur lors de la suppression du message', type: 'error' });
     }
   };
 
@@ -532,9 +570,22 @@ export default function AdminMessagesPage() {
     return null;
   }
 
+  const currentUserId = (session?.user as any)?.id?.toString?.() || '';
+
+  const isThreadUnreadForCurrentUser = (thread: any) => {
+    const threadMessages = Array.isArray(thread?.messages) ? thread.messages : [];
+    return threadMessages.some((m: any) => {
+      const isRecipient =
+        (Array.isArray(m?.destinataires) && m.destinataires.some((d: any) => (d?._id || d || '')?.toString?.() === currentUserId)) ||
+        (Array.isArray(m?.copie) && m.copie.some((c: any) => (c?._id || c || '')?.toString?.() === currentUserId));
+      if (!isRecipient) return false;
+      return !isMessageRead(m);
+    });
+  };
+
   // IMPORTANT: "Non lus" = non lus PAR MOI (uniquement si je suis destinataire ou en copie, ou si c'est un message de contact)
   const unreadCount = threads.length > 0
-    ? threads.filter(t => t.hasUnread).length
+    ? threads.filter((t: any) => isThreadUnreadForCurrentUser(t)).length
     : messages.filter(m => {
     if (m.isContactMessage) {
       // Pour les messages de contact, tous les admins peuvent les marquer comme lus
@@ -543,13 +594,159 @@ export default function AdminMessagesPage() {
     return canCurrentUserMarkAsRead(m) && !isMessageRead(m);
   }).length;
   
-  const displayItems = threads.length > 0 ? threads : messages;
-  const isThreadView = threads.length > 0;
+  const matchesDossier = (value: any) => {
+    if (!selectedDossierId) return true;
+    return (value || '').toString() === selectedDossierId.toString();
+  };
+
+  const filteredThreads = threads.filter((thread: any) => {
+    const threadMessages = Array.isArray(thread?.messages) ? thread.messages : [];
+    if (threadMessages.length === 0) return false;
+
+    const typeMatch =
+      filter === 'all'
+        ? true
+        : filter === 'unread'
+        ? isThreadUnreadForCurrentUser(thread)
+        : filter === 'sent'
+        ? threadMessages.some((m: any) => (m?.expediteur?._id || m?.expediteur || '')?.toString?.() === currentUserId)
+        : threadMessages.some((m: any) =>
+            (Array.isArray(m?.destinataires) && m.destinataires.some((d: any) => (d?._id || d || '')?.toString?.() === currentUserId)) ||
+            (Array.isArray(m?.copie) && m.copie.some((c: any) => (c?._id || c || '')?.toString?.() === currentUserId))
+          );
+
+    if (!typeMatch) return false;
+
+    const expediteurMatch = selectedExpediteurId
+      ? threadMessages.some((m: any) => (m?.expediteur?._id || m?.expediteur || '')?.toString?.() === selectedExpediteurId)
+      : true;
+
+    if (!expediteurMatch) return false;
+
+    const destinataireMatch = selectedDestinataireId
+      ? threadMessages.some((m: any) =>
+          (Array.isArray(m?.destinataires) && m.destinataires.some((d: any) => (d?._id || d || '')?.toString?.() === selectedDestinataireId)) ||
+          (Array.isArray(m?.copie) && m.copie.some((c: any) => (c?._id || c || '')?.toString?.() === selectedDestinataireId))
+        )
+      : true;
+
+    if (!destinataireMatch) return false;
+
+    const dossierMatch = selectedDossierId
+      ? threadMessages.some((m: any) => {
+          const dossierValue = m?.dossierId?._id || m?.dossierId || m?.dossier?._id || m?.dossier;
+          return matchesDossier(dossierValue);
+        })
+      : true;
+
+    return dossierMatch;
+  });
+
+  const filteredMessages = messages.filter((message: any) => {
+    const messageExpediteurId = (message?.expediteur?._id || message?.expediteur || '')?.toString?.();
+    const messageDossierId = (message?.dossierId?._id || message?.dossierId || message?.dossier?._id || message?.dossier || '')?.toString?.();
+
+    const typeMatch =
+      filter === 'all'
+        ? true
+        : filter === 'unread'
+        ? ((message.isContactMessage || canCurrentUserMarkAsRead(message)) && !isMessageRead(message))
+        : filter === 'sent'
+        ? messageExpediteurId === currentUserId
+        : (
+            (Array.isArray(message?.destinataires) && message.destinataires.some((d: any) => (d?._id || d || '')?.toString?.() === currentUserId)) ||
+            (Array.isArray(message?.copie) && message.copie.some((c: any) => (c?._id || c || '')?.toString?.() === currentUserId)) ||
+            !!message.isContactMessage
+          );
+
+    if (!typeMatch) return false;
+    if (!matchesDossier(messageDossierId)) return false;
+    if (selectedExpediteurId && messageExpediteurId !== selectedExpediteurId) return false;
+    if (selectedDestinataireId) {
+      const isDestMatch =
+        (Array.isArray(message?.destinataires) && message.destinataires.some((d: any) => (d?._id || d || '')?.toString?.() === selectedDestinataireId)) ||
+        (Array.isArray(message?.copie) && message.copie.some((c: any) => (c?._id || c || '')?.toString?.() === selectedDestinataireId));
+      if (!isDestMatch) return false;
+    }
+    return true;
+  });
+
+  const forceMessageView = !!selectedExpediteurId || !!selectedDestinataireId;
+  const isThreadView = threads.length > 0 && !forceMessageView;
+  const displayItems = isThreadView ? filteredThreads : filteredMessages;
+
+  const threadMatchesBaseFilters = (thread: any) => {
+    const threadMessages = Array.isArray(thread?.messages) ? thread.messages : [];
+    if (threadMessages.length === 0) return false;
+    const expediteurMatch = selectedExpediteurId
+      ? threadMessages.some((m: any) => (m?.expediteur?._id || m?.expediteur || '')?.toString?.() === selectedExpediteurId)
+      : true;
+    if (!expediteurMatch) return false;
+    const destinataireMatch = selectedDestinataireId
+      ? threadMessages.some((m: any) =>
+          (Array.isArray(m?.destinataires) && m.destinataires.some((d: any) => (d?._id || d || '')?.toString?.() === selectedDestinataireId)) ||
+          (Array.isArray(m?.copie) && m.copie.some((c: any) => (c?._id || c || '')?.toString?.() === selectedDestinataireId))
+        )
+      : true;
+    if (!destinataireMatch) return false;
+    if (selectedDossierId) {
+      const dossierMatch = threadMessages.some((m: any) => {
+        const dossierValue = m?.dossierId?._id || m?.dossierId || m?.dossier?._id || m?.dossier;
+        return matchesDossier(dossierValue);
+      });
+      if (!dossierMatch) return false;
+    }
+    return true;
+  };
+
+  const messageMatchesBaseFilters = (message: any) => {
+    const messageExpediteurId = (message?.expediteur?._id || message?.expediteur || '')?.toString?.();
+    const messageDossierId = (message?.dossierId?._id || message?.dossierId || message?.dossier?._id || message?.dossier || '')?.toString?.();
+    if (!matchesDossier(messageDossierId)) return false;
+    if (selectedExpediteurId && messageExpediteurId !== selectedExpediteurId) return false;
+    if (selectedDestinataireId) {
+      const isDestMatch =
+        (Array.isArray(message?.destinataires) && message.destinataires.some((d: any) => (d?._id || d || '')?.toString?.() === selectedDestinataireId)) ||
+        (Array.isArray(message?.copie) && message.copie.some((c: any) => (c?._id || c || '')?.toString?.() === selectedDestinataireId));
+      if (!isDestMatch) return false;
+    }
+    return true;
+  };
+
+  const counters = (() => {
+    if (isThreadView) {
+      const baseThreads = threads.filter(threadMatchesBaseFilters);
+      return {
+        all: baseThreads.length,
+        received: baseThreads.filter((thread: any) =>
+          (thread.messages || []).some((m: any) =>
+            (Array.isArray(m?.destinataires) && m.destinataires.some((d: any) => (d?._id || d || '')?.toString?.() === currentUserId)) ||
+            (Array.isArray(m?.copie) && m.copie.some((c: any) => (c?._id || c || '')?.toString?.() === currentUserId))
+          )
+        ).length,
+        sent: baseThreads.filter((thread: any) =>
+          (thread.messages || []).some((m: any) => (m?.expediteur?._id || m?.expediteur || '')?.toString?.() === currentUserId)
+        ).length,
+        unread: baseThreads.filter((thread: any) => isThreadUnreadForCurrentUser(thread)).length,
+      };
+    }
+    const baseMessages = messages.filter(messageMatchesBaseFilters);
+    return {
+      all: baseMessages.length,
+      received: baseMessages.filter((m: any) =>
+        !!m.isContactMessage ||
+        (Array.isArray(m?.destinataires) && m.destinataires.some((d: any) => (d?._id || d || '')?.toString?.() === currentUserId)) ||
+        (Array.isArray(m?.copie) && m.copie.some((c: any) => (c?._id || c || '')?.toString?.() === currentUserId))
+      ).length,
+      sent: baseMessages.filter((m: any) => (m?.expediteur?._id || m?.expediteur || '')?.toString?.() === currentUserId).length,
+      unread: baseMessages.filter((m: any) => ((m.isContactMessage || canCurrentUserMarkAsRead(m)) && !isMessageRead(m))).length,
+    };
+  })();
 
   // Grouper les messages par dossier (pour l'affichage non-thread)
-  const messagesByDossier = !isThreadView ? messages.reduce((acc: any, message: any) => {
+  const messagesByDossier = !isThreadView ? filteredMessages.reduce((acc: any, message: any) => {
     const dossierId = message.dossierId?._id?.toString() || message.dossierId?.toString() || message.dossier?._id?.toString() || message.dossier?.toString() || 'sans-dossier';
-    const dossierTitre = message.dossierId?.titre || message.dossier?.titre || message.dossierId?.numero || message.dossier?.numero || null;
+    const dossierTitre = message.dossierId?.titre || message.dossier?.titre || message.dossierId?.numero || message.dossier?.numero || 'Hors dossier';
     
     if (!acc[dossierId]) {
       acc[dossierId] = {
@@ -578,7 +775,7 @@ export default function AdminMessagesPage() {
             </div>
             <div className="flex flex-col gap-2 items-end">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground font-medium">Dossier :</span>
+                <span className="text-sm text-muted-foreground font-medium">Filtrer par dossier :</span>
                 <select
                   value={selectedDossierId}
                   onChange={(e) => setSelectedDossierId(e.target.value)}
@@ -592,15 +789,23 @@ export default function AdminMessagesPage() {
                   ))}
                 </select>
               </div>
-              <Button onClick={() => setShowComposeModal(true)} disabled={!selectedDossierId} className="shadow-md">
+              <Button
+                onClick={() => {
+                  const preselectedDossierId = selectedDossierId || '';
+                  const autoDest = preselectedDossierId ? getAutoDestinataireForDossier(preselectedDossierId) : '';
+                  setComposeDossierId(preselectedDossierId);
+                  setFormData((prev) => ({
+                    ...prev,
+                    destinataire: autoDest || prev.destinataire,
+                    copie: prev.copie.filter((id) => id !== autoDest),
+                  }));
+                  setShowComposeModal(true);
+                }}
+                className="shadow-md"
+              >
                 <span className="mr-2">✉️</span>
                 Nouveau message
               </Button>
-              {!selectedDossierId && (
-                <p className="text-xs text-amber-600 max-w-xs text-right">
-                  Sélectionnez un dossier pour envoyer un message
-                </p>
-              )}
             </div>
           </div>
 
@@ -613,32 +818,32 @@ export default function AdminMessagesPage() {
                 onClick={() => setFilter('all')}
                 size="sm"
               >
-                Tous ({messages.length})
+                Tous ({counters.all})
               </Button>
               <Button
                 variant={filter === 'received' ? 'default' : 'outline'}
                 onClick={() => setFilter('received')}
                 size="sm"
               >
-                Reçus
+                Reçus ({counters.received})
               </Button>
               <Button
                 variant={filter === 'sent' ? 'default' : 'outline'}
                 onClick={() => setFilter('sent')}
                 size="sm"
               >
-                Envoyés
+                Envoyés ({counters.sent})
               </Button>
               <Button
                 variant={filter === 'unread' ? 'default' : 'outline'}
                 onClick={() => setFilter('unread')}
                 size="sm"
-                className={unreadCount > 0 ? 'relative' : ''}
+                className={counters.unread > 0 ? 'relative' : ''}
               >
-                Non lus
-                {unreadCount > 0 && (
+                Non lus ({counters.unread})
+                {counters.unread > 0 && (
                   <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                    {unreadCount}
+                    {counters.unread}
                   </span>
                 )}
               </Button>
@@ -691,17 +896,22 @@ export default function AdminMessagesPage() {
               </div>
 
               {(selectedExpediteurId || selectedDestinataireId) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedExpediteurId('');
-                    setSelectedDestinataireId('');
-                  }}
-                  className="text-xs"
-                >
-                  Réinitialiser les filtres
-                </Button>
+                <>
+                  <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">
+                    Mode filtre précis (par message)
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedExpediteurId('');
+                      setSelectedDestinataireId('');
+                    }}
+                    className="text-xs"
+                  >
+                    Réinitialiser les filtres
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -809,10 +1019,10 @@ export default function AdminMessagesPage() {
               return (
                 <div
                   key={thread.threadId}
-                  className={`bg-white rounded-xl shadow-md border-l-4 transition-all duration-200 hover:shadow-xl cursor-pointer ${
-                    thread.hasUnread
-                      ? 'border-primary bg-gradient-to-r from-primary/5 via-primary/2 to-white' 
-                      : 'border-gray-300 bg-white'
+                  className={`bg-white rounded-xl shadow-sm border transition-all duration-300 hover:shadow-[0_12px_30px_-18px_rgba(249,115,22,0.45)] cursor-pointer ${
+                    isThreadUnreadForCurrentUser(thread)
+                      ? 'border-primary/70 bg-gradient-to-r from-primary/5 via-primary/2 to-white' 
+                      : 'border-gray-300/80 bg-white'
                   }`}
                   onClick={() => {
                     router.push(`/admin/messages/${thread.root?._id || thread.lastMessage?._id || ''}`);
@@ -822,7 +1032,7 @@ export default function AdminMessagesPage() {
                     <div className="flex items-start gap-4">
                       {/* Avatar du dernier expéditeur */}
                       <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md ${
-                        thread.hasUnread 
+                        isThreadUnreadForCurrentUser(thread) 
                           ? 'bg-gradient-to-br from-primary to-primary/80' 
                           : 'bg-gradient-to-br from-gray-400 to-gray-500'
                       }`}>
@@ -836,21 +1046,21 @@ export default function AdminMessagesPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2 flex-wrap">
                               <h3 className={`font-bold text-lg ${
-                                thread.hasUnread ? 'text-gray-900' : 'text-gray-700'
+                                isThreadUnreadForCurrentUser(thread) ? 'text-gray-900' : 'text-gray-700'
                               }`}>
                                 {rootMessage.sujet || rootMessage.subject}
                               </h3>
-                              {thread.hasUnread && (
+                              {isThreadUnreadForCurrentUser(thread) && (
                                 <span className="flex-shrink-0 px-2.5 py-1 rounded-full bg-primary text-white text-xs font-bold shadow-sm">
                                   ✉️ Nouveau
                                 </span>
                               )}
                               <span className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                                thread.hasUnread 
+                                isThreadUnreadForCurrentUser(thread) 
                                   ? 'bg-green-100 text-green-700' 
                                   : 'bg-gray-100 text-gray-600'
                               }`}>
-                                {thread.hasUnread ? '● Non lu' : '✓ Lu'}
+                                {isThreadUnreadForCurrentUser(thread) ? '● Non lu' : '✓ Lu'}
                               </span>
                               {thread.messageCount > 1 && (
                                 <span className="flex-shrink-0 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">
@@ -861,7 +1071,7 @@ export default function AdminMessagesPage() {
                             
                             {/* Aperçu du dernier message */}
                             <p className={`text-sm mb-3 line-clamp-2 ${
-                              thread.hasUnread ? 'text-gray-800' : 'text-gray-600'
+                              isThreadUnreadForCurrentUser(thread) ? 'text-gray-800' : 'text-gray-600'
                             }`}>
                               {lastMessage.contenu || lastMessage.message}
                             </p>
@@ -949,8 +1159,8 @@ export default function AdminMessagesPage() {
                       </Link>
                     )}
                     {dossierGroup.dossierId === 'sans-dossier' && (
-                      <div className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold">
-                        ⚠️ Ce message n'est pas lié à un dossier
+                      <div className="px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-xs font-medium">
+                        Message général
                       </div>
                     )}
                   </div>
@@ -1036,10 +1246,10 @@ export default function AdminMessagesPage() {
               return (
                 <div
                   key={messageId}
-                  className={`bg-white rounded-xl shadow-md border-l-4 transition-all duration-200 hover:shadow-xl ${
+                  className={`bg-white rounded-xl shadow-sm border transition-all duration-300 hover:shadow-[0_12px_30px_-18px_rgba(249,115,22,0.45)] ${
                     (isReceived && !isRead)
-                      ? 'border-primary bg-gradient-to-r from-primary/5 via-primary/2 to-white' 
-                      : 'border-gray-300 bg-white'
+                      ? 'border-primary/70 bg-gradient-to-r from-primary/5 via-primary/2 to-white' 
+                      : 'border-gray-300/80 bg-white'
                   } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
                 >
                   <div className="p-6">
@@ -1259,16 +1469,26 @@ export default function AdminMessagesPage() {
             <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
                 <h2 className="text-2xl font-bold">Nouveau message</h2>
-                <button onClick={() => setShowComposeModal(false)} className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">×</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowComposeModal(false);
+                    setComposeDossierId('');
+                  }}
+                  className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  ×
+                </button>
               </div>
               <form onSubmit={handleSendMessage} className="p-6 space-y-5">
                 {/* Destinataire principal */}
+                {!composeAutoDestinataireId && (
                 <div>
                   <Label htmlFor="destinataire">Destinataire principal *</Label>
                   <p className="text-xs text-muted-foreground mb-3">Sélectionnez un seul destinataire</p>
                   <div className="mt-2 border border-input rounded-lg p-4 max-h-64 overflow-y-auto bg-background">
                     {(() => {
-                      const { admins, clients } = getUsersByCategory();
+                      const { admins, clients, partenaires } = getUsersByCategory();
                       const currentUserId = (session?.user as any)?.id;
                       
                       return (
@@ -1276,7 +1496,7 @@ export default function AdminMessagesPage() {
                           {clients.length > 0 && (
                             <div>
                               <h3 className="font-semibold text-sm text-foreground mb-2 pb-2 border-b border-border">
-                                👤 Utilisateurs ({clients.length})
+                                👤 Clients ({clients.length})
                               </h3>
                               <div className="space-y-2">
                                 {clients.map((user) => {
@@ -1305,6 +1525,46 @@ export default function AdminMessagesPage() {
                                       </div>
                                       <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">
                                         Client
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {partenaires.length > 0 && (
+                            <div>
+                              <h3 className="font-semibold text-sm text-foreground mb-2 pb-2 border-b border-border">
+                                🤝 Partenaires ({partenaires.length})
+                              </h3>
+                              <div className="space-y-2">
+                                {partenaires.map((user) => {
+                                  const userId = user._id || user.id;
+                                  const isSelected = formData.destinataire === userId;
+                                  return (
+                                    <label
+                                      key={userId}
+                                      className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-accent transition-colors ${
+                                        isSelected ? 'bg-primary/10 border-2 border-primary' : 'border border-transparent'
+                                      }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name="destinataire"
+                                        value={userId}
+                                        checked={isSelected}
+                                        onChange={() => handleDestinataireChange(userId)}
+                                        className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
+                                      />
+                                      <div className="flex-1">
+                                        <div className="font-medium text-sm">
+                                          {user.firstName} {user.lastName}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">{user.email}</div>
+                                      </div>
+                                      <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-900">
+                                        Partenaire
                                       </span>
                                     </label>
                                   );
@@ -1355,7 +1615,7 @@ export default function AdminMessagesPage() {
                             </div>
                           )}
 
-                          {admins.length === 0 && clients.length === 0 && (
+                          {admins.length === 0 && clients.length === 0 && partenaires.length === 0 && (
                             <p className="text-sm text-muted-foreground text-center py-4">
                               Aucun utilisateur disponible
                             </p>
@@ -1365,6 +1625,48 @@ export default function AdminMessagesPage() {
                     })()}
                   </div>
                 </div>
+                )}
+
+                <div>
+                  <Label htmlFor="compose-dossier">Lier à un dossier (optionnel)</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Laissez vide pour un échange général hors dossier.
+                  </p>
+                  <select
+                    id="compose-dossier"
+                    value={composeDossierId}
+                    onChange={(e) => {
+                      const nextDossierId = e.target.value;
+                      const autoDest = nextDossierId ? getAutoDestinataireForDossier(nextDossierId) : '';
+                      setComposeDossierId(nextDossierId);
+                      setFormData((prev) => ({
+                        ...prev,
+                        destinataire: autoDest || prev.destinataire,
+                        copie: prev.copie.filter((id) => id !== autoDest),
+                      }));
+                    }}
+                    className="mt-1 w-full px-3 py-2 border border-input rounded-md text-sm bg-background"
+                  >
+                    <option value="">Aucun dossier</option>
+                    {dossiers.map((dossier) => (
+                      <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
+                        {dossier.titre || dossier.numero || 'Dossier'} – {dossier.numero}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {composeDossierId && composeAutoDestinataireId && (
+                  <div className="p-3 rounded-md border border-primary/20 bg-primary/5 text-sm">
+                    <span className="font-semibold">Destinataire automatique :</span>{' '}
+                    {(() => {
+                      const autoUser = users.find((u: any) => (u._id || u.id)?.toString() === composeAutoDestinataireId);
+                      if (!autoUser) return 'Créateur du dossier';
+                      return `${autoUser.firstName || ''} ${autoUser.lastName || ''}`.trim() || autoUser.email;
+                    })()}
+                    <span className="text-muted-foreground"> (créateur du dossier)</span>
+                  </div>
+                )}
 
                 {/* Copie (CC) */}
                 <div>
@@ -1372,11 +1674,11 @@ export default function AdminMessagesPage() {
                   <p className="text-xs text-muted-foreground mb-3">Vous pouvez mettre d'autres personnes en copie</p>
                   <div className="mt-2 border border-input rounded-lg p-4 max-h-64 overflow-y-auto bg-background">
                     {(() => {
-                      const { admins, clients } = getUsersByCategory();
+                      const { admins, clients, partenaires } = getUsersByCategory();
                       const currentUserId = (session?.user as any)?.id;
-                      const allUsers = [...clients, ...admins].filter(user => 
+                      const allUsers = [...clients, ...partenaires, ...admins].filter(user => 
                         (user._id || user.id) !== currentUserId && 
-                        (user._id || user.id) !== formData.destinataire
+                        (user._id || user.id) !== (composeAutoDestinataireId || formData.destinataire)
                       );
                       
                       if (allUsers.length === 0) {
@@ -1393,6 +1695,14 @@ export default function AdminMessagesPage() {
                             const userId = user._id || user.id;
                             const isInCopie = formData.copie.includes(userId);
                             const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+                            const isPartenaire = user.role === 'partenaire';
+                            const roleLabel = isAdmin
+                              ? user.role === 'superadmin'
+                                ? 'Super Admin'
+                                : 'Admin'
+                              : isPartenaire
+                                ? 'Partenaire'
+                                : 'Client';
                             return (
                               <label
                                 key={userId}
@@ -1413,9 +1723,9 @@ export default function AdminMessagesPage() {
                                   <div className="text-xs text-muted-foreground">{user.email}</div>
                                 </div>
                                 <span className={`text-xs px-2 py-1 rounded-full ${
-                                  isAdmin ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                                  isAdmin ? 'bg-blue-100 text-blue-800' : isPartenaire ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-800'
                                 }`}>
-                                  {isAdmin ? (user.role === 'superadmin' ? 'Super Admin' : 'Admin') : 'Client'}
+                                  {roleLabel}
                                 </span>
                               </label>
                             );
@@ -1469,7 +1779,7 @@ export default function AdminMessagesPage() {
                     <div className="mt-2 space-y-1">
                       {attachments.map((file, index) => (
                         <div key={index} className="text-xs text-muted-foreground flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span>📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          <span>📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
@@ -1483,10 +1793,18 @@ export default function AdminMessagesPage() {
                   )}
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button type="button" variant="outline" onClick={() => setShowComposeModal(false)} disabled={isSubmitting}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowComposeModal(false);
+                      setComposeDossierId('');
+                    }}
+                    disabled={isSubmitting}
+                  >
                     Annuler
                   </Button>
-                  <Button type="submit" disabled={isSubmitting || !formData.destinataire}>
+                  <Button type="submit" disabled={isSubmitting || !(composeAutoDestinataireId || formData.destinataire)}>
                     {isSubmitting ? 'Envoi...' : 'Envoyer'}
                   </Button>
                 </div>
@@ -1601,9 +1919,6 @@ export default function AdminMessagesPage() {
                           <div className="flex items-center gap-2">
                             <span>📎</span>
                             <span className="text-sm">{pj.originalName}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({(pj.size / 1024 / 1024).toFixed(2)} MB)
-                            </span>
                           </div>
                           <Button
                             variant="outline"
@@ -1682,8 +1997,13 @@ export default function AdminMessagesPage() {
                 setIsSubmitting(true);
                 setError(null);
 
-                if (!replyData.destinataire) {
-                  setError('Veuillez sélectionner un destinataire');
+                const autoDestinataire =
+                  (replyToMessage as any)?.expediteur?._id?.toString?.() ||
+                  (replyToMessage as any)?.expediteur?.id?.toString?.() ||
+                  replyData.destinataire;
+
+                if (!autoDestinataire) {
+                  setError('Impossible de déterminer automatiquement le destinataire de la réponse');
                   setIsSubmitting(false);
                   return;
                 }
@@ -1692,7 +2012,7 @@ export default function AdminMessagesPage() {
                   const formDataToSend = new FormData();
                   formDataToSend.append('sujet', replyData.sujet);
                   formDataToSend.append('contenu', replyData.contenu);
-                  formDataToSend.append('destinataire', replyData.destinataire);
+                  formDataToSend.append('destinataire', autoDestinataire);
                   replyData.copie.forEach(cc => {
                     formDataToSend.append('copie', cc);
                   });
@@ -1722,7 +2042,7 @@ export default function AdminMessagesPage() {
 
                   const response = await messagesAPI.sendMessage(formDataToSend);
                   if (response.data.success) {
-                    alert('Réponse envoyée avec succès !');
+                    setToast({ message: '✅ Réponse envoyée avec succès.', type: 'success' });
                     setShowReplyModal(false);
                     setReplyToMessage(null);
                     setReplyData({ sujet: '', contenu: '', destinataire: '', copie: [] });
@@ -1742,22 +2062,9 @@ export default function AdminMessagesPage() {
                   </div>
                 )}
 
-                <div>
-                  <Label htmlFor="reply-destinataire">Destinataire *</Label>
-                  <select
-                    id="reply-destinataire"
-                    value={replyData.destinataire}
-                    onChange={(e) => setReplyData({ ...replyData, destinataire: e.target.value })}
-                    required
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                  >
-                    <option value="">Sélectionner un destinataire</option>
-                    {replyToMessage?.expediteur && (
-                      <option value={replyToMessage.expediteur._id || replyToMessage.expediteur.id}>
-                        {replyToMessage.expediteur.firstName} {replyToMessage.expediteur.lastName} ({replyToMessage.expediteur.email})
-                      </option>
-                    )}
-                  </select>
+                <div className="p-3 rounded-md border border-primary/20 bg-primary/5 text-sm">
+                  <span className="font-semibold">Réponse automatique à :</span>{' '}
+                  {replyToMessage?.expediteur?.firstName} {replyToMessage?.expediteur?.lastName} ({replyToMessage?.expediteur?.email})
                 </div>
 
                 <div>
@@ -1804,7 +2111,7 @@ export default function AdminMessagesPage() {
                     <div className="mt-2 space-y-1">
                       {replyAttachments.map((file, index) => (
                         <div key={index} className="text-xs text-muted-foreground flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span>📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          <span>📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setReplyAttachments(replyAttachments.filter((_, i) => i !== index))}
@@ -1827,7 +2134,7 @@ export default function AdminMessagesPage() {
                   }} disabled={isSubmitting}>
                     Annuler
                   </Button>
-                  <Button type="submit" disabled={isSubmitting || !replyData.destinataire}>
+                  <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? 'Envoi...' : 'Envoyer la réponse'}
                   </Button>
                 </div>
@@ -1836,6 +2143,9 @@ export default function AdminMessagesPage() {
           </div>
         )}
       </main>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

@@ -256,16 +256,28 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
 
       if (userId) {
         // Mise à jour
+        const finalRole = selectedRoles.length > 0 ? selectedRoles[0] : 'client';
         const updateData: any = {
           firstName: userInfo.firstName,
           lastName: userInfo.lastName,
           email: userInfo.email,
           phone: userInfo.phone,
-          isActive: userInfo.isActive
+          isActive: userInfo.isActive,
+          role: finalRole
         };
         
         if (userInfo.password) {
           updateData.password = userInfo.password;
+        }
+
+        // Ajouter les informations partenaire si le rôle est partenaire
+        if (finalRole === 'partenaire') {
+          updateData.partenaireInfo = {
+            typeOrganisme: userInfo.partenaireInfo.typeOrganisme,
+            nomOrganisme: userInfo.partenaireInfo.nomOrganisme || undefined,
+            adresseOrganisme: userInfo.partenaireInfo.adresseOrganisme || undefined,
+            contactPrincipal: userInfo.partenaireInfo.contactPrincipal || undefined
+          };
         }
 
         await userAPI.updateUser(userId, updateData);
@@ -626,6 +638,43 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
                 <p className="text-sm text-muted-foreground mt-2">
                   Note: Seul un Super Admin peut créer des comptes Super Admin et Admin.
                 </p>
+              )}
+
+              {/* Choix rapide du type d’organisme quand le rôle Partenaire est sélectionné */}
+              {selectedRoles.includes('partenaire') && (
+                <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
+                  <p className="text-sm font-semibold text-foreground">
+                    Nature du partenaire <span className="text-red-500">*</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Précisez s’il s’agit d’un consulat, d’une association ou d’un avocat. Cette information sera enregistrée dans
+                    le compte partenaire.
+                  </p>
+                  <select
+                    value={userInfo.partenaireInfo.typeOrganisme}
+                    onChange={(e) =>
+                      setUserInfo({
+                        ...userInfo,
+                        partenaireInfo: {
+                          ...userInfo.partenaireInfo,
+                          typeOrganisme: e.target.value as 'consulat' | 'association' | 'avocat' | '',
+                        },
+                      })
+                    }
+                    className="flex h-10 w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    required
+                  >
+                    <option value="">-- Sélectionner --</option>
+                    <option value="consulat">Consulat</option>
+                    <option value="association">Association</option>
+                    <option value="avocat">Avocat</option>
+                  </select>
+                  {!userInfo.partenaireInfo.typeOrganisme && (
+                    <p className="text-xs text-red-600">
+                      Ce champ est obligatoire pour les comptes partenaire.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}

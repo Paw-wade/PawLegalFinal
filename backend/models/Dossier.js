@@ -57,28 +57,7 @@ const dossierSchema = new mongoose.Schema({
   },
   statut: {
     type: String,
-    enum: [
-      'recu',
-      'accepte',
-      'refuse',
-      'annule',
-      'en_attente_onboarding',
-      'en_cours_instruction',
-      'pieces_manquantes',
-      'dossier_complet',
-      'depose',
-      'reception_confirmee',
-      'complement_demande',
-      'decision_defavorable',
-      'communication_motifs',
-      'recours_preparation',
-      'refere_mesures_utiles',
-      'refere_suspension_rep',
-      'gain_cause',
-      'rejet',
-      'decision_favorable',
-      'autre'
-    ],
+    trim: true,
     default: 'recu'
   },
   priorite: {
@@ -125,6 +104,27 @@ const dossierSchema = new mongoose.Schema({
     ref: 'User',
     required: false // Le membre de l'équipe à qui le dossier est assigné (déprécié, utiliser teamMembers)
   },
+  assignmentHistory: [{
+    from: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: false
+    },
+    to: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: false
+    },
+    changedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    changedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   // Équipe de traitement du dossier
   teamMembers: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -157,6 +157,123 @@ const dossierSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  // Étapes supplémentaires ajoutées manuellement par l'admin ou le partenaire (non prévues dans le flux standard)
+  etapesSupplementaires: [{
+    id: { type: String, trim: true },
+    label: { type: String, required: true, trim: true },
+    date: { type: Date },
+    ordre: { type: Number, default: 0 },
+    addedAt: { type: Date, default: Date.now },
+    addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  }],
+  // Compléments au récit : informations ajoutées par le client, le créateur, l'admin ou le partenaire (visibles dans le récap et le PDF)
+  complementsRecit: [{
+    addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    addedAt: { type: Date, default: Date.now },
+    authorName: { type: String, trim: true },
+    role: { type: String, trim: true },
+    /** Titre court affiché en onglet / en-tête (optionnel) */
+    title: { type: String, trim: true, default: '' },
+    text: { type: String, required: true, trim: true }
+  }],
+  // Formule tarifaire choisie par le client (visible admin uniquement côté API pour les partenaires)
+  formuleTarifaire: {
+    type: String,
+    enum: ['standard', 'premium'],
+    required: false
+  },
+  formuleTarifaireChoisieAt: {
+    type: Date,
+    required: false
+  },
+  // Rappel envoyé au client (notification + SMS) si le dossier passe « En cours » sans choix
+  formuleTarifaireReminderSent: {
+    type: Boolean,
+    default: false
+  },
+  // Montant de tarification fixé manuellement par superadmin (pas de choix Standard/Premium côté client)
+  montantTarificationFixe: {
+    type: Number,
+    min: 0,
+    required: false
+  },
+  montantTarificationFixeAt: {
+    type: Date,
+    required: false
+  },
+  montantTarificationFixeBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
+  tarificationNotificationSentAt: {
+    type: Date,
+    required: false
+  },
+  /** Résumé du dernier message « notification tarification » envoyé au client (in-app / base pour SMS). */
+  tarificationLastNotifySummary: {
+    type: String,
+    trim: true,
+    maxlength: 2000,
+    required: false,
+  },
+  paiementTarificationEffectue: {
+    type: Boolean,
+    default: false
+  },
+  paiementTarificationEffectueAt: {
+    type: Date,
+    required: false
+  },
+  paiementTarificationEffectueBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
+  // Exonération des frais de tarification (décision admin à l’acceptation ou ultérieurement)
+  fraisExoneres: {
+    type: Boolean,
+    default: false
+  },
+  fraisExoneresAt: {
+    type: Date,
+    required: false
+  },
+  fraisExoneresBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
+  fraisExoneresMotif: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    required: false
+  },
+  // Mise en stand-by : le dossier existe mais n'est pas traité temporairement
+  isStandby: {
+    type: Boolean,
+    default: false
+  },
+  standbyReason: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    required: false
+  },
+  standbyAt: {
+    type: Date,
+    required: false
+  },
+  standbyUntil: {
+    type: Date,
+    required: false
+  },
+  standbyBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
   transmittedTo: [{
     partenaire: {
       type: mongoose.Schema.Types.ObjectId,
@@ -214,40 +331,47 @@ dossierSchema.pre('save', async function(next) {
   // Générer un numéro unique si ce n'est pas déjà défini
   if (!this.numero) {
     try {
-      // Générer un numéro au format DOS-YYYYMMDD-XXXX
+      // Format court : DOS-YYMM-NN (séquence mensuelle sur 2 chiffres, ex. DOS-2604-07)
       const date = this.createdAt || new Date();
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const prefix = `DOS-${year}${month}${day}-`;
-      
-      // Trouver le dernier numéro du jour en utilisant la collection directement
+      const yy = String(date.getFullYear() % 100).padStart(2, '0');
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const yymm = `${yy}${mm}`;
+      const prefix = `DOS-${yymm}-`;
+
       const collection = this.constructor.collection;
       const lastDossier = await collection.findOne(
-        { numero: { $regex: `^${prefix}` } },
+        { numero: { $regex: `^DOS-${yymm}-\\d{2}$` } },
         { sort: { numero: -1 } }
       );
-      
+
       let sequence = 1;
       if (lastDossier && lastDossier.numero) {
         const parts = lastDossier.numero.split('-');
         if (parts.length >= 3) {
-          const lastSequence = parseInt(parts[2] || '0');
-          sequence = lastSequence + 1;
+          const lastSequence = parseInt(parts[2] || '0', 10);
+          if (Number.isFinite(lastSequence)) {
+            sequence = lastSequence + 1;
+          }
         }
       }
-      
-      // Vérifier que le numéro n'existe pas déjà
-      let numero = `${prefix}${String(sequence).padStart(4, '0')}`;
+
+      if (sequence > 99) {
+        throw new Error(`Séquence mensuelle dépassée (>99) pour le préfixe ${prefix}`);
+      }
+
+      let numero = `${prefix}${String(sequence).padStart(2, '0')}`;
       let exists = await collection.findOne({ numero });
       let attempts = 0;
       while (exists && attempts < 100) {
         sequence++;
-        numero = `${prefix}${String(sequence).padStart(4, '0')}`;
+        if (sequence > 99) {
+          throw new Error(`Séquence mensuelle dépassée (>99) pour le préfixe ${prefix}`);
+        }
+        numero = `${prefix}${String(sequence).padStart(2, '0')}`;
         exists = await collection.findOne({ numero });
         attempts++;
       }
-      
+
       this.numero = numero;
     } catch (error) {
       console.error('Erreur lors de la génération du numéro de dossier:', error);

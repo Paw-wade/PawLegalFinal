@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
+import { useRef } from 'react';
 import Link from 'next/link';
-import { userAPI, smsPreferencesAPI } from '@/lib/api';
+import { userAPI, smsPreferencesAPI, pushAPI } from '@/lib/api';
+import { ensurePushSubscription } from '@/lib/pushClient';
+import { mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import { Toast } from '@/components/ui/Toast';
 
 function Button({ children, variant = 'default', className = '', disabled = false, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
@@ -17,11 +21,51 @@ function Button({ children, variant = 'default', className = '', disabled = fals
   return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} disabled={disabled} {...props}>{children}</button>;
 }
 
-function Input({ className = '', type, value, onChange, ...props }: any) {
+function Input({ className = '', type, value, onChange, id, name, autoComplete, ...props }: any) {
+  const resolvedName = name || id;
+  const normalizedField = String(resolvedName || '').toLowerCase();
+  const inferredAutoCompleteByField =
+    normalizedField === 'firstname'
+      ? 'given-name'
+      : normalizedField === 'lastname'
+        ? 'family-name'
+        : normalizedField === 'email'
+          ? 'email'
+          : normalizedField === 'phone'
+            ? 'tel'
+            : normalizedField === 'adresspostale' || normalizedField === 'adressepostale'
+              ? 'street-address'
+              : normalizedField === 'ville'
+                ? 'address-level2'
+                : normalizedField === 'codepostal'
+                  ? 'postal-code'
+                  : normalizedField === 'pays'
+                    ? 'country-name'
+                    : normalizedField === 'datenaissance'
+                      ? 'bday'
+                      : (normalizedField === 'datedelivrance' || normalizedField === 'dateexpiration')
+                        ? 'off'
+                        : undefined;
+  const resolvedAutoComplete =
+    autoComplete ||
+    inferredAutoCompleteByField ||
+    (type === 'email'
+      ? 'email'
+      : type === 'tel'
+        ? 'tel'
+        : type === 'password'
+          ? 'current-password'
+          : type === 'date'
+            ? 'off'
+            : 'on');
+
   // Pour les champs de date, utiliser le composant DateInput qui garantit le format jour/mois/année
   if (type === 'date') {
     return (
       <DateInputComponent
+        id={id}
+        name={resolvedName}
+        autoComplete={resolvedAutoComplete}
         value={value || ''}
         onChange={(newValue) => {
           if (onChange) {
@@ -40,6 +84,9 @@ function Input({ className = '', type, value, onChange, ...props }: any) {
   
   return (
     <input
+      id={id}
+      name={resolvedName}
+      autoComplete={resolvedAutoComplete}
       type={type}
       className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
@@ -58,9 +105,13 @@ function Label({ className = '', children, ...props }: any) {
 export default function ComptePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
+  const errorRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<'profil' | 'password' | 'sms'>('profil');
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingPushTest, setIsSendingPushTest] = useState(false);
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
@@ -76,7 +127,6 @@ export default function ComptePage() {
     nationalite: '',
     sexe: '',
     numeroEtranger: '',
-    numeroTitre: '',
     typeTitre: '',
     dateDelivrance: '',
     dateExpiration: '',
@@ -182,7 +232,6 @@ export default function ComptePage() {
           nationalite: String(user.nationalite || '').trim(),
           sexe: String(user.sexe || '').trim(),
           numeroEtranger: String(user.numeroEtranger || '').trim(),
-          numeroTitre: String(user.numeroTitre || '').trim(),
           typeTitre: String(user.typeTitre || '').trim(),
           dateDelivrance: formatDate(user.dateDelivrance),
           dateExpiration: formatDate(user.dateExpiration),
@@ -194,6 +243,7 @@ export default function ComptePage() {
         
         console.log('📝 Données pré-remplies:', preFilledData);
         setProfileData(preFilledData);
+        setIsEditingProfile(false);
         
         // Charger aussi les préférences SMS depuis les mêmes données
         if (user.smsPreferences) {
@@ -268,19 +318,78 @@ export default function ComptePage() {
     setError(null);
     setSuccess(null);
 
+    const merged = mergeProfileFormValuesFromDom(profileData as Record<string, string>, {
+      includeSejour: true,
+      includeAccountFields: true,
+    }) as typeof profileData;
+
+    const payload = {
+      firstName: merged.firstName ?? '',
+      lastName: merged.lastName ?? '',
+      phone: merged.phone ?? '',
+      email: merged.email ?? '',
+      dateNaissance: merged.dateNaissance || undefined,
+      lieuNaissance: merged.lieuNaissance ?? '',
+      nationalite: merged.nationalite ?? '',
+      sexe: merged.sexe ?? '',
+      numeroEtranger: merged.numeroEtranger ?? '',
+      typeTitre: merged.typeTitre ?? '',
+      dateDelivrance: merged.dateDelivrance || undefined,
+      dateExpiration: merged.dateExpiration || undefined,
+      adressePostale: merged.adressePostale ?? '',
+      ville: merged.ville ?? '',
+      codePostal: merged.codePostal ?? '',
+      pays: merged.pays ?? 'France',
+    };
+
+    const doUpdate = () => userAPI.updateProfile(payload);
+    let response: any;
+
     try {
-      const response = await userAPI.updateProfile(profileData);
-      if (response.data.success) {
+      response = await doUpdate();
+      const data = response?.data;
+      if (data && data.success) {
         setSuccess('Profil mis à jour avec succès');
         setTimeout(() => setSuccess(null), 3000);
-        // Recharger le profil pour avoir les données à jour (au cas où le backend modifie certaines valeurs)
         await loadProfile();
       } else {
-        setError(response.data.message || 'Erreur lors de la mise à jour du profil');
+        setError((data && data.message) || 'Erreur lors de la mise à jour du profil');
       }
     } catch (error: any) {
+      const status = error.response?.status;
+      const data = error.response?.data;
+
+      if (status === 401) {
+        try {
+          const { getSession } = await import('next-auth/react');
+          const newSession = await getSession();
+          const newToken = (newSession?.user as any)?.accessToken;
+          if (newToken && typeof window !== 'undefined') {
+            localStorage.setItem('token', newToken);
+            response = await doUpdate();
+            const resData = response?.data;
+            if (resData && resData.success) {
+              setSuccess('Profil mis à jour avec succès');
+              setTimeout(() => setSuccess(null), 3000);
+              await loadProfile();
+            } else {
+              setError((resData && resData.message) || 'Erreur lors de la mise à jour du profil');
+            }
+            return;
+          }
+        } catch (retryErr) {
+          console.error('Retry après 401 échoué:', retryErr);
+        }
+        setError('Session expirée. Veuillez vous reconnecter, puis réessayer.');
+      } else {
+        const message = data?.message || error.message || 'Erreur lors de la mise à jour du profil';
+        const details = data?.errors;
+        const fullMessage = Array.isArray(details) && details.length > 0
+          ? `${message} (${details.join(', ')})`
+          : message;
+        setError(fullMessage);
+      }
       console.error('Erreur lors de la mise à jour du profil:', error);
-      setError(error.response?.data?.message || 'Erreur lors de la mise à jour du profil');
     } finally {
       setIsSaving(false);
     }
@@ -325,6 +434,50 @@ export default function ComptePage() {
     }
   };
 
+  const handlePushTest = async () => {
+    setError(null);
+    setSuccess(null);
+    setIsSendingPushTest(true);
+    try {
+      const response = await pushAPI.sendTest();
+      const sent = Number(response?.data?.result?.sent || 0);
+      if (sent > 0) {
+        setSuccess(`Push test envoyé (${sent} appareil${sent > 1 ? 's' : ''}).`);
+      } else {
+        setSuccess('Test envoyé, mais aucun appareil abonné actif n’a été trouvé.');
+      }
+      setTimeout(() => setSuccess(null), 3500);
+    } catch (error: any) {
+      setError(error?.response?.data?.message || 'Impossible d’envoyer le push test.');
+    } finally {
+      setIsSendingPushTest(false);
+    }
+  };
+
+  const handleEnablePush = async () => {
+    setError(null);
+    setSuccess(null);
+    setIsEnablingPush(true);
+    try {
+      const result = await ensurePushSubscription({ requestPermission: true });
+      if (result.ok) {
+        setSuccess('Notifications push activées sur cet appareil.');
+      } else if (result.reason === 'permission_required') {
+        setError('Veuillez autoriser les notifications dans votre navigateur.');
+      } else if (result.reason === 'denied') {
+        setError('Notifications refusées dans le navigateur (paramètres à modifier).');
+      } else if (result.reason === 'server_not_configured') {
+        setError('Serveur push non configuré (clés VAPID manquantes).');
+      } else {
+        setError('Ce navigateur ne supporte pas les notifications push.');
+      }
+    } catch (error: any) {
+      setError(error?.response?.data?.message || 'Impossible d’activer les notifications push.');
+    } finally {
+      setIsEnablingPush(false);
+    }
+  };
+
   if (status === 'loading' || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -340,64 +493,68 @@ export default function ComptePage() {
     return null;
   }
 
+  const userRole = (session.user as any)?.role ?? 'client';
+  const isClient = userRole === 'client';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
-      <main className="w-full px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20 overflow-x-hidden max-w-[100vw]">
+      <Toast message={success || ''} visible={!!success} />
+      <main className="w-full px-3 sm:px-4 py-5 sm:py-8">
         {/* En-tête amélioré */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center shadow-lg">
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-2xl">
                 {session?.user?.name?.charAt(0)?.toUpperCase() || 'U'}
               </span>
             </div>
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-4xl font-bold mb-1 sm:mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
                 Mon compte
               </h1>
-              <p className="text-muted-foreground text-lg">Gérez vos informations personnelles et vos paramètres de sécurité</p>
+              <p className="text-muted-foreground text-sm sm:text-lg">Gérez vos informations personnelles et vos paramètres de sécurité</p>
             </div>
           </div>
         </div>
 
         {/* Onglets améliorés */}
-        <div className="mb-8 bg-white rounded-xl shadow-md p-2 inline-flex gap-2">
+        <div className="mb-6 sm:mb-8 bg-white rounded-xl shadow-md p-2 flex gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('profil')}
-            className={`px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200 ${
+            className={`px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
               activeTab === 'profil'
                 ? 'bg-primary text-white shadow-md'
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             }`}
           >
             <span className="flex items-center gap-2">
-              <span>👤</span>
+              <span className="text-sm sm:text-base">👤</span>
               <span>Informations personnelles</span>
             </span>
           </button>
           <button
             onClick={() => setActiveTab('password')}
-            className={`px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200 ${
+            className={`px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
               activeTab === 'password'
                 ? 'bg-primary text-white shadow-md'
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             }`}
           >
             <span className="flex items-center gap-2">
-              <span>🔒</span>
+              <span className="text-sm sm:text-base">🔒</span>
               <span>Mot de passe</span>
             </span>
           </button>
           <button
             onClick={() => setActiveTab('sms')}
-            className={`px-6 py-3 text-sm font-semibold rounded-lg transition-all duration-200 ${
+            className={`px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
               activeTab === 'sms'
                 ? 'bg-primary text-white shadow-md'
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             }`}
           >
             <span className="flex items-center gap-2">
-              <span>📱</span>
+              <span className="text-sm sm:text-base">📱</span>
               <span>Notifications SMS</span>
             </span>
           </button>
@@ -405,7 +562,10 @@ export default function ComptePage() {
 
         {/* Messages d'erreur et de succès améliorés */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm animate-in slide-in-from-top-2">
+          <div
+            ref={errorRef}
+            className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm animate-in slide-in-from-top-2"
+          >
             <div className="flex items-center gap-2">
               <span className="text-xl">⚠️</span>
               <p className="text-sm font-medium text-red-800">{error}</p>
@@ -425,14 +585,18 @@ export default function ComptePage() {
         {/* Contenu des onglets */}
         {activeTab === 'profil' && (
           <div className="bg-white rounded-xl shadow-lg border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
-              <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
-                <span className="text-3xl">👤</span>
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2 sm:gap-3">
+                <span className="text-2xl sm:text-3xl">👤</span>
                 <span>Informations personnelles</span>
               </h2>
               <p className="text-sm text-muted-foreground mt-2">Mettez à jour vos informations de profil</p>
             </div>
-            <form onSubmit={handleProfileSubmit} className="p-8 space-y-8">
+            <form onSubmit={handleProfileSubmit} className="p-4 sm:p-8 space-y-7 sm:space-y-8" autoComplete="on">
+              <fieldset
+                aria-disabled={!isEditingProfile}
+                className={!isEditingProfile ? 'opacity-100 pointer-events-none' : ''}
+              >
               {/* Informations de base */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3 mb-4">
@@ -557,13 +721,15 @@ export default function ComptePage() {
               {/* Séparateur */}
               <div className="border-t border-border"></div>
 
-              {/* Informations de séjour */}
+              {/* Informations de séjour — obligatoire pour les comptes client uniquement */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                     <span className="text-xl">🛂</span>
                   </div>
-                  <h3 className="text-lg font-semibold text-foreground">Informations de séjour</h3>
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground">Informations de séjour</h3>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="numeroEtranger" className="text-sm font-semibold">Numéro d'étranger</Label>
@@ -578,18 +744,9 @@ export default function ComptePage() {
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="numeroTitre" className="text-sm font-semibold">Numéro de titre</Label>
-                    <Input
-                      id="numeroTitre"
-                      type="text"
-                      value={profileData.numeroTitre}
-                      onChange={(e) => setProfileData({ ...profileData, numeroTitre: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="Numéro du titre de séjour"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="typeTitre" className="text-sm font-semibold">Type de titre</Label>
+                    <Label htmlFor="typeTitre" className="text-sm font-semibold">
+                      Type de titre
+                    </Label>
                     <Input
                       id="typeTitre"
                       type="text"
@@ -602,7 +759,9 @@ export default function ComptePage() {
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="dateDelivrance" className="text-sm font-semibold">Date de délivrance</Label>
+                    <Label htmlFor="dateDelivrance" className="text-sm font-semibold">
+                      Date de délivrance
+                    </Label>
                     <Input
                       id="dateDelivrance"
                       type="date"
@@ -612,7 +771,9 @@ export default function ComptePage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="dateExpiration" className="text-sm font-semibold">Date d'expiration</Label>
+                    <Label htmlFor="dateExpiration" className="text-sm font-semibold">
+                      Date d'expiration
+                    </Label>
                     <Input
                       id="dateExpiration"
                       type="date"
@@ -682,35 +843,67 @@ export default function ComptePage() {
                   </div>
                 </div>
               </div>
+              </fieldset>
 
               {/* Boutons d'action améliorés */}
-              <div className="flex gap-4 pt-6 border-t border-border">
-                <Button 
-                  type="submit" 
-                  disabled={isSaving} 
-                  className="flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                >
-                  {isSaving ? (
-                    <span className="flex items-center gap-2">
-                      <span className="animate-spin">⏳</span>
-                      <span>Enregistrement...</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <span>💾</span>
-                      <span>Enregistrer les modifications</span>
-                    </span>
-                  )}
-                </Button>
-                <Link href="/client">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="h-12 px-6 border-2 hover:bg-accent transition-colors"
-                  >
-                    Annuler
-                  </Button>
-                </Link>
+              <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-border">
+                {!isEditingProfile ? (
+                  <>
+                    <Button
+                      type="button"
+                      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                        e.preventDefault();
+                        setIsEditingProfile(true);
+                      }}
+                      className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>✏️</span>
+                        <span>Modifier</span>
+                      </span>
+                    </Button>
+                    <Link href="/client" className="w-full sm:w-auto">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full h-12 px-6 border-2 hover:bg-accent transition-colors"
+                      >
+                        Retour
+                      </Button>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="submit"
+                      disabled={isSaving}
+                      className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                    >
+                      {isSaving ? (
+                        <span className="flex items-center gap-2">
+                          <span className="animate-spin">⏳</span>
+                          <span>Enregistrement...</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <span>💾</span>
+                          <span>Enregistrer les modifications</span>
+                        </span>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full sm:w-auto h-12 px-6 border-2 hover:bg-accent transition-colors"
+                      onClick={async () => {
+                        await loadProfile();
+                        setIsEditingProfile(false);
+                      }}
+                    >
+                      Annuler
+                    </Button>
+                  </>
+                )}
               </div>
             </form>
           </div>
@@ -718,97 +911,141 @@ export default function ComptePage() {
 
         {activeTab === 'password' && (
           <div className="bg-white rounded-xl shadow-lg border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
-              <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
-                <span className="text-3xl">🔒</span>
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2 sm:gap-3">
+                <span className="text-2xl sm:text-3xl">🔒</span>
                 <span>Changer le mot de passe</span>
               </h2>
               <p className="text-sm text-muted-foreground mt-2">Mettez à jour votre mot de passe pour sécuriser votre compte</p>
             </div>
-            <form onSubmit={handlePasswordSubmit} className="p-8 space-y-6 max-w-2xl">
-              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
-                <p className="text-sm text-blue-800">
-                  <strong>Conseil de sécurité :</strong> Utilisez un mot de passe fort contenant au moins 8 caractères, avec des majuscules, minuscules, chiffres et symboles.
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="currentPassword" className="text-sm font-semibold">Mot de passe actuel *</Label>
-                <Input
-                  id="currentPassword"
-                  type="password"
-                  value={passwordData.currentPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                  required
-                  className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                  placeholder="Entrez votre mot de passe actuel"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="newPassword" className="text-sm font-semibold">Nouveau mot de passe *</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                  required
-                  minLength={8}
-                  className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                  placeholder="Minimum 8 caractères"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Le mot de passe doit contenir au moins 8 caractères
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm font-semibold">Confirmer le nouveau mot de passe *</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                  required
-                  className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                  placeholder="Confirmez votre nouveau mot de passe"
-                />
-                {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
-                  <p className="text-xs text-red-600 mt-1">⚠️ Les mots de passe ne correspondent pas</p>
-                )}
-                {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword === passwordData.confirmPassword && (
-                  <p className="text-xs text-green-600 mt-1">✅ Les mots de passe correspondent</p>
-                )}
-              </div>
-              
-              <div className="flex gap-4 pt-6 border-t border-border">
-                <Button 
-                  type="submit" 
-                  disabled={isSaving || (passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword)} 
-                  className="flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                >
-                  {isSaving ? (
-                    <span className="flex items-center gap-2">
-                      <span className="animate-spin">⏳</span>
-                      <span>Modification...</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <span>🔐</span>
-                      <span>Modifier le mot de passe</span>
-                    </span>
+            <div className="p-4 sm:p-8 space-y-8 sm:space-y-10">
+              <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl" autoComplete="on">
+                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
+                  <p className="text-sm text-blue-800">
+                    <strong>Conseil de sécurité :</strong> Utilisez un mot de passe fort contenant au moins 8 caractères, avec des majuscules, minuscules, chiffres et symboles.
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="currentPassword" className="text-sm font-semibold">Mot de passe actuel *</Label>
+                  <Input
+                    id="currentPassword"
+                    type="password"
+                    autoComplete="current-password"
+                    value={passwordData.currentPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                    required
+                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
+                    placeholder="Entrez votre mot de passe actuel"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword" className="text-sm font-semibold">Nouveau mot de passe *</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordData.newPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                    required
+                    minLength={8}
+                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
+                    placeholder="Minimum 8 caractères"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Le mot de passe doit contenir au moins 8 caractères
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword" className="text-sm font-semibold">Confirmer le nouveau mot de passe *</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                    required
+                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
+                    placeholder="Confirmez votre nouveau mot de passe"
+                  />
+                  {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
+                    <p className="text-xs text-red-600 mt-1">⚠️ Les mots de passe ne correspondent pas</p>
                   )}
+                  {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword === passwordData.confirmPassword && (
+                    <p className="text-xs text-green-600 mt-1">✅ Les mots de passe correspondent</p>
+                  )}
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-border">
+                  <Button 
+                    type="submit" 
+                    disabled={isSaving || (passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword)} 
+                    className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                  >
+                    {isSaving ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin">⏳</span>
+                        <span>Modification...</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <span>🔐</span>
+                        <span>Modifier le mot de passe</span>
+                      </span>
+                    )}
+                  </Button>
+                </div>
+              </form>
+
+              {/* Désactivation du compte */}
+              <div className="border-t border-border pt-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6 max-w-2xl">
+                <div>
+                  <h3 className="text-base font-semibold text-red-600 flex items-center gap-2">
+                    <span>🛑</span>
+                    <span>Désactiver mon compte</span>
+                  </h3>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto border-red-500 text-red-600 hover:bg-red-50"
+                  disabled={isSaving}
+                  onClick={async () => {
+                    const confirmed = window.confirm(
+                      "Êtes-vous sûr de vouloir désactiver votre compte ? Vous ne pourrez plus vous connecter sans passer par l'équipe Ada Papers."
+                    );
+                    if (!confirmed) return;
+                    try {
+                      setIsSaving(true);
+                      setError(null);
+                      const response = await userAPI.deactivateMyAccount();
+                      if (response.data?.success) {
+                        alert('Votre compte a été désactivé. Vous allez être déconnecté.');
+                        await signOut({ callbackUrl: '/' });
+                      } else {
+                        setError(response.data?.message || 'Impossible de désactiver le compte');
+                      }
+                    } catch (e: any) {
+                      setError(e?.response?.data?.message || 'Erreur lors de la désactivation du compte');
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                >
+                  Désactiver mon compte
                 </Button>
               </div>
-            </form>
+            </div>
           </div>
         )}
 
         {activeTab === 'sms' && (
           <div className="bg-white rounded-xl shadow-lg border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
-              <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
-                <span className="text-3xl">📱</span>
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2 sm:gap-3">
+                <span className="text-2xl sm:text-3xl">📱</span>
                 <span>Préférences SMS</span>
               </h2>
               <p className="text-sm text-muted-foreground mt-2">Gérez les notifications SMS que vous souhaitez recevoir</p>
@@ -829,7 +1066,7 @@ export default function ComptePage() {
                   setIsSaving(false);
                 }
               }}
-              className="p-8 space-y-6"
+              className="p-4 sm:p-8 space-y-6"
             >
               <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
                 <p className="text-sm text-blue-800">
@@ -911,9 +1148,29 @@ export default function ComptePage() {
               </div>
 
               <div className="flex justify-end pt-4">
-                <Button type="submit" disabled={isSaving} className="px-8 py-3">
-                  {isSaving ? 'Enregistrement...' : 'Enregistrer les préférences'}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isEnablingPush}
+                    onClick={handleEnablePush}
+                    className="px-6 py-3 border-2"
+                  >
+                    {isEnablingPush ? 'Activation...' : 'Activer les notifications push'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSendingPushTest}
+                    onClick={handlePushTest}
+                    className="px-6 py-3 border-2"
+                  >
+                    {isSendingPushTest ? 'Envoi du push...' : 'Envoyer push test'}
+                  </Button>
+                  <Button type="submit" disabled={isSaving} className="px-8 py-3">
+                    {isSaving ? 'Enregistrement...' : 'Enregistrer les préférences'}
+                  </Button>
+                </div>
               </div>
             </form>
           </div>

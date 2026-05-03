@@ -42,6 +42,15 @@ const documentSchema = new mongoose.Schema({
     ref: 'Dossier',
     default: null
   },
+  visibleToClient: {
+    type: Boolean,
+    default: true
+  },
+  confidentialReason: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   createdAt: {
     type: Date,
     default: Date.now

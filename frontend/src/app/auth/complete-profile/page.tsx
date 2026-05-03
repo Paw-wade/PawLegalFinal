@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useSession, signIn } from 'next-auth/react';
 import { userAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import { Toast } from '@/components/ui/Toast';
 import { useAutoFillDetection, getRealInputValues } from '@/hooks/useAutoFillDetection';
+import { getProfilePhotoAbsoluteUrl, mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 
 // Composants simplifiés
 function Button({ children, variant = 'default', className = '', disabled = false, type = 'button', ...props }: any) {
@@ -21,7 +23,7 @@ function Button({ children, variant = 'default', className = '', disabled = fals
   );
 }
 
-const Input = React.forwardRef<HTMLInputElement, any>(({ className = '', type, value, onChange, ...props }, ref) => {
+const Input = React.forwardRef<HTMLInputElement, any>(({ className = '', type, value, onChange, name, ...props }, ref) => {
   // Pour les champs de date, utiliser le composant DateInput qui garantit le format jour/mois/année
   if (type === 'date') {
     return (
@@ -30,13 +32,14 @@ const Input = React.forwardRef<HTMLInputElement, any>(({ className = '', type, v
         onChange={(newValue) => {
           if (onChange) {
             const syntheticEvent = {
-              target: { value: newValue },
-              currentTarget: { value: newValue }
+              target: { value: newValue, name: name || '' },
+              currentTarget: { value: newValue, name: name || '' }
             } as React.ChangeEvent<HTMLInputElement>;
             onChange(syntheticEvent);
           }
         }}
         className={`flex h-11 w-full rounded-md border-2 border-input bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus:border-primary transition-colors ${className}`}
+        name={name}
         {...props}
       />
     );
@@ -46,6 +49,7 @@ const Input = React.forwardRef<HTMLInputElement, any>(({ className = '', type, v
     <input
       ref={ref}
       type={type}
+      name={name}
       value={value}
       onChange={onChange}
       className={`flex h-11 w-full rounded-md border-2 border-input bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus:border-primary transition-colors ${className}`}
@@ -86,6 +90,10 @@ export default function CompleteProfilePage() {
     ville: '',
     codePostal: '',
     pays: 'France',
+    // Informations de séjour (clients)
+    typeTitre: '',
+    dateDelivrance: '',
+    dateExpiration: '',
   });
 
   // Refs pour détecter l'auto-remplissage
@@ -96,6 +104,10 @@ export default function CompleteProfilePage() {
   const villeInputRef = useRef<HTMLInputElement>(null);
   const codePostalInputRef = useRef<HTMLInputElement>(null);
   const paysInputRef = useRef<HTMLInputElement>(null);
+  const typeTitreInputRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  /** Ne pas écraser l’aperçu si l’utilisateur a déjà choisi un fichier local */
+  const userPickedPhotoRef = useRef(false);
 
   // Détecter l'auto-remplissage du navigateur
   useAutoFillDetection({
@@ -107,9 +119,10 @@ export default function CompleteProfilePage() {
       ville: villeInputRef,
       codePostal: codePostalInputRef,
       pays: paysInputRef,
+      typeTitre: typeTitreInputRef,
     },
     formData,
-    setFormData: (updater) => setFormData(updater),
+    setFormData: (updater) => setFormData(updater as React.SetStateAction<typeof formData>),
   });
 
   useEffect(() => {
@@ -153,46 +166,44 @@ export default function CompleteProfilePage() {
             loadExistingProfile(res.data.user);
           }
         }
-        setIsChecking(false);
-      }).catch(() => {
-      setIsChecking(false);
-      });
+      }).catch(() => {})
+      .finally(() => setIsChecking(false));
       return;
     }
 
-    // Si on a une session, permettre l'accès au formulaire même si le profil est complété
-    // (pour permettre la modification)
+    // Si on a une session, attendre GET /profile avant d’afficher le formulaire (données à jour + photo)
     if (session) {
-      const role = (session.user as any)?.role || 'client';
-      setUserRole(role);
-      
-      // Charger les données existantes depuis l'API pour avoir toutes les données
-      // Permettre la modification même si le profil est déjà complété
-      userAPI.getProfile().then(res => {
-        if (res.data.success && res.data.user) {
-          // Vérifier le délai de 7 jours
-          if (userRole !== 'admin' && userRole !== 'superadmin' && res.data.user.createdAt) {
-            const daysSinceCreation = Math.floor((Date.now() - new Date(res.data.user.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-            const remaining = 7 - daysSinceCreation;
-            setDaysRemaining(remaining);
-            setIsExpired(remaining < 0);
+      const roleFromSession = (session.user as any)?.role || 'client';
+      setUserRole(roleFromSession);
+
+      userAPI.getProfile()
+        .then((res) => {
+          if (res.data.success && res.data.user) {
+            const apiUser = res.data.user;
+            const r = apiUser.role || roleFromSession;
+            setUserRole(r);
+            if (r !== 'admin' && r !== 'superadmin' && apiUser.createdAt) {
+              const daysSinceCreation = Math.floor(
+                (Date.now() - new Date(apiUser.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+              );
+              const remaining = 7 - daysSinceCreation;
+              setDaysRemaining(remaining);
+              setIsExpired(remaining < 0);
+            }
+            loadExistingProfile(apiUser);
           }
-          loadExistingProfile(res.data.user);
-        }
-      }).catch(() => {
-        // Si erreur, utiliser les données de session
-        loadExistingProfile((session.user as any));
-      });
-      
-      // Vérifier le paramètre expired dans l'URL
+        })
+        .catch(() => {
+          loadExistingProfile(session.user as any);
+        })
+        .finally(() => setIsChecking(false));
+
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('expired') === 'true') {
           setIsExpired(true);
         }
       }
-      
-      setIsChecking(false);
       return;
     }
 
@@ -201,11 +212,11 @@ export default function CompleteProfilePage() {
 
   // Fonction pour charger les données existantes du profil
   const loadExistingProfile = async (userData: any) => {
+    const formatDate = (d: any) => (d ? new Date(d).toISOString().split('T')[0] : '');
     setFormData(prev => ({
       ...prev,
-      // Informations personnelles
       numeroEtranger: userData.numeroEtranger || '',
-      dateNaissance: userData.dateNaissance ? new Date(userData.dateNaissance).toISOString().split('T')[0] : '',
+      dateNaissance: formatDate(userData.dateNaissance),
       lieuNaissance: userData.lieuNaissance || '',
       nationalite: userData.nationalite || '',
       sexe: userData.sexe || '',
@@ -213,14 +224,19 @@ export default function CompleteProfilePage() {
       ville: userData.ville || '',
       codePostal: userData.codePostal || '',
       pays: userData.pays || 'France',
+      typeTitre: userData.typeTitre || '',
+      dateDelivrance: formatDate(userData.dateDelivrance),
+      dateExpiration: formatDate(userData.dateExpiration),
     }));
+    if (!userPickedPhotoRef.current) {
+      const abs = getProfilePhotoAbsoluteUrl(userData?.profilePhoto);
+      setPhotoPreview(abs);
+    }
   };
 
   const handleChange = (e: any) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -236,6 +252,7 @@ export default function CompleteProfilePage() {
         setError('Veuillez sélectionner une image');
         return;
       }
+      userPickedPhotoRef.current = true;
       setProfilePhoto(file);
       // Créer un aperçu
       const reader = new FileReader();
@@ -263,21 +280,41 @@ export default function CompleteProfilePage() {
     };
     
     const realValues = getRealInputValues(inputRefs, formData);
+    let dataToSend = { ...formData, ...realValues };
+    dataToSend = mergeProfileFormValuesFromDom(dataToSend, {
+      includeSejour: userRole === 'client',
+      includeAccountFields: false,
+    });
 
-    // Pour la date, chercher l'input date natif dans le composant DateInput via le DOM (uniquement pour les clients)
+    // Mettre à jour l'état pour le prochain rendu
+    setFormData((prev) => ({ ...prev, ...dataToSend }));
+
+    // Pour les clients, les informations de séjour sont obligatoires
     if (userRole === 'client') {
-      const dateInputNative = document.querySelector('#dateNaissance[type="date"]') as HTMLInputElement;
-      if (dateInputNative && dateInputNative.value !== formData.dateNaissance) {
-        realValues.dateNaissance = dateInputNative.value;
+      const { typeTitre, dateDelivrance, dateExpiration } = dataToSend;
+      if (!typeTitre?.trim() || !dateDelivrance?.trim() || !dateExpiration?.trim()) {
+        setError(
+          'Pour finaliser votre profil client, veuillez renseigner les informations de séjour : type de titre, date de délivrance et date d\'expiration.'
+        );
+        setIsLoading(false);
+        // Scroll vers le message d'erreur au centre de la page
+        setTimeout(() => {
+          if (errorRef.current) {
+            errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 0);
+        return;
       }
     }
 
-    // Mettre à jour l'état avec les valeurs réelles
-    setFormData(realValues);
-
     // Préparer les données
     const profileData: any = {
-      ...realValues,
+      ...dataToSend,
+      ...(userRole === 'client' ? {
+        typeTitre: dataToSend.typeTitre?.trim() || '',
+        dateDelivrance: dataToSend.dateDelivrance || undefined,
+        dateExpiration: dataToSend.dateExpiration || undefined,
+      } : {}),
       profilComplete: true,
     };
 
@@ -350,6 +387,7 @@ export default function CompleteProfilePage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 px-4 py-12">
+      <Toast message="Profil complété avec succès ! Redirection en cours..." visible={success} duration={2000} />
       <div className="w-full max-w-3xl">
         <div className="bg-white rounded-xl shadow-xl border border-border overflow-hidden">
           {/* En-tête amélioré */}
@@ -362,13 +400,21 @@ export default function CompleteProfilePage() {
               <p className="text-muted-foreground">
                 Veuillez compléter les informations suivantes pour finaliser votre inscription
               </p>
+              {userRole === 'client' && (
+                <p className="text-xs text-muted-foreground/90 mt-2">
+                  Sans profil complété, l&apos;accès au calculateur de délais n&apos;est pas possible.
+                </p>
+              )}
             </div>
           </div>
 
           <div className="p-8">
             {/* Messages améliorés */}
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm">
+              <div
+                ref={errorRef}
+                className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm"
+              >
                 <div className="flex items-center gap-2">
                   <span className="text-xl">⚠️</span>
                   <p className="text-sm font-medium text-red-800">{error}</p>
@@ -548,6 +594,49 @@ export default function CompleteProfilePage() {
                         <option value="F">Femme</option>
                         <option value="Autre">Autre</option>
                       </select>
+                    </div>
+                  </div>
+
+                  {/* Section Informations de séjour (clients) */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <span className="text-xl">🛂</span>
+                      </div>
+                      <h3 className="text-lg font-semibold text-foreground">Informations de séjour</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="typeTitre">Type de titre <span className="text-destructive">*</span></Label>
+                        <Input
+                          ref={typeTitreInputRef}
+                          id="typeTitre"
+                          name="typeTitre"
+                          value={formData.typeTitre}
+                          onChange={handleChange}
+                          placeholder="Ex: Carte de séjour, Visa, etc."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="dateDelivrance">Date de délivrance <span className="text-destructive">*</span></Label>
+                        <Input
+                          id="dateDelivrance"
+                          name="dateDelivrance"
+                          type="date"
+                          value={formData.dateDelivrance}
+                          onChange={handleChange}
+                        />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="dateExpiration">Date d'expiration <span className="text-destructive">*</span></Label>
+                        <Input
+                          id="dateExpiration"
+                          name="dateExpiration"
+                          type="date"
+                          value={formData.dateExpiration}
+                          onChange={handleChange}
+                        />
+                      </div>
                     </div>
                   </div>
 

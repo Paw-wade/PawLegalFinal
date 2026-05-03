@@ -61,6 +61,7 @@ export default function AdminMessageDetailPage() {
   const [messageNotifications, setMessageNotifications] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [showReplyModal, setShowReplyModal] = useState(false);
+  const [replyToMessage, setReplyToMessage] = useState<any>(null);
   const [showCreateDossierModal, setShowCreateDossierModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreatingDossier, setIsCreatingDossier] = useState(false);
@@ -112,6 +113,29 @@ export default function AdminMessageDetailPage() {
       }
     }
   }, [message]);
+
+  const openReplyForMessage = (targetMsg: any) => {
+    const currentUserId = (session?.user as any)?.id?.toString?.() || '';
+    const targetExpediteurId = targetMsg?.expediteur?._id?.toString?.() || targetMsg?.expediteur?.id?.toString?.() || '';
+
+    let defaultDestinataire = targetExpediteurId;
+    if (targetExpediteurId === currentUserId) {
+      const firstOtherDest = (targetMsg?.destinataires || []).find((d: any) => {
+        const dId = d?._id?.toString?.() || d?.toString?.();
+        return dId && dId !== currentUserId;
+      });
+      defaultDestinataire = firstOtherDest?._id?.toString?.() || firstOtherDest?.toString?.() || '';
+    }
+
+    setReplyToMessage(targetMsg);
+    setReplyData({
+      sujet: `Re: ${targetMsg?.sujet || message?.sujet || ''}`,
+      contenu: '',
+      destinataire: defaultDestinataire,
+      copie: [],
+    });
+    setShowReplyModal(true);
+  };
 
   const loadMessage = async () => {
     if (!messageId) return;
@@ -193,20 +217,12 @@ export default function AdminMessageDetailPage() {
             }
           }
         } else {
-          // Pour les messages internes, uniquement si l'utilisateur est destinataire ou en copie
-          const isDestinataire = fetchedMessage.destinataires?.some(
-            (d: any) => (d?._id?.toString?.() || d?.toString?.()) === userId
-          );
-          const isEnCopie = fetchedMessage.copie?.some(
-            (c: any) => (c?._id?.toString?.() || c?.toString?.()) === userId
-          );
-          const canMark = !!(userId && (isDestinataire || isEnCopie));
           const isRead = fetchedMessage.lu?.some((l: any) => {
             const luUserId = l?.user?._id?.toString?.() || l?.user?.toString?.();
             return luUserId === userId;
           });
 
-          if (canMark && !isRead) {
+          if (userId && !isRead) {
             // Supprimer le badge "Nouveau" immédiatement côté UI
             setMessage((prev: any) => {
               if (!prev) return prev;
@@ -265,8 +281,13 @@ export default function AdminMessageDetailPage() {
     setIsSubmitting(true);
     setError(null);
 
-    if (!replyData.destinataire) {
-      setError('Veuillez sélectionner un destinataire');
+    const autoDestinataire =
+      replyToMessage?.expediteur?._id?.toString?.() ||
+      replyToMessage?.expediteur?.id?.toString?.() ||
+      replyData.destinataire;
+
+    if (!autoDestinataire) {
+      setError('Impossible de déterminer automatiquement le destinataire de la réponse');
       setIsSubmitting(false);
       return;
     }
@@ -275,13 +296,13 @@ export default function AdminMessageDetailPage() {
       const formDataToSend = new FormData();
       formDataToSend.append('sujet', replyData.sujet);
       formDataToSend.append('contenu', replyData.contenu);
-      formDataToSend.append('destinataire', replyData.destinataire);
+      formDataToSend.append('destinataire', autoDestinataire);
       replyData.copie.forEach(cc => {
         formDataToSend.append('copie', cc);
       });
 
-      // Le message parent est le message auquel on répond
-      const messageParentId = message._id || message.id;
+      // Le message parent est le message sélectionné dans le fil (ou fallback message courant)
+      const messageParentId = replyToMessage?._id || replyToMessage?.id || message._id || message.id;
       if (messageParentId) {
         formDataToSend.append('messageParent', messageParentId);
       }
@@ -304,6 +325,7 @@ export default function AdminMessageDetailPage() {
       if (response.data.success) {
         alert('Réponse envoyée avec succès !');
         setShowReplyModal(false);
+        setReplyToMessage(null);
         setReplyData({ sujet: '', contenu: '', destinataire: '', copie: [] });
         setAttachments([]);
         // Recharger le message pour voir les notifications
@@ -412,11 +434,11 @@ export default function AdminMessageDetailPage() {
             <Button variant="outline" size="sm">← Retour aux messages</Button>
           </Link>
           <div className="flex gap-2">
-            {isReceived && (
-              <Button onClick={() => setShowReplyModal(true)}>
-                Répondre
-              </Button>
-            )}
+          {isReceived && (
+            <Button onClick={() => openReplyForMessage(message)}>
+              Répondre
+            </Button>
+          )}
             <Button 
               variant="outline" 
               size="sm"
@@ -526,6 +548,14 @@ export default function AdminMessageDetailPage() {
                           </div>
                         )}
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openReplyForMessage(msg)}
+                        className="ml-3 shrink-0"
+                      >
+                        Répondre
+                      </Button>
                     </div>
                     
                     <div className="mb-4">
@@ -545,9 +575,6 @@ export default function AdminMessageDetailPage() {
                               <div className="flex items-center gap-2">
                                 <span>📎</span>
                                 <span>{pj.originalName}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  ({(pj.size / 1024 / 1024).toFixed(2)} MB)
-                                </span>
                               </div>
                               <Button
                                 variant="outline"
@@ -566,34 +593,34 @@ export default function AdminMessageDetailPage() {
               })
             ) : (
               <div className="bg-white rounded-xl shadow-md border-l-4 border-primary p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h1 className="text-2xl font-bold mb-2">{isContactMessage ? message.subject : message.sujet}</h1>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>
-                        {isReceived ? 'De' : 'À'}: {isReceived 
-                          ? isContactMessage
-                            ? `${message.name || ''} (${message.email || ''})`
-                            : `${expediteur?.firstName || ''} ${expediteur?.lastName || ''}`.trim() || expediteur?.email
-                          : message.typeMessage === 'user_to_admins'
-                          ? 'Tous les administrateurs'
-                          : message.destinataires?.map((d: any) => 
-                              `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.email
-                            ).join(', ')
-                        }
-                      </span>
-                      <span>•</span>
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold mb-2">{isContactMessage ? message.subject : message.sujet}</h1>
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <span>
+                  {isReceived ? 'De' : 'À'}: {isReceived 
+                    ? isContactMessage
+                      ? `${message.name || ''} (${message.email || ''})`
+                      : `${expediteur?.firstName || ''} ${expediteur?.lastName || ''}`.trim() || expediteur?.email
+                    : message.typeMessage === 'user_to_admins'
+                    ? 'Tous les administrateurs'
+                    : message.destinataires?.map((d: any) => 
+                        `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.email
+                      ).join(', ')
+                  }
+                </span>
+                <span>•</span>
                       <span>📅 {formatDate(message.createdAt)}</span>
-                      {isReceived && !isMessageRead(message) && (
-                        <>
-                          <span>•</span>
-                          <span className="px-2 py-1 rounded-full bg-primary text-white text-xs font-semibold">
-                            Nouveau
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                {isReceived && !isMessageRead(message) && (
+                  <>
+                    <span>•</span>
+                    <span className="px-2 py-1 rounded-full bg-primary text-white text-xs font-semibold">
+                      Nouveau
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
             {isReceived && (
               <div className="flex gap-2">
                 <Button
@@ -634,142 +661,139 @@ export default function AdminMessageDetailPage() {
                 )}
               </div>
             )}
-                </div>
+          </div>
 
-                {message.copie && message.copie.length > 0 && (
-                  <div className="mb-4 p-3 bg-gray-50 rounded-md">
-                    <p className="text-xs text-muted-foreground mb-1">Copie (CC)</p>
-                    <p className="text-sm font-semibold">
-                      {message.copie.map((c: any) => 
-                        `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email
-                      ).join(', ')}
+          {message.copie && message.copie.length > 0 && (
+            <div className="mb-4 p-3 bg-gray-50 rounded-md">
+              <p className="text-xs text-muted-foreground mb-1">Copie (CC)</p>
+              <p className="text-sm font-semibold">
+                {message.copie.map((c: any) => 
+                  `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email
+                ).join(', ')}
+              </p>
+            </div>
+          )}
+
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Contenu du message
+            </h3>
+            <div className="prose max-w-none p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="whitespace-pre-wrap text-foreground leading-relaxed">
+                {isContactMessage ? message.message : message.contenu}
+              </p>
+            </div>
+          </div>
+
+          {/* Informations complètes pour les messages de contact */}
+          {isContactMessage && (
+            <div className="mb-6 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-lg">📋</span>
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+                  Informations de l'expéditeur
+                </h3>
+                <span className="ml-auto px-2 py-0.5 rounded-full bg-blue-500 text-white text-xs font-semibold">
+                  Envoyé depuis le formulaire de contact
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Nom complet</p>
+                    <p className="text-sm font-semibold text-foreground">{message.name || 'Non renseigné'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Prénom</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {message.name?.split(' ')[0] || 'Non renseigné'}
                     </p>
                   </div>
-                )}
-
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    Contenu du message
-                  </h3>
-                  <div className="prose max-w-none p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="whitespace-pre-wrap text-foreground leading-relaxed">
-                      {isContactMessage ? message.message : message.contenu}
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Nom de famille</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {message.name?.split(' ').slice(1).join(' ') || 'Non renseigné'}
                     </p>
                   </div>
                 </div>
-
-                {/* Informations complètes pour les messages de contact */}
-                {isContactMessage && (
-                  <div className="mb-6 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="text-lg">📋</span>
-                      <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
-                        Informations de l'expéditeur
-                      </h3>
-                      <span className="ml-auto px-2 py-0.5 rounded-full bg-blue-500 text-white text-xs font-semibold">
-                        Envoyé depuis le formulaire de contact
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-1">Nom complet</p>
-                          <p className="text-sm font-semibold text-foreground">{message.name || 'Non renseigné'}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-1">Prénom</p>
-                          <p className="text-sm font-semibold text-foreground">
-                            {message.name?.split(' ')[0] || 'Non renseigné'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-1">Nom de famille</p>
-                          <p className="text-sm font-semibold text-foreground">
-                            {message.name?.split(' ').slice(1).join(' ') || 'Non renseigné'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-1">Adresse e-mail</p>
-                          <a 
-                            href={`mailto:${message.email}`}
-                            className="text-sm font-semibold text-primary hover:underline flex items-center gap-1"
-                          >
-                            {message.email || 'Non renseigné'}
-                            <span className="text-xs">✉️</span>
-                          </a>
-                        </div>
-                        {message.phone && (
-                          <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-1">Numéro de téléphone</p>
-                            <a 
-                              href={`tel:${message.phone}`}
-                              className="text-sm font-semibold text-primary hover:underline flex items-center gap-1"
-                            >
-                              {message.phone}
-                              <span className="text-xs">📞</span>
-                            </a>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground mb-1">Date d'envoi</p>
-                          <p className="text-sm font-semibold text-foreground">
-                            {formatDate(message.createdAt)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Adresse e-mail</p>
+                    <a 
+                      href={`mailto:${message.email}`}
+                      className="text-sm font-semibold text-primary hover:underline flex items-center gap-1"
+                    >
+                      {message.email || 'Non renseigné'}
+                      <span className="text-xs">✉️</span>
+                    </a>
                   </div>
-                )}
-
-                {(isContactMessage ? message.documents : message.piecesJointes) && 
-                 (isContactMessage ? message.documents : message.piecesJointes).length > 0 && (
-                  <div className="pt-4 border-t">
-                    <p className="text-sm font-semibold mb-3">Pièces jointes</p>
-                    <div className="space-y-2">
-                      {(isContactMessage ? message.documents : message.piecesJointes).map((pj: any, index: number) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                          <div className="flex items-center gap-2">
-                            <span>📎</span>
-                            <span className="text-sm">{pj.originalName}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({(pj.size / 1024 / 1024).toFixed(2)} MB)
-                            </span>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={async () => {
-                              try {
-                                if (isContactMessage) {
-                                  const { contactAPI } = await import('@/lib/api');
-                                  const response = await contactAPI.downloadDocument(message._id || message.id, pj._id || index.toString());
-                                  const blob = new Blob([response.data], { type: response.headers['content-type'] });
-                                  const url = window.URL.createObjectURL(blob);
-                                  const a = document.createElement('a');
-                                  a.href = url;
-                                  a.download = pj.originalName;
-                                  document.body.appendChild(a);
-                                  a.click();
-                                  window.URL.revokeObjectURL(url);
-                                  document.body.removeChild(a);
-                                } else {
-                                  handleDownloadAttachment(message._id || message.id, index, pj.originalName);
-                                }
-                              } catch (err) {
-                                console.error('Erreur lors du téléchargement:', err);
-                                alert('Erreur lors du téléchargement du fichier');
-                              }
-                            }}
-                          >
-                            Télécharger
-                          </Button>
-                        </div>
-                      ))}
+                  {message.phone && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Numéro de téléphone</p>
+                      <a 
+                        href={`tel:${message.phone}`}
+                        className="text-sm font-semibold text-primary hover:underline flex items-center gap-1"
+                      >
+                        {message.phone}
+                        <span className="text-xs">📞</span>
+                      </a>
                     </div>
+                  )}
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Date d'envoi</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {formatDate(message.createdAt)}
+                    </p>
                   </div>
-                )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(isContactMessage ? message.documents : message.piecesJointes) && 
+           (isContactMessage ? message.documents : message.piecesJointes).length > 0 && (
+            <div className="pt-4 border-t">
+              <p className="text-sm font-semibold mb-3">Pièces jointes</p>
+              <div className="space-y-2">
+                {(isContactMessage ? message.documents : message.piecesJointes).map((pj: any, index: number) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                    <div className="flex items-center gap-2">
+                      <span>📎</span>
+                      <span className="text-sm">{pj.originalName}</span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          if (isContactMessage) {
+                            const { contactAPI } = await import('@/lib/api');
+                            const response = await contactAPI.downloadDocument(message._id || message.id, pj._id || index.toString());
+                            const blob = new Blob([response.data], { type: response.headers['content-type'] });
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = pj.originalName;
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                          } else {
+                            handleDownloadAttachment(message._id || message.id, index, pj.originalName);
+                          }
+                        } catch (err) {
+                          console.error('Erreur lors du téléchargement:', err);
+                          alert('Erreur lors du téléchargement du fichier');
+                        }
+                      }}
+                    >
+                      Télécharger
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
               </div>
             )}
           </div>
@@ -816,7 +840,7 @@ export default function AdminMessageDetailPage() {
             <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
                 <h2 className="text-2xl font-bold">Répondre</h2>
-                <button onClick={() => setShowReplyModal(false)} className="text-muted-foreground hover:text-foreground text-2xl leading-none">×</button>
+                <button onClick={() => { setShowReplyModal(false); setReplyToMessage(null); }} className="text-muted-foreground hover:text-foreground text-2xl leading-none">×</button>
               </div>
               <form onSubmit={handleReply} className="p-6 space-y-4">
                 {error && (
@@ -825,23 +849,12 @@ export default function AdminMessageDetailPage() {
                   </div>
                 )}
 
-                <div>
-                  <Label htmlFor="reply-destinataire">Destinataire *</Label>
-                  <select
-                    id="reply-destinataire"
-                    value={replyData.destinataire}
-                    onChange={(e) => setReplyData({ ...replyData, destinataire: e.target.value })}
-                    required
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">Sélectionner un destinataire</option>
-                    {expediteur && (
-                      <option value={expediteur._id || expediteur.id}>
-                        {expediteur.firstName} {expediteur.lastName} ({expediteur.email})
-                      </option>
-                    )}
-                  </select>
-                </div>
+                {replyToMessage && (
+                  <div className="p-3 rounded-md border border-primary/20 bg-primary/5 text-sm">
+                    <span className="font-semibold">Réponse automatique à :</span>{' '}
+                    {replyToMessage?.expediteur?.firstName} {replyToMessage?.expediteur?.lastName} ({replyToMessage?.expediteur?.email})
+                  </div>
+                )}
 
                 <div>
                   <Label htmlFor="reply-sujet">Sujet *</Label>
@@ -883,7 +896,7 @@ export default function AdminMessageDetailPage() {
                     <div className="mt-2 space-y-1">
                       {attachments.map((file, index) => (
                         <div key={index} className="text-xs text-muted-foreground flex items-center justify-between">
-                          <span>📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          <span>📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
@@ -898,10 +911,10 @@ export default function AdminMessageDetailPage() {
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button type="button" variant="outline" onClick={() => setShowReplyModal(false)} disabled={isSubmitting}>
+                  <Button type="button" variant="outline" onClick={() => { setShowReplyModal(false); setReplyToMessage(null); }} disabled={isSubmitting}>
                     Annuler
                   </Button>
-                  <Button type="submit" disabled={isSubmitting || !replyData.destinataire}>
+                  <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? 'Envoi...' : 'Envoyer la réponse'}
                   </Button>
                 </div>

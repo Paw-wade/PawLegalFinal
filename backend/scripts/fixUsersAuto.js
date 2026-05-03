@@ -16,14 +16,8 @@ const connectDB = async () => {
   }
 };
 
-const generatePassword = (length = 12) => {
-  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
-  let password = '';
-  for (let i = 0; i < length; i++) {
-    password += charset.charAt(Math.floor(Math.random() * charset.length));
-  }
-  return password;
-};
+// Mot de passe par défaut pour tous les utilisateurs
+const DEFAULT_PASSWORD = 'Pawlegal25+';
 
 const fixUsersAuto = async () => {
   try {
@@ -96,8 +90,8 @@ const fixUsersAuto = async () => {
       console.log('   Génération automatique de mots de passe sécurisés...\n');
 
       for (const user of usersWithoutPassword) {
-        // Générer un mot de passe aléatoire
-        const password = generatePassword(12);
+        // Utiliser le mot de passe par défaut
+        const password = DEFAULT_PASSWORD;
         passwords[user._id.toString()] = {
           email: user.email || 'N/A',
           name: `${user.firstName} ${user.lastName}`,

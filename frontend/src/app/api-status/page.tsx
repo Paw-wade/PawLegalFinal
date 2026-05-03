@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { getNextPublicApiOrigin } from '@/lib/publicApiUrl';
 
 export default function ApiStatusPage() {
   const [apiStatus, setApiStatus] = useState<any>(null);
@@ -14,9 +15,7 @@ export default function ApiStatusPage() {
       setIsLoading(true);
       setError(null);
       try {
-        const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-        const url = baseURL.endsWith('/api') ? baseURL.replace('/api', '') : baseURL;
-        
+        const url = getNextPublicApiOrigin();
         const response = await fetch(`${url}/`, {
           method: 'GET',
           headers: {
@@ -52,7 +51,7 @@ export default function ApiStatusPage() {
               Statut de l&apos;API
             </h1>
             <p className="text-lg text-muted-foreground">
-              Vérification de l&apos;état de l&apos;API Cabinet Juridique
+              Vérification de l&apos;état de l&apos;API - Service d&apos;Accompagnement aux démarches administratives
             </p>
           </div>
 
@@ -145,7 +144,7 @@ export default function ApiStatusPage() {
                 <p className="text-sm text-blue-800">
                   <span className="font-semibold">URL de l&apos;API:</span>{' '}
                   <code className="bg-blue-100 px-2 py-1 rounded">
-                    {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'}/
+                    {getNextPublicApiOrigin()}/
                   </code>
                 </p>
               </div>

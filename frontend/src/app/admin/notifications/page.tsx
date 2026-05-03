@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { notificationsAPI } from '@/lib/api';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -25,11 +26,29 @@ function Button({ children, variant = 'default', size = 'default', className = '
 export default function AdminNotificationsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('unread');
   const [categoryFilter, setCategoryFilter] = useState<'all' | NotificationCategoryKey>('all');
+  const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+
+  // Lire le dossierId depuis l'URL pour filtrer les notifications liées à un dossier
+  useEffect(() => {
+    const dossierIdParam = searchParams.get('dossierId');
+    const filterParam = searchParams.get('filter');
+    
+    if (dossierIdParam) {
+      setSelectedDossierId(dossierIdParam);
+    }
+    if (filterParam === 'unread') {
+      setFilter('unread');
+    } else if (filterParam === 'all') {
+      setFilter('all');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -79,9 +98,11 @@ export default function AdminNotificationsPage() {
       const response = await notificationsAPI.markAsRead(id);
       if (response.data.success) {
         await loadNotifications();
+        setToast({ message: '✅ Notification marquée comme lue.', type: 'success' });
       }
     } catch (err: any) {
       console.error('Erreur lors de la mise à jour de la notification:', err);
+      setToast({ message: 'Erreur lors de la mise à jour de la notification.', type: 'error' });
     }
   };
 
@@ -90,9 +111,11 @@ export default function AdminNotificationsPage() {
       const response = await notificationsAPI.markAllAsRead();
       if (response.data.success) {
         await loadNotifications();
+        setToast({ message: '✅ Toutes les notifications ont été marquées comme lues.', type: 'success' });
       }
     } catch (err: any) {
       console.error('Erreur lors de la mise à jour des notifications:', err);
+      setToast({ message: 'Erreur lors de la mise à jour des notifications.', type: 'error' });
     }
   };
 
@@ -101,9 +124,11 @@ export default function AdminNotificationsPage() {
       const response = await notificationsAPI.deleteNotification(id);
       if (response.data.success) {
         await loadNotifications();
+        setToast({ message: '✅ Notification supprimée avec succès.', type: 'success' });
       }
     } catch (err: any) {
       console.error('Erreur lors de la suppression de la notification:', err);
+      setToast({ message: 'Erreur lors de la suppression de la notification.', type: 'error' });
     }
   };
 
@@ -119,6 +144,8 @@ export default function AdminNotificationsPage() {
       appointment_created: '📅',
       appointment_updated: '📅',
       appointment_cancelled: '❌',
+      appointment_reminder: '⏰',
+      document_request_reminder: '📎',
       message_received: '💬',
       other: '🔔',
     };
@@ -127,20 +154,22 @@ export default function AdminNotificationsPage() {
 
   const getNotificationColor = (type: string) => {
     const colors: { [key: string]: string } = {
-      dossier_created: 'bg-blue-50 border-l-4 border-blue-500',
-      dossier_updated: 'bg-yellow-50 border-l-4 border-yellow-500',
-      dossier_deleted: 'bg-red-50 border-l-4 border-red-500',
-      dossier_status_changed: 'bg-green-50 border-l-4 border-green-500',
-      dossier_assigned: 'bg-purple-50 border-l-4 border-purple-500',
-      dossier_cancelled: 'bg-orange-50 border-l-4 border-orange-500',
-      document_uploaded: 'bg-indigo-50 border-l-4 border-indigo-500',
-      appointment_created: 'bg-teal-50 border-l-4 border-teal-500',
-      appointment_updated: 'bg-teal-50 border-l-4 border-teal-500',
-      appointment_cancelled: 'bg-red-50 border-l-4 border-red-500',
-      message_received: 'bg-pink-50 border-l-4 border-pink-500',
-      other: 'bg-gray-50 border-l-4 border-gray-500',
+      dossier_created: 'bg-blue-50 border border-blue-300/70',
+      dossier_updated: 'bg-yellow-50 border border-yellow-300/70',
+      dossier_deleted: 'bg-red-50 border border-red-300/70',
+      dossier_status_changed: 'bg-green-50 border border-green-300/70',
+      dossier_assigned: 'bg-purple-50 border border-purple-300/70',
+      dossier_cancelled: 'bg-orange-50 border border-orange-300/70',
+      document_uploaded: 'bg-indigo-50 border border-indigo-300/70',
+      appointment_created: 'bg-teal-50 border border-teal-300/70',
+      appointment_updated: 'bg-teal-50 border border-teal-300/70',
+      appointment_cancelled: 'bg-red-50 border border-red-300/70',
+      appointment_reminder: 'bg-cyan-50 border border-cyan-300/70',
+      document_request_reminder: 'bg-orange-50 border border-orange-300/70',
+      message_received: 'bg-pink-50 border border-pink-300/70',
+      other: 'bg-gray-50 border border-gray-300/70',
     };
-    return colors[type] || 'bg-gray-50 border-l-4 border-gray-500';
+    return colors[type] || 'bg-gray-50 border border-gray-300/70';
   };
 
   type NotificationCategoryKey = 'dossiers' | 'rendezvous' | 'messages' | 'documents' | 'autres';
@@ -150,7 +179,14 @@ export default function AdminNotificationsPage() {
     if (type.startsWith('dossier_')) return 'dossiers';
     if (type.startsWith('appointment_')) return 'rendezvous';
     if (type === 'message_received') return 'messages';
-    if (type === 'document_uploaded') return 'documents';
+    if (
+      type === 'document_uploaded' ||
+      type === 'document_request' ||
+      type === 'document_received' ||
+      type === 'document_request_reminder'
+    ) {
+      return 'documents';
+    }
     return 'autres';
   };
 
@@ -179,6 +215,17 @@ export default function AdminNotificationsPage() {
 
   // Appliquer le filtre de statut (lu/non-lu) sur toutes les notifications
   let filteredByStatus = filter === 'unread' ? notifications.filter(n => !n.lu) : notifications;
+
+  // Filtrer par dossier si un dossierId est spécifié (clic depuis un badge de dossier)
+  if (selectedDossierId) {
+    filteredByStatus = filteredByStatus.filter((notif) => {
+      const notifDossierId = notif.data?.dossierId || notif.dossierId;
+      return notifDossierId && (
+        notifDossierId.toString() === selectedDossierId.toString() ||
+        (typeof notifDossierId === 'object' && notifDossierId._id?.toString() === selectedDossierId.toString())
+      );
+    });
+  }
 
   // Catégoriser les notifications filtrées par statut
   const categorizedNotifications: Record<NotificationCategoryKey, any[]> = {
@@ -367,8 +414,8 @@ export default function AdminNotificationsPage() {
                 {visibleNotifications.map((notification: any) => (
                   <div
                     key={notification._id || notification.id}
-                    className={`bg-white rounded-xl border p-4 transition-all hover:shadow-sm ${
-                      notification.lu ? 'border-gray-200' : 'border-primary/30'
+                    className={`bg-white rounded-xl border p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_-18px_rgba(59,130,246,0.35)] ${getNotificationColor(notification.type)} ${
+                      notification.lu ? 'opacity-90' : ''
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -434,6 +481,9 @@ export default function AdminNotificationsPage() {
           </div>
         )}
       </main>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

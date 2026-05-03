@@ -30,12 +30,8 @@ export function NotificationBadge({ className = '', showCount = true, variant = 
       }
     };
 
+    // Chargement unique au montage pour éviter les rafraîchissements fréquents
     loadUnreadCount();
-    
-    // Rafraîchir toutes les 30 secondes
-    const interval = setInterval(loadUnreadCount, 30000);
-    
-    return () => clearInterval(interval);
   }, []);
 
   if (variant === 'header') {

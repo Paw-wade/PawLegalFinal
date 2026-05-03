@@ -137,6 +137,54 @@ export const getDossierProgress = (statut: string): number => {
   return progress;
 };
 
+/** Ids des trois étapes admin par défaut (hors barre d'avancement « étapes éditées ») */
+export const ADMIN_DEFAULT_ETAPE_IDS = new Set(['en_cours', 'refuse', 'annule']);
+
+export interface EditedEtapeItem {
+  id: string;
+  label: string;
+  ordre: number;
+}
+
+/**
+ * Étapes issues uniquement de l'édition (« étapes supplémentaires »), sans les 3 défauts.
+ */
+export const getEditedEtapesOnly = (etapesSupplementaires: unknown[] | null | undefined): EditedEtapeItem[] => {
+  const raw = Array.isArray(etapesSupplementaires) ? etapesSupplementaires : [];
+  const normalized = raw.map((s: any, idx: number) => {
+    const id = String(s?.id ?? s?.label ?? `step-${idx}`);
+    return {
+      id,
+      label: String(s?.label ?? s?.id ?? `Étape ${idx + 1}`),
+      ordre: typeof s?.ordre === 'number' ? s.ordre : idx,
+    };
+  });
+  return normalized
+    .filter((step) => !ADMIN_DEFAULT_ETAPE_IDS.has(step.id))
+    .sort((a, b) => a.ordre - b.ordre);
+};
+
+export const customEtapeMatchesStatut = (step: EditedEtapeItem, statut: string): boolean => {
+  if (!statut) return false;
+  return step.id === statut || step.label === statut;
+};
+
+/**
+ * Pourcentage d'avancement : uniquement les étapes définies à l'édition (pas les défauts Accepté / Refusé / Annulé).
+ * Aucune étape éditée → 0 %. Statut ne correspond à aucune étape éditée → 0 %.
+ */
+export const getDossierProgressFromEditedEtapes = (
+  statut: string | undefined | null,
+  editedEtapes: EditedEtapeItem[]
+): number => {
+  const s = statut || '';
+  const n = editedEtapes.length;
+  if (n === 0) return 0;
+  const idx = editedEtapes.findIndex((step) => customEtapeMatchesStatut(step, s));
+  if (idx < 0) return 0;
+  return Math.round(((idx + 1) / n) * 100);
+};
+
 // Calculer le nombre de jours depuis une date
 export const calculateDaysSince = (date: Date | string | null | undefined): number => {
   if (!date) return 0;
@@ -199,6 +247,16 @@ export const getNextAction = (statut: string): string | null => {
   };
   return actionsMap[statut] || null;
 };
+
+/**
+ * Statuts proposés dans le formulaire partenaire (création / modification) : les 3 premières étapes du workflow.
+ * @see ALL_DOSSIER_STEPS
+ */
+export const PARTENAIRE_FORM_STATUT_VALUES = ['recu', 'en_attente_onboarding', 'accepte'] as const;
+
+export function isPartenaireFormStatutValue(statut: string): boolean {
+  return (PARTENAIRE_FORM_STATUT_VALUES as readonly string[]).includes(statut);
+}
 
 // Toutes les étapes possibles du dossier dans l'ordre chronologique
 const ALL_DOSSIER_STEPS = [
@@ -267,7 +325,65 @@ export const getTimelineSteps = (statut: string) => {
     label: step.label,
     completed: step.order <= currentOrder,
     order: step.order,
-    isCurrent: step.order === currentOrder
+    isCurrent: step.order === currentOrder,
+    isCustom: false
   }));
 };
+
+export interface EtapeSupplementaire {
+  label: string;
+  date?: string | Date;
+  ordre?: number;
+  addedAt?: string | Date;
+  _id?: string;
+}
+
+/** Étapes de la timeline incluant les étapes standard + étapes supplémentaires ajoutées manuellement */
+export const getTimelineStepsWithCustom = (
+  statut: string,
+  etapesSupplementaires?: EtapeSupplementaire[] | null
+): Array<{ key: string; label: string; completed: boolean; order: number; isCurrent: boolean; isCustom: boolean; date?: string }> => {
+  const standardSteps = getTimelineSteps(statut);
+  const custom = Array.isArray(etapesSupplementaires) ? etapesSupplementaires : [];
+  const maxOrder = standardSteps.length > 0 ? Math.max(...standardSteps.map(s => s.order)) : 0;
+  const customSteps = custom
+    .sort((a, b) => (a.ordre ?? 0) - (b.ordre ?? 0))
+    .map((e, idx) => ({
+      key: `custom-${(e as any)._id ?? idx}`,
+      label: e.label,
+      completed: true,
+      order: maxOrder + 1 + idx,
+      isCurrent: false,
+      isCustom: true,
+      date: e.date ? (typeof e.date === 'string' ? e.date : new Date(e.date).toLocaleDateString('fr-FR')) : undefined
+    }));
+  return [...standardSteps, ...customSteps];
+};
+
+/**
+ * Timestamps (ms) des dates renseignées sur `etapesSupplementaires` (jalons édités par l’admin).
+ */
+export function getDossierEtapeDatesMs(
+  dossier: { etapesSupplementaires?: Array<{ date?: string | Date | null }> } | null | undefined
+): number[] {
+  const steps = Array.isArray(dossier?.etapesSupplementaires) ? dossier.etapesSupplementaires : [];
+  const out: number[] = [];
+  for (const e of steps) {
+    if (e?.date == null || e.date === '') continue;
+    const t = new Date(e.date as Date).getTime();
+    if (!Number.isNaN(t)) out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Date de jalon la plus « proche dans le temps » (min) parmi les étapes datées — retards et échéances proches en tête si tri asc.
+ */
+export function getDossierMinEtapeDateMs(
+  dossier: { etapesSupplementaires?: Array<{ date?: string | Date | null }> } | null | undefined
+): number | null {
+  const arr = getDossierEtapeDatesMs(dossier);
+  if (arr.length === 0) return null;
+  return Math.min(...arr);
+}
 

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { documentsAPI, dossiersAPI } from '@/lib/api';
 import Link from 'next/link';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { FileText, Download, Folder, Calendar, Upload, Search, Filter, User } from 'lucide-react';
+import { FileText, Download, Folder, Upload, Search, Filter, User, Eye, Trash2 } from 'lucide-react';
 
 function Button({ children, variant = 'default', className = '', disabled, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
@@ -50,7 +50,9 @@ export default function AdminDocumentsPage() {
     nom: '',
     description: '',
     categorie: 'autre',
-    dossierId: ''
+    dossierId: '',
+    visibleToClient: true,
+    confidentialReason: ''
   });
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [isLoadingDossiers, setIsLoadingDossiers] = useState(false);
@@ -141,6 +143,10 @@ export default function AdminDocumentsPage() {
       formData.append('nom', uploadData.nom);
       formData.append('description', uploadData.description);
       formData.append('categorie', uploadData.categorie);
+      formData.append('visibleToClient', String(uploadData.visibleToClient));
+      if (!uploadData.visibleToClient && uploadData.confidentialReason.trim()) {
+        formData.append('confidentialReason', uploadData.confidentialReason.trim());
+      }
       if (uploadData.dossierId && uploadData.dossierId.trim() !== '') {
         formData.append('dossierId', uploadData.dossierId);
       }
@@ -148,7 +154,7 @@ export default function AdminDocumentsPage() {
       const response = await documentsAPI.uploadDocument(formData);
       if (response.data.success) {
         setSuccess('Document téléversé avec succès !');
-        setUploadData({ nom: '', description: '', categorie: 'autre', dossierId: '' });
+        setUploadData({ nom: '', description: '', categorie: 'autre', dossierId: '', visibleToClient: true, confidentialReason: '' });
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
@@ -197,36 +203,6 @@ export default function AdminDocumentsPage() {
       console.error('Erreur lors de la suppression:', err);
       setError(err.response?.data?.message || 'Erreur lors de la suppression du document');
     }
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (!bytes) return '';
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-  };
-
-  const formatDate = (date: string | Date) => {
-    if (!date) return '';
-    const d = new Date(date);
-    return d.toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getFileIcon = (typeMime: string) => {
-    if (!typeMime) return '📎';
-    if (typeMime.includes('pdf')) return '📄';
-    if (typeMime.includes('image')) return '🖼️';
-    if (typeMime.includes('word') || typeMime.includes('document')) return '📝';
-    if (typeMime.includes('excel') || typeMime.includes('spreadsheet')) return '📊';
-    return '📎';
   };
 
   const getCategoryLabel = (categorie: string) => {
@@ -314,17 +290,17 @@ export default function AdminDocumentsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
-      <main className="w-full px-4 py-8">
+      <main className="w-full max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8 pb-8">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+        <div className="mb-6 sm:mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-1 sm:mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
               Tous les Documents
             </h1>
-            <p className="text-muted-foreground">Gérez tous les documents téléversés par les utilisateurs</p>
+            <p className="text-sm sm:text-base text-muted-foreground">Gérez tous les documents téléversés par les utilisateurs</p>
           </div>
-          <Button onClick={() => setShowUploadForm(!showUploadForm)} className="flex items-center gap-2">
-            <Upload className="w-4 h-4" />
+          <Button onClick={() => setShowUploadForm(!showUploadForm)} className="flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px] sm:min-h-10 shrink-0">
+            <Upload className="w-4 h-4 shrink-0" />
             {showUploadForm ? 'Annuler' : 'Téléverser un document'}
           </Button>
         </div>
@@ -342,8 +318,8 @@ export default function AdminDocumentsPage() {
 
         {/* Formulaire de téléversement */}
         {showUploadForm && (
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 mb-8">
-            <h2 className="text-2xl font-bold mb-6">Téléverser un document</h2>
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 lg:p-8 mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Téléverser un document</h2>
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
                 <Label htmlFor="file">Fichier *</Label>
@@ -428,7 +404,7 @@ export default function AdminDocumentsPage() {
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => {
                   setShowUploadForm(false);
-                  setUploadData({ nom: '', description: '', categorie: 'autre', dossierId: '' });
+                  setUploadData({ nom: '', description: '', categorie: 'autre', dossierId: '', visibleToClient: true, confidentialReason: '' });
                   if (fileInputRef.current) {
                     fileInputRef.current.value = '';
                   }
@@ -444,7 +420,7 @@ export default function AdminDocumentsPage() {
         )}
 
         {/* Filtres */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="search" className="flex items-center gap-2 mb-2">
@@ -478,25 +454,52 @@ export default function AdminDocumentsPage() {
               </select>
             </div>
           </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={uploadData.visibleToClient}
+                    onChange={(e) =>
+                      setUploadData({
+                        ...uploadData,
+                        visibleToClient: e.target.checked,
+                        confidentialReason: e.target.checked ? '' : uploadData.confidentialReason
+                      })
+                    }
+                    className="mt-1"
+                  />
+                  <span className="text-sm text-amber-900">
+                    Rendre ce document accessible au client
+                  </span>
+                </label>
+                {!uploadData.visibleToClient && (
+                  <textarea
+                    value={uploadData.confidentialReason}
+                    onChange={(e) => setUploadData({ ...uploadData, confidentialReason: e.target.value })}
+                    className="mt-2 flex min-h-[72px] w-full rounded-md border border-amber-200 bg-white px-3 py-2 text-sm"
+                    placeholder="Raison confidentielle (optionnel, visible admin uniquement)"
+                  />
+                )}
+              </div>
         </div>
 
         {/* Liste des documents groupés par dossier */}
         {isLoading ? (
-          <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Chargement des documents...</p>
+          <div className="text-center py-12 sm:py-16 px-2">
+            <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary border-t-transparent mx-auto mb-3 sm:mb-4"></div>
+            <p className="text-sm sm:text-base text-muted-foreground">Chargement des documents...</p>
           </div>
         ) : filteredGroups.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-lg p-16 text-center border border-gray-200">
-            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <p className="text-muted-foreground text-lg mb-2">
+          <div className="bg-white rounded-xl shadow-lg p-8 sm:p-12 lg:p-16 text-center border border-gray-200">
+            <FileText className="w-14 h-14 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-4" />
+            <p className="text-muted-foreground text-base sm:text-lg mb-2 px-1">
               {searchTerm || categoryFilter 
                 ? 'Aucun document ne correspond aux filtres sélectionnés' 
                 : 'Aucun document trouvé'}
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {filteredGroups.map((group: any) => {
               const isExpanded = expandedDossiers.has(group.dossierId);
               const dossierId = group.dossierId;
@@ -507,9 +510,10 @@ export default function AdminDocumentsPage() {
                   className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden"
                 >
                   {/* En-tête du groupe (Dossier + Client) */}
-                  <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-4 border-b border-gray-200">
-                    <div className="flex items-center justify-between">
+                  <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-3 sm:px-5 py-3 sm:py-4 border-b border-gray-200">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between sm:gap-3">
                       <button
+                        type="button"
                         onClick={() => {
                           const newExpanded = new Set(expandedDossiers);
                           if (newExpanded.has(dossierId)) {
@@ -519,37 +523,37 @@ export default function AdminDocumentsPage() {
                           }
                           setExpandedDossiers(newExpanded);
                         }}
-                        className="flex items-center gap-3 hover:opacity-80 transition-opacity flex-1 text-left"
+                        className="flex items-center gap-2 sm:gap-3 hover:opacity-90 active:opacity-100 transition-opacity flex-1 min-w-0 text-left rounded-lg sm:rounded-none -mx-1 px-1 sm:mx-0 sm:px-0 py-1 sm:py-0"
                       >
-                        <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
+                        <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center shrink-0">
                           <Folder className="w-5 h-5 text-primary" />
                         </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h2 className="text-lg font-bold text-foreground">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <h2 className="text-base sm:text-lg font-bold text-foreground break-words">
                               {group.dossierTitre}
                             </h2>
                             {group.dossierNumero && group.dossierNumero !== 'Sans numéro' && (
-                              <span className="px-2 py-0.5 bg-primary/20 text-primary rounded text-xs font-semibold">
+                              <span className="px-2 py-0.5 bg-primary/20 text-primary rounded text-xs font-semibold shrink-0">
                                 N° {group.dossierNumero}
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1.5">
-                              <User className="w-4 h-4" />
-                              <span className="font-medium">{group.clientName}</span>
-                              {group.clientEmail && (
-                                <span className="text-xs">({group.clientEmail})</span>
-                              )}
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <User className="w-4 h-4 shrink-0" />
+                              <span className="font-medium truncate max-w-[12rem] sm:max-w-none">{group.clientName}</span>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <FileText className="w-4 h-4" />
-                              <span>{group.documents.length} document{group.documents.length > 1 ? 's' : ''}</span>
+                            <div
+                              className="flex items-center gap-1.5"
+                              title={`${group.documents.length} document${group.documents.length > 1 ? 's' : ''}`}
+                            >
+                              <FileText className="w-4 h-4 shrink-0" />
+                              <span className="tabular-nums font-medium">{group.documents.length}</span>
                             </div>
                           </div>
                         </div>
-                        <div className="ml-auto">
+                        <div className="shrink-0 self-center sm:self-auto">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             className={`h-5 w-5 text-gray-500 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
@@ -557,15 +561,16 @@ export default function AdminDocumentsPage() {
                             viewBox="0 0 24 24"
                             stroke="currentColor"
                             strokeWidth={2}
+                            aria-hidden
                           >
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                           </svg>
                         </div>
                       </button>
                       {group.dossierId !== 'sans-dossier' && (
-                        <div className="ml-4">
-                          <Link href={`/admin/dossiers/${group.dossierId}`}>
-                            <Button variant="outline" size="sm">
+                        <div className="shrink-0 sm:pt-0 w-full sm:w-auto">
+                          <Link href={`/admin/dossiers/${group.dossierId}`} className="block w-full sm:w-auto">
+                            <Button variant="outline" className="w-full sm:w-auto min-h-[44px] sm:min-h-9 text-sm justify-center">
                               Voir le dossier →
                             </Button>
                           </Link>
@@ -580,84 +585,56 @@ export default function AdminDocumentsPage() {
                       {group.documents.map((doc: any) => {
                         const docId = (doc._id || doc.id)?.toString();
                         const docNom = doc.nom || doc.filename || 'Document';
-                        const docType = doc.type || doc.categorie || 'Type inconnu';
-                        const docTaille = doc.taille ? formatFileSize(doc.taille) : '';
-                        const docDate = doc.createdAt ? formatDate(doc.createdAt) : '';
                         const originalName = doc.originalName || doc.nom || doc.filename || 'document';
-                        const uploadedBy = doc.user 
-                          ? `${doc.user.firstName || ''} ${doc.user.lastName || ''}`.trim() || doc.user.email || 'Utilisateur inconnu'
-                          : 'Utilisateur inconnu';
 
                         return (
                           <div
                             key={docId}
-                            className="p-6 hover:bg-gray-50 transition-colors"
+                            className="p-4 sm:p-5 md:p-6 hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="flex items-center gap-4 flex-1 min-w-0">
-                                <div className="flex-shrink-0 w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                                  <span className="text-2xl">{getFileIcon(doc.typeMime)}</span>
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                              <div className="min-w-0 flex-1">
+                                <h3 className="font-semibold text-foreground mb-1 text-sm sm:text-base break-words sm:truncate">
+                                  {docNom}
+                                </h3>
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                                  <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-md text-xs font-medium">
+                                    {getCategoryLabel(doc.categorie || 'autre')}
+                                  </span>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <h3 className="font-semibold text-foreground mb-1 truncate">
-                                    {docNom}
-                                  </h3>
-                                  <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-                                    <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-md text-xs font-medium">
-                                      {getCategoryLabel(doc.categorie || 'autre')}
-                                    </span>
-                                    {docTaille && (
-                                      <span className="flex items-center gap-1">
-                                        <span>💾</span>
-                                        <span>{docTaille}</span>
-                                      </span>
-                                    )}
-                                    {docDate && (
-                                      <span className="flex items-center gap-1 font-medium text-foreground">
-                                        <Calendar className="w-4 h-4" />
-                                        <span>Téléversé le {docDate}</span>
-                                      </span>
-                                    )}
-                                    {uploadedBy && (
-                                      <span className="flex items-center gap-1">
-                                        <User className="w-4 h-4" />
-                                        <span>Par {uploadedBy}</span>
-                                      </span>
-                                    )}
-                                  </div>
-                                  {doc.description && (
-                                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                                      {doc.description}
-                                    </p>
-                                  )}
-                                </div>
+                                {doc.description && (
+                                  <p className="text-sm text-muted-foreground mt-2 line-clamp-3 sm:line-clamp-2">
+                                    {doc.description}
+                                  </p>
+                                )}
                               </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
+                              <div className="flex items-center justify-end gap-2 shrink-0 pt-1 border-t border-gray-100 sm:border-0 sm:pt-0 -mx-1 px-1 sm:mx-0 sm:px-0">
                                 <Button
                                   variant="outline"
-                                  size="sm"
                                   onClick={() => setPreviewDocument(doc)}
                                   title="Prévisualiser"
+                                  aria-label="Prévisualiser"
+                                  className="h-11 w-11 min-h-[44px] min-w-[44px] sm:h-9 sm:w-9 sm:min-h-0 sm:min-w-0 shrink-0 p-0"
                                 >
-                                  👁️ Prévisualiser
+                                  <Eye className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   variant="default"
-                                  size="sm"
                                   onClick={() => handleDownload(docId, originalName)}
-                                  className="flex items-center gap-2"
                                   title="Télécharger"
+                                  aria-label="Télécharger"
+                                  className="h-11 w-11 min-h-[44px] min-w-[44px] sm:h-9 sm:w-9 sm:min-h-0 sm:min-w-0 shrink-0 p-0"
                                 >
-                                  <Download className="w-4 h-4" />
-                                  Télécharger
+                                  <Download className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   variant="destructive"
-                                  size="sm"
                                   onClick={() => handleDelete(docId)}
                                   title="Supprimer"
+                                  aria-label="Supprimer"
+                                  className="h-11 w-11 min-h-[44px] min-w-[44px] sm:h-9 sm:w-9 sm:min-h-0 sm:min-w-0 shrink-0 p-0"
                                 >
-                                  🗑️
+                                  <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
                             </div>

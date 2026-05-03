@@ -59,10 +59,8 @@ export function DossierTransmissionBanner({ userRole, userId }: DossierTransmiss
 
   useEffect(() => {
     if (userRole === 'partenaire' && userId) {
+      // Chargement unique au montage / changement d'utilisateur
       loadTransmissionNotifications();
-      // Recharger toutes les 30 secondes
-      const interval = setInterval(loadTransmissionNotifications, 30000);
-      return () => clearInterval(interval);
     } else {
       setIsLoading(false);
     }

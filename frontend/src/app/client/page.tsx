@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { ReservationWidget } from '@/components/ReservationWidget';
@@ -10,8 +10,10 @@ import { MessageNotificationModal } from '@/components/MessageNotificationModal'
 import { AppointmentBadgeModal } from '@/components/AppointmentBadgeModal';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notificationsAPI, documentRequestsAPI } from '@/lib/api';
+import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
+const IS_DEV = process.env.NODE_ENV === 'development';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -25,7 +27,6 @@ function Button({ children, variant = 'default', className = '', ...props }: any
 
 function ClientDashboardContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const [stats, setStats] = useState({
     dossiers: 0,
@@ -50,6 +51,20 @@ function ClientDashboardContent() {
   const [selectedDocumentRequest, setSelectedDocumentRequest] = useState<any>(null);
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState(false);
   const [documentRequestNotification, setDocumentRequestNotification] = useState<any>(null);
+  const [isPersonalInfoOpen, setIsPersonalInfoOpen] = useState(false);
+  const [isAdminInfoOpen, setIsAdminInfoOpen] = useState(true);
+  const [joursRestantsSidebar, setJoursRestantsSidebar] = useState<number | null>(null);
+  const [heuresRestantes, setHeuresRestantes] = useState(0);
+  const [minutesRestantes, setMinutesRestantes] = useState(0);
+  const [secondesRestantes, setSecondesRestantes] = useState(0);
+
+  // Charger les blocs secondaires sans délai artificiel pour limiter la latence perçue.
+  const loadDeferredDashboardData = () => {
+    checkUnreadMessages();
+    checkDocumentRequestNotifications();
+    loadNotifications();
+    loadDocumentRequests();
+  };
 
   // Textes CMS pour le header du dashboard client
   const dashboardTitleClient = useCmsText(
@@ -90,7 +105,7 @@ function ClientDashboardContent() {
         const accessToken = (session.user as any).accessToken;
         if (!localStorage.getItem('token')) {
           localStorage.setItem('token', accessToken);
-          console.log('🔑 Token stocké dans localStorage depuis la session');
+          if (IS_DEV) console.log('🔑 Token stocké dans localStorage depuis la session');
         }
       }
 
@@ -99,35 +114,16 @@ function ClientDashboardContent() {
       const isAdmin = userRole === 'admin' || userRole === 'superadmin';
       const isPartenaire = userRole === 'partenaire';
 
-      // Vérifier le délai de 7 jours pour la complétion du profil (sauf pour admin/superadmin/partenaire)
-      if (!isAdmin && !isPartenaire) {
-        // Charger les informations utilisateur pour vérifier le délai
-        userAPI.getProfile().then(res => {
-          if (res.data.success && res.data.user) {
-            if (!res.data.user.profilComplete && res.data.user.createdAt) {
-              const daysSinceCreation = Math.floor((Date.now() - new Date(res.data.user.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-              if (daysSinceCreation >= 7) {
-                // Le délai est dépassé, rediriger vers la page de complétion avec un message
-                router.push('/auth/complete-profile?expired=true');
-                return;
-              }
-            }
-          }
-        }).catch(() => {
-          // En cas d'erreur, continuer
-        });
-      }
-      
       // Si admin, rediriger vers l'espace admin
       if (isAdmin) {
-        console.log('🚫 Admin tentant d\'accéder à la vue client - redirection vers /admin');
+        if (IS_DEV) console.log('🚫 Admin tentant d\'accéder à la vue client - redirection vers /admin');
         router.push('/admin');
         return;
       }
 
       // Si partenaire, rediriger vers l'espace partenaire
       if (isPartenaire) {
-        console.log('🚫 Partenaire tentant d\'accéder à la vue client - redirection vers /partenaire');
+        if (IS_DEV) console.log('🚫 Partenaire tentant d\'accéder à la vue client - redirection vers /partenaire');
         router.push('/partenaire');
         return;
       }
@@ -135,20 +131,14 @@ function ClientDashboardContent() {
       // Charger les statistiques depuis l'API
       loadStats();
       loadUserProfile();
-      checkUnreadMessages();
-      checkDocumentRequestNotifications();
-      loadNotifications();
-      loadDocumentRequests();
+      loadDeferredDashboardData();
     } else if (token) {
       // Si on a un token mais pas de session, charger quand même les stats
       loadStats();
       loadUserProfile();
-      checkUnreadMessages();
-      checkDocumentRequestNotifications();
-      loadNotifications();
-      loadDocumentRequests();
+      loadDeferredDashboardData();
     }
-  }, [session, status, router, searchParams]);
+  }, [session, status, router]);
 
   const loadNotifications = async () => {
     try {
@@ -326,7 +316,7 @@ function ClientDashboardContent() {
       if (!documentRequestsResponse.data.success || 
           !documentRequestsResponse.data.documentRequests || 
           documentRequestsResponse.data.documentRequests.length === 0) {
-        console.log('ℹ️ Aucune demande de document en attente trouvée');
+        if (IS_DEV) console.log('ℹ️ Aucune demande de document en attente trouvée');
         return;
       }
 
@@ -335,7 +325,7 @@ function ClientDashboardContent() {
       
       // Vérifier que la demande existe vraiment et est bien en attente
       if (!latestRequest || latestRequest.status !== 'pending') {
-        console.log('ℹ️ La demande de document n\'est plus en attente');
+        if (IS_DEV) console.log('ℹ️ La demande de document n\'est plus en attente');
         return;
       }
 
@@ -370,32 +360,21 @@ function ClientDashboardContent() {
               isUrgent: latestRequest.isUrgent,
             }
           };
-          console.log('✅ Demande de document valide trouvée, affichage du modal');
+          if (IS_DEV) console.log('✅ Demande de document valide trouvée, affichage du modal');
           setDocumentRequestNotification(enrichedNotification);
           setShowDocumentRequestModal(true);
         } else {
-          console.log('ℹ️ Aucune notification non lue correspondante trouvée pour la demande');
+          if (IS_DEV) console.log('ℹ️ Aucune notification non lue correspondante trouvée pour la demande');
         }
       } else {
-        console.log('ℹ️ Aucune notification de type document_request trouvée');
+        if (IS_DEV) console.log('ℹ️ Aucune notification de type document_request trouvée');
       }
     } catch (error) {
       console.error('❌ Erreur lors de la vérification des notifications de demandes de documents:', error);
     }
   };
 
-  // Rafraîchissement automatique toutes les 30 secondes pour les mises à jour en temps réel
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (session || localStorage.getItem('token')) {
-        loadStats();
-        loadNotifications();
-        loadDocumentRequests();
-      }
-    }, 30000); // Rafraîchir toutes les 30 secondes
-
-    return () => clearInterval(interval);
-  }, [session]);
+  // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
   const loadUserProfile = async () => {
     try {
@@ -426,24 +405,75 @@ function ClientDashboardContent() {
     return diffDays;
   };
 
+  const formatDateCourte = (d: Date) => {
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const getProfileTypeTitre = () => {
+    const candidates = [
+      userProfile?.typeTitre,
+      userProfile?.type_titre,
+      userProfile?.titreSejourType,
+      userProfile?.typeTitreSejour,
+      userProfile?.titreSejour?.typeTitre,
+      userProfile?.titreSejour?.type,
+      (session?.user as any)?.typeTitre,
+    ];
+    const firstNonEmpty = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+    return firstNonEmpty ? String(firstNonEmpty).trim() : '';
+  };
+
+  // Minuteur dynamique pour la sidebar (temps restant avant expiration)
+  useEffect(() => {
+    if (!userProfile?.dateExpiration) {
+      setJoursRestantsSidebar(null);
+      return;
+    }
+    const updateTimer = () => {
+      const expiration = new Date(userProfile.dateExpiration);
+      const maintenant = new Date();
+      const difference = expiration.getTime() - maintenant.getTime();
+      if (difference <= 0) {
+        setJoursRestantsSidebar(0);
+        setHeuresRestantes(0);
+        setMinutesRestantes(0);
+        setSecondesRestantes(0);
+        return;
+      }
+      setJoursRestantsSidebar(Math.floor(difference / (1000 * 60 * 60 * 24)));
+      setHeuresRestantes(Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)));
+      setMinutesRestantes(Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)));
+      setSecondesRestantes(Math.floor((difference % (1000 * 60)) / 1000));
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [userProfile?.dateExpiration]);
+
   const loadStats = async () => {
     setIsLoading(true);
     try {
 
-      console.log('📊 Chargement des statistiques pour l\'utilisateur:', session?.user?.email);
+      if (IS_DEV) console.log('📊 Chargement des statistiques pour l\'utilisateur:', session?.user?.email);
       
       // Vérifier que le token est disponible
       if (typeof window !== 'undefined') {
         const token = localStorage.getItem('token') || sessionStorage.getItem('token');
         if (!token && session && (session.user as any)?.accessToken) {
           localStorage.setItem('token', (session.user as any).accessToken);
-          console.log('🔑 Token stocké dans localStorage depuis la session');
+          if (IS_DEV) console.log('🔑 Token stocké dans localStorage depuis la session');
         }
       }
 
-      // Charger les dossiers
-      try {
-        const dossiersResponse = await dossiersAPI.getMyDossiers();
+      const [dossiersResult, documentsResult, appointmentsResult] = await Promise.allSettled([
+        dossiersAPI.getMyDossiers(),
+        documentsAPI.getMyDocuments(),
+        appointmentsAPI.getMyAppointments(),
+      ]);
+
+      // Dossiers
+      if (dossiersResult.status === 'fulfilled') {
+        const dossiersResponse = dossiersResult.value;
         if (dossiersResponse.data.success) {
           const dossiers = dossiersResponse.data.dossiers || [];
           setStats(prev => ({
@@ -451,68 +481,63 @@ function ClientDashboardContent() {
             dossiers: dossiers.length,
             dossiersEnCours: dossiers.filter((d: any) => {
               const statut = d.statut;
-              // Nouveaux statuts en cours
-              return statut === 'recu' || 
-                     statut === 'accepte' || 
-                     statut === 'en_attente_onboarding' || 
-                     statut === 'en_cours_instruction' || 
-                     statut === 'pieces_manquantes' || 
-                     statut === 'dossier_complet' || 
-                     statut === 'depose' || 
-                     statut === 'reception_confirmee' || 
-                     statut === 'complement_demande' || 
-                     statut === 'communication_motifs' || 
-                     statut === 'recours_preparation' || 
-                     statut === 'refere_mesures_utiles' || 
+              return statut === 'recu' ||
+                     statut === 'accepte' ||
+                     statut === 'en_attente_onboarding' ||
+                     statut === 'en_cours_instruction' ||
+                     statut === 'pieces_manquantes' ||
+                     statut === 'dossier_complet' ||
+                     statut === 'depose' ||
+                     statut === 'reception_confirmee' ||
+                     statut === 'complement_demande' ||
+                     statut === 'communication_motifs' ||
+                     statut === 'recours_preparation' ||
+                     statut === 'refere_mesures_utiles' ||
                      statut === 'refere_suspension_rep' ||
-                     // Anciens statuts pour compatibilité
-                     statut === 'en_cours' || 
+                     statut === 'en_cours' ||
                      statut === 'en_attente' ||
                      statut === 'en_revision';
             }).length
           }));
-          // Garder les 5 dossiers les plus récents
           setRecentDossiers(dossiers.slice(0, 5));
         }
-      } catch (err) {
-        console.error('❌ Erreur lors du chargement des dossiers:', err);
+      } else {
+        console.error('❌ Erreur lors du chargement des dossiers:', dossiersResult.reason);
       }
 
-      // Charger les documents
-      try {
-        const documentsResponse = await documentsAPI.getMyDocuments();
+      // Documents
+      if (documentsResult.status === 'fulfilled') {
+        const documentsResponse = documentsResult.value;
         if (documentsResponse.data.success) {
           setStats(prev => ({
             ...prev,
             documents: documentsResponse.data.documents?.length || 0
           }));
         }
-      } catch (err) {
-        console.error('❌ Erreur lors du chargement des documents:', err);
+      } else {
+        console.error('❌ Erreur lors du chargement des documents:', documentsResult.reason);
       }
 
-      // Charger les rendez-vous
-      try {
-        const appointmentsResponse = await appointmentsAPI.getMyAppointments();
+      // Rendez-vous
+      if (appointmentsResult.status === 'fulfilled') {
+        const appointmentsResponse = appointmentsResult.value;
         if (appointmentsResponse.data.success) {
           const appointments = appointmentsResponse.data.data || appointmentsResponse.data.appointments || [];
           setStats(prev => ({
             ...prev,
             rendezVous: appointments.length
           }));
-          
-          // Trier par date (plus récents en premier) et prendre les 3 prochains
+
           const sortedAppointments = appointments
             .filter((apt: any) => apt.statut !== 'annule' && apt.statut !== 'annulé')
             .map((apt: any) => {
-              // Calculer les alertes pour chaque rendez-vous
               const aptDate = new Date(apt.date);
               const aptTime = apt.heure ? apt.heure.split(':') : ['00', '00'];
               aptDate.setHours(parseInt(aptTime[0]), parseInt(aptTime[1]), 0, 0);
               const now = new Date();
               const diffMs = aptDate.getTime() - now.getTime();
               const diffHours = diffMs / (1000 * 60 * 60);
-              
+
               return {
                 ...apt,
                 alertLevel: diffHours < 0 ? 'past' : diffHours <= 1 ? 'urgent' : diffHours <= 24 ? 'soon' : 'upcoming',
@@ -522,14 +547,14 @@ function ClientDashboardContent() {
             .sort((a: any, b: any) => {
               const dateA = new Date(a.date).getTime();
               const dateB = new Date(b.date).getTime();
-              return dateA - dateB; // Plus proche en premier
+              return dateA - dateB;
             })
             .slice(0, 3);
-          
+
           setRecentAppointments(sortedAppointments);
         }
-      } catch (err) {
-        console.error('❌ Erreur lors du chargement des rendez-vous:', err);
+      } else {
+        console.error('❌ Erreur lors du chargement des rendez-vous:', appointmentsResult.reason);
       }
     } catch (error) {
       console.error('❌ Erreur lors du chargement des statistiques:', error);
@@ -557,7 +582,7 @@ function ClientDashboardContent() {
   const displayUser = getDisplayUser();
   const userName = getUserName();
   const userEmail = getUserEmail();
-
+  const showDashboardSkeleton = isLoading && stats.dossiers === 0 && stats.documents === 0 && stats.rendezVous === 0;
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -582,43 +607,33 @@ function ClientDashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
+    <div className="min-h-screen bg-background max-w-[100vw]">
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes scroll-text {
-          0% {
-            transform: translateX(100%);
-          }
-          100% {
-            transform: translateX(-100%);
-          }
-        }
-        .animate-scroll-text {
-          animation: scroll-text 15s linear infinite;
-          display: inline-block;
-          padding-left: 100%;
-        }
-        .animate-scroll-text:hover {
-          animation-play-state: paused;
+          0% { transform: translateX(100%); }
+          100% { transform: translateX(-100%); }
         }
       `}} />
-      <main className="w-full px-4 py-8">
-        <div id="dashboard-top" className="scroll-mt-20"></div>
+      <main className="w-full max-w-7xl mx-auto px-0 sm:px-2 py-3 sm:py-4 lg:py-6">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start">
+          <div className="flex-1 min-w-0">
+        <div id="dashboard-top" className="scroll-mt-20" />
 
-        {/* En-tête de bienvenue */}
-        <div className="mb-8">
-          <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                {dashboardTitleClient}, {userName.split(' ')[0]}
-              </h1>
-              <p className="text-muted-foreground text-lg">
-                {dashboardSubtitleClient}
-              </p>
-            </div>
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Tableau de bord</p>
+          <h1 className="text-2xl font-bold text-foreground mb-1">
+            {dashboardTitleClient}{userName ? `, ${userName.split(' ')[0]}` : ''}
+          </h1>
+          <p className="text-sm text-gray-700">
+            {dashboardSubtitleClient}
+          </p>
+        </div>
+        <div className="flex items-start justify-between mb-3 flex-wrap gap-3">
+            <div className="flex-1 min-w-0">
             
             {/* Badge de renouvellement du titre de séjour */}
             {hasTitreInfoValue && daysRemainingValue !== null && (
-              <div className={`rounded-xl shadow-lg p-4 border-2 min-w-[280px] max-w-[320px] ${
+              <div className={`rounded-xl shadow-lg p-4 border-2 w-full max-w-[320px] ${
                 daysRemainingValue < 0 
                   ? 'bg-red-50 border-red-300' 
                   : daysRemainingValue <= 30 
@@ -642,7 +657,7 @@ function ClientDashboardContent() {
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Renouvellement du titre de séjour</p>
+                    <p className="text-xs font-medium text-gray-700 mb-1">Renouvellement du titre de séjour</p>
                     {daysRemainingValue < 0 ? (
                       <p className="text-lg font-bold text-red-600">
                         Expiré depuis {Math.abs(daysRemainingValue)} jour{Math.abs(daysRemainingValue) > 1 ? 's' : ''}
@@ -657,7 +672,7 @@ function ClientDashboardContent() {
                       </p>
                     )}
                     {userProfile?.dateExpiration && (
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-gray-600 mt-1">
                         Échéance: {new Date(userProfile.dateExpiration).toLocaleDateString('fr-FR', {
                           year: 'numeric',
                           month: 'long',
@@ -688,70 +703,100 @@ function ClientDashboardContent() {
               </div>
             )}
           </div>
+
         </div>
 
-        {/* Statistiques - Design professionnel et chaleureux avec accès direct */}
-        <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 scroll-mt-20">
-          {/* Badge Dossiers avec lien direct - Fusion des deux badges */}
-          <Link href="/client/dossiers" className="group">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-primary hover:shadow-lg hover:border-primary/80 transition-all duration-200 hover:-translate-y-1 cursor-pointer">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                  <span className="text-2xl">📁</span>
+        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
+        <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4 scroll-mt-20">
+          <Link href="/client/dossiers" className="group block min-w-0">
+            <div
+              className={`rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-orange-200/70 to-orange-200/70 shadow-sm group-hover:shadow-md group-hover:from-orange-400/70 group-hover:via-orange-400/70 group-hover:to-orange-400/70 transition-all duration-300 cursor-pointer ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
+            >
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                    <span className="text-2xl">📁</span>
+                  </div>
+                  <div className="text-right">
+                    {showDashboardSkeleton ? (
+                      <div className="h-8 w-14 bg-gray-200 rounded ml-auto" />
+                    ) : (
+                      <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-primary transition-colors">{stats.dossiers}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-primary transition-colors">{stats.dossiers}</p>
+                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Mes Dossiers</h3>
+                <p className="text-xs text-gray-600 mb-3">Total de vos dossiers</p>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  {showDashboardSkeleton ? (
+                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-200 text-transparent text-xs font-semibold">
+                      00 en cours
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 text-xs font-semibold group-hover:bg-blue-500/20 transition-colors">
+                      {stats.dossiersEnCours} en cours
+                    </span>
+                  )}
+                  <span className="text-primary text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
                 </div>
-              </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Mes Dossiers</h3>
-              <p className="text-xs text-muted-foreground mb-3">Total de vos dossiers</p>
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 text-xs font-semibold group-hover:bg-blue-500/20 transition-colors">
-                  {stats.dossiersEnCours} en cours
-                </span>
-                <span className="text-primary text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
           </Link>
 
           {/* Badge Documents avec lien direct */}
-          <div id="documents-section" className="scroll-mt-20">
-          <Link href="/client/documents" className="group">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 hover:shadow-lg hover:border-green-600 transition-all duration-200 hover:-translate-y-1 cursor-pointer">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
-                  <span className="text-2xl">📄</span>
+          <div id="documents-section" className="scroll-mt-20 min-w-0">
+          <Link href="/client/documents" className="group block min-w-0">
+            <div
+              className={`rounded-xl p-[1px] bg-gradient-to-r from-green-200/70 via-emerald-200/70 to-green-200/70 shadow-sm group-hover:shadow-md group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 transition-all duration-300 cursor-pointer ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
+            >
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
+                    <span className="text-2xl">📄</span>
+                  </div>
+                  <div className="text-right">
+                    {showDashboardSkeleton ? (
+                      <div className="h-8 w-14 bg-gray-200 rounded ml-auto" />
+                    ) : (
+                      <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.documents}</p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.documents}</p>
+                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Documents</h3>
+                <p className="text-xs text-gray-600 mb-3">Documents disponibles</p>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <span className="text-xs text-gray-600">Tous vos documents</span>
+                  <span className="text-green-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
                 </div>
-              </div>
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Documents</h3>
-              <p className="text-xs text-muted-foreground mb-3">Documents disponibles</p>
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <span className="text-xs text-muted-foreground">Tous vos documents</span>
-                <span className="text-green-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
               </div>
             </div>
           </Link>
           </div>
         </div>
 
-        {/* Actions rapides - Seulement les sections sans doublons */}
-        <div id="rendez-vous-section" className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8 scroll-mt-20">
-          <div className="group">
-            <div className="bg-gradient-to-br from-white to-blue-50 rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 border border-blue-200 hover:border-blue-400 hover:scale-105">
+        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Rendez-vous et accès</p>
+        <div id="rendez-vous-section" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 scroll-mt-20">
+          <div className="group min-w-0">
+            <div
+              className={`rounded-xl p-[1px] bg-gradient-to-r from-blue-200/70 via-indigo-200/70 to-blue-200/70 shadow-sm group-hover:shadow-md group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 transition-all duration-300 ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
+            >
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                  <span className="text-3xl">📅</span>
+                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <span className="text-2xl">📅</span>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground group-hover:text-blue-600 transition-colors mb-1">Rendez-vous</h3>
-                  <p className="text-sm text-muted-foreground">Gérez vos rendez-vous</p>
+                  <h3 className="font-semibold text-foreground mb-0.5">Rendez-vous</h3>
+                  <p className="text-xs text-gray-600">Gérez vos rendez-vous</p>
                 </div>
               </div>
               {/* Rendez-vous récents avec alertes */}
-              {recentAppointments.length > 0 && (
+              {showDashboardSkeleton ? (
+                <div className="mb-4 space-y-2">
+                  <div className="h-12 bg-gray-200 rounded-lg" />
+                  <div className="h-12 bg-gray-200 rounded-lg" />
+                </div>
+              ) : recentAppointments.length > 0 && (
                 <div className="mb-4 space-y-2 max-h-32 overflow-y-auto">
                   {recentAppointments.map((apt: any) => {
                     const aptDate = apt.date ? new Date(apt.date) : null;
@@ -788,7 +833,7 @@ function ClientDashboardContent() {
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-muted-foreground">⏰ {apt.heure?.substring(0, 5) || '-'}</p>
+                            <p className="text-xs text-gray-600">⏰ {apt.heure?.substring(0, 5) || '-'}</p>
                           </div>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                             apt.statut === 'confirme' ? 'bg-blue-100 text-blue-800' :
@@ -804,7 +849,7 @@ function ClientDashboardContent() {
                 </div>
               )}
               
-              <div className="flex gap-2 pt-4 border-t border-blue-200">
+              <div className="flex gap-2 pt-4 border-t border-gray-100">
                 <Button 
                   variant="outline" 
                   className="flex-1 text-xs border-blue-300 text-blue-600 hover:bg-blue-50"
@@ -818,356 +863,216 @@ function ClientDashboardContent() {
                   </Button>
                 </Link>
               </div>
+              </div>
             </div>
           </div>
 
-          <div id="temoignages-section" className="scroll-mt-20">
-          <Link href="/client/temoignages" className="group">
-            <div className="bg-gradient-to-br from-white to-purple-50 rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 border border-purple-200 hover:border-purple-400 hover:scale-105">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                  <span className="text-3xl">⭐</span>
+          <div id="temoignages-section" className="scroll-mt-20 min-w-0">
+          <Link href="/client/temoignages" className="group block min-w-0">
+            <div className="rounded-xl p-[1px] bg-gradient-to-r from-yellow-200/70 via-amber-200/70 to-yellow-200/70 shadow-sm transition-all duration-300 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-md">
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <span className="text-2xl">⭐</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-foreground mb-0.5">Témoignage</h3>
+                    <p className="text-xs text-gray-600">Partagez votre expérience</p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground group-hover:text-purple-600 transition-colors mb-1">Témoignage</h3>
-                  <p className="text-sm text-muted-foreground">Partagez votre expérience</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between pt-4 border-t border-purple-200">
-                <span className="text-xs font-medium text-purple-600">Accéder →</span>
-                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-                  <span className="text-purple-600 text-sm">→</span>
-                </div>
+                <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
               </div>
             </div>
           </Link>
           </div>
 
-          <Link href="/client/compte" className="group">
-            <div className="bg-gradient-to-br from-white to-indigo-50 rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 border border-indigo-200 hover:border-indigo-400 hover:scale-105">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                  <span className="text-3xl">👤</span>
+          <Link href="/client/compte" className="group block min-w-0">
+            <div className="rounded-xl p-[1px] bg-gradient-to-r from-gray-200/70 via-slate-200/70 to-gray-200/70 shadow-sm transition-all duration-300 group-hover:from-gray-300/70 group-hover:via-slate-300/70 group-hover:to-gray-300/70 group-hover:shadow-md">
+              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <span className="text-2xl">👤</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-foreground mb-0.5">Mon compte</h3>
+                    <p className="text-xs text-gray-600">Gérez vos informations</p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground group-hover:text-indigo-600 transition-colors mb-1">Mon compte</h3>
-                  <p className="text-sm text-muted-foreground">Gérez vos informations</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between pt-4 border-t border-indigo-200">
-                <span className="text-xs font-medium text-indigo-600">Accéder →</span>
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center group-hover:bg-indigo-200 transition-colors">
-                  <span className="text-indigo-600 text-sm">→</span>
-                </div>
+                <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
               </div>
             </div>
           </Link>
 
         </div>
 
-        {/* Bloc messagerie sur le dashboard client */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="lg:col-span-2" />
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
-                    <span>✉️ Messagerie</span>
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Retrouvez vos échanges avec l&apos;équipe juridique.
+          </div>
+
+          {/* Barre Mon Profil à droite (ou en bas sur mobile) */}
+          <div className="w-full min-w-0 lg:w-72 lg:flex-shrink-0 lg:self-start">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 hover:border-gray-300 hover:shadow-sm transition-all lg:sticky lg:top-24 lg:w-72">
+              <div className="mb-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center overflow-hidden shrink-0">
+                    <UserAvatarDisplay
+                      user={
+                        userProfile && typeof userProfile === 'object'
+                          ? {
+                              profilePhoto: userProfile.profilePhoto,
+                              firstName: userProfile.firstName,
+                              lastName: userProfile.lastName,
+                            }
+                          : null
+                      }
+                      alt=""
+                      fallback={
+                        <span className="text-white font-bold text-lg">
+                          {userProfile?.firstName?.[0]?.toUpperCase() || session?.user?.name?.[0]?.toUpperCase() || 'U'}
+                          {userProfile?.lastName?.[0]?.toUpperCase() || ''}
+                        </span>
+                      }
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-bold text-foreground">Mon Profil</h2>
+                    <span className="inline-block px-2 py-0.5 text-[10px] font-semibold rounded-full bg-primary/20 text-primary mt-1">Client</span>
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 mb-4">
+                  <p className="text-sm font-bold text-foreground mb-1">
+                    {userProfile?.firstName && userProfile?.lastName
+                      ? `${userProfile.firstName} ${userProfile.lastName}`
+                      : session?.user?.name || 'Utilisateur'}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {userProfile?.email || session?.user?.email || ''}
                   </p>
                 </div>
-                <Link href="/client/messages">
-                  <Button variant="outline" className="text-xs">
-                    Ouvrir la messagerie
-                  </Button>
-                </Link>
               </div>
-              {messagesPreview.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Aucun message non lu pour le moment.
-                </p>
+
+              {!userProfile ? (
+                <div className="text-center py-6">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
+                  <p className="text-muted-foreground text-sm">Chargement du profil...</p>
+                </div>
               ) : (
-                <div className="space-y-3">
-                  {messagesPreview.map((msg) => (
-                    <Link
-                      key={msg._id || msg.id}
-                      href={`/client/messages/${msg._id || msg.id}`}
-                      className="block rounded-lg border border-gray-100 px-3 py-2 hover:bg-primary/5 transition-colors"
+                <div className="space-y-5">
+                  <div className="space-y-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsPersonalInfoOpen(!isPersonalInfoOpen)}
+                      className="flex items-center justify-between w-full gap-2 mb-3 hover:opacity-80 transition-opacity cursor-pointer group"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold truncate">{msg.sujet}</p>
-                          <p className="text-[11px] text-muted-foreground line-clamp-2">
-                            {msg.contenu}
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-5 bg-blue-500 rounded-full"></div>
+                        <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 transition-colors">Informations personnelles</h3>
+                      </div>
+                      <span className={`text-blue-600 transition-transform duration-300 text-xs ${isPersonalInfoOpen ? 'rotate-180' : 'rotate-0'}`}>▼</span>
+                    </button>
+                    {isPersonalInfoOpen && (
+                      <div className="space-y-2.5">
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Nom complet</p>
+                          <p className="text-xs font-medium text-foreground break-words">
+                            {userProfile.firstName && userProfile.lastName ? `${userProfile.firstName} ${userProfile.lastName}` : <span className="text-muted-foreground italic">Non renseigné</span>}
                           </p>
                         </div>
-                        <span className="ml-2 flex-shrink-0 rounded-full bg-primary text-white text-[10px] px-2 py-0.5">
-                          Voir
-                        </span>
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Email</p>
+                          <p className="text-xs font-medium text-foreground break-all">{userProfile.email || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Téléphone</p>
+                          <p className="text-xs font-medium text-foreground">{userProfile.phone || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Adresse</p>
+                          <p className="text-xs font-medium text-foreground break-words">
+                            {(userProfile.adressePostale || userProfile.ville || userProfile.codePostal) ? (
+                              <>{userProfile.adressePostale || ''}{userProfile.adressePostale && (userProfile.ville || userProfile.codePostal) ? ', ' : ''}{userProfile.codePostal || ''}{userProfile.codePostal && userProfile.ville ? ' ' : ''}{userProfile.ville || ''}{userProfile.pays && (userProfile.ville || userProfile.codePostal || userProfile.adressePostale) ? `, ${userProfile.pays}` : ''}</>
+                            ) : (
+                              <span className="text-muted-foreground italic">Non renseigné</span>
+                            )}
+                          </p>
+                        </div>
                       </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2.5 pt-4 border-t border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setIsAdminInfoOpen(!isAdminInfoOpen)}
+                      className="flex items-center justify-between w-full gap-2 mb-3 hover:opacity-80 transition-opacity cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-5 bg-green-500 rounded-full"></div>
+                        <h3 className="text-sm font-bold text-foreground group-hover:text-green-600 transition-colors">Informations administratives</h3>
+                      </div>
+                      <span className={`text-green-600 transition-transform duration-300 text-xs ${isAdminInfoOpen ? 'rotate-180' : 'rotate-0'}`}>▼</span>
+                    </button>
+                    {isAdminInfoOpen && (
+                      <div className="space-y-2.5">
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Type de titre</p>
+                          <p className="text-xs font-medium text-foreground break-words">{getProfileTypeTitre() || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                            <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Délivrance</p>
+                            <p className="text-xs font-medium text-foreground">{userProfile.dateDelivrance ? formatDateCourte(new Date(userProfile.dateDelivrance)) : <span className="text-muted-foreground italic">-</span>}</p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                            <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Expiration</p>
+                            <p className="text-xs font-medium text-foreground">{userProfile.dateExpiration ? formatDateCourte(new Date(userProfile.dateExpiration)) : <span className="text-muted-foreground italic">-</span>}</p>
+                          </div>
+                        </div>
+                        {userProfile.dateExpiration && joursRestantsSidebar !== null && (
+                          <div className={`rounded-lg p-4 border ${joursRestantsSidebar <= 0 ? 'bg-red-50 border-red-200' : joursRestantsSidebar < 30 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
+                            <p className={`text-xs font-bold mb-2 uppercase tracking-wide ${joursRestantsSidebar <= 0 ? 'text-red-900' : joursRestantsSidebar < 30 ? 'text-orange-900' : 'text-green-900'}`}>
+                              {joursRestantsSidebar <= 0 ? 'Titre expiré' : 'Temps restant'}
+                            </p>
+                            {joursRestantsSidebar <= 0 ? (
+                              <p className="text-[11px] font-semibold text-red-800">Votre titre a expiré. Pensez au renouvellement.</p>
+                            ) : (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <div className="bg-white/80 rounded-lg px-2 py-1.5 border-2 border-green-400 text-green-900">
+                                  <p className="text-[9px] font-semibold uppercase opacity-70">Jours</p>
+                                  <p className="text-base font-bold">{joursRestantsSidebar}</p>
+                                </div>
+                                <div className="bg-white/80 rounded-lg px-2 py-1.5 border-2 border-green-400 text-green-900">
+                                  <p className="text-[9px] font-semibold uppercase opacity-70">H</p>
+                                  <p className="text-base font-bold">{String(heuresRestantes).padStart(2, '0')}</p>
+                                </div>
+                                <div className="bg-white/80 rounded-lg px-2 py-1.5 border-2 border-green-400 text-green-900">
+                                  <p className="text-[9px] font-semibold uppercase opacity-70">Min</p>
+                                  <p className="text-base font-bold">{String(minutesRestantes).padStart(2, '0')}</p>
+                                </div>
+                                <div className="bg-white/80 rounded-lg px-2 py-1.5 border-2 border-green-400 text-green-900">
+                                  <p className="text-[9px] font-semibold uppercase opacity-70">Sec</p>
+                                  <p className="text-base font-bold">{String(secondesRestantes).padStart(2, '0')}</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Numéro de titre</p>
+                          <p className="text-xs font-medium text-foreground break-all">{userProfile.numeroTitre || <span className="text-muted-foreground italic">Non renseigné</span>}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200">
+                    <Link href="/client/compte">
+                      <Button variant="outline" className="w-full text-xs h-9 font-semibold border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all">
+                        ✏️ Modifier mon profil
+                      </Button>
                     </Link>
-                  ))}
+                  </div>
                 </div>
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Mes Dossiers - Format complet */}
-        <div className="bg-gradient-to-br from-white to-primary/5 rounded-2xl shadow-lg p-8 border border-primary/20">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/70 rounded-lg flex items-center justify-center">
-                <span className="text-xl">📁</span>
-              </div>
-              <h2 className="text-2xl font-bold text-foreground">Mes Dossiers</h2>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={loadStats} disabled={isLoading} size="sm">
-                Actualiser
-              </Button>
-              <Link href="/client/dossiers">
-                <Button variant="outline" size="sm">
-                  Voir tout →
-                </Button>
-              </Link>
-            </div>
-          </div>
-          <div className="space-y-4">
-            {isLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Chargement des dossiers...</p>
-              </div>
-            ) : recentDossiers.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-4xl">📋</span>
-                </div>
-                <p className="text-muted-foreground mb-4 font-medium">Aucun dossier</p>
-                <Link href="/dossiers/create">
-                  <Button className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/90 hover:to-primary/80 shadow-md">
-                    Créer mon premier dossier
-                  </Button>
-                </Link>
-              </div>
-            ) : (
-              recentDossiers.map((dossier) => (
-                <div
-                  key={dossier._id || dossier.id}
-                  className={`border rounded-xl p-5 hover:shadow-xl transition-all duration-200 bg-white w-full ${
-                    dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
-                      ? 'border-l-4 border-l-yellow-500 border-t border-r border-b border-gray-200'
-                      : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
-                      ? 'border-l-4 border-l-green-500 border-t border-r border-b border-gray-200'
-                      : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet'
-                      ? 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200'
-                      : 'border-l-4 border-l-blue-500 border-t border-r border-b border-gray-200'
-                  }`}
-                >
-                  {/* En-tête de la carte */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1 min-w-0 pr-2">
-                      <h3 className="font-bold text-base text-foreground line-clamp-2 leading-tight">
-                        {dossier.titre || 'Sans titre'}
-                      </h3>
-                      {dossier.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                          {dossier.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(dossier.statut)}`}>
-                        {getStatutLabel(dossier.statut)}
-                      </span>
-                      {dossier.priorite && (
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getPrioriteColor(dossier.priorite)}`}>
-                          {dossier.priorite}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Informations du dossier */}
-                  <div className="space-y-2 mb-3">
-                    {(dossier.numero || dossier.numeroDossier) && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-primary font-semibold">🔢</span>
-                        <span className="text-primary font-semibold">
-                          N° {dossier.numero || dossier.numeroDossier}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex items-start gap-2 text-sm">
-                      <span className="text-muted-foreground mt-0.5">📋</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground text-xs">{getCategorieLabel(dossier.categorie || 'autre')}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>📅</span>
-                      <span>
-                        {dossier.createdAt ? new Date(dossier.createdAt).toLocaleDateString('fr-FR', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        }) : '-'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="pt-3 border-t border-gray-200">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        {(() => {
-                          // Vérifier d'abord s'il y a des demandes de documents en attente
-                          const dossierRequests = documentRequests[dossier._id || dossier.id] || [];
-                          const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
-                          
-                          if (pendingRequests.length > 0) {
-                            const urgentRequests = pendingRequests.filter((r: any) => r.isUrgent);
-                            const hasUrgent = urgentRequests.length > 0;
-                            
-                            return (
-                              <div 
-                                className={`relative overflow-hidden rounded-md px-3 py-2 border cursor-pointer transition-all hover:shadow-md ${
-                                  hasUrgent 
-                                    ? 'bg-red-50/50 border-red-200/50 hover:bg-red-100/50' 
-                                    : 'bg-orange-50/50 border-orange-200/50 hover:bg-orange-100/50'
-                                }`}
-                                onClick={() => {
-                                  // Ouvrir le modal avec la première demande en attente (ou urgente si disponible)
-                                  const requestToShow = urgentRequests[0] || pendingRequests[0];
-                                  if (requestToShow) {
-                                    // Créer une notification factice pour le modal
-                                    const notification = {
-                                      _id: requestToShow._id,
-                                      id: requestToShow.id,
-                                      type: 'document_request',
-                                      titre: requestToShow.isUrgent
-                                        ? `🔴 Demande urgente de document - Dossier ${dossier.numero || dossier._id}`
-                                        : `📄 Demande de document - Dossier ${dossier.numero || dossier._id}`,
-                                      message: `Un document de type "${requestToShow.documentTypeLabel}" est requis pour votre dossier.`,
-                                      data: {
-                                        documentRequestId: requestToShow._id || requestToShow.id,
-                                        dossierId: dossier._id || dossier.id,
-                                        dossierNumero: dossier.numero,
-                                        documentType: requestToShow.documentType,
-                                        documentTypeLabel: requestToShow.documentTypeLabel,
-                                        isUrgent: requestToShow.isUrgent || false
-                                      }
-                                    };
-                                    setSelectedDocumentRequest(notification);
-                                    setShowDocumentRequestModal(true);
-                                  }
-                                }}
-                                title={`${pendingRequests.length} demande(s) de document(s) en attente${hasUrgent ? ' (urgente)' : ''}. Cliquez pour envoyer le document.`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs">{hasUrgent ? '🔴' : '📄'}</span>
-                                  <div className="flex-1 min-w-0 overflow-hidden">
-                                    <div className="animate-scroll-text whitespace-nowrap">
-                                      <span className={`text-xs font-medium ${
-                                        hasUrgent ? 'text-red-900' : 'text-orange-900'
-                                      }`}>
-                                        {hasUrgent 
-                                          ? `🔴 ${urgentRequests.length} demande(s) urgente(s) de document`
-                                          : `${pendingRequests.length} demande(s) de document en attente`
-                                        }
-                                        {pendingRequests.length > 1 && !hasUrgent && ` (${pendingRequests.length} demandes)`}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  {pendingRequests.length > 1 && (
-                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-                                      hasUrgent ? 'bg-red-200 text-red-800' : 'bg-orange-200 text-orange-800'
-                                    }`}>
-                                      {pendingRequests.length}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          }
-                          
-                          // Sinon, afficher la dernière notification défilante
-                          const lastNotification = getLastNotificationForDossier(dossier._id || dossier.id);
-                          if (lastNotification) {
-                            return (
-                              <div className="relative overflow-hidden bg-blue-50/50 rounded-md px-3 py-2 border border-blue-200/50">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs">🔔</span>
-                                  <div className="flex-1 min-w-0 overflow-hidden">
-                                    <div className="animate-scroll-text whitespace-nowrap">
-                                      <span className="text-xs text-blue-900 font-medium">
-                                        {lastNotification.title || lastNotification.message || 'Nouvelle notification'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          }
-                          
-                          return (
-                            <div className="flex gap-3 text-xs text-muted-foreground">
-                              {dossier.documents && dossier.documents.length > 0 && (
-                                <span>📄 {dossier.documents.length}</span>
-                              )}
-                              {dossier.messages && dossier.messages.length > 0 && (
-                                <span>💬 {dossier.messages.length}</span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {(() => {
-                          const unreadCount = getUnreadNotificationsCountForDossier(dossier._id || dossier.id);
-                          return (
-                            <Link href={`/client/notifications?dossierId=${dossier._id || dossier.id}&filter=unread`}>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className={`text-xs h-8 relative ${unreadCount > 0 ? 'bg-orange-50 border-orange-300 hover:bg-orange-100' : ''}`}
-                                title="Voir les notifications non lues"
-                              >
-                                🔔 Notifications
-                                {unreadCount > 0 && (
-                                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                                    {unreadCount > 9 ? '9+' : unreadCount}
-                                  </span>
-                                )}
-                              </Button>
-                            </Link>
-                          );
-                        })()}
-                        <Link href={`/client/messages?dossierId=${dossier._id || dossier.id}&action=view`}>
-                          <Button variant="outline" size="sm" className="text-xs h-8" title="Voir les discussions">
-                            💬 Discussions
-                          </Button>
-                        </Link>
-                        <Link href={`/client/messages?dossierId=${dossier._id || dossier.id}&action=send`}>
-                          <Button size="sm" className="text-xs h-8" title="Envoyer un message">
-                            ✉️ Message
-                          </Button>
-                        </Link>
-                        <Link href={`/client/dossiers/${dossier._id || dossier.id}`}>
-                          <Button variant="outline" size="sm" className="text-xs h-8">
-                            Détails
-                          </Button>
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
           </div>
         </div>
       </main>

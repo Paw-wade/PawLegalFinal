@@ -118,6 +118,12 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: 'France'
   },
+  /** URL relative servie sous /uploads/... (ex: /uploads/avatars/user-xxx.jpg) */
+  profilePhoto: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   isActive: {
     type: Boolean,
     default: true
@@ -142,6 +148,69 @@ const userSchema = new mongoose.Schema({
       account_security: { type: Boolean, default: true },
       otp: { type: Boolean, default: true } // OTP toujours activé pour sécurité
     }
+  },
+  // Discussions du forum mises en signet par l'utilisateur
+  forumBookmarks: [{
+    thread: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ForumThread',
+      required: true
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  /** Dernière ouverture d’un fil forum (pour badge « nouvelles réponses ») */
+  forumThreadReads: [{
+    thread: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ForumThread',
+      required: true
+    },
+    readAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  // Abonnements Web Push du navigateur (PWA)
+  pushPreferences: {
+    enabled: {
+      type: Boolean,
+      default: true, // Activé par défaut pour tous les comptes
+    },
+  },
+  pushSubscriptions: [{
+    endpoint: {
+      type: String,
+      trim: true,
+    },
+    keys: {
+      p256dh: { type: String, trim: true },
+      auth: { type: String, trim: true },
+    },
+    userAgent: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    lastSeenAt: {
+      type: Date,
+      default: Date.now,
+    },
+  }],
+  // Réinitialisation de mot de passe (token temporaire)
+  resetPasswordToken: {
+    type: String,
+    select: false
+  },
+  resetPasswordExpires: {
+    type: Date,
+    select: false
   },
   createdAt: {
     type: Date,

@@ -5,10 +5,11 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
+import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, tasksAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { History, Clock, CheckCircle, XCircle } from 'lucide-react';
 
@@ -53,9 +54,12 @@ export default function PartenaireDossierDetailPage() {
   const [discharging, setDischarging] = useState(false);
   const [showDischargeModal, setShowDischargeModal] = useState(false);
   const [dischargeNotes, setDischargeNotes] = useState('');
+  const [isClosing, setIsClosing] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
-
+  
   useEffect(() => {
     const token = localStorage.getItem('token');
     
@@ -96,24 +100,7 @@ export default function PartenaireDossierDetailPage() {
     }
   }, [session, status, router, dossierId]);
 
-  // Rafraîchissement automatique toutes les 30 secondes pour le suivi en temps réel
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (session || localStorage.getItem('token')) {
-        loadDossier();
-        loadNotifications();
-        loadMessagesForDossier();
-        loadTasks();
-        loadDocumentRequests();
-        loadDocuments();
-        if (showHistory) {
-          loadHistory();
-        }
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [session, dossierId]);
+  // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
   const loadDocuments = async () => {
     if (!dossierId) return;
@@ -151,7 +138,7 @@ export default function PartenaireDossierDetailPage() {
       setIsLoadingRequests(false);
     }
   };
-
+  
   const loadDossier = async () => {
     if (!dossierId) return;
     
@@ -276,7 +263,7 @@ export default function PartenaireDossierDetailPage() {
     };
     return labels[type] || type;
   };
-
+  
   const getTransmission = () => {
     if (!dossier || !dossier.transmittedTo) return null;
     const userId = (session?.user as any)?._id || (session?.user as any)?.id;
@@ -284,7 +271,7 @@ export default function PartenaireDossierDetailPage() {
       (t.partenaire?._id?.toString() || t.partenaire?.toString()) === userId
     );
   };
-
+  
   const handleAcknowledge = async () => {
     if (!acknowledgeAction) return;
     
@@ -302,7 +289,7 @@ export default function PartenaireDossierDetailPage() {
       setAcknowledging(false);
     }
   };
-
+  
   const handleDischarge = async () => {
     try {
       setDischarging(true);
@@ -330,7 +317,7 @@ export default function PartenaireDossierDetailPage() {
       </div>
     );
   }
-
+  
   if (status === 'unauthenticated') return null;
 
   if (isLoading) {
@@ -345,7 +332,7 @@ export default function PartenaireDossierDetailPage() {
       </div>
     );
   }
-
+  
   if (error || !dossier) {
     return (
       <div className="min-h-screen bg-background">
@@ -362,98 +349,145 @@ export default function PartenaireDossierDetailPage() {
       </div>
     );
   }
-
+  
   const transmission = getTransmission();
   const statusTransmission = transmission?.status || 'pending';
-  const canAcknowledge = statusTransmission === 'pending';
+  // Le partenaire peut accuser réception lorsqu'un dossier est en attente,
+  // mais aussi lorsqu'il l'a précédemment refusé (pour pouvoir l'accepter à nouveau)
+  const canAcknowledge = statusTransmission === 'pending' || statusTransmission === 'refused';
+  
+  const draftAccessNotifs = (notifications || []).filter((n: any) => n.type === 'draft_access_granted' && !n.lu);
+  const handleMarkDraftAccessAsRead = async () => {
+    for (const notif of draftAccessNotifs) {
+      try {
+        await notificationsAPI.markAsRead(notif._id);
+      } catch (_) {}
+    }
+    loadNotifications();
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
-      <main className="w-full px-4 py-8 overflow-x-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 max-w-[100vw]">
+      <main className="w-full max-w-[100vw] px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
+        {/* Bannière visible : accès document en préparation accordé */}
+        {draftAccessNotifs.length > 0 && (
+          <div className="mb-6 rounded-xl border-2 border-orange-400 bg-gradient-to-r from-orange-50 to-amber-50 shadow-lg p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white text-lg">
+                ✓
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-orange-900 text-base mb-1">Accès accordé à un document en préparation</h3>
+                <p className="text-sm text-orange-800 mb-2">
+                  {draftAccessNotifs.length === 1
+                    ? draftAccessNotifs[0].message
+                    : `Vous avez reçu des accès à ${draftAccessNotifs.length} document(s) en préparation sur ce dossier. Consultez la section « Documents en préparation » ci-dessous.`}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleMarkDraftAccessAsRead}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
+                >
+                  J'ai compris
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* En-tête amélioré */}
         <div className="mb-6">
           <Link href="/partenaire/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Retour aux dossiers
-          </Link>
-          
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6 overflow-hidden">
-            <div className="flex items-start justify-between mb-4">
+        Retour aux dossiers
+      </Link>
+      
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2 flex-wrap">
-                  <h1 className="text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                  <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
                   {(dossier.numero || dossier.numeroDossier) && (
                     <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-semibold">
                       N° {dossier.numero || dossier.numeroDossier}
                     </span>
-                  )}
-                  {transmission && (
+            )}
+          {transmission && (
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                       statusTransmission === 'accepted' ? 'bg-green-100 text-green-800' :
                       statusTransmission === 'refused' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
+              'bg-yellow-100 text-yellow-800'
+            }`}>
                       {statusTransmission === 'accepted' ? 'Accepté' :
                        statusTransmission === 'refused' ? 'Refusé' :
-                       'En attente'}
-                    </span>
-                  )}
-                </div>
+               'En attente'}
+            </span>
+          )}
+        </div>
                 {dossier.description && (
                   <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
                 )}
-                
-                {/* Barre de progression */}
-                {(() => {
-                  const progress = getDossierProgress(dossier.statut);
-                  return (
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-muted-foreground font-medium">Progression du dossier</span>
-                        <span className="font-bold text-foreground">{progress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                        <div 
-                          className={`h-3 rounded-full transition-all duration-500 ${
-                            progress >= 80 ? 'bg-green-500' : 
-                            progress >= 50 ? 'bg-blue-500' : 
-                            progress >= 25 ? 'bg-yellow-500' : 
-                            'bg-gray-400'
-                          }`}
-                          style={{width: `${Math.min(progress, 100)}%`, maxWidth: '100%'}}
-                        ></div>
-                      </div>
-                    </div>
+        
+                {/* Barre de progression basée uniquement sur les étapes choisies pour ce dossier */}
+                {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (() => {
+                  const rawSteps = dossier.etapesSupplementaires;
+                  const currentIndex = rawSteps.findIndex(
+                    (s: any) =>
+                      dossier.statut &&
+                      (dossier.statut === s.id || dossier.statut === s.label)
                   );
-                })()}
-                
-                {/* Timeline */}
-                {(() => {
-                  const steps = getTimelineSteps(dossier.statut);
                   return (
                     <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
                       <div className="flex items-center gap-2 min-w-max">
-                        {steps.map((step, index) => (
-                          <div key={step.key} className="flex items-center gap-2 flex-shrink-0">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></span>
-                              <span className={`text-[10px] font-medium whitespace-nowrap ${
-                                step.completed ? 'text-green-700' : 'text-gray-400'
-                              }`}>
-                                {step.label}
-                              </span>
+                        {rawSteps.map((step: any, index: number) => {
+                          const isCurrent =
+                            currentIndex === -1
+                              ? index === rawSteps.length - 1
+                              : index === currentIndex;
+                          const completed = currentIndex === -1 ? false : index <= currentIndex;
+                          const dateLabel =
+                            step.date
+                              ? (typeof step.date === 'string'
+                                  ? step.date
+                                  : new Date(step.date).toLocaleDateString('fr-FR'))
+                              : undefined;
+                          return (
+                            <div key={step._id || step.id || index} className="flex items-center gap-2 flex-shrink-0">
+                              <div className="flex flex-col items-center gap-1">
+                                <span
+                                  className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                    isCurrent
+                                      ? 'bg-blue-500 ring-2 ring-blue-300'
+                                      : completed
+                                      ? 'bg-green-500'
+                                      : 'bg-gray-300'
+                                  }`}
+                                ></span>
+                                <span
+                                  className={`text-[10px] font-medium whitespace-nowrap ${
+                                    isCurrent
+                                      ? 'text-blue-700'
+                                      : completed
+                                      ? 'text-green-700'
+                                      : 'text-gray-400'
+                                  }`}
+                                >
+                                  {step.label}
+                                  {dateLabel ? ` (${dateLabel})` : ''}
+                                </span>
+                              </div>
+                              {index < rawSteps.length - 1 && (
+                                <div
+                                  className={`h-0.5 w-6 flex-shrink-0 ${
+                                    completed ? 'bg-green-500' : 'bg-gray-300'
+                                  }`}
+                                ></div>
+                              )}
                             </div>
-                            {index < steps.length - 1 && (
-                              <div className={`h-0.5 w-6 flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></div>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -480,76 +514,63 @@ export default function PartenaireDossierDetailPage() {
                     </span>
                   )}
                 </div>
-              </div>
+          </div>
               
-              <div className="flex flex-col gap-2">
-                <Button variant="outline" onClick={() => {
-                  loadDossier();
-                  loadNotifications();
-                }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:flex-wrap sm:items-start shrink-0">
+                <Button variant="outline" onClick={() => { loadDossier(); loadNotifications(); }} className="min-h-[44px] w-full sm:w-auto justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                   Actualiser
                 </Button>
                 {transmission && (
-                  <Button 
-                    variant="outline" 
-                    className="border-orange-500 text-orange-600 hover:bg-orange-50"
-                    onClick={() => setShowDischargeModal(true)}
-                  >
-                    Se décharger du dossier
+                  <Button variant="outline" className="min-h-[44px] w-full sm:w-auto justify-center border-orange-500 text-orange-600 hover:bg-orange-50" onClick={() => setShowDischargeModal(true)}>
+                    Se décharger
                   </Button>
                 )}
               </div>
             </div>
             
             {/* Informations de transmission */}
-            {transmission && (
+        {transmission && (
               <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <h3 className="font-semibold mb-2 text-foreground">Informations de transmission</h3>
                 <p className="text-sm text-muted-foreground">
-                  Transmis le {new Date(transmission.transmittedAt).toLocaleDateString('fr-FR', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </p>
-                {transmission.notes && (
+              Transmis le {new Date(transmission.transmittedAt).toLocaleDateString('fr-FR', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </p>
+            {transmission.notes && (
                   <p className="text-sm text-foreground mt-2">
                     <strong>Notes:</strong> {transmission.notes}
-                  </p>
-                )}
-              </div>
+              </p>
             )}
-            
+          </div>
+        )}
+        
             {/* Boutons d'accusé de réception */}
-            {canAcknowledge && (
-              <div className="flex gap-4 mt-6">
-                <button
-                  onClick={() => {
-                    setAcknowledgeAction('accept');
-                    setShowAcknowledgeModal(true);
-                  }}
-                  className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <CheckCircle className="w-5 h-5" />
-                  Accepter le dossier
-                </button>
-                <button
-                  onClick={() => {
-                    setAcknowledgeAction('refuse');
-                    setShowAcknowledgeModal(true);
-                  }}
-                  className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  <XCircle className="w-5 h-5" />
-                  Refuser le dossier
-                </button>
-              </div>
-            )}
+        {canAcknowledge && (
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-4 sm:mt-6">
+            <button
+              onClick={() => { setAcknowledgeAction('accept'); setShowAcknowledgeModal(true); }}
+              className="flex items-center justify-center gap-2 px-4 py-3 min-h-[48px] bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors w-full sm:w-auto"
+            >
+              <CheckCircle className="w-5 h-5 flex-shrink-0" />
+              Accepter le dossier
+            </button>
+            <button
+              onClick={() => { setAcknowledgeAction('refuse'); setShowAcknowledgeModal(true); }}
+              className="flex items-center justify-center gap-2 px-4 py-3 min-h-[48px] bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors w-full sm:w-auto"
+            >
+              <XCircle className="w-5 h-5 flex-shrink-0" />
+              Refuser le dossier
+            </button>
+          </div>
+        )}
             
             {/* Prochaine action */}
             {(() => {
@@ -575,13 +596,13 @@ export default function PartenaireDossierDetailPage() {
         {/* Vue détaillée avec téléchargement et impression */}
         <DossierDetailView dossier={dossier} variant="partenaire" />
 
-        <div className="grid md:grid-cols-3 gap-6 mt-8">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 mt-6 sm:mt-8">
           {/* Informations principales */}
-          <div className="md:col-span-2 space-y-6">
+          <div className="space-y-4 sm:space-y-6 min-w-0">
             {/* Statut actuel */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Statut actuel</h2>
-              <div className="flex items-center gap-4">
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statut actuel</h2>
+              <div className="flex flex-wrap items-center gap-3">
                 <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatutColor(dossier.statut)}`}>
                   {getStatutLabel(dossier.statut)}
                 </span>
@@ -613,7 +634,7 @@ export default function PartenaireDossierDetailPage() {
             {/* Informations complètes du dossier */}
             <div className="bg-white rounded-lg shadow-lg p-6">
               <h2 className="text-xl font-bold mb-4">📋 Informations Complètes du Dossier</h2>
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
                 <div>
                   <p className="text-sm text-muted-foreground font-semibold">Numéro de dossier</p>
                   <p className="font-bold text-lg text-primary">{dossier.numero || dossier._id}</p>
@@ -676,13 +697,13 @@ export default function PartenaireDossierDetailPage() {
                   </div>
                 )}
               </div>
-            </div>
-
+      </div>
+      
             {/* Coordonnées client */}
             {dossier.user && typeof dossier.user === 'object' && (
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <h2 className="text-xl font-bold mb-4">👤 Informations Client</h2>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
                     <p className="font-medium">{dossier.user.firstName || 'N/A'}</p>
@@ -840,33 +861,46 @@ export default function PartenaireDossierDetailPage() {
               )}
             </div>
 
-            {/* Historique des notifications */}
+            {/* Historique des notifications (repliable, plié par défaut) */}
             {notifications.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Notifications récentes</h2>
-                <div className="space-y-3">
-                  {notifications.slice(0, 5).map((notif) => (
-                    <div key={notif._id || notif.id} className="border-l-4 border-primary pl-4 py-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-semibold">{notif.titre}</h3>
-                          <p className="text-sm text-muted-foreground mt-1">{notif.message}</p>
+              <details className="bg-white rounded-lg shadow-lg">
+                <summary className="list-none cursor-pointer p-4 sm:p-6 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold mb-1">Notifications récentes</h2>
+                    <p className="text-xs text-muted-foreground">
+                      {notifications.length} notification{notifications.length > 1 ? 's' : ''} pour ce dossier
+                    </p>
+                  </div>
+                  <span className="ml-4 text-gray-500 text-sm select-none">
+                    Afficher / masquer
+                  </span>
+                </summary>
+                <div className="px-4 sm:px-6 pb-4 sm:pb-6">
+                  <div className="space-y-3">
+                    {notifications.slice(0, 5).map((notif) => (
+                      <div key={notif._id || notif.id} className="border-l-4 border-primary pl-4 py-2">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-semibold">{notif.titre}</h3>
+                            <p className="text-sm text-muted-foreground mt-1">{notif.message}</p>
+                          </div>
+                          <span className="text-xs text-muted-foreground ml-4">
+                            {new Date(notif.createdAt).toLocaleDateString('fr-FR', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
                         </div>
-                        <span className="text-xs text-muted-foreground ml-4">
-                          {new Date(notif.createdAt).toLocaleDateString('fr-FR', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </details>
             )}
+          </div>
           </div>
 
           {/* Sidebar */}
@@ -883,7 +917,7 @@ export default function PartenaireDossierDetailPage() {
                 </Link>
                 <Link href="/partenaire/notifications" className="block">
                   <Button variant="outline" className="w-full">Voir les notifications</Button>
-                </Link>
+        </Link>
               </div>
             </div>
 
@@ -905,9 +939,6 @@ export default function PartenaireDossierDetailPage() {
                         <span className="text-lg">📄</span>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{doc.nom}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(doc.taille / 1024).toFixed(2)} KB
-                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -969,7 +1000,7 @@ export default function PartenaireDossierDetailPage() {
                     <div
                       key={task._id || task.id}
                       className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow"
-                    >
+        >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -1009,7 +1040,6 @@ export default function PartenaireDossierDetailPage() {
                   ))}
                 </div>
               )}
-            </div>
 
             {/* Messages récents */}
             {messages.length > 0 && (
@@ -1017,7 +1047,7 @@ export default function PartenaireDossierDetailPage() {
                 <h2 className="text-xl font-bold mb-4">💬 Messages récents</h2>
                 <div className="space-y-2">
                   {messages.slice(0, 3).map((message: any) => (
-                    <Link
+        <Link
                       key={message._id || message.id}
                       href={`/partenaire/dossiers/${dossierId}/messages`}
                       className="block p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
@@ -1029,13 +1059,19 @@ export default function PartenaireDossierDetailPage() {
                 </div>
                 <Link href={`/partenaire/dossiers/${dossierId}/messages`} className="block mt-3">
                   <Button variant="outline" className="w-full text-xs">Voir tous les messages</Button>
-                </Link>
-              </div>
+        </Link>
+      </div>
             )}
           </div>
         </div>
-      </main>
 
+        {/* Documents en préparation (brouillons collaboratifs internes) — même affichage que l'admin */}
+        <DossierDraftsPanel
+          dossierId={dossier._id || (dossier as any).id}
+          linkToDedicatedPageHref={`/partenaire/dossiers/${dossierId}/documents-en-preparation`}
+        />
+      </main>
+      
       {/* Modal d'accusé de réception */}
       {showAcknowledgeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1055,24 +1091,18 @@ export default function PartenaireDossierDetailPage() {
               className="w-full p-3 border border-gray-300 rounded-lg mb-4"
               rows={4}
             />
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
               <button
-                onClick={() => {
-                  setShowAcknowledgeModal(false);
-                  setAcknowledgeAction(null);
-                  setAcknowledgeNotes('');
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                onClick={() => { setShowAcknowledgeModal(false); setAcknowledgeAction(null); setAcknowledgeNotes(''); }}
+                className="flex-1 min-h-[44px] px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                 disabled={acknowledging}
               >
                 Annuler
               </button>
               <button
                 onClick={handleAcknowledge}
-                className={`flex-1 px-4 py-2 rounded-lg text-white ${
-                  acknowledgeAction === 'accept' 
-                    ? 'bg-green-600 hover:bg-green-700' 
-                    : 'bg-red-600 hover:bg-red-700'
+                className={`flex-1 min-h-[44px] px-4 py-2 rounded-lg text-white ${
+                  acknowledgeAction === 'accept' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
                 }`}
                 disabled={acknowledging}
               >
@@ -1086,8 +1116,8 @@ export default function PartenaireDossierDetailPage() {
       {/* Modal de décharge */}
       {showDischargeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold mb-4">Se décharger du dossier</h2>
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-3 sm:mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Se décharger du dossier</h2>
             <p className="text-gray-600 mb-4">
               Vous allez vous décharger de ce dossier. Le dossier ne sera <strong>pas supprimé</strong> et restera disponible pour les administrateurs. 
               Vous ne pourrez plus y accéder depuis votre compte partenaire.
@@ -1102,20 +1132,17 @@ export default function PartenaireDossierDetailPage() {
               className="w-full p-3 border border-gray-300 rounded-lg mb-4"
               rows={4}
             />
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
               <button
-                onClick={() => {
-                  setShowDischargeModal(false);
-                  setDischargeNotes('');
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                onClick={() => { setShowDischargeModal(false); setDischargeNotes(''); }}
+                className="flex-1 min-h-[44px] px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                 disabled={discharging}
               >
                 Annuler
               </button>
               <button
                 onClick={handleDischarge}
-                className="flex-1 px-4 py-2 rounded-lg text-white bg-orange-600 hover:bg-orange-700"
+                className="flex-1 min-h-[44px] px-4 py-2 rounded-lg text-white bg-orange-600 hover:bg-orange-700"
                 disabled={discharging}
               >
                 {discharging ? 'Traitement...' : 'Confirmer la décharge'}

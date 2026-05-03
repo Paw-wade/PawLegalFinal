@@ -1,5 +1,6 @@
 // sendSMS.js
 const twilio = require('twilio');
+const { sendPushToUser } = require('./utils/pushService');
 
 // Variables d'environnement
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -183,6 +184,35 @@ function canReceiveSMS(user, smsType) {
   return true;
 }
 
+function resolvePushUrl(type, data = {}, options = {}) {
+  if (data.url && typeof data.url === 'string') return data.url;
+
+  const context = String(options.context || '').toLowerCase();
+  if (context === 'message') return '/client/messages';
+  if (context === 'appointment') return '/client/rendez-vous';
+  if (context === 'dossier' || context === 'document') return '/client/dossiers';
+  if (context === 'task') return '/admin/tasks';
+
+  if (type && type.startsWith('appointment_')) return '/client/rendez-vous';
+  if (type === 'message_received') return '/client/messages';
+  if (type && (type.startsWith('dossier_') || type.startsWith('document_') || type.startsWith('tarification_') || type === 'frais_tarification_exoneres')) {
+    return '/client/dossiers';
+  }
+  if (type && type.startsWith('task_')) return '/admin/tasks';
+
+  return '/client/notifications';
+}
+
+function resolvePushTitle(type, data = {}) {
+  if (data.title && typeof data.title === 'string') return data.title;
+
+  if (type && type.startsWith('appointment_')) return 'Rendez-vous';
+  if (type === 'message_received') return 'Nouveau message';
+  if (type && (type.startsWith('dossier_') || type.startsWith('document_'))) return 'Mise à jour dossier';
+  if (type && type.startsWith('task_')) return 'Tâche';
+  return 'Ada Papers';
+}
+
 /**
  * Envoie un SMS de notification avec template et historique
  * @param {string} to - numéro du destinataire
@@ -225,38 +255,128 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
     if (template) {
       templateCode = template.code;
       templateName = template.name;
-      message = fillTemplate(template.message, data);
+      // For document requests, force the short canonical wording and ignore
+      // any long custom template stored in DB.
+      if (type === 'document_request') {
+        message = fillTemplate('{{isUrgentText}}{{bodyLine1}} Ada Papers.', data);
+      } else {
+        message = fillTemplate(template.message, data);
+      }
     } else {
       // Fallback sur les messages par défaut si aucun template trouvé
       const defaultMessages = {
-        appointment_confirmed: `Bonjour {{name}}, votre rendez-vous est confirmé le {{date}} à {{time}}. Paw Legal.`,
-        appointment_reminder: `Rappel: Vous avez un rendez-vous demain le {{date}} à {{time}}. Paw Legal.`,
-        appointment_cancelled: `Votre rendez-vous du {{date}} à {{time}} a été annulé. Paw Legal.`,
-        appointment_updated: `Votre rendez-vous du {{date}} à {{time}} a été modifié. Paw Legal.`,
-        dossier_created: `Votre dossier "{{dossierTitle}}" a été créé. Référence: {{dossierId}}. Paw Legal.`,
-        dossier_updated: `Votre dossier "{{dossierTitle}}" a été mis à jour. Statut: {{statut}}. Paw Legal.`,
-        dossier_status_changed: `Votre dossier "{{dossierTitle}}" a changé de statut: {{statut}}. Paw Legal.`,
-        document_uploaded: `Un nouveau document a été ajouté à votre dossier "{{dossierTitle}}". Paw Legal.`,
-        document_request: `{{isUrgentText}}Document requis pour votre dossier {{dossierNumero}}. Type: {{documentType}}. Connectez-vous pour envoyer. Paw Legal.`,
-        document_received: `Document "{{documentName}}" reçu pour le dossier {{dossierNumero}}. Paw Legal.`,
-        message_received: `Vous avez reçu un nouveau message de {{senderName}}. Connectez-vous pour le consulter. Paw Legal.`,
-        task_assigned: `Une nouvelle tâche vous a été assignée: {{taskTitle}}. Paw Legal.`,
-        task_reminder: `Rappel: La tâche "{{taskTitle}}" est due le {{dateEcheance}}. Paw Legal.`,
-        task_overdue: `⚠️ ALERTE: La tâche "{{taskTitle}}" assignée à {{assignedTo}} est en retard de {{daysOverdue}} jour(s). Échéance: {{deadlineDate}}. Paw Legal.`,
+        appointment_confirmed: `Bonjour {{name}}, votre rendez-vous est confirmé le {{date}} à {{time}}. Ada Papers.`,
+        appointment_created: `Bonjour {{name}}, votre rendez-vous a été enregistré le {{date}} à {{time}}. Ada Papers.`,
+        appointment_reminder: `Rappel: Vous avez un rendez-vous demain le {{date}} à {{time}}. Ada Papers.`,
+        appointment_cancelled: `Votre rendez-vous du {{date}} à {{time}} a été annulé. Ada Papers.`,
+        appointment_updated: `Votre rendez-vous du {{date}} à {{time}} a été modifié. Ada Papers.`,
+        dossier_created: `Votre dossier "{{dossierTitle}}" a été créé. Référence: {{dossierId}}. Ada Papers.`,
+        dossier_updated: `Votre dossier "{{dossierTitle}}" a été mis à jour. Statut: {{statut}}. Ada Papers.`,
+        dossier_status_changed: `Votre dossier "{{dossierTitle}}" a changé de statut: {{statut}}. Ada Papers.`,
+        document_uploaded: `Un nouveau document a été ajouté à votre dossier "{{dossierTitle}}". Ada Papers.`,
+        document_request: `{{isUrgentText}}{{bodyLine1}} Ada Papers.`,
+        document_received: `Document "{{documentName}}" reçu pour le dossier {{dossierNumero}}. Ada Papers.`,
+        message_received: `Vous avez reçu un nouveau message de {{senderName}}. Ada Papers.`,
+        task_assigned: `Une nouvelle tâche vous a été assignée: {{taskTitle}}. Ada Papers.`,
+        task_reminder: `Rappel: La tâche "{{taskTitle}}" est due le {{dateEcheance}}. Ada Papers.`,
+        task_overdue: `⚠️ ALERTE: La tâche "{{taskTitle}}" assignée à {{assignedTo}} est en retard de {{daysOverdue}} jour(s). Échéance: {{deadlineDate}}. Ada Papers.`,
+        /** Fallback si le template DB `password_reset_temp` est absent ou inactif */
+        password_reset_temp:
+          'Bonjour {{firstName}} {{lastName}}, votre code de vérification pour réinitialiser votre mot de passe est : {{tempPassword}}. Ce code est valable 10 minutes. Ada Papers.',
+        tarification_choice_reminder: `Votre dossier "{{dossierTitle}}" est en cours. Choisissez votre formule tarifaire dans votre espace client. Ada Papers.`,
+        /** Relance admin : message court (1 segment GSM ~160c) — {{numero}} = ref. dossier courte */
+        tarification_payment_reminder: `Rappel Ada Papers: reglement tarif dossier {{numero}} en attente. Espace client > Tarification.`,
+        frais_tarification_exoneres: `Votre dossier "{{dossierTitle}}" : vous êtes exonéré(e) des frais. Ada Papers.`,
       };
       
-      const defaultTemplate = defaultMessages[type] || data.message || 'Vous avez reçu une notification de Paw Legal.';
+      const defaultTemplate = defaultMessages[type] || data.message || 'Vous avez reçu une notification de Ada Papers.';
       message = fillTemplate(defaultTemplate, data);
     }
   } catch (error) {
     console.error('Erreur lors du chargement du template:', error);
     // Fallback sur un message simple
-    message = data.message || 'Vous avez reçu une notification de Paw Legal.';
+    message = data.message || 'Vous avez reçu une notification de Ada Papers.';
   }
   
   // Envoyer le SMS
   let result;
   let historyRecord;
+
+  // Priorité au push: si un push est envoyé, on n'envoie pas de SMS.
+  // Exception: conserver systématiquement le SMS pour l'envoi de code/mot de passe.
+  const shouldPreferPush =
+    options.preferPush !== false &&
+    Boolean(options.userId) &&
+    type !== 'password_reset_temp' &&
+    type !== 'otp';
+
+  // Règle métier: pour "nouveau message", jamais de SMS client.
+  // On tente le push si possible, puis on s'arrête sans fallback SMS.
+  if (type === 'message_received') {
+    try {
+      if (options.userId) {
+        const pushPayload = {
+          title: resolvePushTitle(type, data),
+          body: message,
+          url: resolvePushUrl(type, data, options),
+          type
+        };
+        const pushResult = await sendPushToUser(options.userId, pushPayload);
+        return {
+          success: true,
+          skipped: true,
+          reason: pushResult?.sent > 0 ? 'push_sent_sms_skipped' : 'push_unavailable_sms_skipped',
+          pushSent: pushResult?.sent || 0,
+          message: pushResult?.sent > 0
+            ? 'Notification push envoyée; SMS ignoré.'
+            : 'Push indisponible; SMS ignoré selon la règle métier.'
+        };
+      }
+      return {
+        success: true,
+        skipped: true,
+        reason: 'sms_disabled_for_message_received',
+        pushSent: 0,
+        message: 'SMS désactivé pour les notifications de nouveau message.'
+      };
+    } catch (pushError) {
+      console.error('⚠️ Échec push (message_received), SMS tout de même ignoré:', pushError?.message || pushError);
+      return {
+        success: true,
+        skipped: true,
+        reason: 'push_error_sms_skipped',
+        pushSent: 0,
+        message: 'Erreur push; SMS ignoré selon la règle métier.'
+      };
+    }
+  }
+
+  if (shouldPreferPush) {
+    try {
+      const pushPayload = {
+        title: resolvePushTitle(type, data),
+        body: message,
+        url: resolvePushUrl(type, data, options),
+        type
+      };
+      const pushResult = await sendPushToUser(options.userId, pushPayload);
+      if (pushResult && pushResult.sent > 0) {
+        console.log(
+          `✅ Push envoyé (${pushResult.sent}) pour ${type}; SMS non envoyé (userId=${options.userId})`
+        );
+        return {
+          success: true,
+          skipped: true,
+          reason: 'push_sent',
+          pushSent: pushResult.sent,
+          message: 'Notification push envoyée; SMS ignoré.'
+        };
+      }
+    } catch (pushError) {
+      console.error('⚠️ Échec envoi push prioritaire, fallback SMS:', pushError?.message || pushError);
+      // fallback SMS si le push échoue
+    }
+  }
   
   try {
     result = await sendSMS(to, message);
@@ -314,10 +434,54 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
   }
 }
 
+/**
+ * Enregistre un SMS sortant dans l’historique admin (à appeler après sendSMS si sendNotificationSMS n’est pas utilisé).
+ */
+async function recordOutboundSms({
+  to,
+  message,
+  templateCode = 'manual',
+  templateName = 'SMS',
+  variables = {},
+  twilioSid,
+  twilioStatus,
+  status = 'sent',
+  error,
+  sentBy,
+  sentToUser,
+  context = 'other',
+  contextId = null,
+}) {
+  const SmsHistory = require('./models/SmsHistory');
+  const mongoose = require('mongoose');
+  const doc = {
+    to,
+    message,
+    templateCode,
+    templateName,
+    variables,
+    status,
+    twilioSid: twilioSid || undefined,
+    twilioStatus: twilioStatus || undefined,
+    error: error || undefined,
+    context: context || 'other',
+    contextId: contextId || undefined,
+    sentAt: new Date(),
+  };
+  if (sentBy && mongoose.Types.ObjectId.isValid(String(sentBy))) {
+    doc.sentBy = sentBy;
+  }
+  if (sentToUser && mongoose.Types.ObjectId.isValid(String(sentToUser))) {
+    doc.sentToUser = sentToUser;
+  }
+  return SmsHistory.create(doc);
+}
+
 module.exports = {
   sendSMS,
   sendNotificationSMS,
   formatPhoneNumber,
   fillTemplate,
-  canReceiveSMS
+  canReceiveSMS,
+  recordOutboundSms,
 };

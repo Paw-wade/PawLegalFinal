@@ -5,10 +5,13 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
+import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, userAPI } from '@/lib/api';
+import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
+import { SUGGESTED_STEPS_BY_CATEGORY, DossierCategorie } from '@/lib/dossierStepsConfig';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -19,6 +22,24 @@ function Button({ children, variant = 'default', className = '', ...props }: any
   };
   return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} {...props}>{children}</button>;
 }
+
+const STATUT_STEPS = [
+  { id: 'en_attente_onboarding', label: "En attente d'onboarding" },
+  { id: 'en_cours_instruction', label: "En cours d'instruction" },
+  { id: 'pieces_manquantes', label: 'Pièces manquantes' },
+  { id: 'dossier_complet', label: 'Dossier Complet' },
+  { id: 'depose', label: 'Déposé' },
+  { id: 'reception_confirmee', label: 'Réception confirmée' },
+  { id: 'complement_demande', label: 'Complément demandé' },
+  { id: 'decision_defavorable', label: 'Décision défavorable' },
+  { id: 'communication_motifs', label: 'Communication des Motifs' },
+  { id: 'recours_preparation', label: 'Recours en préparation' },
+  { id: 'refere_mesures_utiles', label: 'Référé Mesures Utiles' },
+  { id: 'refere_suspension_rep', label: 'Référé suspension et REP' },
+  { id: 'gain_cause', label: 'Gain de cause' },
+  { id: 'rejet', label: 'Rejet' },
+  { id: 'decision_favorable', label: 'Décision favorable' },
+];
 
 export default function AdminDossierDetailPage() {
   const { data: session, status } = useSession();
@@ -35,12 +56,26 @@ export default function AdminDossierDetailPage() {
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [documentRequests, setDocumentRequests] = useState<any[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [requestActionLoadingId, setRequestActionLoadingId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
+  const [isExportingZip, setIsExportingZip] = useState(false);
   const [selectedDocumentRequestNotification, setSelectedDocumentRequestNotification] = useState<any>(null);
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState(false);
   const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<any>(null);
   const [showDocumentPreviewModal, setShowDocumentPreviewModal] = useState(false);
+  const [showStepsModal, setShowStepsModal] = useState(false);
+  const [localSteps, setLocalSteps] = useState<any[]>([]);
+  const [editingTitre, setEditingTitre] = useState(false);
+  const [titreEditValue, setTitreEditValue] = useState('');
+  const [savingTitre, setSavingTitre] = useState(false);
+  const [titreEditError, setTitreEditError] = useState<string | null>(null);
+  const [strictPrivacyMode, setStrictPrivacyMode] = useState(false);
+
+  const maskStrict = (value: string, fallback: string = 'N/A') => {
+    if (!strictPrivacyMode) return value || fallback;
+    return value ? '••••••' : fallback;
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -81,20 +116,14 @@ export default function AdminDossierDetailPage() {
     }
   }, [session, status, router, dossierId]);
 
-  // Rafraîchissement automatique toutes les 30 secondes
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (session || localStorage.getItem('token')) {
-        loadDossier();
-        loadNotifications();
-        loadMessagesForDossier();
-        loadDocumentRequests();
-        loadDocuments();
-      }
-    }, 30000);
+    if (typeof window === 'undefined') return;
+    const currentUserId = (session?.user as any)?.id || 'admin';
+    const stored = localStorage.getItem(`adminDossiersStrictPrivacy:${currentUserId}`);
+    setStrictPrivacyMode(stored === 'true');
+  }, [session]);
 
-    return () => clearInterval(interval);
-  }, [session, dossierId]);
+  // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
   const loadDossier = async () => {
     if (!dossierId) return;
@@ -111,6 +140,7 @@ export default function AdminDossierDetailPage() {
       
       if (response.data.success) {
         setDossier(response.data.dossier);
+        setLocalSteps(response.data.dossier.etapesSupplementaires || []);
       } else {
         setError('Erreur lors du chargement du dossier');
       }
@@ -198,6 +228,104 @@ export default function AdminDossierDetailPage() {
     }
   };
 
+  const handleCancelDocumentRequest = async (requestId: string) => {
+    const confirmCancel = window.confirm('Confirmer l’annulation de cette demande de document ?');
+    if (!confirmCancel) return;
+
+    try {
+      setRequestActionLoadingId(requestId);
+      const response = await documentRequestsAPI.cancelRequest(requestId);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Impossible d’annuler la demande');
+      }
+      await loadDocumentRequests();
+    } catch (err: any) {
+      console.error('Erreur lors de l’annulation de la demande:', err);
+      alert(err.response?.data?.message || err.message || 'Erreur lors de l’annulation de la demande');
+    } finally {
+      setRequestActionLoadingId(null);
+    }
+  };
+
+  const handleDeleteReceivedDocument = async (request: any) => {
+    const requestId = request?._id || request?.id;
+    if (!requestId) return;
+
+    const confirmDelete = window.confirm('Supprimer le document reçu et remettre la demande en attente ?');
+    if (!confirmDelete) return;
+
+    try {
+      setRequestActionLoadingId(requestId);
+      const response = await documentRequestsAPI.removeReceivedDocument(requestId);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Impossible de supprimer le document reçu');
+      }
+      await loadDocumentRequests();
+      await loadDocuments();
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression du document reçu:', err);
+      alert(err.response?.data?.message || err.message || 'Erreur lors de la suppression du document reçu');
+    } finally {
+      setRequestActionLoadingId(null);
+    }
+  };
+
+  const handleExportDocumentsZip = async () => {
+    if (!documents || documents.length === 0) {
+      alert('Aucun document à exporter.');
+      return;
+    }
+
+    setIsExportingZip(true);
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      const extFromMime = (mime?: string) => {
+        const value = String(mime || '').toLowerCase();
+        if (value.includes('pdf')) return '.pdf';
+        if (value.includes('wordprocessingml')) return '.docx';
+        if (value.includes('msword')) return '.doc';
+        if (value.includes('spreadsheetml')) return '.xlsx';
+        if (value.includes('ms-excel')) return '.xls';
+        if (value.includes('jpeg')) return '.jpg';
+        if (value.includes('png')) return '.png';
+        return '';
+      };
+      const hasExtension = (name: string) => /\.[a-z0-9]{2,8}$/i.test(name);
+
+      for (const doc of documents) {
+        const docId = doc._id || doc.id;
+        if (!docId) continue;
+
+        const response = await documentsAPI.downloadDocument(docId);
+        const blob = new Blob([response.data]);
+        const fallbackName = `document-${docId}`;
+        const baseName = String(doc.nom || doc.nomFichier || fallbackName).trim() || fallbackName;
+        const sourceName = String(doc.nomFichier || '').trim();
+        const sourceExtMatch = sourceName.match(/(\.[a-z0-9]{2,8})$/i);
+        const sourceExt = sourceExtMatch ? sourceExtMatch[1] : '';
+        const inferredExt = sourceExt || extFromMime(doc.typeMime);
+        const fileName = hasExtension(baseName) ? baseName : `${baseName}${inferredExt}`;
+        zip.file(fileName, blob);
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = window.URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `dossier-${dossier?.numero || dossierId}-documents.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erreur lors de l’export ZIP des documents:', error);
+      alert('Erreur lors de l’export ZIP. Vérifiez que tous les documents sont accessibles.');
+    } finally {
+      setIsExportingZip(false);
+    }
+  };
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -236,23 +364,415 @@ export default function AdminDossierDetailPage() {
     );
   }
 
+  const currentUserId = (session?.user as any)?._id || (session?.user as any)?.id || null;
+  const displayStatutLabel = (() => {
+    const rawStatut = dossier?.statut;
+    const customStep = (dossier?.etapesSupplementaires || []).find(
+      (step: any) => step?.id === rawStatut || step?.label === rawStatut
+    );
+    return customStep?.label || getStatutLabel(rawStatut);
+  })();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
-      <main className="w-full px-4 py-8 overflow-x-hidden">
+      {/* Modal d'édition des étapes du dossier */}
+      {showStepsModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Éditer les étapes du dossier</h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Ces étapes sont internes Ada Papers et servent à suivre l&apos;avancement du dossier.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStepsModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <span className="sr-only">Fermer</span>
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {/* Étapes standard correspondant au statut du dossier */}
+              <div className="border border-blue-100 rounded-xl p-3 bg-blue-50/40">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-blue-800">
+                    Étapes liées au <span className="underline">statut du dossier</span>
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {STATUT_STEPS.map((step) => {
+                    const alreadySelected = localSteps.some(
+                      (s) => s.id === step.id || s.label === step.label
+                    );
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        disabled={alreadySelected}
+                        onClick={() => {
+                          setLocalSteps((prev) => [
+                            ...prev,
+                            {
+                              id: step.id,
+                              label: step.label,
+                              addedBy: currentUserId,
+                              createdAt: new Date().toISOString(),
+                            },
+                          ]);
+                        }}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          alreadySelected
+                            ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                            : 'border-blue-200 text-blue-800 bg-white hover:bg-blue-50'
+                        }`}
+                      >
+                        {step.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Étapes suggérées selon la catégorie */}
+              {dossier.categorie && (SUGGESTED_STEPS_BY_CATEGORY as any)[dossier.categorie as DossierCategorie] && (
+                <div className="border border-orange-100 rounded-xl p-3 bg-orange-50/60">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-orange-800">
+                      Étapes suggérées pour la catégorie&nbsp;
+                      <span className="underline">
+                        {dossier.categorie.replace(/_/g, ' ')}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(SUGGESTED_STEPS_BY_CATEGORY as any)[dossier.categorie as DossierCategorie].map((step: any) => {
+                      const alreadySelected = localSteps.some(
+                        (s) => s.id === step.id || s.label === step.label
+                      );
+                      return (
+                        <button
+                          key={step.id}
+                          type="button"
+                          disabled={alreadySelected}
+                          onClick={() => {
+                            setLocalSteps((prev) => [
+                              ...prev,
+                              {
+                                id: step.id,
+                                label: step.label,
+                                addedBy: currentUserId,
+                                createdAt: new Date().toISOString(),
+                              },
+                            ]);
+                          }}
+                          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                            alreadySelected
+                              ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                              : 'border-orange-200 text-orange-800 bg-white hover:bg-orange-50'
+                          }`}
+                        >
+                          {step.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Ajout manuel d'une étape */}
+              <div className="border border-gray-100 rounded-xl p-3">
+                <p className="text-xs font-semibold text-gray-700 mb-2">Ajouter une étape personnalisée</p>
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = e.currentTarget;
+                    const input = form.elements.namedItem('newStep') as HTMLInputElement | null;
+                    if (!input || !input.value.trim()) return;
+                    const label = input.value.trim();
+                    setLocalSteps((prev) => [
+                      ...prev,
+                      {
+                        id: `custom_${Date.now()}`,
+                        label,
+                        addedBy: currentUserId,
+                        createdAt: new Date().toISOString(),
+                      },
+                    ]);
+                    input.value = '';
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    type="text"
+                    name="newStep"
+                    placeholder="Ex : Préparation du recours CNDA"
+                    className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500/60 focus:border-orange-400"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 text-xs font-medium rounded-md bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+                  >
+                    Ajouter
+                  </button>
+                </form>
+              </div>
+
+              {/* Liste des étapes actuelles */}
+              <div className="border border-gray-100 rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-700">
+                    Étapes actuellement enregistrées ({localSteps.length})
+                  </p>
+                </div>
+                {localSteps.length === 0 ? (
+                  <p className="text-xs text-gray-400">
+                    Aucune étape enregistrée pour le moment. Utilisez les suggestions ou ajoutez vos propres étapes.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {localSteps.map((step, index) => (
+                      <li
+                        key={step.id || index}
+                        className="flex items-center justify-between gap-3 px-2 py-1.5 rounded-md bg-gray-50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-gray-400 font-mono">
+                            {(index + 1).toString().padStart(2, '0')}
+                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-xs text-gray-800">{step.label}</span>
+                            {step.date && (
+                              <span className="text-[10px] text-gray-500">
+                                ⏰ Échéance : {new Date(step.date).toLocaleDateString('fr-FR')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={step.date ? new Date(step.date).toISOString().slice(0, 10) : ''}
+                            onChange={(e) =>
+                              setLocalSteps((prev) =>
+                                prev.map((s, i) =>
+                                  i === index ? { ...s, date: e.target.value } : s
+                                )
+                              )
+                            }
+                            className="text-[10px] px-2 py-1 rounded border border-gray-300 bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLocalSteps((prev) => prev.filter((_, i) => i !== index))
+                            }
+                            className="text-[11px] text-red-500 hover:text-red-600"
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
+              <button
+                type="button"
+                onClick={() => setShowStepsModal(false)}
+                className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 hover:bg-white"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await dossiersAPI.updateDossier(dossier._id, {
+                      etapesSupplementaires: localSteps.map((step) => ({
+                        id: step.id,
+                        label: step.label,
+                        date: step.date || null,
+                      })),
+                    });
+                    setShowStepsModal(false);
+                    await loadDossier();
+                  } catch (err) {
+                    console.error("Erreur lors de l'enregistrement des étapes:", err);
+                  }
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-md bg-orange-500 text-white hover:bg-orange-600"
+              >
+                Enregistrer les étapes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <main className="w-full max-w-[100vw] px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
+        {/* Bannière visible : accès document en préparation accordé (pour cohérence affichage) */}
+        {(() => {
+          const draftAccessNotifs = (notifications || []).filter((n: any) => n.type === 'draft_access_granted' && !n.lu);
+          if (draftAccessNotifs.length === 0) return null;
+          return (
+            <div className="mb-6 rounded-xl border-2 border-orange-400 bg-gradient-to-r from-orange-50 to-amber-50 shadow-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white text-lg">✓</div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-orange-900 text-base mb-1">Accès accordé à un document en préparation</h3>
+                  <p className="text-sm text-orange-800 mb-2">
+                    {draftAccessNotifs.length === 1 ? draftAccessNotifs[0].message : `Vous avez reçu des accès à ${draftAccessNotifs.length} document(s) en préparation sur ce dossier.`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      for (const notif of draftAccessNotifs) {
+                        try { await notificationsAPI.markAsRead(notif._id); } catch (_) {}
+                      }
+                      loadNotifications();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
+                  >
+                    J'ai compris
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* En-tête amélioré */}
         <div className="mb-6">
-          <Link href="/admin/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Retour aux dossiers
-          </Link>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <Link href={`/admin/dossiers?dossierId=${encodeURIComponent(dossier._id || dossier.id || '')}`} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Retour à la vue simplifiée
+            </Link>
+            <Link href="/admin/dossiers" className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 transition-colors">
+              Vue liste complète
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !strictPrivacyMode;
+                setStrictPrivacyMode(next);
+                if (typeof window !== 'undefined') {
+                  const currentUserId = (session?.user as any)?.id || 'admin';
+                  localStorage.setItem(`adminDossiersStrictPrivacy:${currentUserId}`, String(next));
+                }
+              }}
+              className={`inline-flex items-center gap-2 text-xs px-2 py-1 rounded-md border transition-colors ${
+                strictPrivacyMode
+                  ? 'border-gray-300 bg-gray-900 text-white hover:bg-gray-800'
+                  : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
+              }`}
+              title="Masquer strictement les noms et coordonnées"
+            >
+              {strictPrivacyMode ? 'Confidentialité stricte: ON' : 'Confidentialité stricte: OFF'}
+            </button>
+          </div>
           
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6 overflow-hidden">
-            <div className="flex items-start justify-between mb-4">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-3xl font-bold text-foreground">{dossier.titre}</h1>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                  {editingTitre ? (
+                    <div className="flex flex-col gap-2 w-full min-w-0 sm:max-w-2xl">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          value={titreEditValue}
+                          onChange={(e) => {
+                            setTitreEditValue(e.target.value);
+                            setTitreEditError(null);
+                          }}
+                          className="flex-1 min-w-[12rem] rounded-lg border border-gray-300 px-3 py-2 text-lg font-semibold text-foreground focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                          placeholder="Nom du dossier"
+                          disabled={savingTitre}
+                          maxLength={500}
+                          autoFocus
+                        />
+                        <Button
+                          type="button"
+                          variant="default"
+                          className="shrink-0"
+                          disabled={savingTitre}
+                          onClick={async () => {
+                            const trimmed = titreEditValue.trim();
+                            if (!trimmed) {
+                              setTitreEditError('Le nom du dossier ne peut pas être vide.');
+                              return;
+                            }
+                            setSavingTitre(true);
+                            setTitreEditError(null);
+                            try {
+                              const res = await dossiersAPI.updateDossier(dossierId, { titre: trimmed });
+                              if (res.data?.success && res.data?.dossier) {
+                                setDossier(res.data.dossier);
+                                setLocalSteps(res.data.dossier.etapesSupplementaires || []);
+                                setEditingTitre(false);
+                              } else {
+                                setTitreEditError(res.data?.message || 'Erreur lors de l’enregistrement');
+                              }
+                            } catch (err: any) {
+                              setTitreEditError(err.response?.data?.message || 'Erreur lors de l’enregistrement');
+                            } finally {
+                              setSavingTitre(false);
+                            }
+                          }}
+                        >
+                          {savingTitre ? 'Enregistrement…' : 'Enregistrer'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="shrink-0"
+                          disabled={savingTitre}
+                          onClick={() => {
+                            setEditingTitre(false);
+                            setTitreEditError(null);
+                            setTitreEditValue(dossier.titre || '');
+                          }}
+                        >
+                          Annuler
+                        </Button>
+                      </div>
+                      {titreEditError && (
+                        <p className="text-sm text-red-600">{titreEditError}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">
+                        {strictPrivacyMode ? 'Dossier masqué' : (dossier.titre || 'Sans titre')}
+                      </h1>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTitreEditValue(dossier.titre || '');
+                          setTitreEditError(null);
+                          setEditingTitre(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-orange-300"
+                        title="Renommer le dossier"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                        Renommer
+                      </button>
+                    </>
+                  )}
                   {(dossier.numero || dossier.numeroDossier) && (
                     <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-semibold">
                       N° {dossier.numero || dossier.numeroDossier}
@@ -263,64 +783,54 @@ export default function AdminDossierDetailPage() {
                   <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
                 )}
                 
-                {/* Barre de progression */}
-                {(() => {
-                  const progress = getDossierProgress(dossier.statut);
-                  return (
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-muted-foreground font-medium">Progression du dossier</span>
-                        <span className="font-bold text-foreground">{progress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                        <div 
-                          className={`h-3 rounded-full transition-all duration-500 ${
-                            progress >= 80 ? 'bg-green-500' : 
-                            progress >= 50 ? 'bg-blue-500' : 
-                            progress >= 25 ? 'bg-yellow-500' : 
-                            'bg-gray-400'
-                          }`}
-                          style={{width: `${Math.min(progress, 100)}%`, maxWidth: '100%'}}
-                        ></div>
-                      </div>
+                {/* Barre de progression basée sur les étapes définies pour ce dossier */}
+                {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
+                  <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-muted-foreground">Étapes définies pour ce dossier</p>
                     </div>
-                  );
-                })()}
-                
-                {/* Timeline */}
-                {(() => {
-                  const steps = getTimelineSteps(dossier.statut);
-                  return (
-                    <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
-                      <div className="flex items-center gap-2 min-w-max">
-                        {steps.map((step, index) => (
-                          <div key={step.key} className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex items-center gap-4 min-w-max">
+                      {dossier.etapesSupplementaires.map((step: any, index: number) => {
+                        const isCurrent =
+                          dossier.statut &&
+                          (dossier.statut === step.id || dossier.statut === step.label);
+                        return (
+                          <div key={step.id || index} className="flex items-center gap-2 flex-shrink-0">
                             <div className="flex flex-col items-center gap-1">
-                              <span className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></span>
-                              <span className={`text-[10px] font-medium whitespace-nowrap ${
-                                step.completed ? 'text-green-700' : 'text-gray-400'
-                              }`}>
+                              <span
+                                className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                                  isCurrent
+                                    ? 'bg-blue-500 ring-2 ring-blue-300'
+                                    : 'bg-gray-300'
+                                }`}
+                              ></span>
+                              <span
+                                className={`text-[10px] font-medium whitespace-nowrap ${
+                                  isCurrent ? 'text-blue-700' : 'text-gray-500'
+                                }`}
+                              >
                                 {step.label}
                               </span>
+                              {step.date && (
+                                <span className="text-[9px] text-gray-400 whitespace-nowrap">
+                                  ⏰ {new Date(step.date).toLocaleDateString('fr-FR')}
+                                </span>
+                              )}
                             </div>
-                            {index < steps.length - 1 && (
-                              <div className={`h-0.5 w-6 flex-shrink-0 ${
-                                step.completed ? 'bg-green-500' : 'bg-gray-300'
-                              }`}></div>
+                            {index < dossier.etapesSupplementaires.length - 1 && (
+                              <div className="h-0.5 w-6 flex-shrink-0 bg-gray-300"></div>
                             )}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
-                  );
-                })()}
+                  </div>
+                )}
                 
                 {/* Statuts et informations rapides */}
                 <div className="flex flex-wrap items-center gap-3">
                   <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getStatutColor(dossier.statut)}`}>
-                    {getStatutLabel(dossier.statut)}
+                    {displayStatutLabel}
                   </span>
                   {dossier.priorite && (
                     <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getPrioriteColor(dossier.priorite)}`}>
@@ -411,7 +921,18 @@ export default function AdminDossierDetailPage() {
         </div>
 
         {/* Vue détaillée du dossier */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-6">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-8 mb-6 min-w-0">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
+            <h2 className="text-xl font-bold min-w-0 break-words">Vue détaillée du dossier</h2>
+            <button
+              type="button"
+              onClick={() => setShowStepsModal(true)}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 min-h-[44px] rounded-md border border-gray-300 text-xs font-medium bg-white hover:bg-gray-50 w-full sm:w-auto shrink-0"
+            >
+              <span>✏️</span>
+              <span>Éditer les étapes</span>
+            </button>
+          </div>
           <DossierDetailView dossier={dossier} variant="admin" />
         </div>
 
@@ -423,14 +944,14 @@ export default function AdminDossierDetailPage() {
         {/* Informations complètes du dossier - Section visible */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
           <h2 className="text-xl font-bold mb-4">📋 Informations Complètes du Dossier</h2>
-          <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
             <div>
               <p className="text-sm text-muted-foreground font-semibold">Numéro de dossier</p>
               <p className="font-bold text-lg text-primary">{dossier.numero || dossier._id}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground font-semibold">Titre</p>
-              <p className="font-medium">{dossier.titre || 'Sans titre'}</p>
+              <p className="font-medium">{strictPrivacyMode ? 'Dossier masqué' : (dossier.titre || 'Sans titre')}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground font-semibold">Catégorie</p>
@@ -522,24 +1043,50 @@ export default function AdminDossierDetailPage() {
 
         {/* Coordonnées client complètes */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4">👤 Coordonnées Client</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6 pb-4 border-b border-gray-100">
+            {dossier.user ? (
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border-2 border-primary/20">
+                  <UserAvatarDisplay
+                    user={dossier.user}
+                    alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Client'}
+                    fallback={
+                      <span className="text-xl font-bold text-primary">
+                        {strictPrivacyMode ? '••' : (`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤')}
+                      </span>
+                    }
+                  />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold">👤 Coordonnées Client</h2>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {strictPrivacyMode
+                      ? 'Titulaire masqué'
+                      : ([dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email)}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <h2 className="text-xl font-bold">👤 Coordonnées Client</h2>
+            )}
+          </div>
           {dossier.user ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
-                <p className="font-medium">{dossier.user.firstName || 'N/A'}</p>
+                <p className="font-medium">{strictPrivacyMode ? '••••••' : (dossier.user.firstName || 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Nom</p>
-                <p className="font-medium">{dossier.user.lastName || 'N/A'}</p>
+                <p className="font-medium">{strictPrivacyMode ? '••••••' : (dossier.user.lastName || 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Email</p>
-                <p className="font-medium">{dossier.user.email || 'N/A'}</p>
+                <p className="font-medium">{maskStrict(dossier.user.email || '', 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Téléphone</p>
-                <p className="font-medium">{dossier.user.phone || 'N/A'}</p>
+                <p className="font-medium">{maskStrict(dossier.user.phone || '', 'N/A')}</p>
               </div>
               {dossier.user.dateNaissance && (
                 <div>
@@ -641,22 +1188,22 @@ export default function AdminDossierDetailPage() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
-                <p className="font-medium">{dossier.clientPrenom || 'N/A'}</p>
+                <p className="font-medium">{strictPrivacyMode ? '••••••' : (dossier.clientPrenom || 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Nom</p>
-                <p className="font-medium">{dossier.clientNom || 'N/A'}</p>
+                <p className="font-medium">{strictPrivacyMode ? '••••••' : (dossier.clientNom || 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Email</p>
-                <p className="font-medium">{dossier.clientEmail || 'N/A'}</p>
+                <p className="font-medium">{maskStrict(dossier.clientEmail || '', 'N/A')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground font-semibold">Téléphone</p>
-                <p className="font-medium">{dossier.clientTelephone || 'N/A'}</p>
+                <p className="font-medium">{maskStrict(dossier.clientTelephone || '', 'N/A')}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-sm text-orange-600 font-semibold">⚠️ Client non inscrit</p>
@@ -669,21 +1216,21 @@ export default function AdminDossierDetailPage() {
         </div>
 
         {/* Motif et catégorie */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
           <h2 className="text-xl font-bold mb-4">📑 Motif et Nature du Dossier</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 min-w-0">
+            <div className="min-w-0">
               <p className="text-sm text-muted-foreground font-semibold">Catégorie principale</p>
-              <p className="font-medium text-lg">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
+              <p className="font-medium text-base sm:text-lg break-words hyphens-auto">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-muted-foreground font-semibold">Type de demande</p>
-              <p className="font-medium text-lg">{dossier.type || 'Non spécifié'}</p>
+              <p className="font-medium text-base sm:text-lg break-words hyphens-auto">{dossier.type || 'Non spécifié'}</p>
             </div>
             {dossier.categorie && (
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2 min-w-0">
                 <p className="text-sm text-muted-foreground font-semibold">Code catégorie</p>
-                <p className="font-medium text-sm text-muted-foreground">{dossier.categorie}</p>
+                <p className="font-medium text-sm text-muted-foreground break-all">{dossier.categorie}</p>
               </div>
             )}
           </div>
@@ -696,7 +1243,7 @@ export default function AdminDossierDetailPage() {
             <div className="space-y-3">
               {dossier.rendezVous.map((rdv: any, index: number) => (
                 <div key={index} className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground font-semibold">Date</p>
                       <p className="font-medium">
@@ -800,12 +1347,38 @@ export default function AdminDossierDetailPage() {
                         <span className={`inline-block mt-2 px-2 py-1 rounded text-xs font-semibold ${
                           request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                           request.status === 'received' ? 'bg-green-100 text-green-800' :
+                          request.status === 'cancelled' ? 'bg-gray-200 text-gray-700' :
                           'bg-blue-100 text-blue-800'
                         }`}>
                           {request.status === 'pending' ? 'En attente' :
                            request.status === 'received' ? '✅ Document reçu' :
+                           request.status === 'cancelled' ? 'Annulée' :
                            'Envoyé'}
                         </span>
+
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {request.status === 'pending' && (
+                            <Button
+                              variant="outline"
+                              className="text-xs h-8"
+                              disabled={requestActionLoadingId === (request._id || request.id)}
+                              onClick={() => handleCancelDocumentRequest(request._id || request.id)}
+                            >
+                              {requestActionLoadingId === (request._id || request.id) ? 'Annulation...' : 'Annuler la demande'}
+                            </Button>
+                          )}
+
+                          {request.status === 'received' && request.document && (
+                            <Button
+                              variant="outline"
+                              className="text-xs h-8 border-red-200 text-red-700 hover:bg-red-50"
+                              disabled={requestActionLoadingId === (request._id || request.id)}
+                              onClick={() => handleDeleteReceivedDocument(request)}
+                            >
+                              {requestActionLoadingId === (request._id || request.id) ? 'Suppression...' : 'Supprimer le document reçu'}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -816,7 +1389,17 @@ export default function AdminDossierDetailPage() {
 
           {/* Documents du dossier */}
           <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
-            <h2 className="text-xl font-bold mb-4">📁 Documents du dossier</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <h2 className="text-xl font-bold">📁 Documents du dossier</h2>
+              <Button
+                variant="outline"
+                className="text-xs h-8 w-full sm:w-auto"
+                onClick={handleExportDocumentsZip}
+                disabled={isLoadingDocuments || isExportingZip || documents.length === 0}
+              >
+                {isExportingZip ? 'Préparation ZIP...' : '🗜️ Télécharger tout (ZIP)'}
+              </Button>
+            </div>
             {isLoadingDocuments ? (
               <p className="text-sm text-muted-foreground">Chargement...</p>
             ) : documents.length === 0 ? (
@@ -826,21 +1409,18 @@ export default function AdminDossierDetailPage() {
                 {documents.map((doc: any) => (
                   <div
                     key={doc._id || doc.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 min-w-0"
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-lg">📄</span>
+                      <span className="text-lg flex-shrink-0">📄</span>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{doc.nom}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(doc.taille / 1024).toFixed(2)} KB
-                        </p>
+                        <p className="font-medium text-sm break-words">{doc.nom}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto shrink-0">
                       <Button
                         variant="outline"
-                        className="text-xs h-8"
+                        className="text-xs h-8 w-full sm:w-auto"
                         onClick={() => {
                           setSelectedDocumentForPreview(doc);
                           setShowDocumentPreviewModal(true);
@@ -850,7 +1430,7 @@ export default function AdminDossierDetailPage() {
                       </Button>
                       <Button
                         variant="outline"
-                        className="text-xs h-8"
+                        className="text-xs h-8 w-full sm:w-auto"
                         onClick={async () => {
                           try {
                             const response = await documentsAPI.downloadDocument(doc._id || doc.id);
@@ -878,6 +1458,9 @@ export default function AdminDossierDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Documents en préparation (brouillons collaboratifs internes) */}
+        <DossierDraftsPanel dossierId={dossier._id || (dossier as any).id} />
 
         {/* Messages du dossier */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
@@ -1079,11 +1662,11 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">📤 Transmission aux partenaires</h2>
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-8 mb-6 min-w-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6 min-w-0">
+        <h2 className="text-xl sm:text-2xl font-bold min-w-0 break-words">📤 Transmission aux partenaires</h2>
         {(userRole === 'admin' || userRole === 'superadmin') && (
-          <Button onClick={() => setShowTransmitModal(true)}>
+          <Button onClick={() => setShowTransmitModal(true)} className="w-full sm:w-auto shrink-0">
             + Transmettre le dossier
           </Button>
         )}
@@ -1099,14 +1682,14 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
                 Vous devez accepter ou refuser ce dossier avant de pouvoir le modifier
               </p>
             </div>
-            <div className="flex gap-3">
-              <Button onClick={() => handleAcknowledge('accept')} className="bg-green-600 hover:bg-green-700">
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+              <Button onClick={() => handleAcknowledge('accept')} className="bg-green-600 hover:bg-green-700 w-full sm:w-auto">
                 ✓ Accepter le dossier
               </Button>
               <Button onClick={() => {
                 const notes = prompt('Raison du refus (optionnel):');
                 handleAcknowledge('refuse', notes || undefined);
-              }} variant="outline" className="border-red-500 text-red-600 hover:bg-red-50">
+              }} variant="outline" className="border-red-500 text-red-600 hover:bg-red-50 w-full sm:w-auto">
                 ✗ Refuser le dossier
               </Button>
             </div>
@@ -1171,9 +1754,9 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
             const typeOrganisme = partenaire?.partenaireInfo?.typeOrganisme;
             
             return (
-              <div key={index} className="border rounded-lg p-4 flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
+              <div key={index} className="border rounded-lg p-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between min-w-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${
                       typeOrganisme === 'consulat' 
                         ? 'bg-blue-100 text-blue-800' 
@@ -1224,7 +1807,7 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
                   <Button 
                     variant="outline" 
                     onClick={() => handleRemoveTransmission(partenaire?._id || partenaire)}
-                    className="ml-4"
+                    className="w-full sm:w-auto sm:ml-4 shrink-0"
                   >
                     Retirer
                   </Button>

@@ -1,39 +1,80 @@
 import axios from 'axios';
+import { getPublicApiBaseUrl } from './publicApiUrl';
 
-// URL de base de l'API backend
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
+const IS_DEV = process.env.NODE_ENV === 'development';
+const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
+let cachedToken: string | null = null;
+let cachedTokenAt = 0;
+let pendingTokenPromise: Promise<string | null> | null = null;
 
-// Créer une instance axios avec la configuration par défaut
+/** URL API terminée par `/api` une seule fois (axios + fetch hors axios). */
+export function getApiBaseUrl(): string {
+  return getPublicApiBaseUrl();
+}
+
+// Même base que getApiBaseUrl : sinon api.get('/logs') tape .../logs au lieu de .../api/logs → 404 en prod
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
   timeout: 10000, // 10 secondes
 });
 
-// Fonction utilitaire pour récupérer le token
-const getToken = async (): Promise<string | null> => {
+// Retry léger sur erreurs réseau temporaires (mobile/4G, réveil backend, micro-coupures)
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_RETRIES = 2;
+
+const FORUM_VISITOR_ID_KEY = 'forumVisitorId';
+
+const getForumVisitorId = (): string | null => {
   if (typeof window === 'undefined') return null;
+  let visitorId = window.localStorage.getItem(FORUM_VISITOR_ID_KEY);
+  if (!visitorId) {
+    visitorId = `v_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    window.localStorage.setItem(FORUM_VISITOR_ID_KEY, visitorId);
+  }
+  return visitorId;
+};
 
-  // 1. Essayer localStorage
-  let token = localStorage.getItem('token');
-  if (token) {
-    // Log désactivé pour réduire le bruit dans la console
-    // console.log('🔑 Token trouvé dans localStorage');
-    return token;
+const getForumHeaders = () => {
+  const visitorId = getForumVisitorId();
+  return visitorId ? { 'x-forum-visitor-id': visitorId } : {};
+};
+
+// Fonction utilitaire pour récupérer le token (NextAuth + localStorage + session)
+export const getAuthToken = async (): Promise<string | null> => {
+  if (typeof window === 'undefined') return null;
+  const now = Date.now();
+
+  if (cachedToken && now - cachedTokenAt < TOKEN_CACHE_TTL_MS) {
+    return cachedToken;
+  }
+  if (pendingTokenPromise) {
+    return pendingTokenPromise;
   }
 
-  // 2. Essayer sessionStorage
-  token = sessionStorage.getItem('token');
-  if (token) {
-    console.log('🔑 Token trouvé dans sessionStorage');
-    localStorage.setItem('token', token); // Migrer vers localStorage
-    return token;
-  }
+  pendingTokenPromise = (async () => {
+    const resolvedAt = Date.now();
 
-  // 3. Essayer de récupérer depuis NextAuth (seulement côté client)
-  if (typeof window !== 'undefined') {
+    // 1. Essayer localStorage
+    let token = localStorage.getItem('token');
+    if (token) {
+      cachedToken = token;
+      cachedTokenAt = resolvedAt;
+      return token;
+    }
+
+    // 2. Essayer sessionStorage
+    token = sessionStorage.getItem('token');
+    if (token) {
+      localStorage.setItem('token', token); // Migrer vers localStorage
+      cachedToken = token;
+      cachedTokenAt = resolvedAt;
+      return token;
+    }
+
+    // 3. Essayer de récupérer depuis NextAuth (seulement côté client)
     try {
       const { getSession } = await import('next-auth/react');
       const session = await getSession();
@@ -41,13 +82,15 @@ const getToken = async (): Promise<string | null> => {
         token = (session.user as any).accessToken;
         if (token) {
           localStorage.setItem('token', token);
-          console.log('🔑 Token récupéré de NextAuth et stocké dans localStorage');
+          cachedToken = token;
+          cachedTokenAt = Date.now();
+          if (IS_DEV) console.log('🔑 Token récupéré de NextAuth et stocké dans localStorage');
           return token;
         }
       }
     } catch (error) {
       // Ne pas afficher d'avertissement pour les erreurs NextAuth normales
-      if (error && typeof error === 'object' && 'message' in error && !error.message?.includes('NEXT_REDIRECT')) {
+      if (IS_DEV && error && typeof error === 'object' && 'message' in error && !error.message?.includes('NEXT_REDIRECT')) {
         console.warn('⚠️ Impossible de récupérer la session NextAuth:', error);
       }
     }
@@ -62,25 +105,35 @@ const getToken = async (): Promise<string | null> => {
           token = sessionData.accessToken;
           if (token) {
             localStorage.setItem('token', token);
-            console.log('🔑 Token récupéré depuis /api/auth/session');
+            cachedToken = token;
+            cachedTokenAt = Date.now();
+            if (IS_DEV) console.log('🔑 Token récupéré depuis /api/auth/session');
             return token;
           }
         }
       }
     } catch (error) {
       // Ne pas afficher d'avertissement pour les erreurs de fetch normales
-      if (error && typeof error === 'object' && 'message' in error) {
+      if (IS_DEV && error && typeof error === 'object' && 'message' in error) {
         console.warn('⚠️ Impossible de récupérer le token depuis /api/auth/session:', error);
       }
     }
-  }
 
-  // Ne pas afficher d'avertissement si on est côté serveur ou si c'est une route publique
-  if (typeof window !== 'undefined') {
-    console.warn('⚠️ Aucun token trouvé');
+    // Absence de token normale sur pages publiques : on évite le bruit console.
+    cachedToken = null;
+    cachedTokenAt = Date.now();
+    return null;
+  })();
+
+  try {
+    return await pendingTokenPromise;
+  } finally {
+    pendingTokenPromise = null;
   }
-  return null;
 };
+
+/** @deprecated alias */
+const getToken = getAuthToken;
 
 // Intercepteur pour ajouter le token d'authentification
 api.interceptors.request.use(
@@ -88,7 +141,9 @@ api.interceptors.request.use(
     // Si la requête contient un FormData, supprimer le Content-Type pour que le navigateur le définisse avec le boundary
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
-      console.log('📤 FormData détecté, Content-Type supprimé pour laisser le navigateur le définir');
+      if (IS_DEV) {
+        console.log('📤 FormData détecté, Content-Type supprimé pour laisser le navigateur le définir');
+      }
     }
     
     if (typeof window !== 'undefined') {
@@ -114,6 +169,8 @@ api.interceptors.request.use(
           url.includes('/user') ||
           url.includes('/appointments') ||
           url.includes('/dossiers') ||
+          url.includes('/dossier-document-drafts') ||
+          url.includes('/collaborative-drafts') ||
           url.includes('/messages') ||
           url.includes('/notifications') ||
           url.includes('/tasks');
@@ -134,30 +191,50 @@ api.interceptors.request.use(
 // Intercepteur pour gérer les erreurs de réponse
 api.interceptors.response.use(
   (response) => {
-    // Log des réponses réussies pour le débogage
-    if (response.config?.url?.includes('/dossiers') || response.config?.url?.includes('/appointments')) {
-      console.log('✅ Réponse API reçue pour:', response.config.url);
-      console.log('✅ Status:', response.status);
-      console.log('✅ Data:', response.data);
-    }
     return response;
   },
-  (error) => {
+  async (error) => {
+    const cfg: any = error.config || {};
+    const status = error.response?.status;
+    const retried = Number(cfg.__retryCount || 0);
+    const isNetworkError =
+      error.code === 'ECONNABORTED' ||
+      error.code === 'ECONNREFUSED' ||
+      error.message?.includes('Network Error') ||
+      error.message?.includes('ERR_CONNECTION_REFUSED') ||
+      !error.response;
+    const canRetry = (isNetworkError || (status && RETRYABLE_STATUS.has(status))) && retried < MAX_RETRIES;
+    const isAuthRoute = String(cfg.url || '').includes('/auth/');
+
+    if (canRetry && !isAuthRoute) {
+      cfg.__retryCount = retried + 1;
+      const delay = 300 * Math.pow(2, retried); // 300ms, 600ms
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return api(cfg);
+    }
+
+    const url = error.config?.url || '';
+
     // Ignorer silencieusement les 404 pour les clés CMS manquantes (comportement attendu)
     // Cette vérification doit être faite AVANT tous les logs d'erreur
     const isCmsKeyNotFound = error.response?.status === 404 && 
-                             error.config?.url?.includes('/content/value');
+                             url.includes('/content/value');
+
+    // Ne pas spammer la console si la route /forum/unread-count n'existe pas encore
+    const isForumUnreadCountNotFound = error.response?.status === 404 &&
+                                       url.includes('/forum/unread-count');
     
-    if (isCmsKeyNotFound) {
+    if (isCmsKeyNotFound || isForumUnreadCountNotFound) {
       // Ne pas logger cette erreur - c'est un comportement attendu quand une clé CMS n'existe pas encore
       // Retourner une réponse avec status 404 mais sans déclencher d'erreur
       // Cela permettra à getText de gérer le cas normalement sans polluer la console
       return Promise.reject({
         response: {
           status: 404,
-          data: { success: false, message: 'Clé non trouvée' }
+          data: { success: false, message: isCmsKeyNotFound ? 'Clé non trouvée' : 'Route forum/unread-count non disponible' }
         },
-        isCmsNotFound: true,
+        isCmsNotFound: isCmsKeyNotFound,
+        isForumUnreadCountNotFound,
         config: error.config
       });
     }
@@ -189,10 +266,10 @@ api.interceptors.response.use(
       }
     }
     
-    // Log des erreurs pour le débogage (sauf pour les erreurs CMS déjà gérées)
-    if (!isCmsKeyNotFound) {
+    // Log des erreurs pour le débogage (sauf pour les erreurs déjà gérées ci-dessus)
+    if (!isCmsKeyNotFound && !isForumUnreadCountNotFound) {
       console.error('❌ Erreur API:', {
-        url: error.config?.url,
+        url,
         status: error.response?.status,
         message: error.response?.data?.message || error.message,
         data: error.response?.data
@@ -220,7 +297,7 @@ export default api;
 
 // Fonctions utilitaires pour les appels API
 export const authAPI = {
-  register: (data: { firstName: string; lastName: string; email: string; password: string; phone?: string }) =>
+  register: (data: { firstName: string; lastName: string; email: string; phone: string }) =>
     api.post('/auth/register', data),
   
   login: (data: { email: string; password: string }) =>
@@ -232,8 +309,15 @@ export const authAPI = {
   setupPassword: (data: { password: string; email?: string }) =>
     api.post('/auth/setup-password', data),
   
-  forgotPassword: (data: { email: string }) =>
-    api.post('/auth/forgot-password', data),
+  // Mot de passe oublié désormais basé sur le téléphone
+  forgotPassword: (data: { phone: string }) =>
+    api.post('/auth/forgot-password-phone', data),
+
+  resetPasswordByPhone: (data: { phone: string; code: string; password: string }) =>
+    api.post('/auth/reset-password-phone', data),
+
+  resetPassword: (data: { token: string; password: string }) =>
+    api.post('/auth/reset-password', data),
   
   getMe: () =>
     api.get('/auth/me'),
@@ -265,23 +349,24 @@ export const userAPI = {
     api.get('/user/profile'),
   
   updateProfile: (data: any) => {
-    // Si c'est FormData, ne pas définir Content-Type pour laisser le navigateur le faire
-    if (data instanceof FormData) {
-      return api.put('/user/profile', data, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-    }
+    // FormData : l’intercepteur supprime Content-Type pour que le boundary soit correct
     return api.put('/user/profile', data);
   },
   
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.put('/user/password', data),
+
+  // Désactiver son propre compte (soft delete)
+  deactivateMyAccount: () =>
+    api.post('/user/profile/deactivate'),
   
   // Admin - Récupérer tous les utilisateurs
   getAllUsers: () =>
     api.get('/user/all'),
+
+  // Admin - Registre des expirations (clients)
+  getClientExpirationsRegister: (params: { pastDays: number; futureDays: number }) =>
+    api.get('/user/expirations', { params }),
   
   // Admin - Récupérer un utilisateur par ID
   getUserById: (id: string) =>
@@ -290,6 +375,10 @@ export const userAPI = {
   // Admin - Mettre à jour un utilisateur par ID
   updateUser: (id: string, data: any) =>
     api.put(`/user/${id}`, data),
+
+  // Admin - Modifier le mot de passe d'un utilisateur
+  updateUserPassword: (id: string, data: { newPassword: string }) =>
+    api.put(`/user/${id}/password`, data),
   
   // Admin - Supprimer un utilisateur par ID
   deleteUser: (id: string) =>
@@ -302,7 +391,7 @@ export const userAPI = {
     email: string;
     password: string;
     phone?: string;
-    role?: 'client' | 'admin' | 'superadmin' | 'avocat' | 'consulat' | 'collaborateur' | 'assistant' | 'comptable' | 'secretaire' | 'juriste' | 'stagiaire' | 'visiteur';
+    role?: 'client' | 'admin' | 'superadmin' | 'partenaire' | 'avocat' | 'consulat' | 'collaborateur' | 'assistant' | 'comptable' | 'secretaire' | 'juriste' | 'stagiaire' | 'visiteur';
     professionnelType?: 'consulat' | 'cabinet_avocat';
     organisationName?: string;
   }) => api.post('/user/create', data),
@@ -323,14 +412,8 @@ export const logsAPI = {
   downloadDlogPDF: async (date: string): Promise<void> => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || sessionStorage.getItem('token') : null;
     
-    // Utiliser la même logique que pour API_BASE_URL
-    let baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
-    
-    // Si baseURL se termine déjà par /api, ne pas l'ajouter à nouveau
-    // Sinon, construire l'URL complète
-    const url = baseURL.endsWith('/api')
-      ? `${baseURL}/logs/dlog/pdf?date=${date}`
-      : `${baseURL}/api/logs/dlog/pdf?date=${date}`;
+    const baseURL = getApiBaseUrl();
+    const url = `${baseURL}/logs/dlog/pdf?date=${encodeURIComponent(date)}`;
     
     console.log('📥 Tentative de téléchargement DLOG:', { url, date, hasToken: !!token });
     
@@ -517,6 +600,8 @@ export const appointmentsAPI = {
     heure: string;
     motif: string;
     description?: string;
+    /** Admin / superadmin : associer le RDV à ce client */
+    forUserId?: string;
   }) => api.post('/appointments', data),
   
   // Client - Récupérer ses rendez-vous
@@ -701,7 +786,19 @@ export const dossiersAPI = {
       responseType: 'blob'
     });
   },
+
+  // Compléments au récit (visibles dans le récap et le PDF)
+  addRecapComplement: (dossierId: string, body: { text: string; title?: string }) =>
+    api.post(`/user/dossiers/${dossierId}/recap/complements`, body),
+  updateRecapComplement: (dossierId: string, complementId: string, body: { text: string; title?: string }) =>
+    api.patch(`/user/dossiers/${dossierId}/recap/complements/${complementId}`, body),
+  deleteRecapComplement: (dossierId: string, complementId: string) =>
+    api.delete(`/user/dossiers/${dossierId}/recap/complements/${complementId}`),
   
+  // Client — choix de la formule tarifaire (Premium / Standard)
+  setDossierFormuleTarifaire: (dossierId: string, formule: 'standard' | 'premium') =>
+    api.patch(`/user/dossiers/${dossierId}/formule-tarifaire`, { formule }),
+
   // Client - Annuler un dossier
   cancelDossier: (id: string) =>
     api.patch(`/user/dossiers/${id}/cancel`),
@@ -709,6 +806,14 @@ export const dossiersAPI = {
   // Mettre à jour un dossier
   updateDossier: (id: string, data: any) =>
     api.put(`/user/dossiers/${id}`, data),
+
+  // Superadmin - notifier tarification à la demande
+  notifyTarification: (id: string) =>
+    api.put(`/user/dossiers/${id}`, { notifyTarificationClient: true }),
+
+  /** Admin / superadmin : relance paiement tarification (notification in-app + SMS court) */
+  sendTarificationPaymentReminder: (dossierId: string) =>
+    api.post(`/user/dossiers/${dossierId}/tarification-payment-reminder`),
   
   // Supprimer un dossier (Admin)
   deleteDossier: (id: string) =>
@@ -733,7 +838,7 @@ export const dossiersAPI = {
 
 export const notificationsAPI = {
   // Récupérer toutes les notifications
-  getNotifications: (params?: { lu?: boolean; limit?: number }) =>
+  getNotifications: (params?: { lu?: boolean; limit?: number; type?: string }) =>
     api.get('/notifications', { params }),
   
   // Récupérer le nombre de notifications non lues
@@ -751,6 +856,18 @@ export const notificationsAPI = {
   // Supprimer une notification
   deleteNotification: (id: string) =>
     api.delete(`/notifications/${id}`),
+
+  // Supprimer toutes les notifications de l'utilisateur connecté
+  deleteAllNotifications: () =>
+    api.delete('/notifications'),
+};
+
+export const pushAPI = {
+  getPublicKey: () => api.get('/push/public-key'),
+  subscribe: (subscription: PushSubscriptionJSON) =>
+    api.post('/push/subscribe', { subscription }),
+  unsubscribe: (endpoint: string) => api.post('/push/unsubscribe', { endpoint }),
+  sendTest: () => api.post('/push/test'),
 };
 
 export const messagesAPI = {
@@ -835,37 +952,39 @@ export const documentsAPI = {
     });
   },
   
-  // Prévisualiser un document (retourne une Promise qui résout avec l'URL du blob)
+  // Prévisualiser un document (blob URL — à révoquer avec URL.revokeObjectURL quand terminé)
   previewDocument: async (id: string): Promise<string> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || sessionStorage.getItem('token') : null;
-    let baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-    // Si baseURL contient déjà /api, ne pas l'ajouter à nouveau
-    const url = baseURL.endsWith('/api')
-      ? `${baseURL}/user/documents/${id}/preview`
-      : `${baseURL}/api/user/documents/${id}/preview`;
-    
+    const token = typeof window !== 'undefined' ? await getAuthToken() : null;
+    const url = `${getApiBaseUrl()}/user/documents/${encodeURIComponent(id)}/preview`;
+
     const response = await fetch(url, {
       headers: {
-        'Authorization': `Bearer ${token || ''}`
-      }
+        Authorization: `Bearer ${token || ''}`,
+      },
+      credentials: 'omit',
     });
-    
+
     if (!response.ok) {
-      throw new Error('Erreur lors de la prévisualisation');
+      const errText = await response.text().catch(() => '');
+      if (response.status === 401) {
+        throw new Error('Session expirée ou token invalide. Reconnectez-vous.');
+      }
+      if (response.status === 403) {
+        throw new Error('Accès non autorisé à ce document.');
+      }
+      if (response.status === 404) {
+        throw new Error('Document ou fichier introuvable sur le serveur.');
+      }
+      throw new Error(`Erreur prévisualisation (${response.status})${errText ? `: ${errText.slice(0, 120)}` : ''}`);
     }
-    
+
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   },
-  
-  // Obtenir l'URL directe de prévisualisation (pour iframe)
+
+  /** URL d’API preview (sans token) — préférer previewDocument + blob pour l’affichage */
   getPreviewUrl: (id: string): string => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || sessionStorage.getItem('token') : null;
-    let baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-    // Si baseURL contient déjà /api, ne pas l'ajouter à nouveau
-    return baseURL.endsWith('/api')
-      ? `${baseURL}/user/documents/${id}/preview`
-      : `${baseURL}/api/user/documents/${id}/preview`;
+    return `${getApiBaseUrl()}/user/documents/${encodeURIComponent(id)}/preview`;
   },
   
   // Télécharger un document
@@ -879,6 +998,106 @@ export const documentsAPI = {
     api.delete(`/user/documents/${id}`),
 };
 
+export const collaborativeDraftsAPI = {
+  getGlobalCount: () => api.get('/collaborative-drafts/count'),
+  getGlobalList: (params?: { q?: string }) => api.get('/collaborative-drafts', { params }),
+  getDossierDrafts: (dossierId: string) =>
+    api.get(`/dossiers/${dossierId}/drafts`),
+  createDraft: (dossierId: string, data: { title: string; content?: any; dueDate?: string | null }) =>
+    api.post(`/dossiers/${dossierId}/drafts`, data),
+  updateDraft: (
+    draftId: string,
+    data: { title?: string; content?: any; dueDate?: string | null; completed?: boolean | null }
+  ) => api.patch(`/drafts/${draftId}`, data),
+  updatePermissions: (draftId: string, data: { visibleToAdmins?: boolean; excludedAdminIds?: string[]; partnerAccess?: { partner: string; canEdit: boolean }[] }) =>
+    api.patch(`/drafts/${draftId}/permissions`, data),
+  archiveDraft: (draftId: string) =>
+    api.delete(`/drafts/${draftId}`),
+};
+
+/** Brouillons rédactionnels liés à un dossier (admin / équipe), export .docx */
+export const dossierDocumentDraftsAPI = {
+  getCount: () => api.get('/dossier-document-drafts/count'),
+  list: (params?: { q?: string }) => api.get('/dossier-document-drafts', { params }),
+  getById: (id: string) => api.get(`/dossier-document-drafts/${id}`),
+  create: (data: { dossierId: string; title: string; body?: string; dueDate?: string | null }) =>
+    api.post('/dossier-document-drafts', data),
+  update: (id: string, data: { title?: string; body?: string; dueDate?: string | null; completed?: boolean | null }) =>
+    api.patch(`/dossier-document-drafts/${id}`, data),
+  remove: (id: string) => api.delete(`/dossier-document-drafts/${id}`),
+  downloadDocx: (id: string) =>
+    api.get(`/dossier-document-drafts/${id}/docx`, { responseType: 'blob' }),
+};
+
+// Médias publics (carrousel, etc.)
+export const mediaAPI = {
+  // Upload d'un média pour le carrousel du hero (admin)
+  uploadHeroMedia: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/media/hero', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+};
+
+// Forum - discussions et réponses
+export const forumAPI = {
+  // Lister les discussions (optionnel : theme pour filtrer par thème)
+  listThreads: (params?: { page?: number; limit?: number; theme?: string; statusFilter?: 'pinned' | 'resolved' | 'archived'; q?: string }) =>
+    api.get('/forum/threads', { params, headers: getForumHeaders() }),
+
+  // Récupérer une discussion et ses réponses
+  getThread: (id: string) =>
+    api.get(`/forum/threads/${id}`, { headers: getForumHeaders() }),
+
+  // Créer une nouvelle discussion (theme requis : titre-sejour-etudiant, titre-sejour-salarie, regroupement-familial, demande-visa, autres)
+  createThread: (data: { title: string; body: string; theme?: string; tags?: string[]; guestName?: string }) =>
+    api.post('/forum/threads', data),
+
+  // Répondre à une discussion
+  replyToThread: (id: string, data: { body: string; guestName?: string; parentPostId?: string }) =>
+    api.post(`/forum/threads/${id}/posts`, data),
+
+  // Admin - mettre à jour une discussion (statut / épinglage)
+  updateThreadAsAdmin: (id: string, data: { status?: 'open' | 'closed' | 'archived' | 'resolved'; isPinned?: boolean }) =>
+    api.patch(`/forum/threads/${id}`, data),
+
+  // Admin - supprimer une réponse
+  deletePostAsAdmin: (postId: string) =>
+    api.delete(`/forum/posts/${postId}`),
+
+  // Admin - modérer une réponse (approuver / désapprouver)
+  verifyPostAsAdmin: (postId: string, data: { isVerified?: boolean; isRejected?: boolean }) =>
+    api.patch(`/forum/posts/${postId}/verify`, data),
+
+  // Aimer / retirer son like sur une réponse
+  toggleLikePost: (postId: string) =>
+    api.post(`/forum/posts/${postId}/like`, {}, { headers: getForumHeaders() }),
+
+  // Aimer / retirer son like sur une discussion
+  toggleLikeThread: (threadId: string) =>
+    api.post(`/forum/threads/${threadId}/like`, {}, { headers: getForumHeaders() }),
+
+  // Mettre en signet / retirer un signet sur une discussion
+  toggleBookmarkThread: (threadId: string) =>
+    api.post(`/forum/threads/${threadId}/bookmark`),
+
+  // Récupérer les discussions mises en signet par l'utilisateur courant
+  getBookmarks: () =>
+    api.get('/forum/bookmarks'),
+
+  // Marquer un fil comme lu (met à jour le badge dans la sidebar)
+  markThreadRead: (id: string) =>
+    api.post(`/forum/threads/${id}/mark-read`),
+
+  // Nombre de discussions à jour (réponses non lues sur mes fils + signets)
+  getUnreadThreadsCount: () =>
+    api.get('/forum/unread-count'),
+};
+
 export const creneauxAPI = {
   // Récupérer les créneaux disponibles pour une date
   getAvailableSlots: (date: string) =>
@@ -888,8 +1107,8 @@ export const creneauxAPI = {
   getAllCreneaux: (params?: { date?: string; ferme?: boolean }) =>
     api.get('/creneaux', { params }),
   
-  // Admin - Fermer des créneaux
-  closeSlots: (data: { date: string; heures: string[]; motifFermeture?: string }) =>
+  // Admin - Fermer des créneaux (date unique ou plusieurs dates)
+  closeSlots: (data: { date?: string; dates?: string[]; heures: string[]; motifFermeture?: string }) =>
     api.post('/creneaux', data),
   
   // Admin - Rouvrir un créneau
@@ -983,6 +1202,7 @@ export const cmsAPI = {
       description?: string;
       page?: string;
       section?: string;
+      status?: 'draft' | 'published' | 'archived';
       isActive?: boolean;
     }
   ) => {
@@ -1076,6 +1296,9 @@ export const documentRequestsAPI = {
     documentTypeLabel: string;
     message?: string;
     isUrgent?: boolean;
+    skipSms?: boolean;
+    /** Nombre total de demandes créées dans le même envoi (1er appel uniquement) — adapte le SMS client */
+    batchDocumentCount?: number;
   }) => {
     return api.post('/document-requests', data);
   },
@@ -1083,7 +1306,7 @@ export const documentRequestsAPI = {
   // Récupérer les demandes de documents
   getRequests: (params?: {
     dossierId?: string;
-    status?: 'pending' | 'sent' | 'received';
+    status?: 'pending' | 'sent' | 'received' | 'cancelled';
     userId?: string;
   }) => {
     return api.get('/document-requests', { params });
@@ -1100,8 +1323,18 @@ export const documentRequestsAPI = {
   },
 
   // Mettre à jour le statut d'une demande (admin)
-  updateStatus: (id: string, status: 'pending' | 'sent' | 'received') => {
+  updateStatus: (id: string, status: 'pending' | 'sent' | 'received' | 'cancelled') => {
     return api.patch(`/document-requests/${id}/status`, { status });
+  },
+
+  // Annuler une demande (admin)
+  cancelRequest: (id: string) => {
+    return api.patch(`/document-requests/${id}/cancel`);
+  },
+
+  // Supprimer le document reçu lié à une demande (admin)
+  removeReceivedDocument: (id: string) => {
+    return api.patch(`/document-requests/${id}/remove-document`);
   },
 };
 
@@ -1128,6 +1361,23 @@ export const smsHistoryAPI = {
   // Récupérer un SMS par ID
   getSms: (id: string) => {
     return api.get(`/sms-history/${id}`);
+  },
+};
+
+export const smsAPI = {
+  // Envoi SMS manuel simple
+  send: (data: { to: string; message: string }) => {
+    return api.post('/sms/send', data);
+  },
+
+  // Envoi SMS via template/code de notification
+  sendNotification: (data: { to: string; type: string; data?: Record<string, any> }) => {
+    return api.post('/sms/notification', data);
+  },
+
+  // Envoi SMS manuel en masse
+  sendBulk: (data: { recipients: Array<{ phone: string; name?: string }>; message: string }) => {
+    return api.post('/sms/bulk', data);
   },
 };
 

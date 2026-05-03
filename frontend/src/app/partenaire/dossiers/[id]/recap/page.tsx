@@ -2,17 +2,29 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { dossiersAPI } from '@/lib/api';
-import { ArrowLeft, FileText, Download, Calendar, User, FileCheck, MessageSquare, CheckCircle, Clock } from 'lucide-react';
+import { ArrowLeft, FileText, Download, Calendar, User, FileCheck, MessageSquare, CheckCircle, Clock, MessageSquarePlus, Pencil, Trash2 } from 'lucide-react';
 import Link from 'next/link';
+import { Toast } from '@/components/Toast';
 
 export default function PartenaireDossierRecapPage() {
   const params = useParams();
   const dossierId = params.id as string;
+  const { data: session } = useSession();
   
   const [recap, setRecap] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [newComplementText, setNewComplementText] = useState('');
+  const [newComplementTitle, setNewComplementTitle] = useState('');
+  const [addingComplement, setAddingComplement] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [editingTitle, setEditingTitle] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [currentUserIdFromApi, setCurrentUserIdFromApi] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   
   useEffect(() => {
     if (dossierId) {
@@ -26,11 +38,67 @@ export default function PartenaireDossierRecapPage() {
       const response = await dossiersAPI.getDossierRecap(dossierId);
       if (response.data.success) {
         setRecap(response.data.recap);
+        if (response.data.currentUserId) setCurrentUserIdFromApi(response.data.currentUserId);
       }
+      setEditingId(null);
+      setDeletingId(null);
     } catch (error) {
       console.error('Erreur lors du chargement du récit:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const currentUserId = (session?.user as any)?.id ?? currentUserIdFromApi ?? null;
+  const isAdmin = (session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin';
+  const canEditComplement = (c: any) => isAdmin || (currentUserId && c.addedBy && c.addedBy === currentUserId);
+
+  const handleAddComplement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComplementText.trim()) return;
+    try {
+      setAddingComplement(true);
+      await dossiersAPI.addRecapComplement(dossierId, {
+        text: newComplementText.trim(),
+        title: newComplementTitle.trim() || undefined,
+      });
+      setNewComplementText('');
+      setNewComplementTitle('');
+      await loadRecap();
+    } catch (err: any) {
+      setToast({ message: err.response?.data?.message || 'Erreur lors de l\'ajout du complément', type: 'error' });
+    } finally {
+      setAddingComplement(false);
+    }
+  };
+
+  const handleUpdateComplement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingId || !editingText.trim()) return;
+    try {
+      await dossiersAPI.updateRecapComplement(dossierId, editingId, {
+        text: editingText.trim(),
+        title: editingTitle.trim(),
+      });
+      setEditingId(null);
+      setEditingText('');
+      setEditingTitle('');
+      await loadRecap();
+    } catch (err: any) {
+      setToast({ message: err.response?.data?.message || 'Erreur lors de la modification', type: 'error' });
+    }
+  };
+
+  const handleDeleteComplement = async (complementId: string) => {
+    if (!confirm('Supprimer ce complément ?')) return;
+    try {
+      setDeletingId(complementId);
+      await dossiersAPI.deleteRecapComplement(dossierId, complementId);
+      await loadRecap();
+    } catch (err: any) {
+      setToast({ message: err.response?.data?.message || 'Erreur lors de la suppression', type: 'error' });
+    } finally {
+      setDeletingId(null);
     }
   };
   
@@ -49,7 +117,7 @@ export default function PartenaireDossierRecapPage() {
       window.URL.revokeObjectURL(url);
     } catch (error: any) {
       console.error('Erreur lors du téléchargement du PDF:', error);
-      alert(error.response?.data?.message || 'Erreur lors du téléchargement du PDF');
+      setToast({ message: error.response?.data?.message || 'Erreur lors du téléchargement du PDF', type: 'error' });
     } finally {
       setDownloadingPDF(false);
     }
@@ -68,14 +136,6 @@ export default function PartenaireDossierRecapPage() {
     } catch (e) {
       return 'N/A';
     }
-  };
-  
-  const formatFileSize = (bytes: number) => {
-    if (!bytes || bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
   
   if (loading) {
@@ -220,7 +280,6 @@ export default function PartenaireDossierRecapPage() {
                         <p className="font-semibold">{doc.nom}</p>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mt-2">
                           <span>Type: {doc.type}</span>
-                          {doc.taille && <span>Taille: {formatFileSize(doc.taille)}</span>}
                           <span>Date: {formatDate(doc.dateUpload)}</span>
                         </div>
                         {doc.description && (
@@ -337,6 +396,119 @@ export default function PartenaireDossierRecapPage() {
             </section>
           )}
           
+          {/* Complément d'information */}
+          <section className="mb-8">
+            <h2 className="text-2xl font-bold text-foreground mb-4 flex items-center gap-2">
+              <MessageSquarePlus className="w-6 h-6 text-primary" />
+              Complément d'information
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Les compléments ajoutés ici sont visibles par toutes les personnes ayant accès au dossier et apparaissent sur le PDF téléchargé.
+            </p>
+            {(recap.complementsRecit && recap.complementsRecit.length > 0) && (
+              <div className="space-y-4 mb-6">
+                {recap.complementsRecit.map((c: any) => (
+                  <div key={c._id} className="p-4 bg-orange-50/50 rounded-lg border border-orange-200/60">
+                    {editingId === c._id ? (
+                      <form onSubmit={handleUpdateComplement} className="space-y-3">
+                        <input
+                          type="text"
+                          value={editingTitle}
+                          onChange={(e) => setEditingTitle(e.target.value)}
+                          maxLength={200}
+                          placeholder="Titre de la rubrique (optionnel)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-medium"
+                        />
+                        <textarea
+                          value={editingText}
+                          onChange={(e) => setEditingText(e.target.value)}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          required
+                        />
+                        <div className="flex gap-2">
+                          <button type="submit" className="px-3 py-1.5 bg-primary text-white rounded-md text-sm hover:bg-primary/90">Enregistrer</button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(null);
+                              setEditingText('');
+                              setEditingTitle('');
+                            }}
+                            className="px-3 py-1.5 bg-gray-200 rounded-md text-sm"
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        {c.title ? (
+                          <p className="text-sm font-semibold text-gray-900 mb-1">{c.title}</p>
+                        ) : null}
+                        <p className="text-gray-800 whitespace-pre-wrap">{c.text}</p>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+                          <span className="text-sm text-gray-500">
+                            {c.authorName}{c.role ? ` • ${c.role}` : ''} — {formatDate(c.addedAt)}
+                          </span>
+                          {canEditComplement(c) && (
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingId(c._id);
+                                  setEditingText(c.text);
+                                  setEditingTitle(c.title || '');
+                                }}
+                                className="p-1.5 text-gray-600 hover:text-primary hover:bg-orange-100 rounded"
+                                title="Modifier"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteComplement(c._id)}
+                                disabled={deletingId === c._id}
+                                className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                                title="Supprimer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <form onSubmit={handleAddComplement} className="space-y-3">
+              <input
+                type="text"
+                value={newComplementTitle}
+                onChange={(e) => setNewComplementTitle(e.target.value)}
+                maxLength={200}
+                placeholder="Titre de la rubrique (optionnel)"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-medium placeholder:text-gray-400"
+              />
+              <textarea
+                value={newComplementText}
+                onChange={(e) => setNewComplementText(e.target.value)}
+                placeholder="Ajouter une information, une précision ou une mise à jour pour le récit (visible sur le PDF)..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm placeholder:text-gray-400"
+              />
+              <button
+                type="submit"
+                disabled={addingComplement || !newComplementText.trim()}
+                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {addingComplement ? 'Ajout...' : 'Ajouter un complément'}
+              </button>
+            </form>
+          </section>
+          
           {/* Statistiques */}
           <section className="mb-8">
             <h2 className="text-2xl font-bold text-foreground mb-4">Statistiques</h2>
@@ -361,6 +533,9 @@ export default function PartenaireDossierRecapPage() {
           </section>
         </div>
       </div>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

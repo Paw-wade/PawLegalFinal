@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { messagesAPI, dossiersAPI } from '@/lib/api';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -81,6 +82,8 @@ export default function PartenaireMessagesPage() {
   const [isReplying, setIsReplying] = useState(false);
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+  const [composeDossierId, setComposeDossierId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   // Gérer les query params pour pré-sélectionner le dossier et ouvrir le modal
   useEffect(() => {
@@ -133,9 +136,6 @@ export default function PartenaireMessagesPage() {
       if (response.data.success) {
         const list = response.data.dossiers || [];
         setDossiers(list);
-        if (!selectedDossierId && list.length === 1) {
-          setSelectedDossierId(list[0]._id || list[0].id);
-        }
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des dossiers pour la messagerie:', err);
@@ -147,17 +147,13 @@ export default function PartenaireMessagesPage() {
     setIsSubmitting(true);
     setError(null);
 
-    if (!selectedDossierId) {
-      setError('Vous devez sélectionner un dossier pour envoyer un message.');
-      setIsSubmitting(false);
-      return;
-    }
-
     try {
       const formDataToSend = new FormData();
       formDataToSend.append('sujet', formData.sujet);
       formDataToSend.append('contenu', formData.contenu);
-      formDataToSend.append('dossierId', selectedDossierId);
+      if (composeDossierId) {
+        formDataToSend.append('dossierId', composeDossierId);
+      }
 
       attachments.forEach((file) => {
         formDataToSend.append('piecesJointes', file);
@@ -165,9 +161,10 @@ export default function PartenaireMessagesPage() {
 
       const response = await messagesAPI.sendMessage(formDataToSend);
       if (response.data.success) {
-        alert('Message envoyé avec succès à tous les administrateurs !');
+        setToast({ message: '✅ Message envoyé avec succès.', type: 'success' });
         setShowComposeModal(false);
         setFormData({ sujet: '', contenu: '' });
+        setComposeDossierId('');
         setAttachments([]);
         loadMessages();
       }
@@ -192,7 +189,7 @@ export default function PartenaireMessagesPage() {
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
       console.error('Erreur lors du téléchargement:', err);
-      alert('Erreur lors du téléchargement de la pièce jointe');
+      setToast({ message: 'Erreur lors du téléchargement de la pièce jointe', type: 'error' });
     }
   };
 
@@ -242,7 +239,7 @@ export default function PartenaireMessagesPage() {
 
       const response = await messagesAPI.sendMessage(formDataToSend);
       if (response.data.success) {
-        alert('Réponse envoyée avec succès à tous les administrateurs !');
+        setToast({ message: '✅ Réponse envoyée avec succès.', type: 'success' });
         setShowReplyModal(false);
         setReplyData({ sujet: '', contenu: '' });
         setReplyAttachments([]);
@@ -365,7 +362,7 @@ export default function PartenaireMessagesPage() {
       console.error('Erreur lors de la suppression batch:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression des messages';
       setError(errorMessage);
-      alert(`Erreur: ${errorMessage}`);
+      setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
     }
   };
 
@@ -382,14 +379,14 @@ export default function PartenaireMessagesPage() {
       console.error('Erreur lors de la suppression:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression du message';
       setError(errorMessage);
-      alert(`Erreur: ${errorMessage}`);
+      setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
     }
   };
 
   // Grouper les messages par dossier
   const messagesByDossier = messages.reduce((acc: any, message: any) => {
     const dossierId = message.dossierId?._id?.toString() || message.dossierId?.toString() || message.dossier?._id?.toString() || message.dossier?.toString() || 'sans-dossier';
-    const dossierTitre = message.dossierId?.titre || message.dossier?.titre || message.dossierId?.numero || message.dossier?.numero || 'Sans dossier';
+    const dossierTitre = message.dossierId?.titre || message.dossier?.titre || message.dossierId?.numero || message.dossier?.numero || 'Hors dossier';
     
     if (!acc[dossierId]) {
       acc[dossierId] = {
@@ -433,13 +430,13 @@ export default function PartenaireMessagesPage() {
             </div>
             <div className="flex flex-col gap-2 items-end">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground font-medium">Dossier :</span>
+                <span className="text-sm text-muted-foreground font-medium">Filtrer par dossier :</span>
                 <select
                   value={selectedDossierId}
                   onChange={(e) => setSelectedDossierId(e.target.value)}
                   className="px-4 py-2 border border-input rounded-lg text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 max-w-xs"
                 >
-                  <option value="">Tous les dossiers</option>
+                  <option value="">Tous les messages</option>
                   {dossiers.map((dossier) => (
                     <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
                       {dossier.titre || dossier.numero || 'Dossier'} – {dossier.numero}
@@ -447,15 +444,16 @@ export default function PartenaireMessagesPage() {
                   ))}
                 </select>
               </div>
-              <Button onClick={() => setShowComposeModal(true)} disabled={!selectedDossierId} className="shadow-md">
+              <Button
+                onClick={() => {
+                  setComposeDossierId('');
+                  setShowComposeModal(true);
+                }}
+                className="shadow-md"
+              >
                 <span className="mr-2">✉️</span>
                 Nouveau message
               </Button>
-              {!selectedDossierId && (
-                <p className="text-xs text-amber-600 max-w-xs text-right">
-                  Sélectionnez un dossier pour envoyer un message
-                </p>
-              )}
             </div>
           </div>
 
@@ -537,7 +535,7 @@ export default function PartenaireMessagesPage() {
             <p className="text-muted-foreground mb-6 text-lg">
               Aucun message {filter !== 'all' ? `(${filter})` : ''}
             </p>
-            <Button onClick={() => setShowComposeModal(true)} disabled={!selectedDossierId}>
+            <Button onClick={() => { setComposeDossierId(''); setShowComposeModal(true); }}>
               Envoyer un message
             </Button>
         </div>
@@ -558,11 +556,13 @@ export default function PartenaireMessagesPage() {
                         </p>
                       </div>
                     </div>
-                    <Link href={`/partenaire/dossiers/${dossierGroup.dossierId}`}>
-                      <Button variant="outline" size="sm">
-                        Voir le dossier →
-                      </Button>
-                    </Link>
+                    {dossierGroup.dossierId !== 'sans-dossier' && (
+                      <Link href={`/partenaire/dossiers/${dossierGroup.dossierId}`}>
+                        <Button variant="outline" size="sm">
+                          Voir le dossier →
+                        </Button>
+                      </Link>
+                    )}
                   </div>
                 </div>
                 
@@ -600,10 +600,10 @@ export default function PartenaireMessagesPage() {
                     return (
                       <div
                         key={messageId}
-                        className={`p-6 transition-all duration-200 hover:bg-gray-50 ${
+                        className={`p-6 transition-all duration-300 hover:bg-gray-50 border rounded-xl ${
                           (isReceived && !isRead)
-                            ? 'bg-gradient-to-r from-primary/5 via-primary/2 to-white border-l-4 border-primary' 
-                            : ''
+                            ? 'bg-gradient-to-r from-primary/5 via-primary/2 to-white border-primary/70 hover:shadow-[0_12px_30px_-18px_rgba(249,115,22,0.45)]' 
+                            : 'border-gray-200/80'
                         } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
                       >
                         <div className="flex items-start gap-4">
@@ -716,19 +716,36 @@ export default function PartenaireMessagesPage() {
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
                 <h2 className="text-2xl font-bold">Nouveau message</h2>
-                <button onClick={() => setShowComposeModal(false)} className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">×</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowComposeModal(false);
+                    setComposeDossierId('');
+                  }}
+                  className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  ×
+                </button>
               </div>
               <form onSubmit={handleSendMessage} className="p-6 space-y-5">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl">ℹ️</span>
-                    <div>
-                      <p className="text-sm font-semibold text-blue-900 mb-1">Message automatique aux administrateurs</p>
-                      <p className="text-xs text-blue-700">
-                        Votre message sera automatiquement envoyé à tous les administrateurs de l'équipe.
-                      </p>
-                    </div>
-                  </div>
+                <div>
+                  <Label htmlFor="compose-dossier-p">Lier à un dossier (optionnel)</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Si vous choisissez un dossier, il doit vous être transmis. Laissez vide pour un message général.
+                  </p>
+                  <select
+                    id="compose-dossier-p"
+                    value={composeDossierId}
+                    onChange={(e) => setComposeDossierId(e.target.value)}
+                    className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background"
+                  >
+                    <option value="">Aucun dossier</option>
+                    {dossiers.map((dossier) => (
+                      <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
+                        {dossier.titre || dossier.numero || 'Dossier'} – {dossier.numero}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <Label htmlFor="sujet">Sujet *</Label>
@@ -762,7 +779,7 @@ export default function PartenaireMessagesPage() {
                     onChange={(e) => {
                       const files = Array.from(e.target.files || []) as File[];
                       if (files.length > 5) {
-                        alert('Maximum 5 fichiers autorisés');
+                        setToast({ message: 'Maximum 5 fichiers autorisés', type: 'warning' });
                         return;
                       }
                       setAttachments(files);
@@ -773,7 +790,7 @@ export default function PartenaireMessagesPage() {
                     <div className="mt-2 space-y-1">
                       {attachments.map((file, index) => (
                         <div key={index} className="text-xs text-muted-foreground flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span>📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          <span>📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
@@ -787,7 +804,15 @@ export default function PartenaireMessagesPage() {
                   )}
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button type="button" variant="outline" onClick={() => setShowComposeModal(false)} disabled={isSubmitting}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowComposeModal(false);
+                      setComposeDossierId('');
+                    }}
+                    disabled={isSubmitting}
+                  >
                     Annuler
                   </Button>
                   <Button type="submit" disabled={isSubmitting}>
@@ -859,9 +884,6 @@ export default function PartenaireMessagesPage() {
                           <div className="flex items-center gap-2">
                             <span>📎</span>
                             <span className="text-sm">{pj.originalName}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({(pj.size / 1024 / 1024).toFixed(2)} MB)
-                            </span>
                           </div>
                           <Button
                             variant="outline"
@@ -941,7 +963,7 @@ export default function PartenaireMessagesPage() {
                     onChange={(e) => {
                       const files = Array.from(e.target.files || []) as File[];
                       if (files.length > 5) {
-                        alert('Maximum 5 fichiers autorisés');
+                        setToast({ message: 'Maximum 5 fichiers autorisés', type: 'warning' });
                         return;
                       }
                       setReplyAttachments(files);
@@ -952,7 +974,7 @@ export default function PartenaireMessagesPage() {
                     <div className="mt-2 space-y-1">
                       {replyAttachments.map((file, index) => (
                         <div key={index} className="text-xs text-muted-foreground flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span>📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          <span>📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setReplyAttachments(replyAttachments.filter((_, i) => i !== index))}
@@ -987,6 +1009,9 @@ export default function PartenaireMessagesPage() {
         </div>
       )}
       </main>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

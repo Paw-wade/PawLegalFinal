@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
+import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import Link from 'next/link';
 import { getStatutLabel, getStatutColor, getPrioriteColor, getPrioriteLabel } from '@/lib/dossierUtils';
 
@@ -36,39 +37,22 @@ const getCategorieLabel = (categorie: string) => {
 interface DossierDetailViewProps {
   dossier: any;
   variant?: 'client' | 'admin' | 'partenaire';
-  onDownloadPDF?: () => void;
-  onPrint?: () => void;
+  /** Pièces du dossier (toutes origines) — prioritaire sur dossier.documents si fourni */
+  dossierFiles?: any[];
 }
 
-export function DossierDetailView({ dossier, variant = 'client' }: DossierDetailViewProps) {
+export function DossierDetailView({ dossier, variant = 'client', dossierFiles }: DossierDetailViewProps) {
   const componentRef = useRef<HTMLDivElement>(null);
 
-  const handlePrint = () => {
-    // Ouvrir la page PDF dédiée dans un nouvel onglet pour l'impression
-    const dossierId = dossier._id || dossier.id;
-    if (!dossierId) return;
-    
-    const pdfUrl = `/dossiers/${dossierId}/pdf`;
-    window.open(pdfUrl, '_blank');
-  };
-
-  const handleDownloadPDF = () => {
-    // Ouvrir la page PDF dédiée pour le téléchargement
-    const dossierId = dossier._id || dossier.id;
-    if (!dossierId) return;
-    
-    const pdfUrl = `/dossiers/${dossierId}/pdf`;
-    // Ouvrir dans un nouvel onglet
-    const newWindow = window.open(pdfUrl, '_blank');
-    if (newWindow) {
-      // Attendre que la page soit chargée puis déclencher l'impression (qui permet de sauvegarder en PDF)
-      newWindow.onload = () => {
-        setTimeout(() => {
-          newWindow.print();
-        }, 1000);
-      };
-    }
-  };
+  /** Depuis la liste dossiers : lien avec #fiche-client pour cibler la section contact */
+  useEffect(() => {
+    if (typeof window === 'undefined' || !dossier) return;
+    if (window.location.hash !== '#fiche-client') return;
+    const t = window.setTimeout(() => {
+      document.getElementById('fiche-client')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 200);
+    return () => window.clearTimeout(t);
+  }, [dossier?._id, dossier?.id]);
 
   const formatDate = (date: string | Date | null | undefined) => {
     if (!date) return 'N/A';
@@ -107,19 +91,19 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
 
   return (
     <div className="space-y-6">
-      {/* Icône PDF avec actions - visible sur la page */}
-      <div className="bg-white rounded-lg shadow-md p-6 border-2 border-dashed border-primary/30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-red-100 rounded-lg flex items-center justify-center">
-              <span className="text-4xl">📄</span>
+      {/* Icône PDF avec actions — responsive: stack sur mobile */}
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border-2 border-dashed border-primary/30">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <span className="text-2xl sm:text-4xl">📄</span>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-1">
+            <div className="min-w-0">
+              <h3 className="text-base sm:text-lg font-semibold text-foreground mb-0.5 sm:mb-1">
                 Récapitulatif du dossier
               </h3>
-              <p className="text-sm text-muted-foreground">
-                Téléchargez ou imprimez le récapitulatif complet de votre dossier
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Téléchargez ou imprimez le récapitulatif complet
               </p>
               {dossier.numero && (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -128,14 +112,14 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
               )}
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-shrink-0">
             {(() => {
               const dossierId = dossier._id || dossier.id;
               const basePath = variant === 'admin' ? '/admin' : variant === 'partenaire' ? '/partenaire' : '/client';
               return (
                 <Link
                   href={`${basePath}/dossiers/${dossierId}/recap`}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] w-full sm:w-auto bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm text-sm font-medium"
                   title="Voir le récit récapitulatif complet"
                 >
                   <span>📋</span>
@@ -143,25 +127,37 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
                 </Link>
               );
             })()}
-            <button
-              onClick={handlePrint}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors shadow-sm"
-              title="Imprimer le récapitulatif"
-            >
-              <span>🖨️</span>
-              Imprimer
-            </button>
-            <button
-              onClick={handleDownloadPDF}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm"
-              title="Télécharger le récapitulatif en PDF"
-            >
-              <span>📥</span>
-              Télécharger PDF
-            </button>
           </div>
         </div>
       </div>
+
+      {/* Formule tarifaire — visible uniquement côté admin (masquée pour client et partenaire) */}
+      {variant === 'admin' && (
+        <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50/80 p-4 sm:p-5 shadow-sm">
+          <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide mb-2">
+            Tarification (interne)
+          </h3>
+          {dossier.formuleTarifaire ? (
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-gray-900">
+                Formule choisie par le client :{' '}
+                <span className="text-orange-700">
+                  {dossier.formuleTarifaire === 'premium' ? 'Premium' : 'Standard'}
+                </span>
+              </p>
+              {dossier.formuleTarifaireChoisieAt && (
+                <p className="text-xs text-muted-foreground">
+                  Enregistrée le {formatDate(dossier.formuleTarifaireChoisieAt)}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-amber-900/90">
+              Aucune formule sélectionnée par le client pour l’instant. Une relance peut être envoyée lorsque le dossier passe en « En cours ».
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Contenu du dossier - CACHÉ mais présent dans le DOM pour impression/PDF */}
       <div
@@ -212,22 +208,22 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
           <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
             Informations Générales
           </h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="info-item">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="info-item min-w-0">
               <p className="info-label">Numéro de dossier</p>
-              <p className="info-value font-semibold">{dossier.numero || dossier._id || 'N/A'}</p>
+              <p className="info-value font-semibold break-words">{dossier.numero || dossier._id || 'N/A'}</p>
             </div>
-            <div className="info-item">
+            <div className="info-item min-w-0">
               <p className="info-label">Titre</p>
-              <p className="info-value font-semibold">{dossier.titre || 'Sans titre'}</p>
+              <p className="info-value font-semibold break-words">{dossier.titre || 'Sans titre'}</p>
             </div>
-            <div className="info-item">
+            <div className="info-item min-w-0">
               <p className="info-label">Catégorie</p>
-              <p className="info-value">{getCategorieLabel(dossier.categorie || 'autre')}</p>
+              <p className="info-value break-words">{getCategorieLabel(dossier.categorie || 'autre')}</p>
             </div>
-            <div className="info-item">
+            <div className="info-item min-w-0">
               <p className="info-label">Type de demande</p>
-              <p className="info-value">{dossier.type || 'Non spécifié'}</p>
+              <p className="info-value break-words">{dossier.type || 'Non spécifié'}</p>
             </div>
             <div className="info-item">
               <p className="info-label">Statut</p>
@@ -292,7 +288,7 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
               </div>
             )}
             {dossier.teamMembers && dossier.teamMembers.length > 0 && (
-              <div className="info-item col-span-2">
+              <div className="info-item col-span-1 sm:col-span-2 min-w-0">
                 <p className="info-label">Membres de l'équipe</p>
                 <p className="info-value">
                   {dossier.teamMembers.map((member: any, idx: number) => (
@@ -308,11 +304,33 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
           </div>
         </div>
 
-        {/* Informations client complètes */}
-        <div className="section mb-6">
-          <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
-            Coordonnées Client
-          </h2>
+        {/* Informations client complètes — ancre #fiche-client (liste dossiers → fiche contact) */}
+        <div id="fiche-client" className="section mb-6 scroll-mt-20">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4 text-foreground border-b pb-4">
+            {dossier.user ? (
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border-2 border-primary/20">
+                  <UserAvatarDisplay
+                    user={dossier.user}
+                    alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Client'}
+                    fallback={
+                      <span className="text-lg font-bold text-primary">
+                        {`${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'}
+                      </span>
+                    }
+                  />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold">Coordonnées Client</h2>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {[dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <h2 className="text-xl font-bold">Coordonnées Client</h2>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-4">
             {dossier.user ? (
               <>
@@ -460,19 +478,19 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
             <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
               Informations Spécifiques à la Demande
             </h2>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <table className="w-full">
+            <div className="bg-gray-50 p-4 rounded-lg overflow-x-auto">
+              <table className="w-full min-w-0 text-sm">
                 <thead>
                   <tr>
-                    <th className="text-left p-2">Champ</th>
-                    <th className="text-left p-2">Valeur</th>
+                    <th className="text-left p-2 align-top w-[35%] max-w-[40%]">Champ</th>
+                    <th className="text-left p-2 align-top">Valeur</th>
                   </tr>
                 </thead>
                 <tbody>
                   {specificFields.map((field, index) => (
                     <tr key={index} className="border-b">
-                      <td className="p-2 font-semibold">{field.label}</td>
-                      <td className="p-2">{field.value}</td>
+                      <td className="p-2 font-semibold break-words align-top">{field.label}</td>
+                      <td className="p-2 break-words align-top">{field.value}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -481,28 +499,39 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
           </div>
         )}
 
-        {/* Documents associés */}
-        {dossier.documents && dossier.documents.length > 0 && (
-          <div className="section mb-6">
-            <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
-              Documents Associés ({dossier.documents.length})
-            </h2>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <ul className="list-disc list-inside space-y-2">
-                {dossier.documents.map((doc: any, index: number) => (
-                  <li key={index} className="text-foreground">
-                    {doc.nomFichier || doc.filename || `Document ${index + 1}`}
-                    {doc.url && (
-                      <span className="text-xs text-muted-foreground ml-2">
-                        ({doc.url})
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+        {/* Documents associés (références dossier ou liste complète via dossierFiles) */}
+        {(() => {
+          const fromProp = Array.isArray(dossierFiles) && dossierFiles.length > 0 ? dossierFiles : null;
+          const fromDossier =
+            Array.isArray(dossier.documents) && dossier.documents.length > 0 ? dossier.documents : null;
+          const list = fromProp || fromDossier;
+          if (!list?.length) return null;
+          return (
+            <div className="section mb-6">
+              <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
+                Documents associés ({list.length})
+              </h2>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <ul className="list-disc list-inside space-y-2">
+                  {list.map((doc: any, index: number) => (
+                    <li key={doc._id || doc.id || index} className="text-foreground">
+                      {doc.nom || doc.nomFichier || doc.filename || `Document ${index + 1}`}
+                      {doc.user && (doc.user.firstName || doc.user.email) && (
+                        <span className="text-xs text-muted-foreground ml-2">
+                          — {doc.user.firstName || ''} {doc.user.lastName || ''}{' '}
+                          {doc.user.email ? `(${doc.user.email})` : ''}
+                        </span>
+                      )}
+                      {doc.url && (
+                        <span className="text-xs text-muted-foreground ml-2">({doc.url})</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Messages */}
         {dossier.messages && dossier.messages.length > 0 && (
@@ -548,19 +577,19 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
           <h2 className="text-xl font-bold mb-4 text-foreground border-b pb-2">
             Motif et Nature du Dossier
           </h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="info-item">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="info-item min-w-0">
               <p className="info-label">Catégorie principale</p>
-              <p className="info-value font-semibold">{getCategorieLabel(dossier.categorie || 'autre')}</p>
+              <p className="info-value font-semibold break-words hyphens-auto">{getCategorieLabel(dossier.categorie || 'autre')}</p>
             </div>
-            <div className="info-item">
+            <div className="info-item min-w-0">
               <p className="info-label">Type de demande</p>
-              <p className="info-value font-semibold">{dossier.type || 'Non spécifié'}</p>
+              <p className="info-value font-semibold break-words hyphens-auto">{dossier.type || 'Non spécifié'}</p>
             </div>
             {dossier.categorie && (
-              <div className="info-item col-span-2">
+              <div className="info-item col-span-1 sm:col-span-2 min-w-0">
                 <p className="info-label">Code catégorie</p>
-                <p className="info-value text-sm text-muted-foreground">{dossier.categorie}</p>
+                <p className="info-value text-sm text-muted-foreground break-all">{dossier.categorie}</p>
               </div>
             )}
           </div>
@@ -660,7 +689,7 @@ export function DossierDetailView({ dossier, variant = 'client' }: DossierDetail
 
         {/* Pied de page */}
         <div className="mt-8 pt-6 border-t text-center text-xs text-muted-foreground">
-          <p>Document généré automatiquement par Paw Legal</p>
+          <p>Document généré automatiquement par Ada Papers</p>
           <p>Ce document est confidentiel et destiné uniquement au client concerné</p>
         </div>
       </div>

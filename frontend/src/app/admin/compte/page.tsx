@@ -3,8 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { userAPI, smsPreferencesAPI } from '@/lib/api';
+import { userAPI, smsPreferencesAPI, pushAPI } from '@/lib/api';
+import { ensurePushSubscription } from '@/lib/pushClient';
+import { mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import { Toast } from '@/components/ui/Toast';
 
 function Button({ children, variant = 'default', className = '', disabled = false, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
@@ -16,11 +19,51 @@ function Button({ children, variant = 'default', className = '', disabled = fals
   return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} disabled={disabled} {...props}>{children}</button>;
 }
 
-function Input({ className = '', type, value, onChange, ...props }: any) {
+function Input({ className = '', type, value, onChange, id, name, autoComplete, ...props }: any) {
+  const resolvedName = name || id;
+  const normalizedField = String(resolvedName || '').toLowerCase();
+  const inferredAutoCompleteByField =
+    normalizedField === 'firstname'
+      ? 'given-name'
+      : normalizedField === 'lastname'
+        ? 'family-name'
+        : normalizedField === 'email'
+          ? 'email'
+          : normalizedField === 'phone'
+            ? 'tel'
+            : normalizedField === 'adresspostale' || normalizedField === 'adressepostale'
+              ? 'street-address'
+              : normalizedField === 'ville'
+                ? 'address-level2'
+                : normalizedField === 'codepostal'
+                  ? 'postal-code'
+                  : normalizedField === 'pays'
+                    ? 'country-name'
+                    : normalizedField === 'datenaissance'
+                      ? 'bday'
+                      : (normalizedField === 'datedelivrance' || normalizedField === 'dateexpiration')
+                        ? 'off'
+                        : undefined;
+  const resolvedAutoComplete =
+    autoComplete ||
+    inferredAutoCompleteByField ||
+    (type === 'email'
+      ? 'email'
+      : type === 'tel'
+        ? 'tel'
+        : type === 'password'
+          ? 'current-password'
+          : type === 'date'
+            ? 'off'
+            : 'on');
+
   // Pour les champs de date, utiliser le composant DateInput qui garantit le format jour/mois/année
   if (type === 'date') {
     return (
       <DateInputComponent
+        id={id}
+        name={resolvedName}
+        autoComplete={resolvedAutoComplete}
         value={value || ''}
         onChange={(newValue) => {
           if (onChange) {
@@ -39,6 +82,9 @@ function Input({ className = '', type, value, onChange, ...props }: any) {
   
   return (
     <input
+      id={id}
+      name={resolvedName}
+      autoComplete={resolvedAutoComplete}
       type={type}
       className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
@@ -54,9 +100,13 @@ function Label({ className = '', children, ...props }: any) {
   );
 }
 
-function Textarea({ className = '', ...props }: any) {
+function Textarea({ className = '', id, name, autoComplete, ...props }: any) {
+  const resolvedName = name || id;
   return (
     <textarea
+      id={id}
+      name={resolvedName}
+      autoComplete={autoComplete || 'street-address'}
       className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     />
@@ -67,8 +117,14 @@ export default function AdminComptePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [activeTab, setActiveTab] = useState<'profil' | 'password' | 'sms'>('profil');
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingPushTest, setIsSendingPushTest] = useState(false);
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
+  const [pushStatus, setPushStatus] = useState<
+    'checking' | 'enabled' | 'denied' | 'default' | 'unsupported' | 'server_not_configured'
+  >('checking');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
@@ -144,6 +200,48 @@ export default function AdminComptePage() {
     }
   }, [status, session]);
 
+  useEffect(() => {
+    const checkPushStatus = async () => {
+      if (typeof window === 'undefined') return;
+      if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+        setPushStatus('unsupported');
+        return;
+      }
+
+      const permission = Notification.permission;
+      if (permission === 'denied') {
+        setPushStatus('denied');
+        return;
+      }
+      if (permission === 'default') {
+        setPushStatus('default');
+        return;
+      }
+
+      try {
+        const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription) {
+          setPushStatus('enabled');
+          return;
+        }
+      } catch {
+        // On continue pour vérifier la config serveur même si la souscription n'est pas lisible.
+      }
+
+      try {
+        await pushAPI.getPublicKey();
+        setPushStatus('default');
+      } catch {
+        setPushStatus('server_not_configured');
+      }
+    };
+
+    if (status === 'authenticated') {
+      checkPushStatus();
+    }
+  }, [status]);
+
   const loadProfile = async () => {
     setIsLoading(true);
     setError(null);
@@ -203,6 +301,7 @@ export default function AdminComptePage() {
         
         console.log('📝 Données pré-remplies:', preFilledData);
         setProfileData(preFilledData);
+        setIsEditingProfile(false);
         
         // Charger les préférences SMS
         if (user.smsPreferences) {
@@ -244,18 +343,48 @@ export default function AdminComptePage() {
     setSuccess(null);
 
     try {
-      const response = await userAPI.updateProfile(profileData);
-      if (response.data.success) {
+      const merged = mergeProfileFormValuesFromDom(profileData as Record<string, string>, {
+        includeSejour: true,
+        includeAccountFields: true,
+      }) as typeof profileData;
+
+      const payload = {
+        firstName: merged.firstName ?? '',
+        lastName: merged.lastName ?? '',
+        phone: merged.phone ?? '',
+        email: merged.email ?? '',
+        dateNaissance: merged.dateNaissance || undefined,
+        lieuNaissance: merged.lieuNaissance ?? '',
+        nationalite: merged.nationalite ?? '',
+        sexe: merged.sexe ?? '',
+        numeroEtranger: merged.numeroEtranger ?? '',
+        numeroTitre: merged.numeroTitre ?? '',
+        typeTitre: merged.typeTitre ?? '',
+        dateDelivrance: merged.dateDelivrance || undefined,
+        dateExpiration: merged.dateExpiration || undefined,
+        adressePostale: merged.adressePostale ?? '',
+        ville: merged.ville ?? '',
+        codePostal: merged.codePostal ?? '',
+        pays: merged.pays ?? 'France',
+      };
+      const response = await userAPI.updateProfile(payload);
+      const data = response?.data;
+      if (data && data.success) {
         setSuccess('Profil mis à jour avec succès');
         setTimeout(() => setSuccess(null), 3000);
-        // Recharger le profil pour avoir les données à jour (au cas où le backend modifie certaines valeurs)
         await loadProfile();
       } else {
-        setError(response.data.message || 'Erreur lors de la mise à jour du profil');
+        setError((data && data.message) || 'Erreur lors de la mise à jour du profil');
       }
     } catch (error: any) {
       console.error('Erreur lors de la mise à jour du profil:', error);
-      setError(error.response?.data?.message || 'Erreur lors de la mise à jour du profil');
+      const status = error.response?.status;
+      const message = error.response?.data?.message || error.message || 'Erreur lors de la mise à jour du profil';
+      if (status === 401) {
+        setError('Session expirée. Veuillez vous reconnecter, puis réessayer.');
+      } else {
+        setError(message);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -300,6 +429,78 @@ export default function AdminComptePage() {
     }
   };
 
+  const handlePushTest = async () => {
+    setError(null);
+    setSuccess(null);
+    setIsSendingPushTest(true);
+    try {
+      const response = await pushAPI.sendTest();
+      const sent = Number(response?.data?.result?.sent || 0);
+      if (sent > 0) {
+        setSuccess(`Push test envoyé (${sent} appareil${sent > 1 ? 's' : ''}).`);
+      } else {
+        setSuccess('Test envoyé, mais aucun appareil abonné actif n’a été trouvé.');
+      }
+      setTimeout(() => setSuccess(null), 3500);
+    } catch (error: any) {
+      setError(error?.response?.data?.message || 'Impossible d’envoyer le push test.');
+    } finally {
+      setIsSendingPushTest(false);
+      if (typeof window !== 'undefined' && Notification.permission === 'granted') {
+        setPushStatus('enabled');
+      }
+    }
+  };
+
+  const handleEnablePush = async () => {
+    setError(null);
+    setSuccess(null);
+    setIsEnablingPush(true);
+    try {
+      const result = await ensurePushSubscription({ requestPermission: true });
+      if (result.ok) {
+        setPushStatus('enabled');
+        setSuccess('Notifications push activées sur cet appareil.');
+      } else if (result.reason === 'permission_required') {
+        setPushStatus('default');
+        setError('Veuillez autoriser les notifications dans votre navigateur.');
+      } else if (result.reason === 'denied') {
+        setPushStatus('denied');
+        setError('Notifications refusées dans le navigateur (paramètres à modifier).');
+      } else if (result.reason === 'server_not_configured') {
+        setPushStatus('server_not_configured');
+        setError('Serveur push non configuré (clés VAPID manquantes).');
+      } else {
+        setPushStatus('unsupported');
+        setError('Ce navigateur ne supporte pas les notifications push.');
+      }
+    } catch (error: any) {
+      setError(error?.response?.data?.message || 'Impossible d’activer les notifications push.');
+    } finally {
+      setIsEnablingPush(false);
+    }
+  };
+
+  const pushStatusLabel =
+    pushStatus === 'enabled'
+      ? 'Activé'
+      : pushStatus === 'denied'
+        ? 'Refusé'
+        : pushStatus === 'default'
+          ? 'À autoriser'
+          : pushStatus === 'unsupported'
+            ? 'Non supporté'
+            : pushStatus === 'server_not_configured'
+              ? 'Serveur non configuré'
+              : 'Vérification...';
+
+  const pushStatusClasses =
+    pushStatus === 'enabled'
+      ? 'bg-green-100 text-green-800 border-green-200'
+      : pushStatus === 'denied' || pushStatus === 'server_not_configured'
+        ? 'bg-red-100 text-red-800 border-red-200'
+        : 'bg-amber-100 text-amber-800 border-amber-200';
+
   if (status === 'loading' || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -316,68 +517,94 @@ export default function AdminComptePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background">
-      <main className="w-full px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background overflow-x-hidden max-w-[100vw]">
+      <Toast message={success || ''} visible={!!success} />
+      <main className="w-full px-3 sm:px-4 py-5 sm:py-8">
         {/* En-tête amélioré */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-primary to-primary/70 rounded-2xl flex items-center justify-center shadow-lg">
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-primary to-primary/70 rounded-2xl flex items-center justify-center shadow-lg">
               <span className="text-3xl">👤</span>
             </div>
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-4xl font-bold mb-1 sm:mb-2 bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
                 Mon Compte
               </h1>
-              <p className="text-muted-foreground text-lg">Gérez vos informations personnelles et votre sécurité</p>
+              <p className="text-muted-foreground text-sm sm:text-lg">Gérez vos informations personnelles et votre sécurité</p>
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${pushStatusClasses}`}>
+                Push: {pushStatusLabel}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isEnablingPush}
+                onClick={handleEnablePush}
+                className="w-full sm:w-auto px-4 py-2 border-2 text-xs sm:text-sm"
+              >
+                {isEnablingPush ? 'Activation...' : 'Activer les notifications push'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSendingPushTest}
+                onClick={handlePushTest}
+                className="w-full sm:w-auto px-4 py-2 border-2 text-xs sm:text-sm"
+              >
+                {isSendingPushTest ? 'Envoi du push...' : 'Envoyer push test'}
+              </Button>
             </div>
           </div>
         </div>
 
         {/* Onglets améliorés */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-6">
-          <div className="flex gap-1 border-b bg-gray-50/50 p-2">
+          <div className="flex gap-1 border-b bg-gray-50/50 p-2 overflow-x-auto">
             <button
               onClick={() => setActiveTab('profil')}
-              className={`flex-1 px-6 py-3 font-semibold text-sm transition-all duration-200 rounded-lg ${
+              className={`min-w-max flex-1 px-3 sm:px-6 py-2.5 sm:py-3 font-semibold text-xs sm:text-sm transition-all duration-200 rounded-lg whitespace-nowrap ${
                 activeTab === 'profil'
                   ? 'bg-white text-primary shadow-md border border-primary/20'
                   : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
               }`}
             >
               <span className="flex items-center justify-center gap-2">
-                <span className="text-lg">👤</span>
+                <span className="text-sm sm:text-lg">👤</span>
                 <span>Informations personnelles</span>
               </span>
             </button>
             <button
               onClick={() => setActiveTab('password')}
-              className={`flex-1 px-6 py-3 font-semibold text-sm transition-all duration-200 rounded-lg ${
+              className={`min-w-max flex-1 px-3 sm:px-6 py-2.5 sm:py-3 font-semibold text-xs sm:text-sm transition-all duration-200 rounded-lg whitespace-nowrap ${
                 activeTab === 'password'
                   ? 'bg-white text-primary shadow-md border border-primary/20'
                   : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
               }`}
             >
               <span className="flex items-center justify-center gap-2">
-                <span className="text-lg">🔒</span>
+                <span className="text-sm sm:text-lg">🔒</span>
                 <span>Mot de passe</span>
               </span>
             </button>
             <button
               onClick={() => setActiveTab('sms')}
-              className={`flex-1 px-6 py-3 font-semibold text-sm transition-all duration-200 rounded-lg ${
+              className={`min-w-max flex-1 px-3 sm:px-6 py-2.5 sm:py-3 font-semibold text-xs sm:text-sm transition-all duration-200 rounded-lg whitespace-nowrap ${
                 activeTab === 'sms'
                   ? 'bg-white text-primary shadow-md border border-primary/20'
                   : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
               }`}
             >
               <span className="flex items-center justify-center gap-2">
-                <span className="text-lg">📱</span>
+                <span className="text-sm sm:text-lg">📱</span>
                 <span>Notifications SMS</span>
               </span>
             </button>
           </div>
 
-          <div className="p-8">
+          <div className="p-4 sm:p-8">
 
           {error && (
             <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-red-100/50 border-2 border-red-300 rounded-xl shadow-sm">
@@ -399,15 +626,19 @@ export default function AdminComptePage() {
 
           {/* Formulaire de profil */}
           {activeTab === 'profil' && (
-            <form onSubmit={handleProfileSubmit} className="space-y-8">
-              <div className="grid lg:grid-cols-2 gap-8">
+            <form onSubmit={handleProfileSubmit} className="space-y-8" autoComplete="on">
+              <fieldset
+                aria-disabled={!isEditingProfile}
+                className={!isEditingProfile ? 'opacity-100 pointer-events-none' : ''}
+              >
+              <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
                 {/* Informations de base */}
                 <div className="space-y-6">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-1 h-8 bg-blue-500 rounded-full"></div>
                     <h3 className="text-xl font-bold text-foreground">Informations de base</h3>
                   </div>
-                  <div className="bg-gradient-to-br from-blue-50/50 to-white rounded-xl p-6 border border-blue-100 space-y-5">
+                  <div className="bg-gradient-to-br from-blue-50/50 to-white rounded-xl p-4 sm:p-6 border border-blue-100 space-y-5">
                   
                     <div>
                       <Label htmlFor="firstName" className="flex items-center gap-2 mb-2">
@@ -532,7 +763,7 @@ export default function AdminComptePage() {
                     <div className="w-1 h-8 bg-purple-500 rounded-full"></div>
                     <h3 className="text-xl font-bold text-foreground">Informations administratives</h3>
                   </div>
-                  <div className="bg-gradient-to-br from-purple-50/50 to-white rounded-xl p-6 border border-purple-100 space-y-5">
+                  <div className="bg-gradient-to-br from-purple-50/50 to-white rounded-xl p-4 sm:p-6 border border-purple-100 space-y-5">
 
                     <div>
                       <Label htmlFor="numeroEtranger" className="flex items-center gap-2 mb-2">
@@ -542,10 +773,13 @@ export default function AdminComptePage() {
                       <Input
                         id="numeroEtranger"
                         value={profileData.numeroEtranger}
-                        onChange={(e) => setProfileData({ ...profileData, numeroEtranger: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
+                        readOnly
+                        className="h-11 border-2 bg-gray-50 text-gray-700 cursor-not-allowed"
                         placeholder="Ex: 1234567890123"
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Ce numéro est figé pour garantir la traçabilité des dossiers. Utilisez un autre identifiant si besoin.
+                      </p>
                     </div>
 
                     <div>
@@ -618,7 +852,7 @@ export default function AdminComptePage() {
                     <div className="w-1 h-8 bg-green-500 rounded-full"></div>
                     <h3 className="text-xl font-bold text-foreground">Adresse</h3>
                   </div>
-                  <div className="bg-gradient-to-br from-green-50/50 to-white rounded-xl p-6 border border-green-100 space-y-5">
+                  <div className="bg-gradient-to-br from-green-50/50 to-white rounded-xl p-4 sm:p-6 border border-green-100 space-y-5">
 
                     <div>
                       <Label htmlFor="adressePostale" className="flex items-center gap-2 mb-2">
@@ -634,7 +868,7 @@ export default function AdminComptePage() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="codePostal" className="flex items-center gap-2 mb-2">
                           <span>📮</span>
@@ -680,42 +914,74 @@ export default function AdminComptePage() {
                   </div>
                 </div>
               </div>
+              </fieldset>
 
-              <div className="flex justify-end gap-4 pt-6 border-t border-gray-200 mt-8">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push('/admin')}
-                  disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
-                >
-                  Annuler
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
-                >
-                  {isSaving ? (
-                    <span className="flex items-center gap-2">
-                      <span className="animate-spin">⏳</span>
-                      <span>Enregistrement...</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <span>💾</span>
-                      <span>Enregistrer les modifications</span>
-                    </span>
-                  )}
-                </Button>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-6 border-t border-gray-200 mt-8">
+                {!isEditingProfile ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => router.push('/admin')}
+                      className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                    >
+                      Retour
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                        e.preventDefault();
+                        setIsEditingProfile(true);
+                      }}
+                      className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>✏️</span>
+                        <span>Modifier</span>
+                      </span>
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        await loadProfile();
+                        setIsEditingProfile(false);
+                      }}
+                      disabled={isSaving}
+                      className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={isSaving}
+                      className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
+                    >
+                      {isSaving ? (
+                        <span className="flex items-center gap-2">
+                          <span className="animate-spin">⏳</span>
+                          <span>Enregistrement...</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <span>💾</span>
+                          <span>Enregistrer les modifications</span>
+                        </span>
+                      )}
+                    </Button>
+                  </>
+                )}
               </div>
             </form>
           )}
 
           {/* Formulaire de changement de mot de passe */}
           {activeTab === 'password' && (
-            <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl">
-              <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-6 border border-orange-100 space-y-6">
+            <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl" autoComplete="on">
+              <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-4 sm:p-6 border border-orange-100 space-y-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-1 h-8 bg-orange-500 rounded-full"></div>
                   <h3 className="text-xl font-bold text-foreground">Sécurité du compte</h3>
@@ -729,6 +995,7 @@ export default function AdminComptePage() {
                   <Input
                     id="currentPassword"
                     type="password"
+                    autoComplete="current-password"
                     value={passwordData.currentPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
                     required
@@ -745,6 +1012,7 @@ export default function AdminComptePage() {
                   <Input
                     id="newPassword"
                     type="password"
+                    autoComplete="new-password"
                     value={passwordData.newPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
                     required
@@ -768,6 +1036,7 @@ export default function AdminComptePage() {
                   <Input
                     id="confirmPassword"
                     type="password"
+                    autoComplete="new-password"
                     value={passwordData.confirmPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
                     required
@@ -778,20 +1047,29 @@ export default function AdminComptePage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-4 pt-4 border-t border-gray-200">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-4 border-t border-gray-200">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSendingPushTest}
+                  onClick={handlePushTest}
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                >
+                  {isSendingPushTest ? 'Envoi du push...' : 'Envoyer push test'}
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.push('/admin')}
                   disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
                 >
                   Annuler
                 </Button>
                 <Button 
                   type="submit" 
                   disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
                 >
                   {isSaving ? (
                     <span className="flex items-center gap-2">
@@ -828,7 +1106,7 @@ export default function AdminComptePage() {
               }}
               className="space-y-6 max-w-4xl"
             >
-              <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-6 border border-orange-100 space-y-6">
+              <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-4 sm:p-6 border border-orange-100 space-y-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-1 h-8 bg-orange-500 rounded-full"></div>
                   <h3 className="text-xl font-bold text-foreground">Préférences SMS</h3>
@@ -912,20 +1190,20 @@ export default function AdminComptePage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-4 pt-4 border-t border-gray-200">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-4 border-t border-gray-200">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.push('/admin')}
                   disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
                 >
                   Annuler
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
+                  className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
                 >
                   {isSaving ? (
                     <span className="flex items-center gap-2">

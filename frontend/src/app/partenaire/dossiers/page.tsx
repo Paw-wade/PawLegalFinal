@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { dossiersAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI } from '@/lib/api';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { dossiersAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI, collaborativeDraftsAPI } from '@/lib/api';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, PARTENAIRE_FORM_STATUT_VALUES, isPartenaireFormStatutValue } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
+import { Toast } from '@/components/Toast';
+import { QuickComplementTabsForm } from '@/components/dossiers/QuickComplementTabsForm';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -269,7 +271,7 @@ export default function PartenaireDossiersPage() {
     description: '',
     categorie: '',
     type: '',
-    statut: 'en_attente',
+    statut: 'recu',
     priorite: 'normale',
     dateEcheance: getTodayDate(),
     notes: '',
@@ -282,7 +284,9 @@ export default function PartenaireDossiersPage() {
   const [motifRefus, setMotifRefus] = useState('');
   const [showStatutModal, setShowStatutModal] = useState<{ dossierId: string; dossierTitre: string; currentStatut: string; newStatut: string } | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'favorable' | 'unfavorable'>('all');
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'pending' | 'in_progress' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
+  >('all');
   const [userFilter, setUserFilter] = useState<string>('all');
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState<any>(null);
   const [documentRequestData, setDocumentRequestData] = useState({
@@ -299,6 +303,18 @@ export default function PartenaireDossiersPage() {
   const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(new Set());
   const [expandedDossierDocumentDropdowns, setExpandedDossierDocumentDropdowns] = useState<Set<string>>(new Set());
   const [dossierTasks, setDossierTasks] = useState<Record<string, any[]>>({});
+  const [dossierDrafts, setDossierDrafts] = useState<Record<string, any[]>>({});
+  const [activeDirectUploadDossierId, setActiveDirectUploadDossierId] = useState<string | null>(null);
+  const [directUploadData, setDirectUploadData] = useState({
+    nom: '',
+    description: '',
+    categorie: 'autre'
+  });
+  const [directUploadError, setDirectUploadError] = useState<string | null>(null);
+  const [directUploading, setDirectUploading] = useState(false);
+  const [activeQuickComplementDossierId, setActiveQuickComplementDossierId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const directFileInputRef = useRef<HTMLInputElement | null>(null);
   const [expandedTaskSections, setExpandedTaskSections] = useState<Set<string>>(new Set());
   const [showTaskFormForDossier, setShowTaskFormForDossier] = useState<string | null>(null);
   const [taskFormData, setTaskFormData] = useState<{ titre: string; description: string; priorite: string; assignedTo: string[] }>({
@@ -309,7 +325,12 @@ export default function PartenaireDossiersPage() {
   });
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [taskSuccessMessage, setTaskSuccessMessage] = useState<string | null>(null);
-  
+  const [addEtapeDossier, setAddEtapeDossier] = useState<any>(null);
+  const [newEtapeLabel, setNewEtapeLabel] = useState('');
+  const [newEtapeDate, setNewEtapeDate] = useState('');
+  const [isAddingEtape, setIsAddingEtape] = useState(false);
+  const [addEtapeError, setAddEtapeError] = useState<string | null>(null);
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/signin');
@@ -404,10 +425,42 @@ export default function PartenaireDossiersPage() {
             );
           }
         });
-        
-        // Ne pas charger les demandes de documents par défaut pour optimiser les performances
-        // Elles seront chargées à la demande si nécessaire
-        setDocumentRequests({});
+
+        // Charger les demandes de documents pour chaque dossier (comme pour l'admin)
+        // afin que les badges et la section "Documents demandés" soient identiques
+        const requestsMap: Record<string, any[]> = {};
+        await Promise.all(
+          dossiersList.map(async (dossier: any) => {
+            try {
+              const reqRes = await documentRequestsAPI.getRequests({
+                dossierId: dossier._id || dossier.id
+              });
+              if (reqRes.data.success) {
+                requestsMap[dossier._id || dossier.id] = reqRes.data.documentRequests || [];
+              }
+            } catch (err: any) {
+              // Ignorer silencieusement les erreurs 404, loguer les autres
+              if (err.response?.status !== 404) {
+                console.error(`Erreur lors du chargement des demandes pour le dossier ${dossier._id}:`, err);
+              }
+            }
+          })
+        );
+        setDocumentRequests(requestsMap);
+
+        const draftsMap: Record<string, any[]> = {};
+        await Promise.all(
+          dossiersList.map(async (dossier: any) => {
+            const dossierId = dossier._id || dossier.id;
+            try {
+              const draftRes = await collaborativeDraftsAPI.getDossierDrafts(dossierId);
+              if (draftRes.data.success && Array.isArray(draftRes.data.drafts)) {
+                draftsMap[dossierId] = draftRes.data.drafts;
+              }
+            } catch (_) {}
+          })
+        );
+        setDossierDrafts(draftsMap);
       } else {
         console.error('❌ Erreur dans la réponse API:', response.data);
         setError(response.data.message || 'Erreur lors du chargement des dossiers');
@@ -452,6 +505,124 @@ export default function PartenaireDossiersPage() {
       console.log('⚠️ Documents non chargés en masse (seront chargés à la demande):', err.response?.status || err.message);
       setDossierDocuments({});
     }
+  };
+
+  const handleDirectUploadFromList = async (e: React.FormEvent, dossierId: string) => {
+    e.preventDefault();
+    setDirectUploadError(null);
+
+    if (!/^[a-f0-9]{24}$/i.test(dossierId)) {
+      setDirectUploadError('Impossible d\'associer le document au dossier (identifiant invalide).');
+      return;
+    }
+
+    const selectedFiles = Array.from(directFileInputRef.current?.files || []);
+    if (selectedFiles.length === 0) {
+      setDirectUploadError('Veuillez sélectionner un fichier');
+      return;
+    }
+    if (selectedFiles.length === 1 && !directUploadData.nom.trim()) {
+      setDirectUploadError('Veuillez saisir un nom de document');
+      return;
+    }
+
+    setDirectUploading(true);
+    try {
+      const createdDocs: any[] = [];
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append('document', file);
+        formData.append('nom', selectedFiles.length === 1 ? directUploadData.nom.trim() : file.name);
+        formData.append('description', directUploadData.description.trim());
+        formData.append('categorie', directUploadData.categorie);
+        formData.append('dossierId', dossierId);
+
+        const response = await documentsAPI.uploadDocument(formData);
+        if (!response?.data?.success) {
+          throw new Error(response?.data?.message || 'Erreur lors du téléversement du document');
+        }
+        if (response.data.document) {
+          createdDocs.push(response.data.document);
+        }
+      }
+
+      if (createdDocs.length > 0) {
+        setDossierDocuments((prev) => {
+          const current = prev[dossierId] || [];
+          return {
+            ...prev,
+            [dossierId]: [...createdDocs.reverse(), ...current]
+          };
+        });
+      }
+
+      setDirectUploadData({ nom: '', description: '', categorie: 'autre' });
+      if (directFileInputRef.current) {
+        directFileInputRef.current.value = '';
+      }
+      setActiveDirectUploadDossierId(null);
+      await loadDossierDocuments();
+      setExpandedDocumentSections((prev) => new Set(prev).add(dossierId));
+      setToast({
+        message:
+          selectedFiles.length > 1
+            ? `✅ ${selectedFiles.length} documents ajoutés avec succès au dossier.`
+            : '✅ Document ajouté avec succès au dossier.',
+        type: 'success',
+      });
+    } catch (err: any) {
+      console.error('Erreur upload direct depuis la liste (partenaire):', err);
+      setDirectUploadError(err.response?.data?.message || err.message || 'Erreur lors du téléversement du document');
+      setToast({ message: err.response?.data?.message || err.message || 'Erreur lors du téléversement du document', type: 'error' });
+    } finally {
+      setDirectUploading(false);
+    }
+  };
+
+  const getLastComplementTimestamp = (dossier: any): number => {
+    const complements = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit : [];
+    if (complements.length === 0) return 0;
+    const lastComplement = complements[complements.length - 1];
+    const rawDate = lastComplement?.updatedAt || lastComplement?.addedAt || lastComplement?.createdAt;
+    const ts = rawDate ? new Date(rawDate).getTime() : 0;
+    return Number.isFinite(ts) ? ts : 0;
+  };
+
+  const getComplementSeenStorageKey = (dossierId: string) => `dossierComplementSeen:partenaire:${dossierId}`;
+
+  const hasUnseenComplement = (dossier: any): boolean => {
+    if (typeof window === 'undefined') return false;
+    const dossierId = (dossier?._id || dossier?.id || '').toString();
+    if (!dossierId) return false;
+    const lastTs = getLastComplementTimestamp(dossier);
+    if (!lastTs) return false;
+    const seenTs = Number(localStorage.getItem(getComplementSeenStorageKey(dossierId)) || '0');
+    return lastTs > seenTs;
+  };
+
+  const markComplementAsSeen = (dossier: any) => {
+    if (typeof window === 'undefined') return;
+    const dossierId = (dossier?._id || dossier?.id || '').toString();
+    if (!dossierId) return;
+    const lastTs = getLastComplementTimestamp(dossier);
+    if (!lastTs) return;
+    localStorage.setItem(getComplementSeenStorageKey(dossierId), String(lastTs));
+  };
+
+  const openQuickComplementEditor = (dossier: any) => {
+    const dossierId = (dossier?._id || dossier?.id || '').toString();
+    if (!/^[a-f0-9]{24}$/i.test(dossierId)) {
+      alert('Identifiant dossier invalide.');
+      return;
+    }
+
+    if (activeQuickComplementDossierId === dossierId) {
+      setActiveQuickComplementDossierId(null);
+      return;
+    }
+
+    markComplementAsSeen(dossier);
+    setActiveQuickComplementDossierId(dossierId);
   };
 
   // Fonction pour charger les tâches d'un dossier spécifique à la demande
@@ -576,8 +747,15 @@ export default function PartenaireDossiersPage() {
         return;
       }
 
+      const titreTrim = (formData.titre || '').trim();
+      if (!titreTrim) {
+        setError('Veuillez indiquer le nom du dossier.');
+        setIsLoading(false);
+        return;
+      }
+
       const dossierData: any = {
-        titre: formData.titre,
+        titre: titreTrim,
         description: formData.description,
         categorie: formData.categorie,
         type: formData.type,
@@ -666,7 +844,7 @@ export default function PartenaireDossiersPage() {
       description: dossier.description || '',
       categorie: dossier.categorie || '',
       type: dossier.type || '',
-      statut: dossier.statut || 'en_attente',
+      statut: dossier.statut || 'recu',
       priorite: dossier.priorite || 'normale',
       dateEcheance: dossier.dateEcheance ? new Date(dossier.dateEcheance).toISOString().split('T')[0] : '',
       notes: dossier.notes || '',
@@ -684,8 +862,15 @@ export default function PartenaireDossiersPage() {
     setError(null);
 
     try {
+      const titreTrim = (formData.titre || '').trim();
+      if (!titreTrim) {
+        setError('Veuillez indiquer le nom du dossier.');
+        setIsLoading(false);
+        return;
+      }
+
       const updateData: any = {
-        titre: formData.titre,
+        titre: titreTrim,
         description: formData.description,
         categorie: formData.categorie,
         type: formData.type,
@@ -1059,7 +1244,7 @@ export default function PartenaireDossiersPage() {
                 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="titre">Titre du dossier {!editingDossier && '*'}</Label>
+                    <Label htmlFor="titre">Nom du dossier {!editingDossier && '*'}</Label>
                     <Input
                       id="titre"
                       value={formData.titre}
@@ -1129,25 +1314,18 @@ export default function PartenaireDossiersPage() {
                         onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                       >
-                        <option value="recu">Reçu</option>
-                        <option value="accepte">Accepté</option>
-                        <option value="refuse">Refusé</option>
-                        <option value="en_attente_onboarding">En attente d'onboarding (RDV)</option>
-                        <option value="en_cours_instruction">En cours d'instruction (constitution dossier)</option>
-                        <option value="pieces_manquantes">Pièces manquantes (relance client)</option>
-                        <option value="dossier_complet">Dossier Complet</option>
-                        <option value="depose">Déposé</option>
-                        <option value="reception_confirmee">Réception confirmée</option>
-                        <option value="complement_demande">Complément demandé (avec date limite)</option>
-                        <option value="decision_defavorable">Décision défavorable</option>
-                        <option value="communication_motifs">Communication des Motifs</option>
-                        <option value="recours_preparation">Recours en préparation</option>
-                        <option value="refere_mesures_utiles">Référé Mesures Utiles</option>
-                        <option value="refere_suspension_rep">Référé suspension et REP</option>
-                        <option value="gain_cause">Gain de cause</option>
-                        <option value="rejet">Rejet</option>
-                        <option value="decision_favorable">Décision favorable</option>
-                        <option value="autre">Autre (statut non prévu)</option>
+                        {editingDossier &&
+                          formData.statut &&
+                          !isPartenaireFormStatutValue(formData.statut) && (
+                            <option value={formData.statut}>
+                              {getStatutLabel(formData.statut)} (statut actuel)
+                            </option>
+                          )}
+                        {PARTENAIRE_FORM_STATUT_VALUES.map((value) => (
+                          <option key={value} value={value}>
+                            {getStatutLabel(value)}
+                          </option>
+                        ))}
                       </select>
                       <p className="text-xs text-muted-foreground mt-1">
                         📋 <strong>Fonction :</strong> Indique l'état d'avancement du dossier dans le processus administratif. 
@@ -1304,7 +1482,7 @@ export default function PartenaireDossiersPage() {
         <button
                   type="button"
                   onClick={() => setStatusFilter('pending')}
-                  className={`text-left bg-gradient-to-br from-yellow-50 to-yellow-100 border-l-4 border-yellow-500 rounded-lg p-4 shadow-sm transition-all ${
+                  className={`text-left bg-gradient-to-br from-yellow-50 to-yellow-100 border border-yellow-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                     statusFilter === 'pending'
                       ? 'ring-2 ring-yellow-500/60 shadow-md'
                       : 'hover:shadow-md hover:-translate-y-0.5'
@@ -1312,13 +1490,19 @@ export default function PartenaireDossiersPage() {
                 >
                   <p className="text-xs text-yellow-700 font-semibold mb-1 uppercase tracking-wide">En attente</p>
                   <p className="text-2xl font-bold text-yellow-900">
-                    {dossiers.filter((d: any) => d.statut === 'recu' || d.statut === 'en_attente_onboarding').length}
+                    {dossiers.filter((d: any) =>
+                      // Dossiers transmis au partenaire mais pas encore acceptés ni refusés
+                      Array.isArray(d.transmittedTo) &&
+                      d.transmittedTo.some((t: any) => t.status === 'pending') &&
+                      !d.estCloture &&
+                      !(d.estArchive || d.statut === 'annule')
+                    ).length}
                   </p>
         </button>
         <button
                   type="button"
                   onClick={() => setStatusFilter('in_progress')}
-                  className={`text-left bg-gradient-to-br from-blue-50 to-blue-100 border-l-4 border-blue-500 rounded-lg p-4 shadow-sm transition-all ${
+                  className={`text-left bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                     statusFilter === 'in_progress'
                       ? 'ring-2 ring-blue-500/60 shadow-md'
                       : 'hover:shadow-md hover:-translate-y-0.5'
@@ -1326,35 +1510,45 @@ export default function PartenaireDossiersPage() {
                 >
                   <p className="text-xs text-blue-700 font-semibold mb-1 uppercase tracking-wide">En cours</p>
                   <p className="text-2xl font-bold text-blue-900">
-                    {dossiers.filter((d: any) => d.statut === 'en_cours_instruction' || d.statut === 'dossier_complet').length}
+                    {dossiers.filter((d: any) =>
+                      // Dossiers acceptés par le partenaire et non clôturés / archivés
+                      Array.isArray(d.transmittedTo) &&
+                      d.transmittedTo.some((t: any) => t.status === 'accepted') &&
+                      !d.estCloture &&
+                      !(d.estArchive || d.statut === 'annule')
+                    ).length}
                   </p>
         </button>
         <button
                   type="button"
-                  onClick={() => setStatusFilter('favorable')}
-                  className={`text-left bg-gradient-to-br from-green-50 to-green-100 border-l-4 border-green-500 rounded-lg p-4 shadow-sm transition-all ${
-                    statusFilter === 'favorable'
+                  onClick={() => setStatusFilter('closed')}
+                  className={`text-left bg-gradient-to-br from-green-50 to-green-100 border border-green-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
+                    statusFilter === 'closed'
                       ? 'ring-2 ring-green-500/60 shadow-md'
                       : 'hover:shadow-md hover:-translate-y-0.5'
                   }`}
                 >
-                  <p className="text-xs text-green-700 font-semibold mb-1 uppercase tracking-wide">Favorables</p>
+                  <p className="text-xs text-green-700 font-semibold mb-1 uppercase tracking-wide">Clôturés</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {dossiers.filter((d: any) => d.statut === 'decision_favorable' || d.statut === 'gain_cause').length}
+                    {dossiers.filter((d: any) => d.estCloture).length}
                   </p>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStatusFilter('unfavorable')}
-                  className={`text-left bg-gradient-to-br from-red-50 to-red-100 border-l-4 border-red-500 rounded-lg p-4 shadow-sm transition-all ${
-                    statusFilter === 'unfavorable'
+                  onClick={() => setStatusFilter('archived')}
+                  className={`text-left bg-gradient-to-br from-red-50 to-red-100 border border-red-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
+                    statusFilter === 'archived'
                       ? 'ring-2 ring-red-500/60 shadow-md'
                       : 'hover:shadow-md hover:-translate-y-0.5'
                   }`}
                 >
-                  <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Défavorables</p>
+                  <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
                   <p className="text-2xl font-bold text-red-900">
-                    {dossiers.filter((d: any) => d.statut === 'decision_defavorable' || d.statut === 'refuse' || d.statut === 'rejet').length}
+                    {dossiers.filter((d: any) =>
+                      d.estArchive ||
+                      d.statut === 'annule' ||
+                      (Array.isArray(d.transmittedTo) && d.transmittedTo.some((t: any) => t.status === 'refused'))
+                    ).length}
                   </p>
         </button>
       </div>
@@ -1370,10 +1564,10 @@ export default function PartenaireDossiersPage() {
                       <span className="font-semibold text-primary">
                         {statusFilter !== 'all' && (
                           <>
-                            {statusFilter === 'pending' && 'En attente'}
-                            {statusFilter === 'in_progress' && 'En cours'}
-                            {statusFilter === 'favorable' && 'Favorables'}
-                            {statusFilter === 'unfavorable' && 'Défavorables'}
+                            {statusFilter === 'pending' && 'En attente (dossiers transmis non encore acceptés)'}
+                            {statusFilter === 'in_progress' && 'En cours (dossiers acceptés non clôturés)'}
+                            {statusFilter === 'closed' && 'Clôturés'}
+                            {statusFilter === 'archived' && 'Archivés'}
                           </>
                         )}
                         {statusFilter !== 'all' && userFilter !== 'all' && ' • '}
@@ -1401,13 +1595,48 @@ export default function PartenaireDossiersPage() {
                 const filteredDossiers = dossiers.filter((d: any) => {
                   // Filtre par statut
                   if (statusFilter === 'pending') {
-                    if (!(d.statut === 'recu' || d.statut === 'en_attente_onboarding')) return false;
+                    // Dossiers transmis au partenaire mais pas encore acceptés / refusés
+                    if (
+                      !Array.isArray(d.transmittedTo) ||
+                      !d.transmittedTo.some((t: any) => t.status === 'pending') ||
+                      d.estCloture ||
+                      (d.estArchive || d.statut === 'annule')
+                    ) {
+                      return false;
+                    }
                   } else if (statusFilter === 'in_progress') {
-                    if (!(d.statut === 'en_cours_instruction' || d.statut === 'dossier_complet')) return false;
-                  } else if (statusFilter === 'favorable') {
-                    if (!(d.statut === 'decision_favorable' || d.statut === 'gain_cause')) return false;
+                    // Dossiers acceptés par le partenaire et non clôturés / archivés
+                    if (
+                      !Array.isArray(d.transmittedTo) ||
+                      !d.transmittedTo.some((t: any) => t.status === 'accepted') ||
+                      d.estCloture ||
+                      (d.estArchive || d.statut === 'annule')
+                    ) {
+                      return false;
+                    }
                   } else if (statusFilter === 'unfavorable') {
-                    if (!(d.statut === 'decision_defavorable' || d.statut === 'refuse' || d.statut === 'rejet')) return false;
+                    // Dossiers refusés par le partenaire
+                    if (
+                      !Array.isArray(d.transmittedTo) ||
+                      !d.transmittedTo.some((t: any) => t.status === 'refused') ||
+                      d.estCloture ||
+                      (d.estArchive || d.statut === 'annule')
+                    ) {
+                      return false;
+                    }
+                  } else if (statusFilter === 'closed') {
+                    // Dossiers clôturés
+                    if (!d.estCloture) return false;
+                  } else if (statusFilter === 'archived') {
+                    // Dossiers archivés
+                    if (
+                      !(
+                        d.estArchive ||
+                        (d.statut || '') === 'annule' ||
+                        (Array.isArray(d.transmittedTo) && d.transmittedTo.some((t: any) => t.status === 'refused'))
+                      )
+                    )
+                      return false;
                   }
 
                   // Filtre par utilisateur
@@ -1450,21 +1679,21 @@ export default function PartenaireDossiersPage() {
                     {filteredDossiers.map((dossier) => (
                   <div
                     key={dossier._id || dossier.id}
-                    className={`border rounded-xl p-5 hover:shadow-xl transition-all duration-200 bg-white w-full ${
+                    className={`relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 bg-gradient-to-r shadow-sm w-full min-w-0 ${
                       dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
-                        ? 'border-l-4 border-l-yellow-500 border-t border-r border-b border-gray-200'
+                        ? 'from-yellow-200/70 via-amber-200/70 to-yellow-200/70 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(234,179,8,0.5)]'
                         : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
-                        ? 'border-l-4 border-l-green-500 border-t border-r border-b border-gray-200'
-                        : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet'
-                        ? 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200'
-                        : 'border-l-4 border-l-blue-500 border-t border-r border-b border-gray-200'
+                        ? 'from-green-200/70 via-emerald-200/70 to-green-200/70 group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(34,197,94,0.5)]'
+                        : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet' || dossier.statut === 'annule'
+                        ? 'from-red-200/70 via-rose-200/70 to-red-200/70 group-hover:from-red-400/70 group-hover:via-rose-400/70 group-hover:to-red-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(239,68,68,0.5)]'
+                        : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
                     }`}
                   >
-                    <div>
-                    {/* En-tête de la carte avec bouton de pliage/dépliage */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1 min-w-0 pr-2">
-                        <div className="flex items-center gap-2 mb-1">
+                    <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                      {/* En-tête de la carte : vue compacte, identique à l’espace admin */}
+                      <div className="flex flex-col gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
                           <button
                             onClick={() => {
                               const dossierId = dossier._id || dossier.id;
@@ -1476,116 +1705,75 @@ export default function PartenaireDossiersPage() {
                               }
                               setExpandedDossiers(newExpanded);
                             }}
-                            className="p-1 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary flex-shrink-0"
+                            className="p-2 -m-1 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary flex-shrink-0"
                             title={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
+                            aria-label={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d={expandedDossiers.has(dossier._id || dossier.id) ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
                             </svg>
                           </button>
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-bold text-base text-foreground line-clamp-2 leading-tight">
-                              {dossier.titre}
-                      </h3>
+                            <h3 className="font-semibold text-base text-foreground line-clamp-1 leading-snug truncate">
+                              {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
+                            </h3>
                             {(dossier.numero || dossier.numeroDossier) && (
-                              <p className="text-xs text-primary font-semibold mt-0.5">
-                                N° {dossier.numero || dossier.numeroDossier}
+                              <p className="text-xs text-primary font-mono font-semibold">
+                                Réf. {dossier.numero || dossier.numeroDossier}
                               </p>
                             )}
-                            {/* Compteurs et informations sur dossier plié */}
+                            {/* Client — toujours visible, même plié */}
+                            <p className="text-xs text-primary font-medium">
+                              Client : {dossier.user && typeof dossier.user === 'object'
+                                ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '—'
+                                : [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ') || dossier.clientEmail || 'Non renseigné'}
+                            </p>
+                            {/* Résumé compact des infos clés du dossier (plié) */}
                             {!expandedDossiers.has(dossier._id || dossier.id) && (
-                              <div className="mt-1.5 space-y-1">
+                              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
                                 {(() => {
-                                  const dossierRequests = documentRequests[dossier._id || dossier.id] || [];
-                                  const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
-                                  const receivedRequests = dossierRequests.filter((r: any) => r.status === 'received' || r.status === 'sent');
-                                  const totalDocuments = dossierDocuments[dossier._id || dossier.id]?.length || dossier.documents?.length || 0;
-                                  const progress = getDossierProgress(dossier.statut);
-                                  const unreadCount = getUnreadNotificationsCountForDossier(dossier._id || dossier.id);
-                                  
-                                  // Calculer les tâches
                                   const dossierId = dossier._id || dossier.id;
+                                  const totalDocuments = dossierDocuments[dossierId]?.length || dossier.documents?.length || 0;
+                                  const dossierRequests = documentRequests[dossierId] || [];
+                                  const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
                                   const tasks = dossierTasks[dossierId] || [];
-                                  const pendingTasks = tasks.filter((task: any) => {
-                                    return task.statut !== 'termine' && task.statut !== 'annule' && !task.effectue;
-                                  });
-                                  const completedTasks = tasks.filter((task: any) => {
-                                    return task.statut === 'termine' || task.effectue === true;
-                                  });
-                                  
+                                  const pendingTasks = tasks.filter((task: any) => task.statut !== 'termine' && task.statut !== 'annule' && !task.effectue);
+                                  const draftsCount = dossierDrafts[dossierId]?.length ?? 0;
+                                  const transmissions = (dossier.transmittedTo && dossier.transmittedTo.length) || 0;
+                                  const hasDeadline = !!dossier.dateEcheance;
+                                  const deadlineDays = hasDeadline ? calculateDaysUntil(dossier.dateEcheance) : null;
+
                                   return (
                                     <>
-                                      {/* Ligne 1: Documents */}
-                                      <div className="flex items-center gap-2.5 flex-wrap text-[10px] text-muted-foreground">
-                                        <span className="flex items-center gap-0.5">
-                                          <span className="text-xs">📄</span>
-                                          <span className="font-semibold text-foreground">{totalDocuments}</span>
+                                      <span>📄 Documents : <span className="font-semibold text-foreground">{totalDocuments}</span></span>
+                                      <span>
+                                        📝 En préparation :{' '}
+                                        <span className="font-semibold text-foreground">
+                                          {draftsCount} document{draftsCount > 1 ? 's' : ''}
                                         </span>
-                                        {dossierRequests.length > 0 && (
-                                          <>
-                                            <span className="flex items-center gap-0.5">
-                                              <span className="text-xs">📋</span>
-                                              <span className="font-semibold text-orange-600">{pendingRequests.length}</span>
-                                            </span>
-                                            <span className="flex items-center gap-0.5">
-                                              <span className="text-xs">✅</span>
-                                              <span className="font-semibold text-green-600">{receivedRequests.length}</span>
-                                            </span>
-                                          </>
-                                        )}
-                                        {tasks.length > 0 && (
-                                          <>
-                                            <span className="flex items-center gap-0.5">
-                                              <span className="text-xs">⏳</span>
-                                              <span className="font-semibold text-orange-600">{pendingTasks.length}</span>
-                                            </span>
-                                            {completedTasks.length > 0 && (
-                                              <span className="flex items-center gap-0.5">
-                                                <span className="text-xs">✅</span>
-                                                <span className="font-semibold text-green-600">{completedTasks.length}</span>
-                                              </span>
-                                            )}
-                                          </>
-                                        )}
-                                        {dossier.messages?.length > 0 && (
-                                          <span className="flex items-center gap-0.5">
-                                            <span className="text-xs">💬</span>
-                                            <span className="font-semibold">{dossier.messages.length}</span>
-                                          </span>
-                                        )}
-                                        {unreadCount > 0 && (
-                                          <span className="flex items-center gap-0.5">
-                                            <span className="text-xs">🔔</span>
-                                            <span className="font-semibold text-red-600">{unreadCount}</span>
-                                          </span>
-                                        )}
-                    </div>
-                                      
-                                      {/* Ligne 2: Progression, Échéance, Activité, Assigné */}
-                                      <div className="flex items-center gap-2.5 flex-wrap text-[10px] text-muted-foreground">
-                                        <span className="flex items-center gap-0.5">
-                                          <span className="text-xs">📊</span>
-                                          <span className="font-semibold">{progress}%</span>
+                                      </span>
+                                      {dossierRequests.length > 0 && (
+                                        <span>📨 Demandes : <span className="font-semibold text-foreground">{pendingRequests.length}</span></span>
+                                      )}
+                                      {tasks.length > 0 && (
+                                        <span>✅ Tâches : <span className="font-semibold text-foreground">{pendingTasks.length}</span></span>
+                                      )}
+                                      {transmissions > 0 && (
+                                        <span>
+                                          📤 Transmissions :{' '}
+                                          <span className="font-semibold text-foreground">{transmissions}</span>
                                         </span>
-                                        {dossier.dateEcheance && isDeadlineApproaching(dossier.dateEcheance) && (
-                                          <span className="flex items-center gap-0.5 text-red-600">
-                                            <span className="text-xs">⏰</span>
-                                            <span className="font-semibold">{calculateDaysUntil(dossier.dateEcheance)}j</span>
+                                      )}
+                                      {hasDeadline && (
+                                        <span>
+                                          ⏰ Échéance :{' '}
+                                          <span className={deadlineDays !== null && deadlineDays < 0 ? 'text-red-600 font-semibold' : 'text-foreground font-semibold'}>
+                                            {deadlineDays !== null && deadlineDays < 0
+                                              ? `dépassée (${Math.abs(deadlineDays)} j)`
+                                              : `${deadlineDays} j`}
                                           </span>
-                                        )}
-                                        {dossier.updatedAt && (
-                                          <span className="flex items-center gap-0.5">
-                                            <span className="text-xs">🔄</span>
-                                            <span>{formatRelativeTime(dossier.updatedAt)}</span>
-                                          </span>
-                                        )}
-                                        {dossier.assignedTo && typeof dossier.assignedTo === 'object' && dossier.assignedTo.firstName && (
-                                          <span className="flex items-center gap-0.5">
-                                            <span className="text-xs">👤</span>
-                                            <span className="truncate max-w-[80px]">{dossier.assignedTo.firstName}</span>
-                                          </span>
-                                        )}
-                                      </div>
+                                        </span>
+                                      )}
                                     </>
                                   );
                                 })()}
@@ -1593,43 +1781,53 @@ export default function PartenaireDossiersPage() {
                             )}
                           </div>
                         </div>
-                        {expandedDossiers.has(dossier._id || dossier.id) && dossier.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 mt-1 ml-7">
-                            {dossier.description}
-                      </p>
-                    )}
                       </div>
-                      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/partenaire/dossiers/${dossier._id || dossier.id}`}
-                            className="p-1.5 rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary"
-                            title="Voir les détails du dossier"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </Link>
+                      <div className="flex flex-col sm:items-end gap-2 flex-shrink-0 w-full sm:max-w-none">
+                        <div className="flex flex-wrap items-center gap-2 justify-end">
+                          <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getStatutColor(dossier.statut)}`}>
+                            {getStatutLabel(dossier.statut)}
+                          </span>
+                          {dossier.priorite && (
+                            <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getPrioriteColor(dossier.priorite)}`}>
+                              {dossier.priorite}
+                            </span>
+                          )}
                         </div>
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(dossier.statut)}`}>
-                          {getStatutLabel(dossier.statut)}
-                        </span>
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getPrioriteColor(dossier.priorite)}`}>
-                          {dossier.priorite}
-                        </span>
+                        <Link
+                          href={`/partenaire/dossiers/${dossier._id || dossier.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center justify-center px-3 py-2.5 min-h-[44px] rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors w-full sm:w-auto"
+                        >
+                          Voir les détails
+                        </Link>
                       </div>
                     </div>
 
                     {/* Contenu détaillé (affiché uniquement si le dossier est déplié) */}
                     {expandedDossiers.has(dossier._id || dossier.id) && (
                       <>
-                    {/* Informations du client */}
-                    <div className="mb-3 pb-3 border-b border-gray-200">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm">👤</span>
+                    {/* Client */}
+                    <div className="mb-4 pb-4 border-b border-gray-200">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Client</p>
+                      <Link
+                        href={`/partenaire/dossiers/${dossier._id || dossier.id}#fiche-client`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-3 rounded-lg -m-1 p-1 hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                        title="Ouvrir la fiche contact du client"
+                        aria-label="Ouvrir la fiche contact du client"
+                      >
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-gray-100">
+                          {dossier.user && (dossier.user.avatarUrl || dossier.user.photoUrl) ? (
+                            // Photo du client si disponible
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={String(dossier.user.avatarUrl || dossier.user.photoUrl)}
+                              alt={`${dossier.user.firstName || ''} ${dossier.user.lastName || ''}`.trim() || 'Photo client'}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-base text-gray-600">👤</span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           {dossier.user ? (
@@ -1645,21 +1843,21 @@ export default function PartenaireDossiersPage() {
                                 {dossier.clientPrenom} {dossier.clientNom}
                               </p>
                               <p className="text-xs text-muted-foreground truncate">{dossier.clientEmail}</p>
-                              <span className="text-xs text-orange-600 font-medium">(Non inscrit)</span>
+                              <span className="text-xs text-amber-600">(Non inscrit)</span>
                             </>
                           )}
                         </div>
-                      </div>
+                      </Link>
                     </div>
 
-                    {/* Barre de progression */}
+                    {/* Avancement du dossier */}
                     {(() => {
                       const progress = getDossierProgress(dossier.statut);
                       return (
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="text-muted-foreground">Progression</span>
-                            <span className="font-semibold text-foreground">{progress}%</span>
+                        <div className="mb-4">
+                          <div className="flex items-center justify-between text-xs mb-1.5">
+                            <span className="text-muted-foreground font-medium">Avancement du dossier</span>
+                            <span className="font-semibold text-foreground">{progress} %</span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
                             <div 
@@ -1670,21 +1868,43 @@ export default function PartenaireDossiersPage() {
                                 'bg-gray-400'
                               }`}
                               style={{width: `${progress}%`}}
-                            ></div>
+                            />
                           </div>
                         </div>
                       );
                     })()}
 
+                    {/* Documents en préparation */}
+                    {(dossierDrafts[dossier._id || dossier.id]?.length > 0) && (
+                      <div className="mb-4">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Documents en préparation</p>
+                        <Link
+                          href={`/partenaire/dossiers/${dossier._id || dossier.id}/documents-en-preparation`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="block rounded-lg border border-gray-200 bg-gray-50/50 p-3 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                        >
+                          <div className="space-y-2">
+                            {(dossierDrafts[dossier._id || dossier.id] || []).map((d: any) => (
+                              <div key={d._id} className="rounded border border-gray-100 bg-white px-3 py-2">
+                                <p className="font-medium text-sm text-foreground">{d.title || 'Sans titre'}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Créé par : {d.createdBy ? `${d.createdBy.firstName || ''} ${d.createdBy.lastName || ''}`.trim() || d.createdBy.role : '—'}</p>
+                                {(d.partnerAccess?.length > 0) && (
+                                  <p className="text-xs text-gray-500 mt-0.5">Accès : {(d.partnerAccess.map((pa: any) => (pa.partner && typeof pa.partner === 'object' && (pa.partner.firstName || pa.partner.lastName)) ? `${(pa.partner.firstName || '').trim()} ${(pa.partner.lastName || '').trim()}`.trim() : null).filter(Boolean).join(', ')) || '—'}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-xs text-primary font-medium mt-2">Ouvrir la page Documents en préparation →</p>
+                        </Link>
+                      </div>
+                    )}
+
                     {/* Alerte d'échéance */}
                     {isDeadlineApproaching(dossier.dateEcheance) && (
-                      <div className="bg-red-50 border-l-4 border-red-500 p-2 mb-3 rounded-r">
-                        <div className="flex items-center gap-2">
-                          <span className="text-red-600">⚠️</span>
-                          <p className="text-xs font-semibold text-red-900">
-                            Échéance dans {calculateDaysUntil(dossier.dateEcheance)} jour{calculateDaysUntil(dossier.dateEcheance) > 1 ? 's' : ''}
-                          </p>
-                        </div>
+                      <div className="bg-red-50 border-l-4 border-red-500 p-3 mb-4 rounded-r">
+                        <p className="text-xs font-semibold text-red-900">
+                          Échéance dans {calculateDaysUntil(dossier.dateEcheance)} jour{calculateDaysUntil(dossier.dateEcheance) > 1 ? 's' : ''}
+                        </p>
                       </div>
                     )}
 
@@ -1693,183 +1913,81 @@ export default function PartenaireDossiersPage() {
                       const nextAction = getNextAction(dossier.statut);
                       if (nextAction) {
                         return (
-                          <div className="bg-blue-50 border border-blue-200 rounded-md p-2 mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-blue-600">📋</span>
-                              <div>
-                                <p className="text-xs font-semibold text-blue-900">Prochaine action</p>
-                                <p className="text-xs text-blue-700">{nextAction}</p>
-                  </div>
-                            </div>
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                            <p className="text-xs font-semibold text-blue-900 mb-0.5">Prochaine action</p>
+                            <p className="text-xs text-blue-800">{nextAction}</p>
                           </div>
                         );
                       }
                       return null;
                     })()}
 
-                    {/* Timeline complète avec toutes les étapes */}
-                    {(() => {
-                      const steps = getTimelineSteps(dossier.statut);
-                      return (
-                        <div className="mb-3 pb-2 border-b border-gray-100">
-                          <p className="text-xs font-semibold text-muted-foreground mb-2">Étapes du dossier :</p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {steps.map((step) => (
-                              <div key={step.key} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded ${
-                                step.isCurrent ? 'bg-blue-50 border border-blue-200' : ''
-                              }`}>
-                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                  step.completed && !step.isCurrent ? 'bg-green-500' : 
-                                  step.isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' : 
-                                  'bg-gray-300'
-                                }`}></span>
-                                <span className={`text-[10px] leading-tight ${
-                                  step.completed && !step.isCurrent ? 'text-green-700 font-medium' : 
-                                  step.isCurrent ? 'text-blue-700 font-bold' : 
-                                  'text-gray-400'
-                                }`}>
-                                  {step.label}
-                    </span>
-                  </div>
-                            ))}
-                </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Informations du dossier */}
-                    <div className="space-y-2 mb-3">
-                      {(dossier.numero || dossier.numeroDossier) && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-primary font-semibold">🔢</span>
-                          <span className="text-primary font-semibold">
-                            N° {dossier.numero || dossier.numeroDossier}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-start gap-2 text-sm">
-                        <span className="text-muted-foreground mt-0.5">📋</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-foreground text-xs">{getCategorieLabel(dossier.categorie || 'autre')}</p>
-                          {dossier.type && (
-                            <p className="text-xs text-muted-foreground truncate mt-0.5">
-                              {getTypeLabel(dossier.categorie || 'autre', dossier.type)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {dossier.assignedTo ? (
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-muted-foreground">👨‍💼</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-foreground text-xs truncate">
-                              {dossier.assignedTo.firstName} {dossier.assignedTo.lastName}
-                            </p>
-                            <span className={`text-xs px-2 py-0.5 rounded-full inline-block mt-0.5 ${
-                              dossier.assignedTo.role === 'superadmin'
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-blue-100 text-blue-800'
-                            }`}>
-                              {dossier.assignedTo.role === 'superadmin' ? 'Superadmin' : 'Admin'}
+                    {/* Informations du dossier — version compacte, identique à l'admin */}
+                    <div className="mb-3 pb-3 border-b border-gray-200">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        {(dossier.numero || dossier.numeroDossier) && (
+                          <span>
+                            Réf.{" "}
+                            <span className="font-mono font-semibold text-foreground">
+                              {dossier.numero || dossier.numeroDossier}
                             </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>👨‍💼</span>
-                          <span className="italic">Non assigné</span>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>📅</span>
-                        <span>
-                          Créé le {dossier.createdAt ? new Date(dossier.createdAt).toLocaleDateString('fr-FR', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                          }) : '-'}
-                        </span>
-                      </div>
-
-                      {/* Temps écoulé */}
-                      {dossier.createdAt && (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>⏱️</span>
-                          <span>Ouvert il y a {calculateDaysSince(dossier.createdAt)} jour{calculateDaysSince(dossier.createdAt) > 1 ? 's' : ''}</span>
-                        </div>
-                      )}
-
-                      {/* Dernière activité */}
-                      {dossier.updatedAt && (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>🔄</span>
-                          <span>Dernière activité: {formatRelativeTime(dossier.updatedAt)}</span>
-                        </div>
-                      )}
-
-                      {dossier.dateEcheance && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-orange-600">⏰</span>
-                          <span className="text-orange-600 font-medium">
-                            Échéance: {new Date(dossier.dateEcheance).toLocaleDateString('fr-FR')}
                           </span>
-                        </div>
-                      )}
+                        )}
+                        <span>
+                          Catégorie :{" "}
+                          <span className="font-medium text-foreground">
+                            {getCategorieLabel(dossier.categorie || "autre")}
+                          </span>
+                        </span>
+                        {dossier.type && (
+                          <span>
+                            Type :{" "}
+                            <span className="text-foreground">
+                              {getTypeLabel(dossier.categorie || "autre", dossier.type)}
+                            </span>
+                          </span>
+                        )}
+                        <span>
+                          Assigné à :{" "}
+                          <span className="text-foreground">
+                            {dossier.assignedTo
+                              ? `${dossier.assignedTo.firstName || ""} ${dossier.assignedTo.lastName || ""}`.trim() ||
+                                (dossier.assignedTo.email ?? "—")
+                              : "Non assigné"}
+                          </span>
+                        </span>
+                        {dossier.createdAt && (
+                          <span>
+                            Créé le :{" "}
+                            <span className="text-foreground">
+                              {new Date(dossier.createdAt).toLocaleDateString("fr-FR", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </span>
+                          </span>
+                        )}
+                        {dossier.updatedAt && (
+                          <span>
+                            Dernière activité :{" "}
+                            <span className="text-foreground">
+                              {formatRelativeTime(dossier.updatedAt)}
+                            </span>
+                          </span>
+                        )}
+                        {dossier.dateEcheance && (
+                          <span>
+                            Échéance :{" "}
+                            <span className="font-medium text-foreground">
+                              {new Date(dossier.dateEcheance).toLocaleDateString("fr-FR")}
+                            </span>
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Statistiques rapides */}
-                    <div className="grid grid-cols-4 gap-2 mb-3 pb-2 border-b border-gray-100">
-                      <div className="bg-gray-50 p-2 rounded text-center">
-                        <p className="text-xs text-muted-foreground">Documents</p>
-                        <p className="text-sm font-semibold text-foreground">
-                          {dossierDocuments[dossier._id || dossier.id]?.length || dossier.documents?.length || 0}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 p-2 rounded text-center">
-                        <p className="text-xs text-muted-foreground">Messages</p>
-                        <p className="text-sm font-semibold text-foreground">
-                          {dossier.messages?.length || 0}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 p-2 rounded text-center">
-                        <p className="text-xs text-muted-foreground">Demandes</p>
-                        <p className="text-sm font-semibold text-foreground">
-                          {documentRequests[dossier._id || dossier.id]?.length || 0}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 p-2 rounded text-center">
-                        <p className="text-xs text-muted-foreground">Tâches</p>
-                        {(() => {
-                          const dossierId = dossier._id || dossier.id;
-                          const tasks = dossierTasks[dossierId] || [];
-                          const pendingTasks = tasks.filter((task: any) => {
-                            return task.statut !== 'termine' && task.statut !== 'annule' && !task.effectue;
-                          });
-                          const completedTasks = tasks.filter((task: any) => {
-                            return task.statut === 'termine' || task.effectue === true;
-                          });
-                          return (
-                            <div className="flex items-center justify-center gap-1.5">
-                              {pendingTasks.length > 0 && (
-                                <span className="text-sm font-semibold text-orange-600">
-                                  ⏳ {pendingTasks.length}
-                                </span>
-                              )}
-                              {completedTasks.length > 0 && (
-                                <span className="text-sm font-semibold text-green-600">
-                                  ✅ {completedTasks.length}
-                                </span>
-                              )}
-                              {tasks.length === 0 && (
-                                <span className="text-sm font-semibold text-foreground">0</span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
+                    {/* Synthèse supprimée pour harmoniser avec la vue admin */}
 
                     {/* Section Tâches */}
                     {(() => {
@@ -2090,23 +2208,40 @@ export default function PartenaireDossiersPage() {
   );
                     })()}
 
-                    {/* Section Documents demandés - Style identique au client */}
+                    {/* Section Documents demandés + pièces envoyées spontanément par le client (sans demande préalable) */}
                     {(() => {
-                      const dossierRequests = documentRequests[dossier._id || dossier.id] || [];
+                      const dossierId = dossier._id || dossier.id;
+                      const dossierRequests = documentRequests[dossierId] || [];
+                      const dossierDocsList = dossierDocuments[dossierId] || [];
+                      const linkedDocIds = new Set(
+                        dossierRequests
+                          .filter((r: any) => r.document)
+                          .map((r: any) => String(r.document._id || r.document))
+                      );
+                      const spontaneousDocs = dossierDocsList.filter(
+                        (doc: any) => !linkedDocIds.has(String(doc._id || doc.id))
+                      );
                       const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
                       const receivedRequests = dossierRequests.filter((r: any) => r.status === 'received' || r.status === 'sent');
-                      const isExpanded = expandedDocumentSections.has(dossier._id || dossier.id);
-                      
-                      if (dossierRequests.length === 0) {
-                        return null; // Ne rien afficher s'il n'y a pas de demandes
-                      }
-                      
+                      const isExpanded = expandedDocumentSections.has(dossierId);
+                      const receivedPiecesCount = receivedRequests.length + spontaneousDocs.length;
+                      const importantInfoCount = Array.isArray(dossier?.complementsRecit) ? dossier.complementsRecit.length : 0;
+
+                      const toggleDirectUpload = (e?: { stopPropagation?: () => void }) => {
+                        e?.stopPropagation?.();
+                        setDirectUploadError(null);
+                        if (activeDirectUploadDossierId === dossierId) {
+                          setActiveDirectUploadDossierId(null);
+                        } else {
+                          setActiveDirectUploadDossierId(dossierId);
+                        }
+                      };
+
                       return (
                         <div className="pt-3 border-t border-gray-200 mb-3">
                           <div 
                             className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-md p-2 -m-2 transition-colors"
                             onClick={() => {
-                              const dossierId = dossier._id || dossier.id;
                               const newExpanded = new Set(expandedDocumentSections);
                               if (isExpanded) {
                                 newExpanded.delete(dossierId);
@@ -2126,17 +2261,148 @@ export default function PartenaireDossiersPage() {
                                       {pendingRequests.length} en attente
                                     </span>
                                   )}
-                                  {pendingRequests.length > 0 && receivedRequests.length > 0 && ' • '}
-                                  {receivedRequests.length > 0 && (
+                                  {pendingRequests.length > 0 && receivedPiecesCount > 0 && ' • '}
+                                  {receivedPiecesCount > 0 && (
                                     <span className="text-green-600 font-medium">
-                                      {receivedRequests.length} reçu{receivedRequests.length > 1 ? 's' : ''}
+                                      {receivedPiecesCount} reçu{receivedPiecesCount > 1 ? 's' : ''}
                                     </span>
                                   )}
                                 </p>
                               </div>
                             </div>
-                            <span className="text-muted-foreground text-sm">{isExpanded ? '▲' : '▼'}</span>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                title="Ajouter un document"
+                                aria-label="Ajouter un document"
+                                className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                                onClick={toggleDirectUpload}
+                              >
+                                +
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                title="Ajouter une info importante"
+                                aria-label="Ajouter une info importante"
+                                className="relative h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openQuickComplementEditor(dossier);
+                                }}
+                              >
+                                ℹ️
+                                {importantInfoCount > 0 && (
+                                  <span
+                                    className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] leading-4 text-white text-center font-bold ring-2 ring-white ${
+                                      hasUnseenComplement(dossier) ? 'bg-red-500' : 'bg-blue-500'
+                                    }`}
+                                    title={`${importantInfoCount} information(s) importante(s)`}
+                                  >
+                                    {importantInfoCount > 99 ? '99+' : importantInfoCount}
+                                  </span>
+                                )}
+                              </Button>
+                              <span className="text-muted-foreground text-sm">{isExpanded ? '▲' : '▼'}</span>
+                            </div>
                           </div>
+
+                          {activeDirectUploadDossierId === dossierId && (
+                            <form
+                              onSubmit={(e) => handleDirectUploadFromList(e, dossierId)}
+                              className="mt-3 p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-2.5"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {directUploadError && <p className="text-xs text-red-600">{directUploadError}</p>}
+                              <div>
+                                <label className="text-[11px] md:text-sm font-medium">Fichier(s) *</label>
+                                <input
+                                  ref={directFileInputRef}
+                                  type="file"
+                                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                                  multiple
+                                  className="mt-1 w-full text-xs md:text-sm"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file && !directUploadData.nom.trim()) {
+                                      setDirectUploadData((prev) => ({ ...prev, nom: file.name }));
+                                    }
+                                  }}
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] md:text-sm font-medium">Nom du document *</label>
+                                <input
+                                  type="text"
+                                  value={directUploadData.nom}
+                                  onChange={(e) => setDirectUploadData((prev) => ({ ...prev, nom: e.target.value }))}
+                                  className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] md:text-sm font-medium">Catégorie</label>
+                                <select
+                                  value={directUploadData.categorie}
+                                  onChange={(e) => setDirectUploadData((prev) => ({ ...prev, categorie: e.target.value }))}
+                                  className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm"
+                                >
+                                  <option value="identite">Identité</option>
+                                  <option value="titre_sejour">Titre de séjour</option>
+                                  <option value="contrat">Contrat</option>
+                                  <option value="facture">Facture</option>
+                                  <option value="autre">Autre</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[11px] md:text-sm font-medium">Description</label>
+                                <textarea
+                                  value={directUploadData.description}
+                                  onChange={(e) => setDirectUploadData((prev) => ({ ...prev, description: e.target.value }))}
+                                  className="mt-1 w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs md:text-sm min-h-[56px]"
+                                />
+                              </div>
+                              <div className="flex justify-end gap-2 pt-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
+                                  onClick={() => {
+                                    setActiveDirectUploadDossierId(null);
+                                    setDirectUploadError(null);
+                                  }}
+                                  disabled={directUploading}
+                                >
+                                  Annuler
+                                </Button>
+                                <Button
+                                  type="submit"
+                                  className="h-7 md:h-8 px-2 md:px-3 text-[10px] md:text-xs"
+                                  disabled={directUploading}
+                                >
+                                  {directUploading ? 'Envoi...' : 'Envoyer'}
+                                </Button>
+                              </div>
+                            </form>
+                          )}
+
+                          {activeQuickComplementDossierId === dossierId && (
+                            <QuickComplementTabsForm
+                              key={`${dossierId}-${(dossier.complementsRecit || [])
+                                .map((c: any) => c._id || c.id)
+                                .join('-')}`}
+                              dossierId={dossierId}
+                              complements={dossier.complementsRecit || []}
+                              onSaved={async () => {
+                                await loadDossiers();
+                                setActiveQuickComplementDossierId(null);
+                              }}
+                              onCancel={() => setActiveQuickComplementDossierId(null)}
+                              onSuccessToast={(msg) => setToast({ message: msg, type: 'success' })}
+                              onErrorToast={(msg) => setToast({ message: msg, type: 'error' })}
+                            />
+                          )}
                           
                           {isExpanded && (
                             <div className="mt-3 space-y-3">
@@ -2264,6 +2530,79 @@ export default function PartenaireDossiersPage() {
                                   </div>
                                 );
                               })}
+                              {spontaneousDocs.map((doc: any) => (
+                                <div
+                                  key={`spontaneous-${doc._id || doc.id}`}
+                                  className="border rounded-lg p-3 bg-green-50/50 border-green-200"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                        <span className="text-lg flex-shrink-0">✅</span>
+                                        <div className="flex-1 min-w-0">
+                                          <h5 className="font-semibold text-sm truncate text-foreground">
+                                            {doc.nom || 'Document'}
+                                          </h5>
+                                        </div>
+                                        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-semibold flex-shrink-0">
+                                          Sans demande préalable
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 bg-green-100 text-green-800">
+                                          Reçu
+                                        </span>
+                                      </div>
+                                      {doc.description && (
+                                        <p className="text-xs text-muted-foreground mb-2 ml-7 line-clamp-2">
+                                          {doc.description}
+                                        </p>
+                                      )}
+                                      <div className="flex items-center gap-3 text-xs text-muted-foreground ml-7">
+                                        <span>
+                                          📅 Envoyé le{' '}
+                                          {new Date(doc.createdAt || doc.updatedAt).toLocaleDateString('fr-FR')}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2 mt-3 ml-7">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedDocumentForPreview(doc);
+                                            setShowDocumentPreviewModal(true);
+                                          }}
+                                          className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-xs font-medium transition-colors"
+                                        >
+                                          👁️ Voir
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            try {
+                                              const response = await documentsAPI.downloadDocument(doc._id || doc.id);
+                                              const blob = new Blob([response.data]);
+                                              const url = window.URL.createObjectURL(blob);
+                                              const link = document.createElement('a');
+                                              link.href = url;
+                                              link.download = doc.nom;
+                                              document.body.appendChild(link);
+                                              link.click();
+                                              document.body.removeChild(link);
+                                              window.URL.revokeObjectURL(url);
+                                            } catch (err) {
+                                              console.error('Erreur lors du téléchargement:', err);
+                                              alert('Erreur lors du téléchargement du document');
+                                            }
+                                          }}
+                                          className="px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded text-xs font-medium transition-colors"
+                                        >
+                                          ⬇️ Télécharger
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -2300,30 +2639,11 @@ export default function PartenaireDossiersPage() {
                             return (
                               <div className="relative">
                                 <div className="flex gap-3 text-xs text-muted-foreground">
-                                  {hasDocuments && (
+                                  {hasDocuments && isDocDropdownExpanded && (
+                                    <>
                                     <div className="relative">
-                                      <button
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          const newExpanded = new Set(expandedDossierDocumentDropdowns);
-                                          if (isDocDropdownExpanded) {
-                                            newExpanded.delete(dossier._id || dossier.id);
-                                          } else {
-                                            newExpanded.add(dossier._id || dossier.id);
-                                          }
-                                          setExpandedDossierDocumentDropdowns(newExpanded);
-                                        }}
-                                        className="flex items-center gap-1 hover:text-foreground transition-colors"
-                                        title="Voir les documents"
-                                      >
-                                        <span>📄 {dossierDocs.length}</span>
-                                        <span className="text-[10px]">{isDocDropdownExpanded ? '▲' : '▼'}</span>
-                                      </button>
-                                      
-                                      {/* Dropdown des documents */}
-                                      {isDocDropdownExpanded && (
-                                        <div 
+                                      {/* Dropdown des documents (affiché uniquement quand étendu par autre interaction éventuelle) */}
+                                      <div 
                                           className="absolute left-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
                                           onClick={(e) => e.stopPropagation()}
                                         >
@@ -2344,9 +2664,9 @@ export default function PartenaireDossiersPage() {
                                                       {doc.description && (
                                                         <p className="text-[10px] text-gray-500 line-clamp-1 mt-0.5">{doc.description}</p>
                                                       )}
-                                                      <p className="text-[10px] text-gray-400 mt-1">
-                                                        {doc.typeMime} • {doc.taille ? `${(doc.taille / 1024).toFixed(1)} KB` : ''}
-                                                      </p>
+                                                      {doc.typeMime && (
+                                                        <p className="text-[10px] text-gray-400 mt-1">{doc.typeMime}</p>
+                                                      )}
                                                     </div>
                                                   </div>
                                                   <div className="flex items-center gap-1 pt-2 border-t border-gray-100">
@@ -2391,8 +2711,8 @@ export default function PartenaireDossiersPage() {
                                             </div>
                                           </div>
                                         </div>
-                                      )}
                                     </div>
+                                    </>
                                   )}
                                   {dossier.messages && dossier.messages.length > 0 && (
                                     <span>💬 {dossier.messages.length}</span>
@@ -2402,7 +2722,7 @@ export default function PartenaireDossiersPage() {
                             );
                           })()}
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
                           {(() => {
                             const unreadCount = getUnreadNotificationsCountForDossier(dossier._id || dossier.id);
                             return (
@@ -2472,32 +2792,45 @@ export default function PartenaireDossiersPage() {
                             📋 Statut du dossier
                           </label>
                           <select
-                            value={dossier.statut}
-                            onChange={(e) => handleChangeStatut(dossier._id || dossier.id, e.target.value)}
+                            value={dossier.statut || ''}
+                            // Les partenaires ne peuvent pas modifier le statut du dossier
+                            onChange={() => {}}
                             className="text-xs px-2 py-1.5 rounded-md border border-gray-300 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors w-full"
-                            disabled={isLoading}
-                            title="État d'avancement du dossier dans le processus. Modifiable par le chef d'équipe ou superadmin uniquement."
+                            disabled={true}
+                            title="Le changement de statut est réservé aux administrateurs."
                           >
-                            <option value="recu">Reçu</option>
-                            <option value="accepte">Accepté</option>
-                            <option value="refuse">Refusé</option>
-                            <option value="en_attente_onboarding">En attente d'onboarding</option>
-                            <option value="en_cours_instruction">En cours d'instruction</option>
-                            <option value="pieces_manquantes">Pièces manquantes</option>
-                            <option value="dossier_complet">Dossier Complet</option>
-                            <option value="depose">Déposé</option>
-                            <option value="reception_confirmee">Réception confirmée</option>
-                            <option value="complement_demande">Complément demandé</option>
-                            <option value="decision_defavorable">Décision défavorable</option>
-                            <option value="communication_motifs">Communication des Motifs</option>
-                            <option value="recours_preparation">Recours en préparation</option>
-                            <option value="refere_mesures_utiles">Référé Mesures Utiles</option>
-                            <option value="refere_suspension_rep">Référé suspension et REP</option>
-                            <option value="gain_cause">Gain de cause</option>
-                            <option value="rejet">Rejet</option>
-                            <option value="decision_favorable">Décision favorable</option>
-                            <option value="autre">Autre (statut non prévu)</option>
+                            {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 ? (
+                              <>
+                                {!dossier.statut && (
+                                  <option value="">Sélectionner une étape</option>
+                                )}
+                                {dossier.etapesSupplementaires.map((etape: any, idx: number) => {
+                                  const value = etape.id || etape.label || String(idx);
+                                  return (
+                                    <option
+                                      key={value}
+                                      value={value}
+                                    >
+                                      {etape.label || etape.id || `Étape ${idx + 1}`}
+                                    </option>
+                                  );
+                                })}
+                              </>
+                            ) : (
+                              <option value="">
+                                Aucune étape définie (ouvrir &quot;Ajouter une étape&quot; dans les détails)
+                              </option>
+                            )}
                           </select>
+                          {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Étapes choisies :{' '}
+                              {dossier.etapesSupplementaires
+                                .map((etape: any) => etape.label)
+                                .filter(Boolean)
+                                .join(' • ')}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">
@@ -2505,10 +2838,11 @@ export default function PartenaireDossiersPage() {
                           </label>
                           <select
                             value={dossier.assignedTo?._id || dossier.assignedTo || ''}
-                            onChange={(e) => handleAssignDossier(dossier._id || dossier.id, e.target.value)}
+                            // Les partenaires ne peuvent pas modifier l'assignation
+                            onChange={() => {}}
                             className="text-xs px-2 py-1.5 rounded-md border border-gray-300 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors w-full"
-                            disabled={isLoading}
-                            title="Assignation rapide d'un membre pour le suivi. Pour une équipe complète, utilisez la gestion d'équipe dans les détails."
+                            disabled={true}
+                            title="L'assignation des dossiers est réservée aux administrateurs."
                           >
                             <option value="">Non assigné</option>
                             {/* Les partenaires n'ont pas accès à la liste des membres de l'équipe */}
@@ -2519,7 +2853,7 @@ export default function PartenaireDossiersPage() {
                     </div>
                     </>
                     )}
-                    </div>
+                      </div>
                   </div>
                 ))}
                   </div>
@@ -2661,11 +2995,16 @@ export default function PartenaireDossiersPage() {
               setIsLoading(true);
               setError(null);
               try {
-                // Créer une demande pour chaque type de document sélectionné
-                const requests = documentRequestData.selectedDocumentTypes.map(async (docType) => {
+                // Créer une demande pour chaque type de document sélectionné.
+                // Important: on exécute séquentiellement pour éviter un throttling SMS/Twilio
+                // quand plusieurs appels API sont lancés en même temps.
+                let successCount = 0;
+                let failedCount = 0;
+                for (let index = 0; index < documentRequestData.selectedDocumentTypes.length; index += 1) {
+                  const docType = documentRequestData.selectedDocumentTypes[index];
                   const docInfo = documentTypesList.find(d => d.value === docType);
                   const documentTypeLabel = docInfo?.label || docType;
-                  
+
                   // Utiliser le type de base pour l'enum backend (mapping)
                   const baseTypeMap: Record<string, string> = {
                     passeport: 'passeport',
@@ -2731,25 +3070,38 @@ export default function PartenaireDossiersPage() {
                     isUrgent: documentRequestData.isUrgent
                   });
                   
-                  return await documentRequestsAPI.createRequest({
-                    dossierId: showDocumentRequestModal._id || showDocumentRequestModal.id,
-                    documentType: baseType,
-                    documentTypeLabel: documentTypeLabel,
-                    message: documentRequestData.message,
-                    isUrgent: documentRequestData.isUrgent
-                  });
+                  try {
+                    const resp = await documentRequestsAPI.createRequest({
+                      dossierId: showDocumentRequestModal._id || showDocumentRequestModal.id,
+                      documentType: baseType,
+                      documentTypeLabel: documentTypeLabel,
+                      message: documentRequestData.message,
+                      isUrgent: documentRequestData.isUrgent,
+                      skipSms: index > 0,
+                      batchDocumentCount:
+                        index === 0 ? documentRequestData.selectedDocumentTypes.length : undefined
+                    });
+                    if (resp?.data?.success) {
+                      successCount += 1;
+                    } else {
+                      failedCount += 1;
+                    }
+                  } catch (err) {
+                    failedCount += 1;
+                    console.error('❌ Erreur création demande docType:', docType, err);
+                  }
+                }
+
+                console.log('✅ Résultat créations demandes documents:', {
+                  successCount,
+                  failedCount
                 });
-                
-                const responses = await Promise.all(requests);
-                const allSuccess = responses.every(r => r.data.success);
-                
-                console.log('✅ Réponses de l\'API:', responses);
-                
-                if (allSuccess) {
+
+                if (failedCount === 0 && successCount > 0) {
                   // Afficher un message de succès temporaire
                   setError(null);
-                  const count = documentRequestData.selectedDocumentTypes.length;
-                  alert(`✅ ${count} demande(s) de document(s) créée(s) avec succès ! Le client a été notifié.`);
+                  const totalCount = documentRequestData.selectedDocumentTypes.length;
+                  alert(`✅ ${totalCount} demande(s) de document(s) créée(s) avec succès ! Le client a été notifié.`);
                   
                   setShowDocumentRequestModal(null);
                   setDocumentRequestData({
@@ -2760,8 +3112,8 @@ export default function PartenaireDossiersPage() {
                   // Recharger les dossiers pour afficher les nouvelles demandes
                   await loadDossiers();
                 } else {
-                  const failedCount = responses.filter(r => !r.data.success).length;
-                  setError(`${failedCount} demande(s) n'a(ont) pas pu être créée(s). Veuillez réessayer.`);
+                  const totalCount = documentRequestData.selectedDocumentTypes.length;
+                  setError(`${failedCount} demande(s) sur ${totalCount} n'a(ont) pas pu être créée(s). Veuillez réessayer.`);
                 }
               } catch (err: any) {
                 console.error('❌ Erreur lors de la création de la demande:', err);
@@ -2879,8 +3231,7 @@ export default function PartenaireDossiersPage() {
                     onClick={() => {
                       setShowDocumentRequestModal(null);
                       setDocumentRequestData({
-                        documentType: '',
-                        documentTypeLabel: '',
+                        selectedDocumentTypes: [],
                         message: '',
                         isUrgent: false
                       });
@@ -2899,6 +3250,79 @@ export default function PartenaireDossiersPage() {
           </div>
         </div>
       )}
+
+      {/* Modal Ajouter une étape du dossier */}
+      {addEtapeDossier && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-2">Ajouter une étape (non prévue)</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Dossier : <strong>{addEtapeDossier.titre || addEtapeDossier.numero || addEtapeDossier._id}</strong>
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const label = newEtapeLabel.trim();
+                if (!label) return;
+                setIsAddingEtape(true);
+                setAddEtapeError(null);
+                try {
+                  const current = addEtapeDossier.etapesSupplementaires || [];
+                  const next = [...current, { label, date: newEtapeDate || undefined, ordre: current.length }];
+                  const response = await dossiersAPI.updateDossier(addEtapeDossier._id, { etapesSupplementaires: next });
+                  if (response.data.success) {
+                    setDossiers(prev => prev.map(d => d._id === addEtapeDossier._id ? { ...d, etapesSupplementaires: next } : d));
+                    setAddEtapeDossier(null);
+                    setNewEtapeLabel('');
+                    setNewEtapeDate('');
+                  } else {
+                    setAddEtapeError(response.data.message || 'Erreur lors de l\'ajout');
+                  }
+                } catch (err: any) {
+                  setAddEtapeError(err.response?.data?.message || 'Erreur lors de l\'ajout de l\'étape');
+                } finally {
+                  setIsAddingEtape(false);
+                }
+              }}
+            >
+              <div className="space-y-3 mb-4">
+                <div>
+                  <Label htmlFor="newEtapeLabelPart">Libellé de l&apos;étape *</Label>
+                  <Input
+                    id="newEtapeLabelPart"
+                    value={newEtapeLabel}
+                    onChange={(e) => setNewEtapeLabel(e.target.value)}
+                    placeholder="Ex: Convocation préfecture reçue"
+                    required
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="newEtapeDatePart">Date (optionnel)</Label>
+                  <Input
+                    id="newEtapeDatePart"
+                    type="date"
+                    value={newEtapeDate}
+                    onChange={(e) => setNewEtapeDate(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              {addEtapeError && (
+                <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{addEtapeError}</div>
+              )}
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => { setAddEtapeDossier(null); setNewEtapeLabel(''); setNewEtapeDate(''); setAddEtapeError(null); }} disabled={isAddingEtape}>
+                  Annuler
+                </Button>
+                <Button type="submit" disabled={isAddingEtape || !newEtapeLabel.trim()}>
+                  {isAddingEtape ? 'Ajout...' : 'Ajouter l\'étape'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       
       {/* Modal de prévisualisation de document */}
       {selectedDocumentForPreview && (
@@ -2909,6 +3333,13 @@ export default function PartenaireDossiersPage() {
             setShowDocumentPreviewModal(false);
             setSelectedDocumentForPreview(null);
           }}
+        />
+      )}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
         />
       )}
     </div>

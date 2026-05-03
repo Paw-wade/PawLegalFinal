@@ -39,10 +39,8 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
   const { isVisible, toggleVisibility } = useNotificationBannerVisibility();
 
   useEffect(() => {
+    // Chargement unique au montage / changement de rôle utilisateur
     loadBannerItems();
-    // Recharger toutes les 30 secondes
-    const interval = setInterval(loadBannerItems, 30000);
-    return () => clearInterval(interval);
   }, [userRole, userId]);
 
   const loadBannerItems = async () => {
@@ -122,7 +120,7 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
         }
       }
 
-      // Pour les clients : notifications importantes de dossiers
+      // Pour les clients : notifications importantes de dossiers (documents, échéances, explications)
       if (userRole === 'client' && userId) {
         try {
           const notificationsResponse = await notificationsAPI.getNotifications({
@@ -132,10 +130,34 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
           if (notificationsResponse.data.success) {
             const notifications = notificationsResponse.data.notifications || [];
             
-            // Filtrer les notifications importantes (documents manquants, échéances, etc.)
+            // Filtrer les notifications importantes pour le client :
+            // - demandes de documents
+            // - transmissions de dossier
+            // - clôture / archivage de dossier
+            // - tarification (choix demandé, montant fixé, exonération)
             const importantNotifications = notifications.filter((notif: any) => {
-              const type = notif.type || '';
-              return type.includes('document') || type.includes('echeance') || type.includes('urgent');
+              const rawType = notif.type || '';
+              const type = rawType.toLowerCase();
+
+              const isDocument =
+                type === 'document_request' ||
+                type.includes('document');
+
+              const isTransmission =
+                type.includes('transmis') ||
+                type.includes('transmission');
+
+              const isClosureOrArchive =
+                type.includes('cloture') ||
+                type.includes('clôture') ||
+                type.includes('closed') ||
+                type.includes('archive');
+
+              const isTarification =
+                type === 'tarification_choice_requested' ||
+                type.includes('tarification');
+
+              return isDocument || isTransmission || isClosureOrArchive || isTarification;
             });
 
             importantNotifications.slice(0, 3).forEach((notif: any) => {
@@ -144,17 +166,90 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
               let link = '/client/notifications';
               let icon = '🔔';
 
-              if (notif.type?.includes('document')) {
+              const notifType = notif.type || '';
+              const lowerType = notifType.toLowerCase();
+              const data = notif.data || notif.metadata || {};
+
+              if (notifType === 'document_request') {
+                // Cas spécifique: demande de document pour le client
+                const dossierId = safeString(data.dossierId);
+                const dossierNumero = safeString(data.dossierNumero);
+                const label =
+                  safeString(data.documentTypeLabel) ||
+                  safeString(data.documentType) ||
+                  'document';
+                const isUrgent = !!data.isUrgent;
+
+                message = `${isUrgent ? '[URGENT] ' : ''}Un document "${label}" est demandé pour votre dossier ${dossierNumero || ''}`.trim();
+                icon = '📄';
+                link = dossierId ? `/client/dossiers/${dossierId}` : '/client/documents';
+
+                items.push({
+                  id: `notification-${safeString(notif._id) || safeString(notif.id) || Math.random()}`,
+                  type: 'dossier',
+                  message,
+                  link,
+                  icon,
+                  priority: isUrgent ? 'high' : 'normal'
+                });
+                return;
+              }
+
+              if (notifType === 'tarification_choice_requested' || lowerType.includes('tarification')) {
+                message =
+                  safeString(notif.message) ||
+                  safeString(notif.titre) ||
+                  'Information de tarification disponible pour votre dossier.';
+                icon = '💶';
+                link = '/client/tarification';
+                items.push({
+                  id: `notification-${safeString(notif._id) || safeString(notif.id) || Math.random()}`,
+                  type: 'custom',
+                  message,
+                  link,
+                  icon,
+                  priority: 'high'
+                });
+                return;
+              }
+
+              if (lowerType.includes('document')) {
                 icon = '📄';
                 const dossierId = safeString(notif.dossierId) || safeString(notif.metadata?.dossierId);
                 if (dossierId) {
                   link = `/client/dossiers/${dossierId}`;
                 }
-              } else if (notif.type?.includes('echeance')) {
-                icon = '⏰';
-                const dossierId = safeString(notif.dossierId) || safeString(notif.metadata?.dossierId);
+              } else if (
+                lowerType.includes('transmis') ||
+                lowerType.includes('transmission')
+              ) {
+                icon = '📤';
+                const dossierId =
+                  safeString(notif.dossierId) ||
+                  safeString(notif.metadata?.dossierId) ||
+                  safeString(data.dossierId);
                 if (dossierId) {
                   link = `/client/dossiers/${dossierId}`;
+                }
+                if (!message) {
+                  message = 'Votre dossier a été transmis.';
+                }
+              } else if (
+                lowerType.includes('cloture') ||
+                lowerType.includes('clôture') ||
+                lowerType.includes('closed') ||
+                lowerType.includes('archive')
+              ) {
+                icon = '📁';
+                const dossierId =
+                  safeString(notif.dossierId) ||
+                  safeString(notif.metadata?.dossierId) ||
+                  safeString(data.dossierId);
+                if (dossierId) {
+                  link = `/client/dossiers/${dossierId}`;
+                }
+                if (!message) {
+                  message = 'Le statut de votre dossier a été mis à jour.';
                 }
               }
 
@@ -164,7 +259,7 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
                 message,
                 link,
                 icon,
-                priority: notif.type?.includes('urgent') ? 'high' : 'normal'
+                priority: notifType.includes('urgent') ? 'high' : 'normal'
               });
             });
           }
@@ -214,61 +309,31 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
       >
         <span className="text-sm">×</span>
       </button>
-      <div className="overflow-hidden pr-10">
-        <div className="flex animate-scroll-banner whitespace-nowrap">
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5">
+        <div className="space-y-2">
           {bannerItems.map((item) => (
             <Link
               key={item.id}
               href={item.link || '#'}
-              className={`inline-flex items-center gap-2 px-6 py-3 mx-2 rounded-lg transition-all hover:bg-primary/20 ${
-                item.priority === 'high' ? 'bg-red-50 border border-red-200' : 'bg-white/50'
+              className={`flex items-start gap-2 px-3 py-2 rounded-lg transition-all hover:bg-primary/10 ${
+                item.priority === 'high' ? 'bg-red-50 border border-red-200' : 'bg-white/70 border border-primary/10'
               }`}
             >
-              <span className="text-lg">{item.icon}</span>
-              <span className={`text-sm font-medium ${
-                item.priority === 'high' ? 'text-red-900' : 'text-foreground'
-              }`}>
-                {item.message}
-              </span>
-              <span className="text-xs text-muted-foreground">→</span>
-            </Link>
-          ))}
-          {/* Dupliquer pour animation continue */}
-          {bannerItems.map((item) => (
-            <Link
-              key={`${item.id}-dup`}
-              href={item.link || '#'}
-              className={`inline-flex items-center gap-2 px-6 py-3 mx-2 rounded-lg transition-all hover:bg-primary/20 ${
-                item.priority === 'high' ? 'bg-red-50 border border-red-200' : 'bg-white/50'
-              }`}
-            >
-              <span className="text-lg">{item.icon}</span>
-              <span className={`text-sm font-medium ${
-                item.priority === 'high' ? 'text-red-900' : 'text-foreground'
-              }`}>
-                {item.message}
-              </span>
-              <span className="text-xs text-muted-foreground">→</span>
+              <span className="text-lg mt-0.5">{item.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p
+                  className={`text-sm font-medium leading-snug ${
+                    item.priority === 'high' ? 'text-red-900' : 'text-foreground'
+                  }`}
+                >
+                  {item.message}
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground shrink-0 mt-0.5">→</span>
             </Link>
           ))}
         </div>
       </div>
-      <style jsx>{`
-        @keyframes scroll-banner {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
-        }
-        .animate-scroll-banner {
-          animation: scroll-banner 30s linear infinite;
-        }
-        .animate-scroll-banner:hover {
-          animation-play-state: paused;
-        }
-      `}</style>
     </div>
   );
 }

@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { messagesAPI, dossiersAPI } from '@/lib/api';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -55,7 +56,7 @@ function Textarea({ className = '', ...props }: any) {
   );
 }
 
-export default function MessagesPage() {
+function MessagesContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -81,9 +82,13 @@ export default function MessagesPage() {
   const [isReplying, setIsReplying] = useState(false);
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+  const [composeDossierId, setComposeDossierId] = useState<string>('');
+  /** Admin ciblé pour un nouveau message (optionnel — sinon tous les admins) */
+  const [composeDestinataireId, setComposeDestinataireId] = useState<string>('');
   const [users, setUsers] = useState<any[]>([]);
   const [selectedExpediteurId, setSelectedExpediteurId] = useState<string>('');
   const [selectedDestinataireId, setSelectedDestinataireId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   // Gérer les query params pour pré-sélectionner le dossier et ouvrir le modal
   useEffect(() => {
@@ -143,9 +148,6 @@ export default function MessagesPage() {
       if (response.data.success) {
         const list = response.data.dossiers || [];
         setDossiers(list);
-        if (!selectedDossierId && list.length === 1) {
-          setSelectedDossierId(list[0]._id || list[0].id);
-        }
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des dossiers pour la messagerie:', err);
@@ -168,17 +170,16 @@ export default function MessagesPage() {
     setIsSubmitting(true);
     setError(null);
 
-    if (!selectedDossierId) {
-      setError('Vous devez sélectionner un dossier pour envoyer un message.');
-      setIsSubmitting(false);
-      return;
-    }
-
     try {
       const formDataToSend = new FormData();
       formDataToSend.append('sujet', formData.sujet);
       formDataToSend.append('contenu', formData.contenu);
-      formDataToSend.append('dossierId', selectedDossierId);
+      if (composeDossierId) {
+        formDataToSend.append('dossierId', composeDossierId);
+      }
+      if (composeDestinataireId) {
+        formDataToSend.append('destinataire', composeDestinataireId);
+      }
 
       attachments.forEach((file) => {
         formDataToSend.append('piecesJointes', file);
@@ -186,9 +187,11 @@ export default function MessagesPage() {
 
       const response = await messagesAPI.sendMessage(formDataToSend);
       if (response.data.success) {
-        alert('Message envoyé avec succès à tous les administrateurs !');
+        setToast({ message: '✅ Message envoyé avec succès.', type: 'success' });
         setShowComposeModal(false);
         setFormData({ sujet: '', contenu: '' });
+        setComposeDestinataireId('');
+        setComposeDossierId('');
         setAttachments([]);
         loadMessages();
       }
@@ -213,7 +216,7 @@ export default function MessagesPage() {
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
       console.error('Erreur lors du téléchargement:', err);
-      alert('Erreur lors du téléchargement de la pièce jointe');
+      setToast({ message: 'Erreur lors du téléchargement de la pièce jointe', type: 'error' });
     }
   };
 
@@ -254,7 +257,7 @@ export default function MessagesPage() {
                        selectedMessage.dossier?.toString() || 
                        selectedDossierId;
       if (dossierId) {
-        formDataToSend.append('dossierId', dossierId);
+      formDataToSend.append('dossierId', dossierId);
       }
 
       replyAttachments.forEach((file) => {
@@ -263,7 +266,7 @@ export default function MessagesPage() {
 
       const response = await messagesAPI.sendMessage(formDataToSend);
       if (response.data.success) {
-        alert('Réponse envoyée avec succès à tous les administrateurs !');
+        setToast({ message: '✅ Réponse envoyée avec succès.', type: 'success' });
         setShowReplyModal(false);
         setReplyData({ sujet: '', contenu: '' });
         setReplyAttachments([]);
@@ -389,7 +392,7 @@ export default function MessagesPage() {
       console.error('Erreur lors du marquage batch:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Erreur lors du marquage des messages';
       setError(errorMessage);
-      alert(`Erreur: ${errorMessage}`);
+      setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
     }
   };
 
@@ -408,7 +411,7 @@ export default function MessagesPage() {
       console.error('Erreur lors du marquage batch:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Erreur lors du marquage des messages';
       setError(errorMessage);
-      alert(`Erreur: ${errorMessage}`);
+      setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
     }
   };
 
@@ -424,7 +427,7 @@ export default function MessagesPage() {
       console.error('Erreur lors de la suppression batch:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression des messages';
       setError(errorMessage);
-      alert(`Erreur: ${errorMessage}`);
+      setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
     }
   };
 
@@ -441,7 +444,7 @@ export default function MessagesPage() {
       console.error('Erreur lors de la suppression:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression du message';
       setError(errorMessage);
-      alert(`Erreur: ${errorMessage}`);
+      setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
     }
   };
 
@@ -493,13 +496,13 @@ export default function MessagesPage() {
             </div>
             <div className="flex flex-col gap-2 items-end">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground font-medium">Dossier :</span>
+                <span className="text-sm text-muted-foreground font-medium">Filtrer par dossier :</span>
                 <select
                   value={selectedDossierId}
                   onChange={(e) => setSelectedDossierId(e.target.value)}
                   className="px-4 py-2 border border-input rounded-lg text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 max-w-xs"
                 >
-                  <option value="">Sélectionnez un dossier</option>
+                  <option value="">Tous les messages</option>
                   {dossiers.map((dossier) => (
                     <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
                       {dossier.titre || dossier.numero || 'Dossier'} – {dossier.numero}
@@ -507,15 +510,17 @@ export default function MessagesPage() {
                   ))}
                 </select>
               </div>
-              <Button onClick={() => setShowComposeModal(true)} disabled={!selectedDossierId} className="shadow-md">
+              <Button
+                onClick={() => {
+                  setComposeDestinataireId('');
+                  setComposeDossierId('');
+                  setShowComposeModal(true);
+                }}
+                className="shadow-md"
+              >
                 <span className="mr-2">✉️</span>
                 Nouveau message
               </Button>
-              {!selectedDossierId && (
-                <p className="text-xs text-amber-600 max-w-xs text-right">
-                  Sélectionnez un dossier pour envoyer un message
-                </p>
-              )}
             </div>
           </div>
 
@@ -560,16 +565,16 @@ export default function MessagesPage() {
             </div>
 
             {/* Filtres par utilisateur */}
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="filter-expediteur" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                <Label htmlFor="filter-expediteur" className="text-sm font-medium text-muted-foreground">
                   Expéditeur :
                 </Label>
                 <select
                   id="filter-expediteur"
                   value={selectedExpediteurId}
                   onChange={(e) => setSelectedExpediteurId(e.target.value)}
-                  className="px-3 py-1.5 border border-input rounded-md text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-[200px]"
+                  className="px-3 py-1.5 border border-input rounded-md text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-full sm:w-auto sm:min-w-[200px]"
                 >
                   <option value="">Tous les expéditeurs</option>
                   {users.map((user) => {
@@ -583,15 +588,15 @@ export default function MessagesPage() {
                 </select>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Label htmlFor="filter-destinataire" className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                <Label htmlFor="filter-destinataire" className="text-sm font-medium text-muted-foreground">
                   Destinataire :
                 </Label>
                 <select
                   id="filter-destinataire"
                   value={selectedDestinataireId}
                   onChange={(e) => setSelectedDestinataireId(e.target.value)}
-                  className="px-3 py-1.5 border border-input rounded-md text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-[200px]"
+                  className="px-3 py-1.5 border border-input rounded-md text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-full sm:w-auto sm:min-w-[200px]"
                 >
                   <option value="">Tous les destinataires</option>
                   {users.map((user) => {
@@ -613,7 +618,7 @@ export default function MessagesPage() {
                     setSelectedExpediteurId('');
                     setSelectedDestinataireId('');
                   }}
-                  className="text-xs"
+                  className="text-xs sm:col-span-2"
                 >
                   Réinitialiser les filtres
                 </Button>
@@ -672,7 +677,7 @@ export default function MessagesPage() {
             {dossiersList.map((dossierGroup: any) => (
               <div key={dossierGroup.dossierId} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                 {/* En-tête du dossier */}
-                <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-4 border-b border-gray-200">
+                    <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-6 py-4 border-b border-gray-200">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
@@ -680,7 +685,7 @@ export default function MessagesPage() {
                       </div>
                       <div>
                         <h2 className="text-lg font-bold text-foreground">
-                          {dossierGroup.dossierTitre || 'Sans dossier'}
+                          {dossierGroup.dossierTitre || 'Hors dossier'}
                         </h2>
                         <p className="text-sm text-muted-foreground">
                           {dossierGroup.messages.length} message{dossierGroup.messages.length > 1 ? 's' : ''}
@@ -695,8 +700,8 @@ export default function MessagesPage() {
                       </Link>
                     )}
                     {dossierGroup.dossierId === 'sans-dossier' && (
-                      <div className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold">
-                        ⚠️ Ce message n'est pas lié à un dossier
+                      <div className="px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-xs font-medium">
+                        Message général
                       </div>
                     )}
                   </div>
@@ -705,9 +710,9 @@ export default function MessagesPage() {
                 {/* Messages du dossier */}
                 <div className="divide-y divide-gray-100">
                   {/* Checkbox pour sélectionner tous les messages de ce dossier */}
-                  <div className="flex items-center gap-3 px-6 py-3 bg-gray-50 border-b border-gray-200">
-                    <input
-                      type="checkbox"
+                      <div className="flex items-center gap-3 px-4 sm:px-6 py-3 bg-gray-50 border-b border-gray-200">
+              <input
+                type="checkbox"
                       checked={dossierGroup.messages.every((m: any) => selectedMessages.has(m._id || m.id)) && dossierGroup.messages.length > 0}
                       onChange={() => {
                         const allSelected = dossierGroup.messages.every((m: any) => selectedMessages.has(m._id || m.id));
@@ -730,11 +735,11 @@ export default function MessagesPage() {
                         }
                       }}
                       className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
-                    />
-                    <span className="text-sm font-medium text-muted-foreground">
+              />
+              <span className="text-sm font-medium text-muted-foreground">
                       Sélectionner tous les messages de ce dossier
-                    </span>
-                  </div>
+              </span>
+            </div>
 
                   {dossierGroup.messages.map((message: any) => {
               const expediteur = message.expediteur;
@@ -773,14 +778,14 @@ export default function MessagesPage() {
               return (
                 <div
                   key={messageId}
-                  className={`bg-white rounded-xl shadow-md border-l-4 transition-all duration-200 hover:shadow-xl ${
+                  className={`bg-white rounded-xl shadow-sm border transition-all duration-300 hover:shadow-[0_12px_30px_-18px_rgba(249,115,22,0.45)] ${
                     (isReceived && !isRead)
-                      ? 'border-primary bg-gradient-to-r from-primary/5 via-primary/2 to-white' 
-                      : 'border-gray-300 bg-white'
+                      ? 'border-primary/70 bg-gradient-to-r from-primary/5 via-primary/2 to-white' 
+                      : 'border-gray-300/80 bg-white'
                   } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
                 >
                   <div className="p-6">
-                    <div className="flex items-start gap-4">
+                            <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
                       {/* Checkbox */}
                       <input
                         type="checkbox"
@@ -852,7 +857,7 @@ export default function MessagesPage() {
                             <div className="space-y-2 text-xs">
                               {/* Expéditeur/Destinataire */}
                               <div className="flex items-start gap-2">
-                                <span className="text-muted-foreground font-medium min-w-[70px]">
+                                <span className="text-muted-foreground font-medium min-w-[56px] sm:min-w-[70px]">
                                   {isReceived ? '📤 De' : '📥 À'}:
                                 </span>
                                 <span className="text-foreground font-semibold">
@@ -866,8 +871,8 @@ export default function MessagesPage() {
                               {/* Copie */}
                               {copieList.length > 0 && (
                                 <div className="flex items-start gap-2">
-                                  <span className="text-muted-foreground font-medium min-w-[70px]">📋 Copie:</span>
-                                  <span className="text-foreground">{copieList.join(', ')}</span>
+                                  <span className="text-muted-foreground font-medium min-w-[56px] sm:min-w-[70px]">📋 Copie:</span>
+                                  <span className="text-foreground break-words">{copieList.join(', ')}</span>
                                 </div>
                               )}
                               
@@ -898,11 +903,12 @@ export default function MessagesPage() {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex flex-col gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto" onClick={(e) => e.stopPropagation()}>
                         {isReceived && (
                           <Button
                             variant="outline"
                             size="sm"
+                                  className="w-full sm:w-auto"
                             onClick={() => {
                               setReplyData({
                                 sujet: `Re: ${message.sujet}`,
@@ -918,6 +924,7 @@ export default function MessagesPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                                className="w-full sm:w-auto"
                           onClick={async (e) => {
                             e.stopPropagation();
                             try {
@@ -932,7 +939,7 @@ export default function MessagesPage() {
                               console.error('Erreur lors du changement de statut:', err);
                               const errorMessage = err.response?.data?.message || err.message || 'Erreur lors du changement de statut';
                               setError(errorMessage);
-                              alert(`Erreur: ${errorMessage}`);
+                              setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
                             }
                           }}
                         >
@@ -941,6 +948,7 @@ export default function MessagesPage() {
                         <Button
                           variant="destructive"
                           size="sm"
+                                className="w-full sm:w-auto"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteMessage(messageId);
@@ -957,8 +965,8 @@ export default function MessagesPage() {
                     </div>
                   </div>
                 </div>
-                  );
-                })}
+              );
+            })}
                 </div>
               </div>
             ))}
@@ -971,20 +979,56 @@ export default function MessagesPage() {
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
                 <h2 className="text-2xl font-bold">Nouveau message</h2>
-                <button onClick={() => setShowComposeModal(false)} className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">×</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowComposeModal(false);
+                    setComposeDossierId('');
+                    setComposeDestinataireId('');
+                  }}
+                  className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  ×
+                </button>
               </div>
               <form onSubmit={handleSendMessage} className="p-6 space-y-5">
-                {/* Info automatique aux admins */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl">ℹ️</span>
-                    <div>
-                      <p className="text-sm font-semibold text-blue-900 mb-1">Message automatique aux administrateurs</p>
-                      <p className="text-xs text-blue-700">
-                        Votre message sera automatiquement envoyé à tous les administrateurs de l'équipe.
-                      </p>
-                    </div>
-                  </div>
+                <div>
+                  <Label htmlFor="compose-dest">Destinataire (optionnel)</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Par défaut, votre message est adressé à toute l&apos;équipe administrative. Vous pouvez cibler un administrateur.
+                  </p>
+                  <select
+                    id="compose-dest"
+                    value={composeDestinataireId}
+                    onChange={(e) => setComposeDestinataireId(e.target.value)}
+                    className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background"
+                  >
+                    <option value="">Toute l&apos;équipe administrative</option>
+                    {users.map((u) => {
+                      const uid = u._id || u.id;
+                      return (
+                        <option key={uid} value={uid}>
+                          {u.firstName} {u.lastName} ({u.email})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="compose-dossier">Lier à un dossier (optionnel)</Label>
+                  <select
+                    id="compose-dossier"
+                    value={composeDossierId}
+                    onChange={(e) => setComposeDossierId(e.target.value)}
+                    className="mt-1 w-full px-3 py-2 border border-input rounded-md text-sm bg-background"
+                  >
+                    <option value="">Aucun dossier</option>
+                    {dossiers.map((dossier) => (
+                      <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
+                        {dossier.titre || dossier.numero || 'Dossier'} – {dossier.numero}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <Label htmlFor="sujet">Sujet *</Label>
@@ -1018,7 +1062,7 @@ export default function MessagesPage() {
                     onChange={(e) => {
                       const files = Array.from(e.target.files || []) as File[];
                       if (files.length > 5) {
-                        alert('Maximum 5 fichiers autorisés');
+                        setToast({ message: 'Maximum 5 fichiers autorisés', type: 'warning' });
                         return;
                       }
                       setAttachments(files);
@@ -1029,7 +1073,7 @@ export default function MessagesPage() {
                     <div className="mt-2 space-y-1">
                       {attachments.map((file, index) => (
                         <div key={index} className="text-xs text-muted-foreground flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span>📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          <span>📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
@@ -1043,7 +1087,16 @@ export default function MessagesPage() {
                   )}
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button type="button" variant="outline" onClick={() => setShowComposeModal(false)} disabled={isSubmitting}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowComposeModal(false);
+                      setComposeDossierId('');
+                      setComposeDestinataireId('');
+                    }}
+                    disabled={isSubmitting}
+                  >
                     Annuler
                   </Button>
                   <Button type="submit" disabled={isSubmitting}>
@@ -1083,7 +1136,7 @@ export default function MessagesPage() {
                         console.error('Erreur lors du changement de statut:', err);
                         const errorMessage = err.response?.data?.message || err.message || 'Erreur lors du changement de statut';
                         setError(errorMessage);
-                        alert(`Erreur: ${errorMessage}`);
+                        setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
                       }
                     }}
                   >
@@ -1139,9 +1192,6 @@ export default function MessagesPage() {
                           <div className="flex items-center gap-2">
                             <span>📎</span>
                             <span className="text-sm">{pj.originalName}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({(pj.size / 1024 / 1024).toFixed(2)} MB)
-                            </span>
                           </div>
                           <Button
                             variant="outline"
@@ -1222,7 +1272,7 @@ export default function MessagesPage() {
                     onChange={(e) => {
                       const files = Array.from(e.target.files || []) as File[];
                       if (files.length > 5) {
-                        alert('Maximum 5 fichiers autorisés');
+                        setToast({ message: 'Maximum 5 fichiers autorisés', type: 'warning' });
                         return;
                       }
                       setReplyAttachments(files);
@@ -1233,7 +1283,7 @@ export default function MessagesPage() {
                     <div className="mt-2 space-y-1">
                       {replyAttachments.map((file, index) => (
                         <div key={index} className="text-xs text-muted-foreground flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span>📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          <span>📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setReplyAttachments(replyAttachments.filter((_, i) => i !== index))}
@@ -1268,6 +1318,17 @@ export default function MessagesPage() {
           </div>
         )}
       </main>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
+  );
+}
+
+export default function MessagesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Chargement...</div>}>
+      <MessagesContent />
+    </Suspense>
   );
 }

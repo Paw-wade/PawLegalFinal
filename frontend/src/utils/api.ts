@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { getPublicApiBaseUrl } from '@/lib/publicApiUrl';
 
 // URL de base de l'API backend
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
+const API_BASE_URL = getPublicApiBaseUrl();
 
 // Créer une instance axios avec la configuration par défaut
 const api = axios.create({
@@ -61,7 +62,7 @@ export default api;
 
 // Fonctions utilitaires pour les appels API
 export const authAPI = {
-  register: (data: { firstName: string; lastName: string; email: string; password: string; phone?: string }) =>
+  register: (data: { firstName: string; lastName: string; email: string; phone: string }) =>
     api.post('/auth/register', data),
   
   login: (data: { email: string; password: string }) =>

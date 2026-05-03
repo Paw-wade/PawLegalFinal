@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { userAPI } from '@/lib/api';
 import { UserPermissionsModal } from '@/components/admin/UserPermissionsModal';
 import jsPDF from 'jspdf';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import { Toast } from '@/components/ui/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -203,9 +204,15 @@ const downloadUserProfile = (user: any) => {
 
 function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose: () => void; userId: string | null; onUpdate: () => void }) {
   const { data: session } = useSession();
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showPasswordPanel, setShowPasswordPanel] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [formData, setFormData] = useState<any>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -217,6 +224,11 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
       setUser(null);
       setFormData({});
       setIsEditing(false);
+      setShowPasswordPanel(false);
+      setPasswordForm({ newPassword: '', confirmPassword: '' });
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
+      setPasswordLoading(false);
       setError(null);
       setSuccess(null);
     }
@@ -298,6 +310,44 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
     }
   };
 
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+    const formEl = e.currentTarget as HTMLFormElement;
+    const fd = new FormData(formEl);
+    const newPassword = String(fd.get('newPassword') || passwordForm.newPassword || '').trim();
+    const confirmPassword = String(fd.get('confirmPassword') || passwordForm.confirmPassword || '').trim();
+
+    if (newPassword.length < 8) {
+      setError('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('La confirmation du mot de passe ne correspond pas.');
+      return;
+    }
+
+    setPasswordLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await userAPI.updateUserPassword(userId, { newPassword });
+      if (response.data.success) {
+        setSuccess('Mot de passe utilisateur mis à jour avec succès');
+        setPasswordForm({ newPassword: '', confirmPassword: '' });
+        setShowNewPassword(false);
+        setShowConfirmPassword(false);
+        setShowPasswordPanel(false);
+        onUpdate();
+      }
+    } catch (err: any) {
+      console.error('Erreur lors de la mise à jour du mot de passe utilisateur:', err);
+      setError(err.response?.data?.message || 'Erreur lors de la mise à jour du mot de passe utilisateur');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -326,9 +376,11 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                 </div>
               )}
               {success && (
-                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                  <p className="text-sm text-green-600">{success}</p>
-                </div>
+                <Toast
+                  message={success}
+                  visible={!!success}
+                  onClose={() => setSuccess(null)}
+                />
               )}
 
               {!isEditing ? (
@@ -339,6 +391,18 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                       <p className="text-muted-foreground">{user?.email}</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const targetUserId = (user?._id || user?.id || userId || '').toString();
+                          if (!targetUserId) return;
+                          onClose();
+                          router.push(`/admin/messages?action=send&destinataireId=${encodeURIComponent(targetUserId)}`);
+                        }}
+                        className="bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                      >
+                        ✉️ Envoyer un message
+                      </Button>
                       <Button 
                         variant="outline"
                         onClick={() => {
@@ -350,6 +414,19 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                         📥 Télécharger la fiche
                       </Button>
                       <Button onClick={() => setIsEditing(true)}>Modifier</Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowPasswordPanel((prev) => !prev);
+                          setPasswordForm({ newPassword: '', confirmPassword: '' });
+                          setShowNewPassword(false);
+                          setShowConfirmPassword(false);
+                          setError(null);
+                        }}
+                        className="bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100"
+                      >
+                        Mot de passe
+                      </Button>
                       <Button 
                         variant="destructive" 
                         onClick={async () => {
@@ -382,6 +459,86 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                       </Button>
                     </div>
                   </div>
+
+                  {showPasswordPanel && (
+                    <div className="p-4 rounded-lg border border-amber-200 bg-amber-50/60">
+                      <h4 className="text-sm font-semibold text-amber-900 mb-3">
+                        Modifier le mot de passe du compte
+                      </h4>
+                      <form onSubmit={handlePasswordUpdate} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="adminNewPassword">Nouveau mot de passe *</Label>
+                          <div className="relative">
+                            <Input
+                              id="adminNewPassword"
+                              name="newPassword"
+                              type={showNewPassword ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              value={passwordForm.newPassword}
+                              onChange={(e: any) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                              onInput={(e: any) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                              placeholder="Au moins 8 caractères"
+                              disabled={passwordLoading}
+                              className="pr-12"
+                            />
+                            <button
+                              type="button"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowNewPassword((prev) => !prev)}
+                              disabled={passwordLoading}
+                              aria-label={showNewPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                            >
+                              {showNewPassword ? '🙈' : '👁️'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="adminConfirmPassword">Confirmer *</Label>
+                          <div className="relative">
+                            <Input
+                              id="adminConfirmPassword"
+                              name="confirmPassword"
+                              type={showConfirmPassword ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              value={passwordForm.confirmPassword}
+                              onChange={(e: any) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                              onInput={(e: any) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                              placeholder="Répétez le mot de passe"
+                              disabled={passwordLoading}
+                              className="pr-12"
+                            />
+                            <button
+                              type="button"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowConfirmPassword((prev) => !prev)}
+                              disabled={passwordLoading}
+                              aria-label={showConfirmPassword ? 'Masquer la confirmation du mot de passe' : 'Afficher la confirmation du mot de passe'}
+                            >
+                              {showConfirmPassword ? '🙈' : '👁️'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="md:col-span-2 flex justify-end gap-2 pt-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setShowPasswordPanel(false);
+                              setPasswordForm({ newPassword: '', confirmPassword: '' });
+                              setShowNewPassword(false);
+                              setShowConfirmPassword(false);
+                            }}
+                            disabled={passwordLoading}
+                          >
+                            Annuler
+                          </Button>
+                          <Button type="submit" disabled={passwordLoading}>
+                            {passwordLoading ? 'Mise à jour...' : 'Enregistrer le mot de passe'}
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-6">
                     <div>
@@ -534,6 +691,7 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                         <option value="client">Client</option>
                         <option value="admin">Admin</option>
                         <option value="superadmin">Super Admin</option>
+                        <option value="partenaire">Partenaire</option>
                       </select>
                     </div>
                     <div>
@@ -704,10 +862,17 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
 export default function AdminUtilisateursPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [utilisateurs, setUtilisateurs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const [expirations, setExpirations] = useState<any[]>([]);
+  const [expirationsLoading, setExpirationsLoading] = useState(false);
+  const [expirationsError, setExpirationsError] = useState<string | null>(null);
+  const EXPIRATION_PAST_DAYS = 125;
+  const EXPIRATION_FUTURE_DAYS = 15;
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'client' | 'admin' | 'superadmin'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -744,8 +909,18 @@ export default function AdminUtilisateursPage() {
   useEffect(() => {
     if (status === 'authenticated' && ((session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin')) {
       loadUsers();
+      loadExpirations();
     }
   }, [session, status]);
+
+  useEffect(() => {
+    const userIdFromQuery = searchParams.get('userId');
+    if (!userIdFromQuery) return;
+    if (status !== 'authenticated') return;
+
+    setSelectedUserId(userIdFromQuery);
+    setIsModalOpen(true);
+  }, [searchParams, status]);
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -762,6 +937,27 @@ export default function AdminUtilisateursPage() {
       setError(err.response?.data?.message || 'Erreur lors du chargement des utilisateurs');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadExpirations = async () => {
+    setExpirationsLoading(true);
+    setExpirationsError(null);
+    try {
+      const response = await userAPI.getClientExpirationsRegister({
+        pastDays: EXPIRATION_PAST_DAYS,
+        futureDays: EXPIRATION_FUTURE_DAYS,
+      });
+      if (response.data.success) {
+        setExpirations(response.data.users || []);
+      } else {
+        setExpirationsError('Erreur lors du chargement du registre des expirations');
+      }
+    } catch (err: any) {
+      console.error('Erreur lors du chargement du registre des expirations:', err);
+      setExpirationsError(err.response?.data?.message || 'Erreur lors du chargement du registre des expirations');
+    } finally {
+      setExpirationsLoading(false);
     }
   };
 
@@ -866,10 +1062,68 @@ export default function AdminUtilisateursPage() {
             </div>
           )}
           {success && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-              <p className="text-sm text-green-600">{success}</p>
-            </div>
+            <Toast
+              message={success}
+              visible={!!success}
+              onClose={() => setSuccess(null)}
+            />
           )}
+
+          <div className="mb-8">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-xl font-semibold">Registre expirations (J-{EXPIRATION_PAST_DAYS} à J+{EXPIRATION_FUTURE_DAYS})</h2>
+                <p className="text-muted-foreground mt-1">
+                  Clients avec `dateExpiration` dans l'intervalle, triés par date (les déjà expirés sont inclus).
+                </p>
+              </div>
+              {!expirationsLoading && (
+                <span className="px-2 py-1 rounded-full bg-orange-50 text-orange-700 text-xs font-semibold border border-orange-200">
+                  {expirations.length} client{expirations.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+
+            {expirationsLoading ? (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                <p className="text-muted-foreground">Chargement du registre...</p>
+              </div>
+            ) : expirationsError ? (
+              <p className="text-red-600 text-sm">{expirationsError}</p>
+            ) : expirations.length === 0 ? (
+              <p className="text-muted-foreground">Aucun client dans cette plage.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-3 font-semibold">Nom</th>
+                      <th className="text-left p-3 font-semibold">Prénom</th>
+                      <th className="text-left p-3 font-semibold">Téléphone</th>
+                      <th className="text-left p-3 font-semibold">Email</th>
+                      <th className="text-left p-3 font-semibold">Adresse</th>
+                      <th className="text-left p-3 font-semibold">Expiration</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expirations.map((u: any) => (
+                      <tr key={u.id || `${u.email}-${u.dateExpiration}`} className="border-b hover:bg-muted/30 transition-colors">
+                        <td className="p-3">{u.nom}</td>
+                        <td className="p-3">{u.prenom}</td>
+                        <td className="p-3">{u.telephone || '-'}</td>
+                        <td className="p-3">{u.email}</td>
+                        <td className="p-3">{u.adresse || '-'}</td>
+                        <td className="p-3 text-sm text-muted-foreground">
+                          {u.dateExpiration ? new Date(u.dateExpiration).toLocaleDateString('fr-FR') : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
           {(session?.user as any)?.role === 'superadmin' && (
             <div className="mb-6">
@@ -1294,6 +1548,9 @@ export default function AdminUtilisateursPage() {
         onClose={() => {
           setIsModalOpen(false);
           setSelectedUserId(null);
+          if (searchParams.get('userId')) {
+            router.replace('/admin/utilisateurs');
+          }
         }}
         userId={selectedUserId}
         onUpdate={loadUsers}

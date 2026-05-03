@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { notificationsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -23,7 +24,7 @@ function Button({ children, variant = 'default', size = 'default', className = '
   return <button className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`} {...props}>{children}</button>;
 }
 
-export default function NotificationsPage() {
+function NotificationsContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -35,6 +36,7 @@ export default function NotificationsPage() {
   const [selectedDocumentRequestNotification, setSelectedDocumentRequestNotification] = useState<any>(null);
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState(false);
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   // Gérer les query params pour filtrer par dossier
   useEffect(() => {
@@ -92,9 +94,11 @@ export default function NotificationsPage() {
       const response = await notificationsAPI.markAsRead(id);
       if (response.data.success) {
         await loadNotifications();
+        setToast({ message: '✅ Notification marquée comme lue.', type: 'success' });
       }
     } catch (err: any) {
       console.error('Erreur lors de la mise à jour de la notification:', err);
+      setToast({ message: err.response?.data?.message || 'Erreur lors de la mise à jour de la notification', type: 'error' });
     }
   };
 
@@ -103,9 +107,11 @@ export default function NotificationsPage() {
       const response = await notificationsAPI.markAllAsRead();
       if (response.data.success) {
         await loadNotifications();
+        setToast({ message: '✅ Toutes les notifications ont été marquées comme lues.', type: 'success' });
       }
     } catch (err: any) {
       console.error('Erreur lors de la mise à jour des notifications:', err);
+      setToast({ message: err.response?.data?.message || 'Erreur lors de la mise à jour des notifications', type: 'error' });
     }
   };
 
@@ -114,9 +120,11 @@ export default function NotificationsPage() {
       const response = await notificationsAPI.deleteNotification(id);
       if (response.data.success) {
         await loadNotifications();
+        setToast({ message: '✅ Notification supprimée avec succès.', type: 'success' });
       }
     } catch (err: any) {
       console.error('Erreur lors de la suppression de la notification:', err);
+      setToast({ message: err.response?.data?.message || 'Erreur lors de la suppression de la notification', type: 'error' });
     }
   };
 
@@ -134,7 +142,11 @@ export default function NotificationsPage() {
       appointment_created: '📅',
       appointment_updated: '📅',
       appointment_cancelled: '❌',
+      appointment_reminder: '⏰',
+      document_request_reminder: '📎',
       message_received: '💬',
+      tarification_choice_requested: '💶',
+      tarification_payment_reminder: '💶',
       other: '🔔',
     };
     return icons[type] || '🔔';
@@ -142,32 +154,44 @@ export default function NotificationsPage() {
 
   const getNotificationColor = (type: string) => {
     const colors: { [key: string]: string } = {
-      dossier_created: 'bg-blue-50 border-l-4 border-blue-500',
-      dossier_updated: 'bg-yellow-50 border-l-4 border-yellow-500',
-      dossier_deleted: 'bg-red-50 border-l-4 border-red-500',
-      dossier_status_changed: 'bg-green-50 border-l-4 border-green-500',
-      dossier_assigned: 'bg-purple-50 border-l-4 border-purple-500',
-      dossier_cancelled: 'bg-orange-50 border-l-4 border-orange-500',
-      document_uploaded: 'bg-indigo-50 border-l-4 border-indigo-500',
-      document_request: 'bg-orange-50 border-l-4 border-orange-500',
-      document_received: 'bg-green-50 border-l-4 border-green-500',
-      appointment_created: 'bg-teal-50 border-l-4 border-teal-500',
-      appointment_updated: 'bg-teal-50 border-l-4 border-teal-500',
-      appointment_cancelled: 'bg-red-50 border-l-4 border-red-500',
-      message_received: 'bg-pink-50 border-l-4 border-pink-500',
-      other: 'bg-gray-50 border-l-4 border-gray-500',
+      dossier_created: 'bg-blue-50 border border-blue-300/70',
+      dossier_updated: 'bg-yellow-50 border border-yellow-300/70',
+      dossier_deleted: 'bg-red-50 border border-red-300/70',
+      dossier_status_changed: 'bg-green-50 border border-green-300/70',
+      dossier_assigned: 'bg-purple-50 border border-purple-300/70',
+      dossier_cancelled: 'bg-orange-50 border border-orange-300/70',
+      document_uploaded: 'bg-indigo-50 border border-indigo-300/70',
+      document_request: 'bg-orange-50 border border-orange-300/70',
+      document_received: 'bg-green-50 border border-green-300/70',
+      appointment_created: 'bg-teal-50 border border-teal-300/70',
+      appointment_updated: 'bg-teal-50 border border-teal-300/70',
+      appointment_cancelled: 'bg-red-50 border border-red-300/70',
+      appointment_reminder: 'bg-cyan-50 border border-cyan-300/70',
+      document_request_reminder: 'bg-orange-50 border border-orange-300/70',
+      message_received: 'bg-pink-50 border border-pink-300/70',
+      tarification_choice_requested: 'bg-amber-50 border border-amber-300/70',
+      tarification_payment_reminder: 'bg-amber-50 border border-amber-300/70',
+      other: 'bg-gray-50 border border-gray-300/70',
     };
-    return colors[type] || 'bg-gray-50 border-l-4 border-gray-500';
+    return colors[type] || 'bg-gray-50 border border-gray-300/70';
   };
 
   type NotificationCategoryKey = 'dossiers' | 'rendezvous' | 'messages' | 'documents' | 'autres';
 
   const getNotificationCategory = (notification: any): NotificationCategoryKey => {
     const type = notification.type || '';
+    if (type === 'tarification_choice_requested' || type === 'tarification_payment_reminder') return 'dossiers';
     if (type.startsWith('dossier_')) return 'dossiers';
     if (type.startsWith('appointment_')) return 'rendezvous';
     if (type === 'message_received') return 'messages';
-    if (type === 'document_uploaded') return 'documents';
+    if (
+      type === 'document_uploaded' ||
+      type === 'document_request' ||
+      type === 'document_received' ||
+      type === 'document_request_reminder'
+    ) {
+      return 'documents';
+    }
     return 'autres';
   };
 
@@ -393,8 +417,8 @@ export default function NotificationsPage() {
                 {visibleNotifications.map((notification: any) => (
                   <div
                     key={notification._id || notification.id}
-                    className={`bg-white rounded-xl border p-4 transition-all hover:shadow-sm ${
-                      notification.lu ? 'border-gray-200' : 'border-primary/30'
+                    className={`bg-white rounded-xl border p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_-18px_rgba(59,130,246,0.35)] ${getNotificationColor(notification.type)} ${
+                      notification.lu ? 'opacity-90' : ''
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -484,8 +508,18 @@ export default function NotificationsPage() {
         }}
         notification={selectedDocumentRequestNotification}
       />
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }
 
+export default function NotificationsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Chargement...</div>}>
+      <NotificationsContent />
+    </Suspense>
+  );
+}
 

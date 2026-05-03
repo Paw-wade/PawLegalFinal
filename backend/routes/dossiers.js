@@ -9,6 +9,26 @@ const { protect, authorize } = require('../middleware/auth');
 const router = express.Router();
 
 // Helper function pour créer une notification
+function sanitizeDossierForPartenaire(dossier) {
+  const o = dossier && typeof dossier.toObject === 'function' ? dossier.toObject() : { ...dossier };
+  delete o.formuleTarifaire;
+  delete o.formuleTarifaireChoisieAt;
+  delete o.formuleTarifaireReminderSent;
+  delete o.montantTarificationFixe;
+  delete o.montantTarificationFixeAt;
+  delete o.montantTarificationFixeBy;
+  delete o.tarificationNotificationSentAt;
+  delete o.tarificationLastNotifySummary;
+  delete o.paiementTarificationEffectue;
+  delete o.paiementTarificationEffectueAt;
+  delete o.paiementTarificationEffectueBy;
+  delete o.fraisExoneres;
+  delete o.fraisExoneresAt;
+  delete o.fraisExoneresBy;
+  delete o.fraisExoneresMotif;
+  return o;
+}
+
 const createNotification = async (userId, type, titre, message, lien = null, metadata = {}) => {
   try {
     if (!userId) {
@@ -41,6 +61,10 @@ const createNotification = async (userId, type, titre, message, lien = null, met
 // Helper function pour notifier toutes les parties lors d'une modification de dossier
 const notifyDossierModification = async (dossier, modifier, changes = {}) => {
   try {
+    if (changes.skipAllPingAndSms === true) {
+      console.log('⏭️ notifyDossierModification ignorée (montant tarification — aucun ping / SMS).');
+      return;
+    }
     const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
     const modifierName = `${modifier.firstName} ${modifier.lastName}`;
     const modifierRole = modifier.role;
@@ -87,29 +111,38 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
       : `Le dossier "${dossierTitle}" a été modifié par ${modifierName} (${qualityLabel})`;
     
     for (const userInfo of usersToNotify) {
+      const skipClientPing =
+        (changes.skipClientEtapesOnlyNotify === true && userInfo.role === 'client') ||
+        (changes.skipClientTarificationOnlyNotify === true && userInfo.role === 'client') ||
+        (changes.onlyAssignmentChanged === true && userInfo.role === 'client');
+      const skipClientSmsBecauseStandby =
+        userInfo.role === 'client' && !!dossier.isStandby;
+
       // Notification dashboard
       const lien = userInfo.role === 'client' 
         ? `/client/dossiers/${dossier._id}`
         : `/admin/dossiers/${dossier._id}`;
       
-      await createNotification(
-        userInfo.userId,
-        'dossier_updated',
-        'Dossier modifié',
-        notificationMessage,
-        lien,
-        {
-          dossierId: dossier._id.toString(),
-          dossierTitre: dossierTitle,
-          modifiedBy: modifier._id ? modifier._id.toString() : modifier.id.toString(),
-          modifierName: modifierName,
-          modifierRole: modifierRole,
-          changes: changes
-        }
-      );
+      if (!skipClientPing) {
+        await createNotification(
+          userInfo.userId,
+          'dossier_updated',
+          'Dossier modifié',
+          notificationMessage,
+          lien,
+          {
+            dossierId: dossier._id.toString(),
+            dossierTitre: dossierTitle,
+            modifiedBy: modifier._id ? modifier._id.toString() : modifier.id.toString(),
+            modifierName: modifierName,
+            modifierRole: modifierRole,
+            changes: changes
+          }
+        );
+      }
       
-      // SMS si téléphone disponible
-      if (userInfo.user && userInfo.user.phone) {
+      // SMS si téléphone disponible (ex. renommage du dossier seul → pas de SMS)
+      if (!skipClientPing && !skipClientSmsBecauseStandby && !changes.skipSms && userInfo.user && userInfo.user.phone) {
         try {
           const formattedPhone = formatPhoneNumber(userInfo.user.phone);
           if (formattedPhone) {
@@ -130,6 +163,8 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
     }
     
     console.log(`✅ Notifications envoyées à ${usersToNotify.length} utilisateur(s) pour la modification du dossier ${dossier._id}`);
+
+    // NOTE métier : les changements d'assignation ne doivent pas être notifiés au client.
   } catch (error) {
     console.error('❌ Erreur lors de la notification de modification:', error);
     // Ne pas bloquer la modification si la notification échoue
@@ -144,7 +179,7 @@ router.post(
   [
     body('titre').optional().trim(),
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']),
-    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']),
+    body('statut').optional().isString().trim().isLength({ max: 200 }),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente'])
   ],
   // Middleware d'authentification optionnel
@@ -168,7 +203,7 @@ router.post(
       }
 
       const {
-        userId,
+        userId: bodyUserId,
         clientNom,
         clientPrenom,
         clientEmail,
@@ -185,9 +220,20 @@ router.post(
         rendezVousId
       } = req.body;
 
+      const normalizedTitre = [titre, req.body?.title, req.body?.nomDossier, req.body?.nom]
+        .find((v) => typeof v === 'string' && v.trim().length > 0)?.trim() || '';
+
+      // Création depuis l'espace admin: le nom du dossier est obligatoire.
+      if (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin') && !normalizedTitre) {
+        return res.status(400).json({
+          success: false,
+          message: 'Le nom du dossier est requis'
+        });
+      }
+
       // Vérifier si un utilisateur est spécifié (pour utilisateurs connectés)
       let user = null;
-      let finalUserId = userId;
+      let finalUserId = bodyUserId;
       
       // Si l'utilisateur est connecté mais n'a pas fourni d'ID, utiliser l'ID de l'utilisateur connecté
       if (!finalUserId && req.user && req.user.id) {
@@ -238,7 +284,7 @@ router.post(
         clientPrenom: finalUserId ? null : clientPrenom,
         clientEmail: finalUserId ? user.email : clientEmail,
         clientTelephone: finalUserId ? user.phone : clientTelephone,
-        titre: titre || '',
+        titre: normalizedTitre,
         description: description || '',
         categorie: categorie || 'autre',
         type: type || '',
@@ -250,6 +296,11 @@ router.post(
         assignedTo: assignedTo || null,
         rendezVous: rendezVousId ? [rendezVousId] : []
       });
+
+      if (assignedTo) {
+        dossier.teamMembers = Array.from(new Set([...(dossier.teamMembers || []).map((id) => id.toString()), assignedTo.toString()]));
+        await dossier.save();
+      }
 
       // Si le dossier est créé depuis un rendez-vous, lier le rendez-vous au dossier
       if (rendezVousId) {
@@ -404,6 +455,31 @@ router.post(
                   }
                 );
               }
+
+              // SMS au superadmin principal (s'il a un téléphone)
+              try {
+                const superadmin = await User.findOne({ role: 'superadmin', isActive: true }).sort({ createdAt: 1 });
+                if (superadmin && superadmin.phone) {
+                  const superPhone = formatPhoneNumber(superadmin.phone);
+                  if (superPhone) {
+                    await sendNotificationSMS(
+                      superPhone,
+                      'dossier_created',
+                      {
+                        dossierTitle: dossier.titre || dossier.numero || 'Nouveau dossier',
+                        dossierId: dossier.numero || dossier._id.toString(),
+                      },
+                      {
+                        userId: superadmin._id.toString(),
+                        context: 'dossier',
+                        contextId: dossier._id.toString(),
+                      }
+                    );
+                  }
+                }
+              } catch (smsAdminError) {
+                console.error('⚠️ Erreur lors de l\'envoi du SMS au superadmin pour la création de dossier:', smsAdminError);
+              }
             }
           }
         } catch (notifError) {
@@ -422,12 +498,12 @@ router.post(
             userEmail: req.user.email,
             targetUser: finalUserId || null,
             targetUserEmail: finalUserId ? user.email : clientEmail,
-            description: `${req.user.email} a créé le dossier "${titre}" ${finalUserId ? `pour ${user.email}` : `pour ${clientNom} ${clientPrenom} (non inscrit)`}`,
+            description: `${req.user.email} a créé le dossier "${normalizedTitre || 'Sans titre'}" ${finalUserId ? `pour ${user.email}` : `pour ${clientNom} ${clientPrenom} (non inscrit)`}`,
             ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
             userAgent: req.get('user-agent'),
             metadata: {
               dossierId: dossier._id.toString(),
-              titre,
+              titre: normalizedTitre,
               categorie: dossier.categorie,
               type: dossier.type,
               statut,
@@ -515,7 +591,7 @@ router.get('/', async (req, res) => {
     console.log('🔍 Filtre de recherche:', JSON.stringify(filter, null, 2));
     
     const dossiers = await Dossier.find(filter)
-      .populate('user', 'firstName lastName email phone')
+      .populate('user', 'firstName lastName email phone profilePhoto')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedTo', 'firstName lastName email role')
       .populate('transmittedTo.partenaire', 'firstName lastName email partenaireInfo')
@@ -537,11 +613,14 @@ router.get('/', async (req, res) => {
         }
       });
     }
-    
+
+    const dossiersOut =
+      userRole === 'partenaire' ? dossiers.map((d) => sanitizeDossierForPartenaire(d)) : dossiers;
+
     res.json({
       success: true,
-      count: dossiers.length,
-      dossiers
+      count: dossiersOut.length,
+      dossiers: dossiersOut
     });
   } catch (error) {
     console.error('Erreur lors de la récupération des dossiers:', error);
@@ -554,9 +633,12 @@ router.get('/', async (req, res) => {
 });
 
 // @route   GET /api/user/dossiers/admin
-// @desc    Récupérer tous les dossiers (Admin seulement)
-// @access  Private/Admin
-router.get('/admin', authorize('admin', 'superadmin'), async (req, res) => {
+// @desc    Récupérer tous les dossiers (équipe cabinet)
+// @access  Private — rôles admin / équipe
+router.get(
+  '/admin',
+  authorize('admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'),
+  async (req, res) => {
   try {
     const { statut, type, categorie, userId, search } = req.query;
     
@@ -589,7 +671,7 @@ router.get('/admin', authorize('admin', 'superadmin'), async (req, res) => {
     }
     
     const dossiers = await Dossier.find(filter)
-      .populate('user', 'firstName lastName email phone')
+      .populate('user', 'firstName lastName email phone profilePhoto')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedTo', 'firstName lastName email role')
       .sort({ createdAt: -1 });
@@ -608,6 +690,9 @@ router.get('/admin', authorize('admin', 'superadmin'), async (req, res) => {
     });
   }
 });
+
+// Note : PATCH /api/user/dossiers/:id/formule-tarifaire est enregistré dans server.js (avant ce routeur)
+// pour garantir la résolution de la route en toutes circonstances.
 
 // @route   POST /api/user/dossiers
 // @desc    Créer un nouveau dossier
@@ -650,13 +735,25 @@ router.post(
         priorite,
         dateEcheance,
         notes,
-        assignedTo
+        assignedTo,
+        rendezVousId
       } = req.body;
+
+      const normalizedTitre = [titre, req.body?.title, req.body?.nomDossier, req.body?.nom]
+        .find((v) => typeof v === 'string' && v.trim().length > 0)?.trim() || '';
+
+      if (!normalizedTitre) {
+        return res.status(400).json({
+          success: false,
+          message: 'Le nom du dossier est requis'
+        });
+      }
 
       // Vérifier si un utilisateur est spécifié (pour utilisateurs connectés)
       let user = null;
-      if (userId) {
-        user = await User.findById(userId);
+      let finalUserId = bodyUserId;
+      if (finalUserId) {
+        user = await User.findById(finalUserId);
         if (!user) {
           return res.status(404).json({
             success: false,
@@ -668,9 +765,9 @@ router.post(
       // Tous les champs sont optionnels - pas de validation obligatoire pour les visiteurs
 
       // Si l'utilisateur est connecté mais n'a pas fourni d'ID, utiliser l'ID de l'utilisateur connecté
-      if (!userId && req.user && req.user.id) {
-        userId = req.user.id;
-        user = await User.findById(userId);
+      if (!finalUserId && req.user && req.user.id) {
+        finalUserId = req.user.id;
+        user = await User.findById(finalUserId);
       }
 
       // Vérifier si un membre de l'équipe est assigné
@@ -693,12 +790,12 @@ router.post(
       }
 
       const dossier = await Dossier.create({
-        user: userId || null,
-        clientNom: userId ? null : clientNom,
-        clientPrenom: userId ? null : clientPrenom,
-        clientEmail: userId ? user.email : clientEmail,
-        clientTelephone: userId ? user.phone : clientTelephone,
-        titre: titre || '',
+        user: finalUserId || null,
+        clientNom: finalUserId ? null : clientNom,
+        clientPrenom: finalUserId ? null : clientPrenom,
+        clientEmail: finalUserId ? user.email : clientEmail,
+        clientTelephone: finalUserId ? user.phone : clientTelephone,
+        titre: normalizedTitre,
         description: description || '',
         categorie: categorie || 'autre',
         type: type || '',
@@ -711,6 +808,11 @@ router.post(
         rendezVous: rendezVousId ? [rendezVousId] : []
       });
 
+      if (assignedTo) {
+        dossier.teamMembers = Array.from(new Set([...(dossier.teamMembers || []).map((id) => id.toString()), assignedTo.toString()]));
+        await dossier.save();
+      }
+
       // Logger l'action
       try {
         const Log = require('../models/Log');
@@ -718,14 +820,14 @@ router.post(
           action: 'dossier_created',
           user: req.user.id,
           userEmail: req.user.email,
-          targetUser: userId || null,
-          targetUserEmail: userId ? user.email : clientEmail,
-          description: `${req.user.email} a créé le dossier "${titre}" ${userId ? `pour ${user.email}` : `pour ${clientNom} ${clientPrenom} (non inscrit)`}`,
+          targetUser: finalUserId || null,
+          targetUserEmail: finalUserId ? user.email : clientEmail,
+          description: `${req.user.email} a créé le dossier "${normalizedTitre || 'Sans titre'}" ${finalUserId ? `pour ${user.email}` : `pour ${clientNom} ${clientPrenom} (non inscrit)`}`,
           ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
           userAgent: req.get('user-agent'),
           metadata: {
             dossierId: dossier._id.toString(),
-            titre,
+            titre: normalizedTitre,
             categorie: dossier.categorie,
             type: dossier.type,
             statut
@@ -736,12 +838,22 @@ router.post(
       }
 
       const dossierPopulated = await Dossier.findById(dossier._id)
-        .populate('user', 'firstName lastName email phone')
+        .populate('user', 'firstName lastName email phone profilePhoto')
         .populate('createdBy', 'firstName lastName email');
 
       // Si le dossier a été créé par un client (pas un admin), notifier tous les admins
-      if (req.user && req.user.role === 'client') {
+      // (robuste: si req.user n'est pas défini, mais qu'un userId client existe en entrée)
+      const isClientCreator = (req.user && req.user.role === 'client') || (!req.user && user && user.role === 'client');
+      if (isClientCreator) {
         try {
+          const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+
+          const clientId = req.user ? req.user.id : user._id.toString();
+          const clientEmail = req.user ? req.user.email : user.email;
+          const clientFirstName = req.user ? req.user.firstName : user.firstName;
+          const clientLastName = req.user ? req.user.lastName : user.lastName;
+          const clientDisplayName = `${clientFirstName} ${clientLastName}`.trim() || 'Client';
+
           // Trouver tous les admins et superadmins
           const admins = await User.find({
             role: { $in: ['admin', 'superadmin'] },
@@ -754,15 +866,41 @@ router.post(
               admin._id.toString(),
               'dossier_created',
               'Nouveau dossier créé par un client',
-              `${req.user.firstName} ${req.user.lastName} (${req.user.email}) a créé un nouveau dossier : "${titre || 'Sans titre'}"`,
+              `${clientDisplayName} (${clientEmail}) a créé un nouveau dossier : "${normalizedTitre || 'Sans titre'}"`,
               `/admin/dossiers/${dossier._id}`,
               { 
                 dossierId: dossier._id.toString(), 
-                titre: titre || 'Sans titre',
-                clientId: req.user.id,
-                clientEmail: req.user.email
+                titre: normalizedTitre || 'Sans titre',
+                clientId,
+                clientEmail
               }
             );
+
+            // SMS (non bloquant) aux admins : permet d'être averti même sans passer par le dashboard
+            if (admin.phone) {
+              try {
+                const formattedPhone = formatPhoneNumber(admin.phone);
+                if (formattedPhone) {
+                  void sendNotificationSMS(
+                    formattedPhone,
+                    'dossier_created',
+                    {
+                      dossierTitle: normalizedTitre || dossier.titre || 'Sans titre',
+                      dossierId: dossier.numero || dossier._id.toString()
+                    },
+                    {
+                      userId: admin._id.toString(),
+                      context: 'dossier',
+                      contextId: dossier._id.toString()
+                    }
+                  ).catch((smsError) => {
+                    console.error(`⚠️ Erreur lors de l'envoi du SMS à l'admin ${admin.email}:`, smsError);
+                  });
+                }
+              } catch (smsFormatError) {
+                console.error(`⚠️ Erreur lors du formatage du téléphone admin ${admin.email}:`, smsFormatError);
+              }
+            }
           }
           console.log(`✅ Notifications envoyées à ${admins.length} administrateur(s) pour le nouveau dossier`);
         } catch (notifError) {
@@ -771,7 +909,7 @@ router.post(
       }
       // Si le dossier a été créé par un admin, notifier le client
       else if (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin')) {
-        let targetUserId = userId;
+        let targetUserId = finalUserId;
         
         // Si pas de userId mais on a un clientEmail, chercher l'utilisateur par email
         if (!targetUserId && clientEmail) {
@@ -791,10 +929,12 @@ router.post(
             targetUserId,
             'dossier_created',
             'Nouveau dossier créé',
-            `Un nouveau dossier "${titre || 'Sans titre'}" a été créé pour vous par l'administrateur.`,
+            `Un nouveau dossier "${normalizedTitre || 'Sans titre'}" a été créé pour vous par l'administrateur.`,
             `/client/dossiers`,
-            { dossierId: dossier._id.toString(), titre: titre || 'Sans titre' }
+            { dossierId: dossier._id.toString(), titre: normalizedTitre || 'Sans titre' }
           );
+
+          // NOTE métier : pas de notification client sur l'assignation du dossier.
         }
       }
 
@@ -823,7 +963,7 @@ router.get('/:id/recap', protect, async (req, res) => {
     
     // Récupérer le dossier avec toutes les relations
     const dossier = await Dossier.findById(dossierId)
-      .populate('user', 'firstName lastName email phone createdAt')
+      .populate('user', 'firstName lastName email phone profilePhoto createdAt')
       .populate('createdBy', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email role')
       .populate('teamMembers', 'firstName lastName email role')
@@ -841,10 +981,12 @@ router.get('/:id/recap', protect, async (req, res) => {
       });
     }
     
-    // Vérifier l'accès
+    // Vérifier l'accès (gérer user/assignedTo populés ou non)
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
-    const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const ownerId = dossier.user ? (dossier.user._id || dossier.user).toString() : null;
+    const isOwner = ownerId && ownerId === req.user.id.toString();
+    const assignedId = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
+    const isAssigned = assignedId && assignedId === req.user.id.toString();
     const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(
       m => m._id.toString() === req.user.id.toString()
     );
@@ -853,7 +995,9 @@ router.get('/:id/recap', protect, async (req, res) => {
       t => {
         if (!t.partenaire) return false;
         const partenaireId = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
-        return partenaireId === req.user.id.toString() && t.status !== 'refused';
+        // Le partenaire a accès au dossier tant qu'il lui a été transmis,
+        // même si la transmission a été précédemment refusée
+        return partenaireId === req.user.id.toString();
       }
     );
     
@@ -874,7 +1018,7 @@ router.get('/:id/recap', protect, async (req, res) => {
     
     // Documents
     const documents = await Document.find({ dossierId: dossierId })
-      .populate('user', 'firstName lastName email')
+      .populate('user', 'firstName lastName email profilePhoto')
       .sort({ createdAt: -1 });
     
     // Tâches
@@ -910,7 +1054,7 @@ router.get('/:id/recap', protect, async (req, res) => {
         { description: { $regex: dossierId, $options: 'i' } }
       ]
     })
-      .populate('user', 'firstName lastName email role')
+      .populate('user', 'firstName lastName email role profilePhoto')
       .sort({ createdAt: -1 });
     
     // Calculer les statistiques
@@ -1049,6 +1193,15 @@ router.get('/:id/recap', protect, async (req, res) => {
         date: log.createdAt,
         details: log.metadata
       })),
+      complementsRecit: (dossier.complementsRecit || []).map(c => ({
+        _id: c._id,
+        addedBy: c.addedBy ? c.addedBy.toString() : null,
+        addedAt: c.addedAt,
+        authorName: c.authorName || 'Inconnu',
+        role: c.role || '',
+        title: c.title || '',
+        text: c.text
+      })),
       statistiques: {
         dureeTraitement: dureeTraitement,
         joursDepuisCreation: dureeTraitement,
@@ -1060,7 +1213,8 @@ router.get('/:id/recap', protect, async (req, res) => {
     
     res.json({
       success: true,
-      recap
+      recap,
+      currentUserId: req.user.id
     });
   } catch (error) {
     console.error('Erreur lors de la génération du récit récapitulatif:', error);
@@ -1069,6 +1223,234 @@ router.get('/:id/recap', protect, async (req, res) => {
       message: 'Erreur serveur',
       error: error.message
     });
+  }
+});
+
+// Helper : vérifier si l'utilisateur peut modifier les compléments du récit (client, créateur, admin, partenaire, assigné, membre équipe)
+function canEditRecapComplements(dossier, user) {
+  const uid = (user && user.id ? user.id : user).toString();
+  const role = user && user.role ? user.role : '';
+  if (role === 'admin' || role === 'superadmin') return true;
+  const ownerId = dossier.user ? (dossier.user._id || dossier.user).toString() : null;
+  const isOwner = ownerId && ownerId === uid;
+  const createdById = dossier.createdBy ? (dossier.createdBy._id || dossier.createdBy).toString() : null;
+  const isCreatedBy = createdById && createdById === uid;
+  const assignedId = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
+  const isAssigned = assignedId && assignedId === uid;
+  const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(m => (m._id || m).toString() === uid);
+  const isPartenaire = dossier.transmittedTo && dossier.transmittedTo.some(t => {
+    const pid = t.partenaire ? (t.partenaire._id || t.partenaire).toString() : null;
+    return pid === uid;
+  });
+  return isOwner || isCreatedBy || isAssigned || isTeamMember || isPartenaire;
+}
+
+// @route   POST /api/user/dossiers/:id/recap/complements
+// @desc    Ajouter un complément au récit (client, créateur, admin, partenaire)
+// @access  Private
+router.post('/:id/recap/complements', protect, async (req, res) => {
+  try {
+    const dossierId = req.params.id;
+    const { text, title } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
+    }
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName profilePhoto')
+      .populate('createdBy', 'firstName lastName role')
+      .populate('assignedTo', 'firstName lastName role')
+      .populate('teamMembers', 'firstName lastName role')
+      .populate('transmittedTo.partenaire', 'firstName lastName partenaireInfo');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+    }
+    const canEdit = canEditRecapComplements(dossier, req.user);
+    if (!canEdit) {
+      return res.status(403).json({ success: false, message: 'Vous n\'êtes pas autorisé à ajouter un complément à ce dossier.' });
+    }
+    const authorName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email || 'Inconnu';
+    const role = req.user.role || '';
+    const complement = {
+      addedBy: req.user.id,
+      addedAt: new Date(),
+      authorName,
+      role,
+      title: title != null ? String(title).trim().slice(0, 200) : '',
+      text: String(text).trim()
+    };
+    if (!dossier.complementsRecit) dossier.complementsRecit = [];
+    dossier.complementsRecit.push(complement);
+    await dossier.save();
+    const added = dossier.complementsRecit[dossier.complementsRecit.length - 1];
+
+    // Notifications : client + partenaires/admin concernés
+    try {
+      const modifier = req.user;
+      const dossierTitle = dossier.titre || dossier.numero || 'Votre dossier';
+      const baseMessage = `Une nouvelle explication a été ajoutée au dossier "${dossierTitle}" par ${authorName}.`;
+      const lienClient = `/client/dossiers/${dossier._id.toString()}/recap`;
+      const lienAdmin = `/admin/dossiers/${dossier._id.toString()}/recap`;
+      const lienPartenaire = `/partenaire/dossiers/${dossier._id.toString()}/recap`;
+
+      // 1. Notifier le client (propriétaire) si ce n'est pas lui qui parle
+      if (dossier.user) {
+        const clientId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
+        if (clientId !== req.user.id.toString()) {
+          await createNotification(
+            clientId,
+            'dossier_updated',
+            'Nouvelle explication sur votre dossier',
+            baseMessage,
+            lienClient,
+            { dossierId: dossier._id.toString(), complementId: added._id.toString(), source: 'complementsRecit' }
+          );
+        }
+      }
+
+      // 2. Notifier les partenaires à qui le dossier est transmis
+      if (Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0) {
+        for (const trans of dossier.transmittedTo) {
+          const part = trans.partenaire;
+          const partenaireId = part?._id ? part._id.toString() : part?.toString();
+          if (partenaireId && partenaireId !== req.user.id.toString()) {
+            await createNotification(
+              partenaireId,
+              'dossier_updated',
+              'Nouvelle explication sur un dossier transmis',
+              baseMessage,
+              lienPartenaire,
+              { dossierId: dossier._id.toString(), complementId: added._id.toString(), source: 'complementsRecit' }
+            );
+          }
+        }
+      }
+
+      // 3. Notifier l'admin assigné le cas échéant (si ce n'est pas lui)
+      if (dossier.assignedTo) {
+        const assignedId = dossier.assignedTo._id ? dossier.assignedTo._id.toString() : dossier.assignedTo.toString();
+        if (assignedId !== req.user.id.toString()) {
+          await createNotification(
+            assignedId,
+            'dossier_updated',
+            'Nouvelle explication sur un dossier',
+            baseMessage,
+            lienAdmin,
+            { dossierId: dossier._id.toString(), complementId: added._id.toString(), source: 'complementsRecit' }
+          );
+        }
+      }
+    } catch (notifyError) {
+      console.error('Erreur lors de la création des notifications pour complément récit:', notifyError);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Complément ajouté.',
+      complement: {
+        _id: added._id,
+        addedAt: added.addedAt,
+        authorName: added.authorName,
+        role: added.role,
+        title: added.title || '',
+        text: added.text
+      }
+    });
+  } catch (error) {
+    console.error('Erreur ajout complément récit:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// @route   PATCH /api/user/dossiers/:id/recap/complements/:complementId
+// @desc    Modifier un complément (auteur du complément ou admin)
+// @access  Private
+router.patch('/:id/recap/complements/:complementId', protect, async (req, res) => {
+  try {
+    const { id: dossierId, complementId } = req.params;
+    const { text, title } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
+    }
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName profilePhoto')
+      .populate('createdBy', 'firstName lastName role')
+      .populate('assignedTo', 'firstName lastName role')
+      .populate('teamMembers', 'firstName lastName role')
+      .populate('transmittedTo.partenaire', 'firstName lastName partenaireInfo');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+    }
+    const canEdit = canEditRecapComplements(dossier, req.user);
+    if (!canEdit) {
+      return res.status(403).json({ success: false, message: 'Non autorisé.' });
+    }
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const comp = (dossier.complementsRecit || []).find(c => (c._id || c).toString() === complementId);
+    if (!comp) {
+      return res.status(404).json({ success: false, message: 'Complément non trouvé.' });
+    }
+    const isAuthor = (comp.addedBy || comp).toString() === req.user.id.toString();
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Seul l\'auteur du complément ou un administrateur peut le modifier.' });
+    }
+    comp.text = String(text).trim();
+    if (title !== undefined) {
+      comp.title = String(title).trim().slice(0, 200);
+    }
+    await dossier.save();
+    return res.json({
+      success: true,
+      message: 'Complément mis à jour.',
+      complement: {
+        _id: comp._id,
+        addedAt: comp.addedAt,
+        authorName: comp.authorName,
+        role: comp.role,
+        title: comp.title || '',
+        text: comp.text
+      }
+    });
+  } catch (error) {
+    console.error('Erreur modification complément récit:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// @route   DELETE /api/user/dossiers/:id/recap/complements/:complementId
+// @desc    Supprimer un complément (auteur du complément ou admin)
+// @access  Private
+router.delete('/:id/recap/complements/:complementId', protect, async (req, res) => {
+  try {
+    const { id: dossierId, complementId } = req.params;
+    const dossier = await Dossier.findById(dossierId)
+      .populate('user', 'firstName lastName profilePhoto')
+      .populate('createdBy', 'firstName lastName role')
+      .populate('assignedTo', 'firstName lastName role')
+      .populate('teamMembers', 'firstName lastName role')
+      .populate('transmittedTo.partenaire', 'firstName lastName partenaireInfo');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+    }
+    const canEdit = canEditRecapComplements(dossier, req.user);
+    if (!canEdit) {
+      return res.status(403).json({ success: false, message: 'Non autorisé.' });
+    }
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const index = (dossier.complementsRecit || []).findIndex(c => (c._id || c).toString() === complementId);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Complément non trouvé.' });
+    }
+    const comp = dossier.complementsRecit[index];
+    const isAuthor = (comp.addedBy || comp).toString() === req.user.id.toString();
+    if (!isAuthor && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Seul l\'auteur du complément ou un administrateur peut le supprimer.' });
+    }
+    dossier.complementsRecit.splice(index, 1);
+    await dossier.save();
+    return res.json({ success: true, message: 'Complément supprimé.' });
+  } catch (error) {
+    console.error('Erreur suppression complément récit:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
   }
 });
 
@@ -1081,7 +1463,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     
     // Récupérer le dossier avec toutes les relations (même logique que /recap)
     const dossier = await Dossier.findById(dossierId)
-      .populate('user', 'firstName lastName email phone createdAt')
+      .populate('user', 'firstName lastName email phone profilePhoto createdAt')
       .populate('createdBy', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email role')
       .populate('teamMembers', 'firstName lastName email role')
@@ -1099,10 +1481,12 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       });
     }
     
-    // Vérifier l'accès (même logique que /recap)
+    // Vérifier l'accès (même logique que /recap, gérer user/assignedTo populés ou non)
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
-    const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const ownerIdPdf = dossier.user ? (dossier.user._id || dossier.user).toString() : null;
+    const isOwner = ownerIdPdf && ownerIdPdf === req.user.id.toString();
+    const assignedIdPdf = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
+    const isAssigned = assignedIdPdf && assignedIdPdf === req.user.id.toString();
     const isTeamMember = dossier.teamMembers && dossier.teamMembers.some(
       m => m._id.toString() === req.user.id.toString()
     );
@@ -1111,7 +1495,9 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       t => {
         if (!t.partenaire) return false;
         const partenaireId = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
-        return partenaireId === req.user.id.toString() && t.status !== 'refused';
+        // Le partenaire a accès aux données détaillées du dossier
+        // tant que le dossier lui a été transmis, quel que soit le statut
+        return partenaireId === req.user.id.toString();
       }
     );
     
@@ -1131,7 +1517,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     const Log = require('../models/Log');
     
     const [documents, tasks, messages, rendezVous, documentRequests, logs] = await Promise.all([
-      Document.find({ dossierId: dossierId }).populate('user', 'firstName lastName email').sort({ createdAt: -1 }),
+      Document.find({ dossierId: dossierId }).populate('user', 'firstName lastName email profilePhoto').sort({ createdAt: -1 }),
       Task.find({ dossier: dossierId }).populate('createdBy', 'firstName lastName email role').populate('assignedTo', 'firstName lastName email role').populate('completedBy', 'firstName lastName email role').sort({ createdAt: -1 }),
       MessageInterne.find({ dossierId: dossierId }).populate('expediteur', 'firstName lastName email role').populate('destinataires', 'firstName lastName email role').sort({ createdAt: -1 }),
       RendezVous.find({ dossierId: dossierId }).populate('client', 'firstName lastName email').populate('createdBy', 'firstName lastName email role').sort({ date: -1 }),
@@ -1141,7 +1527,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
           { 'metadata.dossierId': dossierId },
           { description: { $regex: dossierId, $options: 'i' } }
         ]
-      }).populate('user', 'firstName lastName email role').sort({ createdAt: -1 })
+      }).populate('user', 'firstName lastName email role profilePhoto').sort({ createdAt: -1 })
     ]);
     
     // Construire le récit récapitulatif (même structure que /recap)
@@ -1279,6 +1665,15 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         date: log.createdAt,
         details: log.metadata
       })),
+      complementsRecit: (dossier.complementsRecit || []).map(c => ({
+        _id: c._id,
+        addedBy: c.addedBy ? c.addedBy.toString() : null,
+        addedAt: c.addedAt,
+        authorName: c.authorName || 'Inconnu',
+        role: c.role || '',
+        title: c.title || '',
+        text: c.text
+      })),
       statistiques: {
         dureeTraitement: dureeTraitement,
         joursDepuisCreation: dureeTraitement,
@@ -1289,8 +1684,10 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     };
     
     // Générer le PDF
+    const { addDocumentHeader, PLATFORM_CONFIG } = require('../utils/documentHeader');
     const PDFDocument = require('pdfkit');
-    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+    const margin = 50;
+    const doc = new PDFDocument({ margin, size: 'A4' });
     
     // Headers pour le téléchargement
     const filename = `Recit_Dossier_${recap.dossier.numero || dossierId}_${new Date().toISOString().split('T')[0]}.pdf`;
@@ -1300,10 +1697,11 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     // Pipe le PDF vers la réponse
     doc.pipe(res);
     
+    // Ajouter l'en-tête standard Ada Papers et récupérer la position de départ du contenu
+    let yPosition = addDocumentHeader(doc, { margin });
+    
     // Fonction helper pour ajouter du texte avec gestion de la pagination
-    let yPosition = 50;
     const pageHeight = doc.page.height;
-    const margin = 50;
     const lineHeight = 15;
     const sectionSpacing = 20;
     let pageCount = 1;
@@ -1354,13 +1752,8 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       return currentY;
     };
     
-    // En-tête
-    doc.fontSize(18).font('Helvetica-Bold').fillColor('#FF6600');
-    yPosition = addText('PAW LEGAL', margin, yPosition);
-    doc.fontSize(16).fillColor('#000000');
-    yPosition += lineHeight;
-    yPosition = addText('RÉCIT RÉCAPITULATIF DU DOSSIER', margin, yPosition);
-    yPosition += sectionSpacing;
+    // Titre principal sous l'en-tête
+    yPosition = addSection('RÉCIT RÉCAPITULATIF DU DOSSIER', yPosition);
     
     // Informations du dossier
     yPosition = addSection('INFORMATIONS DU DOSSIER', yPosition);
@@ -1417,6 +1810,25 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     }
     yPosition += sectionSpacing;
     
+    // Explication du dossier (compléments au récit, visibles par tous) — placés AVANT les documents
+    if (recap.complementsRecit && recap.complementsRecit.length > 0) {
+      yPosition = addSection('EXPLICATION DU DOSSIER', yPosition);
+      doc.fontSize(10);
+      recap.complementsRecit.forEach((c, index) => {
+        const dateStr = c.addedAt ? new Date(c.addedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const authorLabel = [c.authorName, c.role].filter(Boolean).join(' • ');
+        const titlePart = c.title && String(c.title).trim() ? ` — ${String(c.title).trim()}` : '';
+        yPosition = addText(`${index + 1}. Le ${dateStr} — ${authorLabel}${titlePart}`, margin, yPosition);
+        yPosition += lineHeight * 0.5;
+        yPosition = addMultilineText(c.text, margin + 10, yPosition, {
+          width: doc.page.width - 2 * margin - 10,
+          align: 'left'
+        });
+        yPosition += lineHeight;
+      });
+      yPosition += sectionSpacing;
+    }
+    
     // Documents
     yPosition = addSection('DOCUMENTS', yPosition);
     yPosition = addText(`Total : ${recap.documents.total} document(s)`, margin, yPosition);
@@ -1439,7 +1851,6 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       yPosition = addText(`En attente : ${recap.documentRequests.enAttente} | Reçus : ${recap.documentRequests.recus}`, margin, yPosition);
       yPosition += sectionSpacing;
     }
-    
     // Tâches
     if (recap.taches.total > 0) {
       yPosition = addSection('TÂCHES', yPosition);
@@ -1492,18 +1903,6 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       yPosition += sectionSpacing;
     }
     
-    // Historique récent
-    if (recap.historique && recap.historique.length > 0) {
-      yPosition = addSection('HISTORIQUE RÉCENT', yPosition);
-      recap.historique.slice(0, 10).forEach((log, index) => {
-        yPosition = addText(`${new Date(log.date).toLocaleDateString('fr-FR')} - ${log.description}`, margin + 20, yPosition);
-        yPosition += lineHeight * 0.7;
-        yPosition = addText(`   Par: ${log.utilisateur}`, margin + 20, yPosition);
-        yPosition += lineHeight;
-      });
-      yPosition += sectionSpacing;
-    }
-    
     // Statistiques
     yPosition = addSection('STATISTIQUES', yPosition);
     yPosition = addText(`Durée de traitement : ${recap.statistiques.dureeTraitement} jour(s)`, margin, yPosition);
@@ -1532,6 +1931,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         width: doc.page.width - 2 * margin,
         align: 'left'
       });
+      yPosition += sectionSpacing;
     }
     
     // Gérer les erreurs du stream PDF
@@ -1556,8 +1956,9 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         for (let i = startPage; i < startPage + totalPages; i++) {
           doc.switchToPage(i);
           doc.fontSize(8).fillColor('#666666');
+          const footerText = `${PLATFORM_CONFIG.name} - ${PLATFORM_CONFIG.website} - ${PLATFORM_CONFIG.email} | Page ${i - startPage + 1}/${totalPages}`;
           doc.text(
-            `Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')} - Page ${i - startPage + 1}/${totalPages}`,
+            footerText,
             margin,
             doc.page.height - 30,
             { align: 'center', width: doc.page.width - 2 * margin }
@@ -1584,6 +1985,150 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
   }
 });
 
+// @route   POST /api/user/dossiers/:id/tarification-payment-reminder
+// @desc    Relance client : notification in-app + SMS court (1 segment) si numéro présent
+// @access  Private (admin, superadmin)
+router.post(
+  '/:id/tarification-payment-reminder',
+  protect,
+  authorize('admin', 'superadmin'),
+  async (req, res) => {
+    try {
+      const dossierId = req.params.id;
+      if (!mongoose.Types.ObjectId.isValid(dossierId)) {
+        return res.status(400).json({ success: false, message: 'Identifiant de dossier invalide' });
+      }
+
+      const dossier = await Dossier.findById(dossierId).lean();
+      if (!dossier) {
+        return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+      }
+
+      if (dossier.fraisExoneres) {
+        return res.status(400).json({
+          success: false,
+          message: 'Dossier exonéré : relance paiement non applicable.'
+        });
+      }
+
+      const hasPaymentDefined =
+        Number(dossier.montantTarificationFixe || 0) > 0 || !!dossier.formuleTarifaire;
+      if (!hasPaymentDefined) {
+        return res.status(400).json({
+          success: false,
+          message: 'Aucun montant ni formule de tarification définie pour ce dossier.'
+        });
+      }
+
+      if (dossier.paiementTarificationEffectue) {
+        return res.status(400).json({
+          success: false,
+          message: 'Le paiement est déjà enregistré comme effectué.'
+        });
+      }
+
+      let clientUserId = null;
+      if (dossier.user) {
+        clientUserId = dossier.user.toString();
+      } else if (dossier.clientEmail) {
+        const userByEmail = await User.findOne({
+          email: String(dossier.clientEmail).toLowerCase()
+        }).select('_id');
+        if (userByEmail) clientUserId = userByEmail._id.toString();
+      }
+
+      if (!clientUserId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Client introuvable : associez un compte ou un email client au dossier.'
+        });
+      }
+
+      const dossierTitle = dossier.titre || dossier.numero || 'votre dossier';
+      const refCourte = (dossier.numero || dossierId.slice(-8)).toString().replace(/\s+/g, '').slice(0, 20);
+      const montantFixe = Number(dossier.montantTarificationFixe || 0);
+      const messageInApp =
+        montantFixe > 0
+          ? `Le règlement de la tarification (${montantFixe.toLocaleString('fr-FR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            })} EUR) pour le dossier « ${dossierTitle} » est en attente. Finalisez depuis la rubrique Tarification.`
+          : `Le dossier « ${dossierTitle} » : choix de formule et paiement tarifaire sont attendus. Consultez Tarification dans votre espace client.`;
+
+      const notif = await createNotification(
+        clientUserId,
+        'tarification_payment_reminder',
+        'Rappel : paiement tarification en attente',
+        messageInApp,
+        '/client/tarification',
+        { dossierId: dossierId.toString(), sentByAdmin: req.user.id?.toString?.() || String(req.user.id) }
+      );
+
+      if (!notif) {
+        return res.status(500).json({
+          success: false,
+          message: 'Impossible de créer la notification in-app (voir les logs serveur).'
+        });
+      }
+
+      const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+      let smsSent = false;
+      let smsSkipped = null;
+
+      const phoneUser = await User.findById(clientUserId).select('phone');
+      if (dossier.isStandby) {
+        smsSkipped = 'dossier_standby';
+      } else if (!phoneUser?.phone) {
+        smsSkipped = 'no_phone';
+      } else {
+        const formattedPhone = formatPhoneNumber(phoneUser.phone);
+        if (!formattedPhone) {
+          smsSkipped = 'invalid_phone';
+        } else {
+          try {
+            await sendNotificationSMS(
+              formattedPhone,
+              'tarification_payment_reminder',
+              { numero: refCourte },
+              {
+                userId: clientUserId,
+                skipPreferences: true,
+                context: 'tarification_payment_reminder',
+                contextId: dossierId,
+                sentBy: req.user.id
+              }
+            );
+            smsSent = true;
+          } catch (smsErr) {
+            console.error('⚠️ SMS relance tarification:', smsErr);
+            smsSkipped = smsErr.message || 'sms_error';
+          }
+        }
+      }
+
+      const parts = ['notification in-app'];
+      if (smsSent) parts.push('SMS');
+      const smsHint =
+        smsSent ? '' : ` — SMS non envoyé${smsSkipped ? ` (${smsSkipped})` : ''}`;
+
+      return res.json({
+        success: true,
+        message: `Relance enregistrée (${parts.join(' + ')})${smsHint}.`,
+        notificationCreated: true,
+        smsSent,
+        smsSkipped: smsSent ? null : smsSkipped
+      });
+    } catch (error) {
+      console.error('Erreur relance tarification:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+);
+
 // @route   GET /api/user/dossiers/:id
 // @desc    Récupérer un dossier par ID
 // @access  Private
@@ -1592,7 +2137,7 @@ router.get('/:id', async (req, res) => {
     console.log('📥 GET /api/user/dossiers/:id - ID:', req.params.id);
     console.log('📥 User:', req.user?.email || req.user?.id);
     const dossier = await Dossier.findById(req.params.id)
-      .populate('user', 'firstName lastName email phone dateNaissance lieuNaissance nationalite sexe numeroEtranger numeroTitre typeTitre dateDelivrance dateExpiration adressePostale ville codePostal pays')
+      .populate('user', 'firstName lastName email phone profilePhoto dateNaissance lieuNaissance nationalite sexe numeroEtranger numeroTitre typeTitre dateDelivrance dateExpiration adressePostale ville codePostal pays')
       .populate('createdBy', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email role')
       .populate('teamMembers', 'firstName lastName email role')
@@ -1679,9 +2224,11 @@ router.get('/:id', async (req, res) => {
       });
     }
 
+    const dossierOut = req.user.role === 'partenaire' ? sanitizeDossierForPartenaire(dossier) : dossier;
+
     res.json({
       success: true,
-      dossier
+      dossier: dossierOut
     });
   } catch (error) {
     console.error('Erreur lors de la récupération du dossier:', error);
@@ -1702,7 +2249,8 @@ router.put(
     // Validation simplifiée : tous les champs sont optionnels
     // Si un champ est fourni, il sera validé, sinon ignoré
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']).withMessage('Catégorie invalide'),
-    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']).withMessage('Statut invalide'),
+    body('titre').optional().trim().isLength({ max: 500 }).withMessage('Titre trop long (max 500 caractères)'),
+    body('statut').optional().isString().trim().isLength({ max: 200 }).withMessage('Statut invalide'),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente']).withMessage('Priorité invalide')
     // Pas de validation pour les autres champs optionnels
   ],
@@ -1724,7 +2272,7 @@ router.put(
       }
 
       const dossier = await Dossier.findById(req.params.id)
-        .populate('user', 'firstName lastName email phone');
+        .populate('user', 'firstName lastName email phone profilePhoto');
 
       if (!dossier) {
         return res.status(404).json({
@@ -1736,21 +2284,50 @@ router.put(
       // Vérifier les permissions
       const dossierUserId = dossier.user ? (dossier.user._id ? dossier.user._id.toString() : dossier.user.toString()) : null;
       let hasModifyPermission = false;
-      
+      const isPartenaire = req.user.role === 'partenaire';
+      const isTransmittedToPartenaire = isPartenaire && dossier.transmittedTo && dossier.transmittedTo.some(
+        t => {
+          if (!t.partenaire) return false;
+          const pid = t.partenaire._id ? t.partenaire._id.toString() : t.partenaire.toString();
+          return pid === req.user.id.toString();
+        }
+      );
+
       // L'utilisateur peut modifier si :
       // 1. Il est le propriétaire du dossier
       // 2. Il est admin/superadmin
+      // 3. Il est partenaire et le dossier lui a été transmis et accepté
       if (dossierUserId && dossierUserId === req.user.id.toString()) {
         hasModifyPermission = true;
       } else if (req.user.role === 'admin' || req.user.role === 'superadmin') {
         hasModifyPermission = true;
+      } else if (isTransmittedToPartenaire) {
+        hasModifyPermission = true;
       }
-      
+
       if (!hasModifyPermission) {
         return res.status(403).json({
           success: false,
           message: 'Accès non autorisé à ce dossier'
         });
+      }
+
+      // Partenaire : ne peut mettre à jour que les étapes supplémentaires
+      if (isPartenaire && hasModifyPermission) {
+        const etapesSupplementaires = req.body.etapesSupplementaires;
+        if (Array.isArray(etapesSupplementaires)) {
+          dossier.etapesSupplementaires = etapesSupplementaires.map((e, idx) => ({
+            id: e.id || e.label || `step_${idx}`,
+            label: e.label || '',
+            date: e.date ? new Date(e.date) : undefined,
+            ordre: typeof e.ordre === 'number' ? e.ordre : idx,
+            addedAt: e.addedAt ? new Date(e.addedAt) : new Date(),
+            addedBy: req.user.id
+          }));
+        }
+        await dossier.save();
+        const updated = await Dossier.findById(dossier._id).populate('user', 'firstName lastName email phone profilePhoto');
+        return res.status(200).json({ success: true, message: 'Dossier mis à jour', dossier: updated });
       }
 
       const {
@@ -1764,25 +2341,261 @@ router.put(
         notes,
         assignedTo,
         motifRefus,
-        notificationMessage
+        notificationMessage,
+        etapesSupplementaires: bodyEtapesSupplementaires,
+        fraisExoneres,
+        fraisExoneresMotif: bodyFraisExoneresMotif,
+        montantTarificationFixe,
+        paiementTarificationEffectue,
+        notifyTarificationClient,
+        tarificationClientMessage,
+        isStandby,
+        standbyReason,
+        standbyUntil
       } = req.body;
+
+      const shouldNotifyTarificationClientNow =
+        notifyTarificationClient === true ||
+        notifyTarificationClient === 'true' ||
+        notifyTarificationClient === 1 ||
+        notifyTarificationClient === '1';
+      const isMontantTarificationPatch =
+        montantTarificationFixe !== undefined && montantTarificationFixe !== null;
+
+      /** Superadmin : enregistrer uniquement le montant fixe sans aucune notif/SMS « dossier modifié ». */
+      const skipMontantSilentNotify =
+        (req.body.skipDossierModificationNotify === true || req.body.skipDossierModificationNotify === 'true') &&
+        req.user.role === 'superadmin' &&
+        isMontantTarificationPatch &&
+        !shouldNotifyTarificationClientNow;
+
+      if ((montantTarificationFixe !== undefined || shouldNotifyTarificationClientNow) && req.user.role !== 'superadmin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Seul le superadmin peut fixer un montant manuel ou envoyer la notification de tarification.'
+        });
+      }
 
       const oldStatut = dossier.statut;
       const oldAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
+      /** Après save : retirer toute trace du montant fixe en base (évite null / 0 résiduel). */
+      let shouldUnsetMontantTarificationFixeFields = false;
+
+      const dossierSnapshotBeforeUpdate = {
+        titre: (dossier.titre || '').trim(),
+        description: dossier.description == null ? '' : String(dossier.description),
+        categorie: dossier.categorie || '',
+        type: dossier.type == null ? '' : String(dossier.type),
+        statut: dossier.statut || '',
+        priorite: dossier.priorite || '',
+        notes: dossier.notes == null ? '' : String(dossier.notes),
+        motifRefus: dossier.motifRefus == null ? '' : String(dossier.motifRefus),
+        assignedTo: dossier.assignedTo ? dossier.assignedTo.toString() : null,
+        dateEcheanceMs: dossier.dateEcheance ? new Date(dossier.dateEcheance).getTime() : null,
+        etapesJson: JSON.stringify(dossier.etapesSupplementaires || []),
+        fraisExoneres: !!dossier.fraisExoneres,
+        fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
+        montantTarificationFixe: Number(dossier.montantTarificationFixe || 0),
+        paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
+        isStandby: !!dossier.isStandby,
+        standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
+        standbyUntilMs: dossier.standbyUntil ? new Date(dossier.standbyUntil).getTime() : null
+      };
 
       // Appliquer directement les modifications
-      if (titre) dossier.titre = titre;
+      if (titre !== undefined && titre !== null) {
+        dossier.titre = typeof titre === 'string' ? titre.trim() : String(titre).trim();
+      }
       if (description !== undefined) dossier.description = description;
       if (categorie) dossier.categorie = categorie;
       if (type !== undefined) dossier.type = type;
       if (statut) dossier.statut = statut;
+
+      // Synchroniser le statut partenaire (tableau transmittedTo) quand l'admin change le statut du dossier.
+      // Cela permet aux filtres des espaces client/partenaire de réagir immédiatement.
+      if (statut && Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0) {
+        if (statut === 'en_cours') {
+          dossier.transmittedTo.forEach((t) => {
+            t.status = 'accepted';
+          });
+        } else if (statut === 'refuse') {
+          dossier.transmittedTo.forEach((t) => {
+            t.status = 'refused';
+          });
+        }
+      }
+
       if (priorite) dossier.priorite = priorite;
       if (dateEcheance) dossier.dateEcheance = dateEcheance;
       if (notes !== undefined) dossier.notes = notes;
       if (motifRefus !== undefined) dossier.motifRefus = motifRefus;
-      
+
+      // Stand-by (admin/superadmin uniquement) : suspend temporairement le traitement sans changer le statut métier
+      if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+        if (isStandby !== undefined && isStandby !== null) {
+          const truthy =
+            isStandby === true ||
+            isStandby === 'true' ||
+            isStandby === 1 ||
+            isStandby === '1';
+          const falsy =
+            isStandby === false ||
+            isStandby === 'false' ||
+            isStandby === 0 ||
+            isStandby === '0';
+
+          if (truthy) {
+            dossier.isStandby = true;
+            dossier.standbyAt = new Date();
+            dossier.standbyBy = req.user.id;
+            if (standbyReason !== undefined && standbyReason !== null) {
+              const reason = String(standbyReason).trim();
+              dossier.standbyReason = reason ? reason.slice(0, 500) : undefined;
+            }
+            if (standbyUntil !== undefined) {
+              if (standbyUntil) {
+                const d = new Date(standbyUntil);
+                dossier.standbyUntil = Number.isNaN(d.getTime()) ? undefined : d;
+              } else {
+                dossier.standbyUntil = undefined;
+              }
+            }
+          } else if (falsy) {
+            dossier.isStandby = false;
+            dossier.standbyReason = undefined;
+            dossier.standbyAt = undefined;
+            dossier.standbyBy = undefined;
+            dossier.standbyUntil = undefined;
+          }
+        } else {
+          if (dossier.isStandby && standbyReason !== undefined) {
+            const reason = String(standbyReason || '').trim();
+            dossier.standbyReason = reason ? reason.slice(0, 500) : undefined;
+          }
+          if (dossier.isStandby && standbyUntil !== undefined) {
+            if (standbyUntil) {
+              const d = new Date(standbyUntil);
+              dossier.standbyUntil = Number.isNaN(d.getTime()) ? undefined : d;
+            } else {
+              dossier.standbyUntil = undefined;
+            }
+          }
+        }
+      }
+
+      // Étapes supplémentaires (admin/superadmin uniquement, partenaire géré au-dessus)
+      if (Array.isArray(bodyEtapesSupplementaires)) {
+        dossier.etapesSupplementaires = bodyEtapesSupplementaires.map((e, idx) => ({
+          id: e.id || e.label || `step_${idx}`,
+          label: e.label || '',
+          date: e.date ? new Date(e.date) : undefined,
+          ordre: typeof e.ordre === 'number' ? e.ordre : idx,
+          addedAt: e.addedAt ? new Date(e.addedAt) : new Date(),
+          addedBy: e.addedBy || req.user.id
+        }));
+      }
+
+      // Exonération des frais (admin / superadmin uniquement)
+      let fraisExoneresJustGranted = false;
+      if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+        const wasFraisExoneresBefore = !!dossier.fraisExoneres;
+        if (fraisExoneres !== undefined && fraisExoneres !== null) {
+          const truthy =
+            fraisExoneres === true ||
+            fraisExoneres === 'true' ||
+            fraisExoneres === 1 ||
+            fraisExoneres === '1';
+          const falsy =
+            fraisExoneres === false ||
+            fraisExoneres === 'false' ||
+            fraisExoneres === 0 ||
+            fraisExoneres === '0';
+          if (truthy) {
+            dossier.fraisExoneres = true;
+            dossier.fraisExoneresAt = new Date();
+            dossier.fraisExoneresBy = req.user.id;
+            if (bodyFraisExoneresMotif !== undefined && bodyFraisExoneresMotif !== null) {
+              const m = String(bodyFraisExoneresMotif).trim();
+              dossier.fraisExoneresMotif = m ? m.slice(0, 500) : undefined;
+            }
+            fraisExoneresJustGranted = !wasFraisExoneresBefore;
+          } else if (falsy) {
+            dossier.fraisExoneres = false;
+            dossier.fraisExoneresAt = undefined;
+            dossier.fraisExoneresBy = undefined;
+            dossier.fraisExoneresMotif = undefined;
+          }
+        } else if (bodyFraisExoneresMotif !== undefined && dossier.fraisExoneres) {
+          const m = String(bodyFraisExoneresMotif || '').trim();
+          dossier.fraisExoneresMotif = m ? m.slice(0, 500) : undefined;
+        }
+      }
+
+      // Montant manuel de tarification (superadmin uniquement)
+      if (req.user.role === 'superadmin' && montantTarificationFixe !== undefined) {
+        const rawAmount = typeof montantTarificationFixe === 'string'
+          ? montantTarificationFixe.replace(',', '.').trim()
+          : montantTarificationFixe;
+        const parsedAmount = Number(rawAmount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Le montant de tarification fixe est invalide.'
+          });
+        }
+
+        if (parsedAmount === 0) {
+          dossier.montantTarificationFixe = undefined;
+          dossier.montantTarificationFixeAt = undefined;
+          dossier.montantTarificationFixeBy = undefined;
+          shouldUnsetMontantTarificationFixeFields = true;
+        } else {
+          dossier.montantTarificationFixe = parsedAmount;
+          dossier.montantTarificationFixeAt = new Date();
+          dossier.montantTarificationFixeBy = req.user.id;
+          // Pas de choix client quand un montant manuel est défini.
+          dossier.formuleTarifaire = undefined;
+          dossier.formuleTarifaireChoisieAt = undefined;
+          dossier.formuleTarifaireReminderSent = true;
+          // Un montant manuel n'est pas une exonération.
+          dossier.fraisExoneres = false;
+          dossier.fraisExoneresAt = undefined;
+          dossier.fraisExoneresBy = undefined;
+          dossier.fraisExoneresMotif = undefined;
+        }
+      }
+
+      // Statut de paiement tarification (admin / superadmin)
+      if (
+        (req.user.role === 'admin' || req.user.role === 'superadmin') &&
+        paiementTarificationEffectue !== undefined &&
+        paiementTarificationEffectue !== null
+      ) {
+        const truthy =
+          paiementTarificationEffectue === true ||
+          paiementTarificationEffectue === 'true' ||
+          paiementTarificationEffectue === 1 ||
+          paiementTarificationEffectue === '1';
+        const falsy =
+          paiementTarificationEffectue === false ||
+          paiementTarificationEffectue === 'false' ||
+          paiementTarificationEffectue === 0 ||
+          paiementTarificationEffectue === '0';
+
+        if (truthy) {
+          dossier.paiementTarificationEffectue = true;
+          dossier.paiementTarificationEffectueAt = new Date();
+          dossier.paiementTarificationEffectueBy = req.user.id;
+        } else if (falsy) {
+          dossier.paiementTarificationEffectue = false;
+          dossier.paiementTarificationEffectueAt = undefined;
+          dossier.paiementTarificationEffectueBy = undefined;
+        }
+      }
+
       // Gérer l'assignation
       if (assignedTo !== undefined) {
+        const previousAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
         if (assignedTo === '' || assignedTo === null) {
           dossier.assignedTo = null;
         } else {
@@ -1801,14 +2614,147 @@ router.put(
             });
           }
           dossier.assignedTo = assignedTo;
+          // Un référent assigné doit aussi faire partie de l'équipe dossier.
+          const memberIds = (dossier.teamMembers || []).map((id) => id.toString());
+          if (!memberIds.includes(assignedTo.toString())) {
+            dossier.teamMembers = [...(dossier.teamMembers || []), assignedTo];
+          }
+        }
+
+        const nextAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
+        if (previousAssignedTo !== nextAssignedTo) {
+          dossier.assignmentHistory = dossier.assignmentHistory || [];
+          dossier.assignmentHistory.push({
+            from: previousAssignedTo,
+            to: nextAssignedTo,
+            changedBy: req.user.id,
+            changedAt: new Date()
+          });
         }
       }
 
+      const dossierSnapshotAfterUpdate = {
+        titre: (dossier.titre || '').trim(),
+        description: dossier.description == null ? '' : String(dossier.description),
+        categorie: dossier.categorie || '',
+        type: dossier.type == null ? '' : String(dossier.type),
+        statut: dossier.statut || '',
+        priorite: dossier.priorite || '',
+        notes: dossier.notes == null ? '' : String(dossier.notes),
+        motifRefus: dossier.motifRefus == null ? '' : String(dossier.motifRefus),
+        assignedTo: dossier.assignedTo ? dossier.assignedTo.toString() : null,
+        dateEcheanceMs: dossier.dateEcheance ? new Date(dossier.dateEcheance).getTime() : null,
+        etapesJson: JSON.stringify(dossier.etapesSupplementaires || []),
+        fraisExoneres: !!dossier.fraisExoneres,
+        fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
+        montantTarificationFixe: Number(dossier.montantTarificationFixe || 0),
+        paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
+        isStandby: !!dossier.isStandby,
+        standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
+        standbyUntilMs: dossier.standbyUntil ? new Date(dossier.standbyUntil).getTime() : null
+      };
+
+      const onlyTitreRenamed =
+        dossierSnapshotBeforeUpdate.titre !== dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.assignedTo === dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
+        dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson;
+
+      // Édition des seules étapes (jalons) : pas de changement de statut métier → pas de SMS client
+      const onlyEtapesEdited =
+        dossierSnapshotBeforeUpdate.etapesJson !== dossierSnapshotAfterUpdate.etapesJson &&
+        dossierSnapshotBeforeUpdate.titre === dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.assignedTo === dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs;
+
+      const standbyFieldsChanged =
+        dossierSnapshotBeforeUpdate.isStandby !== dossierSnapshotAfterUpdate.isStandby ||
+        dossierSnapshotBeforeUpdate.standbyReason !== dossierSnapshotAfterUpdate.standbyReason ||
+        dossierSnapshotBeforeUpdate.standbyUntilMs !== dossierSnapshotAfterUpdate.standbyUntilMs;
+
+      const onlyStandbySettingChanged =
+        standbyFieldsChanged &&
+        dossierSnapshotBeforeUpdate.titre === dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.assignedTo === dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
+        dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson;
+
+      const tarificationFieldsChanged =
+        dossierSnapshotBeforeUpdate.fraisExoneres !== dossierSnapshotAfterUpdate.fraisExoneres ||
+        dossierSnapshotBeforeUpdate.fraisExoneresMotif !== dossierSnapshotAfterUpdate.fraisExoneresMotif ||
+        dossierSnapshotBeforeUpdate.montantTarificationFixe !== dossierSnapshotAfterUpdate.montantTarificationFixe ||
+        dossierSnapshotBeforeUpdate.paiementTarificationEffectue !== dossierSnapshotAfterUpdate.paiementTarificationEffectue ||
+        shouldNotifyTarificationClientNow;
+
+      const onlyTarificationSettingChanged =
+        tarificationFieldsChanged &&
+        dossierSnapshotBeforeUpdate.titre === dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.assignedTo === dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
+        dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson &&
+        !standbyFieldsChanged;
+
+      const onlyAssignmentChanged =
+        dossierSnapshotBeforeUpdate.assignedTo !== dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.titre === dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
+        dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson &&
+        !standbyFieldsChanged &&
+        dossierSnapshotBeforeUpdate.fraisExoneres === dossierSnapshotAfterUpdate.fraisExoneres &&
+        dossierSnapshotBeforeUpdate.fraisExoneresMotif === dossierSnapshotAfterUpdate.fraisExoneresMotif &&
+        dossierSnapshotBeforeUpdate.montantTarificationFixe === dossierSnapshotAfterUpdate.montantTarificationFixe &&
+        dossierSnapshotBeforeUpdate.paiementTarificationEffectue === dossierSnapshotAfterUpdate.paiementTarificationEffectue;
+
       await dossier.save();
+
+      if (shouldUnsetMontantTarificationFixeFields) {
+        await Dossier.updateOne(
+          { _id: dossier._id },
+          { $unset: { montantTarificationFixe: 1, montantTarificationFixeAt: 1, montantTarificationFixeBy: 1 } }
+        );
+      }
 
       // Recharger le dossier avec les données peuplées pour les notifications
       const dossierForNotification = await Dossier.findById(dossier._id)
-        .populate('user', 'firstName lastName email phone');
+        .populate('user', 'firstName lastName email phone profilePhoto')
+        .populate('assignedTo', 'firstName lastName email');
+
+      const newAssignedToResolved = dossierSnapshotAfterUpdate.assignedTo || null;
 
       // Notifier toutes les parties concernées lors d'une modification
       // Cette fonction gère les notifications pour tous les rôles (admin, consulat, avocat)
@@ -1816,11 +2762,21 @@ router.put(
         oldStatut,
         newStatut: statut,
         oldAssignedTo,
-        newAssignedTo: assignedTo
+        newAssignedTo: newAssignedToResolved,
+        onlyAssignmentChanged,
+        skipSms:
+          skipMontantSilentNotify ||
+          onlyTitreRenamed ||
+          onlyEtapesEdited ||
+          onlyStandbySettingChanged ||
+          onlyTarificationSettingChanged,
+        skipClientEtapesOnlyNotify: onlyEtapesEdited,
+        skipClientTarificationOnlyNotify: onlyTarificationSettingChanged || skipMontantSilentNotify,
+        skipAllPingAndSms: skipMontantSilentNotify,
       });
 
       // Pour les admins, créer aussi des notifications spécifiques au client (logique existante)
-      if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+      if ((req.user.role === 'admin' || req.user.role === 'superadmin') && !skipMontantSilentNotify) {
         let userId = null;
         
         // Si le dossier a un user associé
@@ -1885,32 +2841,11 @@ router.put(
             console.log('✅ Notification créée avec succès');
           }
           
-          // Notification si le dossier a été assigné
-          if (assignedTo !== undefined && assignedTo !== oldAssignedTo) {
-            if (assignedTo && assignedTo !== oldAssignedTo) {
-              const assignedUser = await User.findById(assignedTo);
-              await createNotification(
-                userId,
-                'dossier_assigned',
-                'Dossier assigné',
-                `Votre dossier "${dossierForNotification.titre}" a été assigné à ${assignedUser.firstName} ${assignedUser.lastName}.`,
-                `/client/dossiers`,
-                { dossierId: dossierForNotification._id.toString(), assignedTo: assignedTo }
-              );
-            } else if (!assignedTo && oldAssignedTo) {
-              await createNotification(
-                userId,
-                'dossier_updated',
-                'Dossier modifié',
-                `L'assignation de votre dossier "${dossierForNotification.titre}" a été retirée.`,
-                `/client/dossiers`,
-                { dossierId: dossierForNotification._id.toString() }
-              );
-            }
-          }
+          // ⚠️ Ne plus notifier le client sur les changements d'assignation de dossier
+          // (ni assignation ni retrait d'assignation)
           
-          // Notification générale si d'autres modifications
-          if (!statut || statut === oldStatut) {
+          // Notification générale si d'autres modifications (pas si seules les étapes ont changé)
+          if (!onlyEtapesEdited && !onlyStandbySettingChanged && !onlyTarificationSettingChanged && (!statut || statut === oldStatut)) {
             if (assignedTo === undefined || assignedTo === oldAssignedTo) {
               await createNotification(
                 userId,
@@ -1924,6 +2859,173 @@ router.put(
           }
         } else {
           console.warn('⚠️ Impossible de créer une notification : aucun utilisateur trouvé pour le dossier', dossierForNotification._id);
+        }
+      }
+
+      // Client informé lors d'une nouvelle exonération des frais de tarification
+      // (éviter le doublon si notifyTarificationClient est aussi envoyé dans la même requête)
+      if (
+        fraisExoneresJustGranted &&
+        !isMontantTarificationPatch &&
+        !shouldNotifyTarificationClientNow &&
+        (req.user.role === 'admin' || req.user.role === 'superadmin')
+      ) {
+        try {
+          let userIdExo = null;
+          if (dossierForNotification.user) {
+            userIdExo = dossierForNotification.user._id
+              ? dossierForNotification.user._id.toString()
+              : dossierForNotification.user.toString();
+          } else if (dossierForNotification.clientEmail) {
+            const u = await User.findOne({
+              email: String(dossierForNotification.clientEmail).toLowerCase()
+            });
+            if (u) userIdExo = u._id.toString();
+          }
+          if (userIdExo) {
+            const dossierTitle =
+              dossierForNotification.titre ||
+              dossierForNotification.numero ||
+              'votre dossier';
+            const motif =
+              dossierForNotification.fraisExoneresMotif &&
+              String(dossierForNotification.fraisExoneresMotif).trim();
+            const baseMsg =
+              `Vous êtes exonéré(e) des frais de prise en charge de votre dossier « ${dossierTitle} ». Aucune formule n’est à sélectionner dans l’espace Tarification. Les éventuelles frais d'envoi postal demeurent à votre charge.`;
+            const messageExo = motif
+              ? `${baseMsg} Précision de l’équipe : ${motif}`
+              : baseMsg;
+            await createNotification(
+              userIdExo,
+              'frais_tarification_exoneres',
+              'Frais de tarification exonérés',
+              messageExo,
+              '/client/tarification',
+              {
+                dossierId: dossierForNotification._id.toString(),
+                ...(motif ? { fraisExoneresMotif: motif.slice(0, 200) } : {})
+              }
+            );
+            const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+            const phoneUser = await User.findById(userIdExo).select('phone');
+            if (phoneUser?.phone && !dossierForNotification.isStandby) {
+              const formattedPhone = formatPhoneNumber(phoneUser.phone);
+              if (formattedPhone) {
+                await sendNotificationSMS(
+                  formattedPhone,
+                  'frais_tarification_exoneres',
+                  { dossierTitle },
+                  {
+                    userId: userIdExo,
+                    skipPreferences: true,
+                    context: 'dossier',
+                    contextId: dossierForNotification._id.toString()
+                  }
+                );
+              }
+            }
+          }
+        } catch (exoErr) {
+          console.error('⚠️ Notification exonération frais non envoyée:', exoErr);
+        }
+      }
+
+      // Notification tarification envoyée uniquement à la demande du superadmin (à tout moment)
+      if (shouldNotifyTarificationClientNow && req.user.role === 'superadmin') {
+        try {
+          let clientUserId = null;
+          if (dossierForNotification.user) {
+            clientUserId = dossierForNotification.user._id
+              ? dossierForNotification.user._id.toString()
+              : dossierForNotification.user.toString();
+          } else if (dossierForNotification.clientEmail) {
+            const userByEmail = await User.findOne({
+              email: String(dossierForNotification.clientEmail).toLowerCase()
+            }).select('_id');
+            if (userByEmail) clientUserId = userByEmail._id.toString();
+          }
+
+          if (clientUserId) {
+            const dossierTitle = dossierForNotification.titre || dossierForNotification.numero || 'votre dossier';
+            const montantFixe = Number(dossierForNotification.montantTarificationFixe || 0);
+            const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+            let titreTarif = 'Choisissez votre formule tarifaire';
+            let messageTarif = `Votre dossier « ${dossierTitle} » nécessite un choix de formule (Standard ou Tawfekh) dans votre espace client, rubrique Tarification.`;
+            let smsType = 'tarification_choice_reminder';
+            let smsData = { dossierTitle };
+
+            if (dossierForNotification.fraisExoneres) {
+              const motif = dossierForNotification.fraisExoneresMotif
+                ? String(dossierForNotification.fraisExoneresMotif).trim()
+                : '';
+              titreTarif = 'Frais de tarification exonérés';
+              messageTarif = motif
+                ? `Vous êtes exonéré(e) des frais de tarification pour le dossier « ${dossierTitle} ». Motif : ${motif}`
+                : `Vous êtes exonéré(e) des frais de tarification pour le dossier « ${dossierTitle} ».`;
+              smsType = 'frais_tarification_exoneres';
+              smsData = { dossierTitle };
+            } else if (montantFixe > 0) {
+              const amountText = montantFixe.toLocaleString('fr-FR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              });
+              titreTarif = 'Montant du paiement convenu avec Ada Papers.';
+              messageTarif = `Pour le dossier « ${dossierTitle} », le montant à payer a été fixé à ${amountText} EUR.`;
+              smsType = 'manual';
+              smsData = {
+                message: `Dossier "${dossierTitle}" : montant de tarification fixe ${amountText} EUR. Ada Papers.`
+              };
+            }
+
+            const tarifMsgExtra =
+              tarificationClientMessage != null && String(tarificationClientMessage).trim()
+                ? String(tarificationClientMessage).trim().slice(0, 2000)
+                : '';
+            if (tarifMsgExtra) {
+              messageTarif = `${messageTarif}\n\n— Message de l’équipe —\n${tarifMsgExtra}`;
+            }
+
+            await createNotification(
+              clientUserId,
+              'tarification_choice_requested',
+              titreTarif,
+              messageTarif,
+              '/client/tarification',
+              {
+                dossierId: dossierForNotification._id.toString(),
+                ...(tarifMsgExtra ? { tarificationClientMessage: tarifMsgExtra.slice(0, 500) } : {})
+              }
+            );
+
+            const phoneUser = await User.findById(clientUserId).select('phone');
+            if (phoneUser?.phone && !dossierForNotification.isStandby && !isMontantTarificationPatch) {
+              const formattedPhone = formatPhoneNumber(phoneUser.phone);
+              if (formattedPhone) {
+                await sendNotificationSMS(
+                  formattedPhone,
+                  smsType,
+                  smsData,
+                  {
+                    userId: clientUserId,
+                    skipPreferences: true,
+                    context: 'tarification_reminder',
+                    contextId: dossier._id.toString()
+                  }
+                );
+              }
+            }
+
+            dossier.tarificationNotificationSentAt = new Date();
+            dossier.tarificationLastNotifySummary = String(messageTarif || '')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 2000);
+            await dossier.save();
+          } else {
+            console.warn('⚠️ Notification tarification non envoyée: client introuvable pour ce dossier', dossier._id);
+          }
+        } catch (tarifErr) {
+          console.error('⚠️ Notification tarification manuelle non envoyée:', tarifErr);
         }
       }
 
@@ -1948,7 +3050,7 @@ router.put(
 
 
       const dossierPopulated = await Dossier.findById(dossier._id)
-        .populate('user', 'firstName lastName email phone')
+        .populate('user', 'firstName lastName email phone profilePhoto')
         .populate('createdBy', 'firstName lastName email');
 
       res.json({
@@ -2053,7 +3155,7 @@ router.patch('/:id/cancel', protect, async (req, res) => {
     }
 
     const dossierPopulated = await Dossier.findById(dossier._id)
-      .populate('user', 'firstName lastName email phone')
+      .populate('user', 'firstName lastName email phone profilePhoto')
       .populate('createdBy', 'firstName lastName email');
 
     res.json({
@@ -2077,7 +3179,7 @@ router.patch('/:id/cancel', protect, async (req, res) => {
 router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
   try {
     const dossier = await Dossier.findById(req.params.id)
-      .populate('user', 'firstName lastName email')
+      .populate('user', 'firstName lastName email profilePhoto')
       .populate('createdBy', 'firstName lastName email');
 
     if (!dossier) {
@@ -2470,6 +3572,29 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
         transmittedBy: req.user.id.toString()
       }
     });
+    // SMS pour le partenaire (si téléphone disponible et préférences OK)
+    try {
+      if (partenaire.phone) {
+        const formattedPhone = formatPhoneNumber(partenaire.phone);
+        if (formattedPhone) {
+          await sendNotificationSMS(
+            formattedPhone,
+            'dossier_transmitted',
+            {
+              dossierTitle: dossier.titre || dossier.numero || 'Sans titre',
+              partenaireName: partenaire.partenaireInfo?.nomOrganisme || `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() || 'Partenaire',
+            },
+            {
+              userId: partenaire._id.toString(),
+              context: 'dossier',
+              contextId: dossier._id.toString(),
+            }
+          );
+        }
+      }
+    } catch (smsError) {
+      console.error('⚠️ Erreur lors de l\'envoi du SMS au partenaire pour la transmission du dossier:', smsError);
+    }
     
     // Notifier aussi le client si le dossier a un propriétaire
     if (dossier.user) {
@@ -2487,6 +3612,30 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
           partenaireId: partenaireId.toString ? partenaireId.toString() : String(partenaireId)
         }
       });
+      // SMS pour le client (si téléphone disponible et préférences OK)
+      try {
+        const clientUser = await User.findById(userId);
+        if (clientUser?.phone) {
+          const formattedPhone = formatPhoneNumber(clientUser.phone);
+          if (formattedPhone) {
+            await sendNotificationSMS(
+              formattedPhone,
+              'dossier_transmitted',
+              {
+                dossierTitle: dossier.titre || dossier.numero || 'Sans titre',
+                partenaireName: partenaire.partenaireInfo?.nomOrganisme || partenaire.email || 'un partenaire',
+              },
+              {
+                userId: clientUser._id.toString(),
+                context: 'dossier',
+                contextId: dossier._id.toString(),
+              }
+            );
+          }
+        }
+      } catch (smsError) {
+        console.error('⚠️ Erreur lors de l\'envoi du SMS au client pour la transmission du dossier:', smsError);
+      }
     }
     
     res.json({ 
@@ -2849,7 +3998,7 @@ router.get('/:id/history', async (req, res) => {
         { description: { $regex: dossier._id.toString(), $options: 'i' } }
       ]
     })
-      .populate('user', 'firstName lastName email role')
+      .populate('user', 'firstName lastName email role profilePhoto')
       .sort({ createdAt: -1 });
     
     // Créer un historique structuré

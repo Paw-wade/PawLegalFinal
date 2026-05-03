@@ -1,24 +1,24 @@
 /** @type {import('next').NextConfig} */
-const path = require('path');
-
 const nextConfig = {
   reactStrictMode: true,
-  env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api',
+  turbopack: {
+    root: __dirname,
   },
-  // Configuration pour améliorer le chargement des chunks
-  onDemandEntries: {
-    maxInactiveAge: 25 * 1000,
-    pagesBufferLength: 2,
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3005',
+        pathname: '/uploads/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'pawlegalfinal.onrender.com',
+        pathname: '/uploads/**',
+      },
+    ],
   },
-  // Configuration des alias
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@': path.resolve(__dirname, 'src'),
-    };
-    return config;
-  },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;

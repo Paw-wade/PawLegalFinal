@@ -2,58 +2,329 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const mongoose = require('mongoose');
 const Document = require('../models/Document');
 const User = require('../models/User');
 const Log = require('../models/Log');
+const Dossier = require('../models/Dossier');
+const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
+const BACKEND_ROOT = path.resolve(__dirname, '..');
+const UPLOADS_ROOT = path.resolve(BACKEND_ROOT, 'uploads');
 
-// Configuration du stockage Multer
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads/documents');
-    // Créer le dossier s'il n'existe pas
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    // Générer un nom de fichier unique avec timestamp
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
-    cb(null, name + '-' + uniqueSuffix + ext);
-  }
-});
-
-// Filtre pour accepter seulement certains types de fichiers
-const fileFilter = (req, file, cb) => {
-  // Types de fichiers autorisés
-  const allowedTypes = [
-    'application/pdf',
-    'image/jpeg',
-    'image/png',
-    'image/jpg',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  ];
-
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Type de fichier non autorisé. Types acceptés: PDF, images (JPG, PNG), Word, Excel'), false);
+const isExistingFile = (p) => {
+  try {
+    return fs.existsSync(p) && fs.statSync(p).isFile();
+  } catch {
+    return false;
   }
 };
 
+/** Liste plate uploads/documents puis recherche récursive (compat Node sans recursive) */
+const searchFileInUploads = (targetNames = []) => {
+  const normalizedTargets = targetNames
+    .filter(Boolean)
+    .map((n) => path.basename(String(n)).toLowerCase());
+  if (normalizedTargets.length === 0) return null;
+
+  const tryDir = (dir) => {
+    try {
+      if (!fs.existsSync(dir)) return null;
+      const names = fs.readdirSync(dir);
+      for (const name of names) {
+        const full = path.join(dir, name);
+        if (!isExistingFile(full)) continue;
+        if (normalizedTargets.includes(name.toLowerCase())) return full;
+      }
+    } catch (e) {
+      console.warn('⚠️ scan dossier uploads:', dir, e.message);
+    }
+    return null;
+  };
+
+  // 1) Dossier standard des documents
+  const flat = tryDir(path.join(UPLOADS_ROOT, 'documents'));
+  if (flat) return flat;
+
+  if (process.env.UPLOADS_DOCUMENTS_DIR) {
+    const fromEnv = tryDir(path.resolve(process.env.UPLOADS_DOCUMENTS_DIR));
+    if (fromEnv) return fromEnv;
+  }
+
+  // 2) Récursif depuis uploads/ (Node 18+)
+  try {
+    if (!fs.existsSync(UPLOADS_ROOT)) return null;
+    const entries = fs.readdirSync(UPLOADS_ROOT, { withFileTypes: true, recursive: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const entryName = entry.name.toLowerCase();
+      if (!normalizedTargets.includes(entryName)) continue;
+      const parent = entry.parentPath || UPLOADS_ROOT;
+      const candidate = path.join(parent, entry.name);
+      if (isExistingFile(candidate)) return candidate;
+    }
+  } catch (e) {
+    console.warn('⚠️ Recherche récursive uploads échouée:', e.message);
+  }
+  return null;
+};
+
+const resolveExistingDocumentPath = (storedPath, fileName) => {
+  if (!storedPath && !fileName) return null;
+
+  const rawPath = String(storedPath || '').trim();
+  const filenameOnly = fileName ? path.basename(String(fileName)) : (rawPath ? path.basename(rawPath) : '');
+
+  const normalized = rawPath.replace(/[\\/]+/g, path.sep);
+  const withoutLeadingSep = normalized.replace(new RegExp(`^\\${path.sep}+`), '');
+  const uploadsRelative = withoutLeadingSep.replace(/^uploads[\\/]+documents[\\/]+/i, '');
+  const asForwardSlash = rawPath.replace(/\\/g, '/').replace(/^\/+/, '');
+
+  const candidates = [];
+
+  if (normalized) {
+    if (path.isAbsolute(normalized)) candidates.push(normalized);
+    candidates.push(
+      path.resolve(BACKEND_ROOT, normalized),
+      path.resolve(BACKEND_ROOT, withoutLeadingSep),
+      path.resolve(process.cwd(), normalized),
+      path.resolve(process.cwd(), withoutLeadingSep)
+    );
+  }
+
+  if (asForwardSlash.startsWith('uploads/')) {
+    const parts = asForwardSlash.split('/').filter(Boolean);
+    if (parts.length > 0) {
+      candidates.push(path.join(BACKEND_ROOT, ...parts));
+      candidates.push(path.join(process.cwd(), ...parts));
+    }
+  }
+
+  if (uploadsRelative && uploadsRelative !== '.' && uploadsRelative !== path.sep) {
+    candidates.push(path.resolve(BACKEND_ROOT, 'uploads', 'documents', uploadsRelative));
+    candidates.push(path.resolve(process.cwd(), 'uploads', 'documents', uploadsRelative));
+  }
+  if (filenameOnly) {
+    candidates.push(
+      path.resolve(BACKEND_ROOT, 'uploads', 'documents', filenameOnly),
+      path.join(UPLOADS_ROOT, 'documents', filenameOnly),
+      path.join(process.cwd(), 'uploads', 'documents', filenameOnly),
+      path.join(process.cwd(), 'backend', 'uploads', 'documents', filenameOnly)
+    );
+  }
+
+  if (process.env.UPLOADS_DOCUMENTS_DIR && filenameOnly) {
+    candidates.push(path.join(path.resolve(process.env.UPLOADS_DOCUMENTS_DIR), filenameOnly));
+  }
+
+  const unique = [...new Set(candidates.filter(Boolean))];
+
+  for (const candidate of unique) {
+    if (isExistingFile(candidate)) return candidate;
+  }
+
+  const foundByName = searchFileInUploads([fileName, filenameOnly, rawPath ? path.basename(normalized) : '']);
+  if (foundByName) return foundByName;
+
+  return null;
+};
+
+/**
+ * Fichier introuvable par chemin : retrouver par taille (octets) + proximité de createdAt.
+ */
+const findFileByTailleAndCreatedAt = (document) => {
+  const size = Number(document.taille);
+  if (!Number.isFinite(size) || size <= 0) return null;
+  const t0 = document.createdAt ? new Date(document.createdAt).getTime() : null;
+
+  const scanDirs = new Set([
+    path.join(UPLOADS_ROOT, 'documents'),
+    path.join(process.cwd(), 'uploads', 'documents'),
+    path.join(process.cwd(), 'backend', 'uploads', 'documents'),
+  ]);
+  if (process.env.UPLOADS_DOCUMENTS_DIR) {
+    scanDirs.add(path.resolve(process.env.UPLOADS_DOCUMENTS_DIR));
+  }
+
+  const matches = [];
+  for (const dir of scanDirs) {
+    try {
+      if (!fs.existsSync(dir)) continue;
+      for (const name of fs.readdirSync(dir)) {
+        const full = path.join(dir, name);
+        if (!isExistingFile(full)) continue;
+        const st = fs.statSync(full);
+        if (st.size !== size) continue;
+        const timeDiff = t0 != null ? Math.abs(st.mtimeMs - t0) : 0;
+        matches.push({ full, timeDiff });
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0].full;
+
+  matches.sort((a, b) => a.timeDiff - b.timeDiff);
+  const best = matches[0];
+  if (t0 == null) return null;
+  if (best.timeDiff > 48 * 60 * 60 * 1000) return null;
+  if (matches.length > 1 && Math.abs(matches[1].timeDiff - best.timeDiff) < 3000) {
+    return null;
+  }
+  return best.full;
+};
+
+/**
+ * Résolution complète : chemins multiples, nom d'affichage, puis empreinte taille/date.
+ * Met à jour cheminFichier / nomFichier en base si retrouvé par heuristique.
+ */
+const resolveDocumentPhysicalPath = async (document) => {
+  let filePath = resolveExistingDocumentPath(document.cheminFichier, document.nomFichier);
+  if (filePath) return filePath;
+
+  if (document.nom) {
+    filePath = resolveExistingDocumentPath(null, document.nom);
+    if (filePath) return filePath;
+  }
+
+  filePath = findFileByTailleAndCreatedAt(document);
+  if (!filePath) return null;
+
+  try {
+    const absFile = path.resolve(filePath);
+    const rel = path.relative(BACKEND_ROOT, absFile);
+    const cheminToStore =
+      rel && !rel.startsWith('..') && !path.isAbsolute(rel)
+        ? rel.replace(/\\/g, '/')
+        : absFile.replace(/\\/g, '/');
+    await Document.updateOne(
+      { _id: document._id },
+      {
+        $set: {
+          cheminFichier: cheminToStore,
+          nomFichier: path.basename(absFile),
+        },
+      }
+    );
+    document.cheminFichier = cheminToStore;
+    document.nomFichier = path.basename(absFile);
+    console.log('🔧 Chemin fichier document réparé en base:', String(document._id), '→', cheminToStore);
+  } catch (e) {
+    console.warn('⚠️ Impossible de persister le chemin réparé:', e.message);
+  }
+
+  return filePath;
+};
+
+// Normaliser la catégorie pour éviter les erreurs de validation Mongoose
+// lorsque la valeur vient d'écrans différents (libellés libres, accents, etc.).
+const normalizeCategorie = (rawCategorie) => {
+  if (!rawCategorie) return 'autre';
+
+  const normalized = String(rawCategorie)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\s-]+/g, '_');
+
+  const mapping = {
+    identite: 'identite',
+    piece_identite: 'identite',
+    pieces_identite: 'identite',
+    identity: 'identite',
+    passport: 'identite',
+    passeport: 'identite',
+    carte_identite: 'identite',
+    titre_sejour: 'titre_sejour',
+    titre_de_sejour: 'titre_sejour',
+    sejour: 'titre_sejour',
+    residence_permit: 'titre_sejour',
+    contrat: 'contrat',
+    contract: 'contrat',
+    facture: 'facture',
+    facture_energie: 'facture',
+    invoice: 'facture',
+    autre: 'autre',
+    other: 'autre'
+  };
+
+  return mapping[normalized] || 'autre';
+};
+
+// Configuration du stockage Multer
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
+const hasCloudinaryConfig =
+  !!process.env.CLOUDINARY_CLOUD_NAME &&
+  !!process.env.CLOUDINARY_API_KEY &&
+  !!process.env.CLOUDINARY_API_SECRET;
+
+if (hasCloudinaryConfig) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
+
+const localDocumentsDir = path.join(UPLOADS_ROOT, 'documents');
+if (!fs.existsSync(localDocumentsDir)) {
+  fs.mkdirSync(localDocumentsDir, { recursive: true });
+}
+
+/** public_id Cloudinary depuis une URL res.cloudinary.com (évite slice(-2) qui coupe le dossier racine) */
+function cloudinaryPublicIdFromUrl(fileUrl) {
+  if (!fileUrl || typeof fileUrl !== 'string') return null;
+  if (!fileUrl.includes('res.cloudinary.com')) return null;
+  const noQuery = fileUrl.split('?')[0];
+  const marker = '/upload/';
+  const idx = noQuery.indexOf(marker);
+  if (idx === -1) return null;
+  let rest = noQuery.slice(idx + marker.length);
+  // Segments de transformations (ex. c_scale,w_500/) avant la version ou le public_id
+  while (rest.includes('/') && /^[a-z0-9_]+,[a-z0-9_.,\-]+/i.test(rest.split('/')[0])) {
+    rest = rest.slice(rest.indexOf('/') + 1);
+  }
+  rest = rest.replace(/^v\d+\//, '');
+  const withoutExt = rest.replace(/\.[^/.]+$/, '');
+  return withoutExt || null;
+}
+
+const cloudinaryStorage = hasCloudinaryConfig
+  ? new CloudinaryStorage({
+      cloudinary,
+      params: async (req, file) => {
+        const isImage = (file.mimetype || '').startsWith('image/');
+        return {
+          folder: 'pawlegal/documents',
+          resource_type: isImage ? 'image' : 'raw',
+          public_id: `${Date.now()}-${(file.originalname || 'document').replace(/[^a-zA-Z0-9]/g, '_')}`,
+        };
+      },
+    })
+  : multer.diskStorage({
+      destination: (req, file, cb) => cb(null, localDocumentsDir),
+      filename: (req, file, cb) => {
+        const safeName = (file.originalname || 'document')
+          .replace(/[^a-zA-Z0-9._-]/g, '_')
+          .replace(/_+/g, '_');
+        cb(null, `${Date.now()}-${safeName}`);
+      },
+    });
+
+// Filtre permissif: accepter tous les types de fichiers
+const fileFilter = (req, file, cb) => {
+  cb(null, true);
+};
+
 const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10 MB max
-  },
+  storage: cloudinaryStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: fileFilter
 });
 
@@ -185,13 +456,18 @@ router.get('/dossier/:dossierId', async (req, res) => {
       });
     }
     
-    // Vérifier l'accès
+    // Vérifier l'accès (aligné sur GET /user/dossiers/:id pour le client)
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
     const isOwner = dossier.user && dossier.user.toString() === req.user.id.toString();
     const isAssigned = dossier.assignedTo && dossier.assignedTo.toString() === req.user.id.toString();
+    const isClientByEmail =
+      req.user.role === 'client' &&
+      dossier.clientEmail &&
+      req.user.email &&
+      String(dossier.clientEmail).trim().toLowerCase() === String(req.user.email).trim().toLowerCase();
     const isPartenaire = req.user.role === 'partenaire';
     
-    let hasAccess = isAdmin || isOwner || isAssigned;
+    let hasAccess = isAdmin || isOwner || isAssigned || isClientByEmail;
     
     // Pour les partenaires, vérifier si le dossier leur est transmis (pending ou accepted, pas refused)
     if (isPartenaire && !hasAccess) {
@@ -213,9 +489,28 @@ router.get('/dossier/:dossierId', async (req, res) => {
     }
     
     // Récupérer tous les documents du dossier
-    const documents = await Document.find({ dossierId: dossierId })
+    const rawDocuments = await Document.find({ dossierId: dossierId })
       .populate('user', 'firstName lastName email')
       .sort({ createdAt: -1 });
+
+    const documents = await Promise.all(
+      rawDocuments.map(async (doc) => {
+        if (req.user.role !== 'client') return doc;
+
+        const canViewContent = await canClientViewDocumentContent(doc, req.user);
+        if (canViewContent) return doc;
+
+        const docObj = doc.toObject();
+        return {
+          ...docObj,
+          isConfidentialForClient: true,
+          canPreview: false,
+          canDownload: false,
+          confidentialReason: undefined,
+          cheminFichier: undefined
+        };
+      })
+    );
     
     res.json({
       success: true,
@@ -290,24 +585,36 @@ router.post('/', (req, res, next) => {
       });
     }
 
-    const { nom, description, categorie, dossierId } = req.body;
+    const { nom, description, categorie, dossierId, visibleToClient, confidentialReason } = req.body;
     const effectiveUserId = req.user.id;
+    const safeCategorie = normalizeCategorie(categorie);
+    const uploaderIsCabinet = isCabinetStaff(req.user.role);
 
     console.log('📤 Données du document:', {
       userId: effectiveUserId,
       nom: nom || req.file.originalname,
-      dossierId: dossierId
+      dossierId: dossierId,
+      categorieRecue: categorie,
+      categorieNormalisee: safeCategorie
     });
 
+    // Stocker un chemin relatif stable pour éviter les erreurs selon le cwd du serveur
     const documentData = {
       user: effectiveUserId,
       nom: nom || req.file.originalname,
+      // `nomFichier` est indexé/unique côté DB : utiliser le nom de fichier généré par multer (timestamp)
+      // pour éviter les doublons lorsque l'utilisateur upload plusieurs fois le même fichier original.
       nomFichier: req.file.filename,
-      cheminFichier: req.file.path,
+      cheminFichier: req.file.path, // URL Cloudinary
       typeMime: req.file.mimetype,
       taille: req.file.size,
       description: description || '',
-      categorie: categorie || 'autre'
+      categorie: safeCategorie,
+      visibleToClient: uploaderIsCabinet ? parseBoolean(visibleToClient, true) : true,
+      confidentialReason:
+        uploaderIsCabinet && parseBoolean(visibleToClient, true) === false
+          ? String(confidentialReason || '').trim()
+          : ''
     };
 
     // Ajouter dossierId seulement s'il est fourni et valide
@@ -325,6 +632,45 @@ router.post('/', (req, res, next) => {
     console.log('📤 Création du document...');
     const document = await Document.create(documentData);
     console.log('✅ Document créé avec succès:', document._id);
+
+    // Notifier le client (push + in-app) quand un tiers ajoute un document à son dossier
+    if (documentData.dossierId) {
+      try {
+        const dossier = await Dossier.findById(documentData.dossierId)
+          .select('user clientEmail titre numero')
+          .lean();
+        if (dossier) {
+          let clientUserId = dossier.user ? dossier.user.toString() : null;
+          if (!clientUserId && dossier.clientEmail) {
+            const linked = await User.findOne({
+              email: String(dossier.clientEmail).trim().toLowerCase(),
+            })
+              .select('_id')
+              .lean();
+            if (linked?._id) clientUserId = linked._id.toString();
+          }
+          const uploaderId = String(req.user.id);
+          const isOwnClientUpload = clientUserId && clientUserId === uploaderId;
+          if (clientUserId && !isOwnClientUpload) {
+            const dossierTitle = dossier.titre || dossier.numero || 'votre dossier';
+            await Notification.create({
+              user: clientUserId,
+              type: 'document_uploaded',
+              titre: 'Nouveau document sur votre dossier',
+              message: `« ${document.nom} » a été ajouté au dossier « ${dossierTitle} ».`,
+              lien: `/client/dossiers/${dossier._id}`,
+              metadata: {
+                dossierId: dossier._id.toString(),
+                documentId: document._id.toString(),
+                uploadedBy: uploaderId,
+              },
+            });
+          }
+        }
+      } catch (pushNotifError) {
+        console.error('⚠️ Notification client document_uploaded:', pushNotifError?.message || pushNotifError);
+      }
+    }
 
     // Logger l'action
     try {
@@ -358,15 +704,25 @@ router.post('/', (req, res, next) => {
     console.error('❌ Request file:', req.file);
     
     // Supprimer le fichier si le document n'a pas pu être créé
-    if (req.file && req.file.path) {
+    if (req.file && req.file.path && req.file.path.startsWith('http')) {
       try {
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-          console.log('🗑️ Fichier temporaire supprimé:', req.file.path);
-        }
-      } catch (unlinkError) {
-        console.error('⚠️ Erreur lors de la suppression du fichier temporaire:', unlinkError);
+        const urlParts = req.file.path.split('/');
+        const publicIdWithExt = urlParts.slice(-2).join('/');
+        const publicId = publicIdWithExt.replace(/\.[^/.]+$/, '');
+        await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
+        console.log('🗑️ Fichier Cloudinary supprimé après erreur:', publicId);
+      } catch (cloudErr) {
+        console.warn('⚠️ Suppression Cloudinary échouée:', cloudErr.message);
       }
+    }
+
+    // Erreurs de validation Mongoose -> 400 (problème de données d'entrée)
+    if (error && (error.name === 'ValidationError' || error.name === 'CastError')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Données de document invalides',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
     }
 
     res.status(500).json({
@@ -378,85 +734,81 @@ router.post('/', (req, res, next) => {
   }
 });
 
+// Rôles cabinet avec accès lecture à tous les documents
+const isCabinetStaff = (role) =>
+  role === 'admin' || role === 'superadmin' || role === 'secretaire';
+
+const parseBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') return true;
+    if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off') return false;
+  }
+  return fallback;
+};
+
+const canClientViewDocumentContent = async (document, user) => {
+  if (!document || !user || user.role !== 'client') return true;
+  const isDossierOwnerClient = await canClientAccessDocumentViaOwningDossier(document, user);
+  if (!isDossierOwnerClient) return true;
+  return document.visibleToClient !== false;
+};
+
+/**
+ * Client : accès aux pièces du dossier si même règle que GET /user/dossiers/:id
+ * (utilisateur lié au dossier OU email client du dossier = email connecté).
+ */
+async function canClientAccessDocumentViaOwningDossier(document, user) {
+  if (!document || !document.dossierId || user.role !== 'client') return false;
+  const userId = (user.id || user._id || '').toString();
+  const userEmail = (user.email || '').trim().toLowerCase();
+  if (!userId) return false;
+  const rawDossierId = document.dossierId._id || document.dossierId;
+  if (!rawDossierId || !mongoose.Types.ObjectId.isValid(String(rawDossierId))) return false;
+  try {
+    const Dossier = require('../models/Dossier');
+    const dossier = await Dossier.findById(rawDossierId).select('user clientEmail').lean();
+    if (!dossier) return false;
+    if (dossier.user && dossier.user.toString() === userId) return true;
+    if (
+      dossier.clientEmail &&
+      userEmail &&
+      String(dossier.clientEmail).trim().toLowerCase() === userEmail
+    ) {
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.warn('canClientAccessDocumentViaOwningDossier:', e.message);
+    return false;
+  }
+}
+
 // @route   GET /api/user/documents/:id/preview
 // @desc    Prévisualiser un document (retourne le fichier avec headers pour affichage)
-// @access  Private (peut accepter token en query param pour iframe)
+// @access  Private — auth via middleware protect (Bearer ou ?token=)
 router.get('/:id/preview', async (req, res) => {
   try {
-    console.log('📄 Prévisualisation demandée pour le document:', req.params.id);
-    console.log('📄 Headers Authorization:', req.headers.authorization ? 'Présent' : 'Absent');
-    console.log('📄 Query token:', req.query.token ? 'Présent' : 'Absent');
-    
-    // Vérifier l'authentification manuellement pour permettre le token en query param
-    const jwt = require('jsonwebtoken');
-    let token;
-    
-    // Priorité 1: Token dans les headers Authorization
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-      console.log('✅ Token récupéré depuis les headers');
-    } 
-    // Priorité 2: Token en query parameter
-    else if (req.query.token) {
-      token = req.query.token;
-      console.log('✅ Token récupéré depuis query parameter');
-    }
-    
-    if (!token) {
-      console.log('❌ Aucun token fourni pour la prévisualisation');
-      return res.status(401).json({
-        success: false,
-        message: 'Non autorisé, token manquant'
-      });
-    }
-    
-    // Vérifier le token
-    let decoded;
-    try {
-      const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-here';
-      console.log('🔑 Vérification du token avec JWT_SECRET:', jwtSecret ? 'Défini' : 'Non défini (utilisation de la valeur par défaut)');
-      decoded = jwt.verify(token, jwtSecret);
-      console.log('✅ Token valide, utilisateur ID:', decoded.id);
-    } catch (jwtError) {
-      console.error('❌ Erreur de vérification JWT:', jwtError.name, jwtError.message);
-      if (jwtError.name === 'TokenExpiredError') {
-        return res.status(401).json({
-          success: false,
-          message: 'Token expiré, veuillez vous reconnecter'
-        });
-      } else if (jwtError.name === 'JsonWebTokenError') {
-        return res.status(401).json({
-          success: false,
-          message: 'Token invalide'
-        });
-      }
-      return res.status(401).json({
-        success: false,
-        message: 'Erreur d\'authentification'
-      });
-    }
-    
-    const user = await User.findById(decoded.id).select('-password');
-    
+    const user = req.user;
     if (!user) {
-      console.error('❌ Utilisateur non trouvé pour le token:', decoded.id);
       return res.status(401).json({
         success: false,
-        message: 'Utilisateur non trouvé'
+        message: 'Non autorisé'
       });
     }
-    
-    if (!user.isActive) {
-      console.error('❌ Utilisateur inactif:', user.email);
-      return res.status(401).json({
+
+    const mongoose = require('mongoose');
+    const docId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(docId)) {
+      return res.status(400).json({
         success: false,
-        message: 'Compte utilisateur désactivé'
+        message: 'Identifiant de document invalide'
       });
     }
-    
-    console.log('✅ Utilisateur authentifié:', user.email, 'Rôle:', user.role);
-    
-    const document = await Document.findById(req.params.id)
+
+    const document = await Document.findById(docId)
       .populate('user', 'firstName lastName email')
       .populate({
         path: 'dossierId',
@@ -468,9 +820,10 @@ router.get('/:id/preview', async (req, res) => {
       });
 
     if (!document) {
-      console.error('❌ Document non trouvé:', req.params.id);
+      console.error('❌ Document non trouvé en base:', docId);
       return res.status(404).json({
         success: false,
+        code: 'DOCUMENT_NOT_FOUND',
         message: 'Document non trouvé'
       });
     }
@@ -482,7 +835,7 @@ router.get('/:id/preview', async (req, res) => {
     const currentUserId = user._id.toString();
     
     const isOwner = documentUserId === currentUserId;
-    const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+    const isAdmin = isCabinetStaff(user.role);
     const isPartenaire = user.role === 'partenaire';
     
     // Vérifier si le document appartient à un dossier transmis au partenaire ET accepté
@@ -513,76 +866,76 @@ router.get('/:id/preview', async (req, res) => {
       }
     }
     
+    const isDossierOwnerClient = await canClientAccessDocumentViaOwningDossier(document, user);
+
     console.log('🔐 Vérification des permissions:', {
       isOwner,
       isAdmin,
       isPartenaire,
       isTransmittedToPartenaire,
+      isDossierOwnerClient,
       documentUserId,
       currentUserId,
       userRole: user.role,
       dossierId: document.dossierId?._id || document.dossierId
     });
 
-    if (!isOwner && !isAdmin && !isTransmittedToPartenaire) {
-      console.error('❌ Accès refusé - Pas propriétaire, pas admin, et pas partenaire autorisé');
+    if (!isOwner && !isAdmin && !isTransmittedToPartenaire && !isDossierOwnerClient) {
+      console.error('❌ Accès refusé - Pas propriétaire, pas admin/secrétaire, pas partenaire autorisé, pas client propriétaire du dossier');
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé à ce document'
       });
     }
 
-    // Vérifier que le fichier existe
-    const filePath = path.resolve(document.cheminFichier);
-    console.log('📁 Chemin du fichier:', filePath);
-    
-    if (!fs.existsSync(filePath)) {
-      console.error('❌ Fichier non trouvé sur le serveur:', filePath);
-      return res.status(404).json({
-        success: false,
-        message: 'Fichier non trouvé sur le serveur'
-      });
+    if (user.role === 'client') {
+      const canViewContent = await canClientViewDocumentContent(document, user);
+      if (!canViewContent) {
+        return res.status(403).json({
+          success: false,
+          message: 'Ce document est confidentiel et réservé à l’administration.'
+        });
+      }
     }
 
-    console.log('✅ Fichier trouvé, envoi en cours...');
-
-    // Déterminer le Content-Type correct
+    // Gérer Cloudinary (URL http/https) ET stockage local (chemin disque)
+    const fileUrl = document.cheminFichier;
     let contentType = document.typeMime || 'application/octet-stream';
-    if (contentType === 'application/octet-stream' && document.nom.toLowerCase().endsWith('.pdf')) {
+    if (!document.typeMime && (document.nom || '').toLowerCase().endsWith('.pdf')) {
       contentType = 'application/pdf';
     }
-
-    // Définir les headers pour la prévisualisation (pas le téléchargement)
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(document.nom)}"`);
-    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache pour 1 heure
-    res.setHeader('X-Content-Type-Options', 'nosniff'); // Empêcher le sniffing de type
-    
-    // Pour les PDF, ajouter des headers supplémentaires pour une meilleure compatibilité
-    if (contentType === 'application/pdf') {
-      res.setHeader('Accept-Ranges', 'bytes');
-    }
-    
-    // Envoyer le fichier
-    res.sendFile(filePath, {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': `inline; filename="${encodeURIComponent(document.nom)}"`,
-      }
-    }, (err) => {
-      if (err) {
-        console.error('❌ Erreur lors de l\'envoi du fichier:', err);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+
+    if (fileUrl && fileUrl.startsWith('http')) {
+      // Récupérer le fichier depuis Cloudinary et le streamer
+      const https = require('https');
+      const http = require('http');
+      const protocol = fileUrl.startsWith('https') ? https : http;
+      console.log('✅ Prévisualisation — stream Cloudinary:', fileUrl);
+      protocol.get(fileUrl, (stream) => {
+        stream.pipe(res);
+      }).on('error', (err) => {
+        console.error('❌ Erreur stream Cloudinary:', err.message);
         if (!res.headersSent) {
-          res.status(500).json({
-            success: false,
-            message: 'Erreur lors de la prévisualisation du fichier',
-            error: err.message
-          });
+          res.status(500).json({ success: false, message: 'Erreur lecture du fichier' });
         }
-      } else {
-        console.log('✅ Fichier envoyé avec succès');
-      }
-    });
+      });
+      return;
+    }
+
+    // Fichier local
+    const localPath = await resolveDocumentPhysicalPath(document);
+    if (!localPath) {
+      return res.status(404).json({
+        success: false,
+        code: 'FILE_NOT_FOUND',
+        message: 'Fichier non trouvé'
+      });
+    }
+    console.log('✅ Prévisualisation — fichier local:', localPath);
+    return res.sendFile(localPath);
   } catch (error) {
     console.error('Erreur lors de la prévisualisation du document:', error);
     if (!res.headersSent) {
@@ -623,7 +976,7 @@ router.get('/:id/download', async (req, res) => {
     // Les partenaires peuvent télécharger les documents des dossiers transmis
     const effectiveUserId = req.user.id;
     const isOwner = document.user.toString() === effectiveUserId.toString();
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const isAdmin = isCabinetStaff(req.user.role);
     const isPartenaire = req.user.role === 'partenaire';
     
     // Pour partenaire, vérifier si le document appartient à un dossier transmis ET accepté
@@ -654,51 +1007,43 @@ router.get('/:id/download', async (req, res) => {
         });
       }
     }
+
+    const isDossierOwnerClient = await canClientAccessDocumentViaOwningDossier(document, req.user);
     
-    if (!isOwner && !isAdmin && !hasAccessViaTransmission) {
+    if (!isOwner && !isAdmin && !hasAccessViaTransmission && !isDossierOwnerClient) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé à ce document'
       });
     }
 
-    // Vérifier que le fichier existe
-    const filePath = path.resolve(document.cheminFichier);
-    if (!fs.existsSync(filePath)) {
+    if (req.user.role === 'client') {
+      const canViewContent = await canClientViewDocumentContent(document, req.user);
+      if (!canViewContent) {
+        return res.status(403).json({
+          success: false,
+          message: 'Ce document est confidentiel et réservé à l’administration.'
+        });
+      }
+    }
+
+    const fileUrl = document.cheminFichier;
+    if (fileUrl && fileUrl.startsWith('http')) {
+      console.log('✅ Téléchargement — redirect Cloudinary:', fileUrl);
+      return res.redirect(fileUrl);
+    }
+
+    const localPath = await resolveDocumentPhysicalPath(document);
+    if (!localPath) {
       return res.status(404).json({
         success: false,
-        message: 'Fichier non trouvé sur le serveur'
+        code: 'FILE_NOT_FOUND',
+        message: 'Fichier non trouvé'
       });
     }
 
-    // Déterminer le Content-Type correct
-    let contentType = document.typeMime || 'application/octet-stream';
-    if (contentType === 'application/octet-stream' && document.nom.toLowerCase().endsWith('.pdf')) {
-      contentType = 'application/pdf';
-    }
-
-    // Définir les headers pour le téléchargement
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(document.nom)}"`);
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    
-    // Envoyer le fichier tel quel (binaire intact)
-    res.sendFile(filePath, {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(document.nom)}"`,
-      }
-    }, (err) => {
-      if (err) {
-        console.error('Erreur lors du téléchargement:', err);
-        if (!res.headersSent) {
-          res.status(500).json({
-            success: false,
-            message: 'Erreur lors du téléchargement du fichier'
-          });
-        }
-      }
-    });
+    console.log('✅ Téléchargement — fichier local:', localPath);
+    return res.download(localPath, document.nom || document.nomFichier || 'document');
   } catch (error) {
     console.error('Erreur lors du téléchargement du document:', error);
     res.status(500).json({
@@ -714,9 +1059,12 @@ router.get('/:id/download', async (req, res) => {
 // @access  Private
 router.delete('/:id', async (req, res) => {
   try {
-    const document = await Document.findById(req.params.id)
-      .populate('user', 'firstName lastName email')
-      .populate('dossierId', 'titre numero');
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Identifiant de document invalide' });
+    }
+
+    // Ne pas populate('user') : si le compte a été supprimé, user devient null et .toString() provoque un 500.
+    const document = await Document.findById(req.params.id).populate('dossierId', 'titre numero');
 
     if (!document) {
       return res.status(404).json({
@@ -725,11 +1073,21 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    // Vérifier les permissions
-    const effectiveUserId = req.user.id;
-    if (document.user.toString() !== effectiveUserId.toString() && 
-        req.user.role !== 'admin' && 
-        req.user.role !== 'superadmin') {
+    const effectiveUserId = req.user.id || req.user._id;
+    if (!effectiveUserId) {
+      return res.status(401).json({ success: false, message: 'Session invalide' });
+    }
+
+    const ownerId = document.user != null ? String(document.user) : null;
+    if (!ownerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Document sans propriétaire valide',
+      });
+    }
+
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    if (ownerId !== String(effectiveUserId) && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé à ce document'
@@ -746,7 +1104,7 @@ router.delete('/:id', async (req, res) => {
         originalId: document._id,
         itemData: documentData,
         deletedBy: effectiveUserId,
-        originalOwner: document.user._id || document.user,
+        originalOwner: document.user,
         origin: req.headers.referer || 'unknown',
         metadata: {
           nom: document.nom,
@@ -760,23 +1118,39 @@ router.delete('/:id', async (req, res) => {
       // Continuer la suppression même si l'ajout à la corbeille échoue
     }
 
-    // Supprimer le fichier du système de fichiers
-    if (fs.existsSync(document.cheminFichier)) {
-      fs.unlinkSync(document.cheminFichier);
+    // Suppression sur Cloudinary (uniquement si configuré + URL Cloudinary + public_id fiable)
+    if (
+      hasCloudinaryConfig &&
+      document.cheminFichier &&
+      document.cheminFichier.startsWith('http') &&
+      document.cheminFichier.includes('res.cloudinary.com')
+    ) {
+      try {
+        const publicId = cloudinaryPublicIdFromUrl(document.cheminFichier);
+        if (publicId) {
+          const resourceType = document.cheminFichier.includes('/raw/upload/') ? 'raw' : 'image';
+          await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+          console.log('✅ Fichier supprimé sur Cloudinary:', publicId, resourceType);
+        } else {
+          console.warn('⚠️ Impossible d’extraire le public_id Cloudinary:', document.cheminFichier);
+        }
+      } catch (cloudErr) {
+        console.warn('⚠️ Suppression Cloudinary échouée:', cloudErr.message);
+      }
     }
 
     // Supprimer le document de la base de données
     await document.deleteOne();
 
-    // Logger l'action
+    // Logger l'action (userEmail requis par le schéma — comptes téléphone seulement sans email)
     try {
-      const effectiveUserId = req.user.id;
-      const effectiveUser = req.user;
+      const actorEmail =
+        req.user.email || req.user.phone || (req.user.name ? String(req.user.name) : '') || 'inconnu';
       await Log.create({
         user: effectiveUserId,
-        userEmail: effectiveUser?.email || req.user.email,
+        userEmail: actorEmail,
         action: 'document_deleted',
-        description: `${effectiveUser?.email || req.user.email} a supprimé le document "${document.nom}"`,
+        description: `${actorEmail} a supprimé le document "${document.nom || document.nomFichier || 'sans nom'}"`,
         ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
         userAgent: req.get('user-agent'),
         metadata: {
@@ -794,10 +1168,17 @@ router.delete('/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur lors de la suppression du document:', error);
+    if (error.name === 'CastError' || error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Requête de suppression invalide',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Erreur serveur',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 });

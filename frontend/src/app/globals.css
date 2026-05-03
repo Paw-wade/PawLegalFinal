@@ -41,10 +41,47 @@
   * {
     @apply border-border;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    overflow-x: hidden;
+    /* Safe area pour encoches et barre d’accueil sur mobile */
+    padding-left: env(safe-area-inset-left, 0);
+    padding-right: env(safe-area-inset-right, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
+}
+
+/* Cibles tactiles minimales 44px pour mobile (accessibilité) */
+@layer utilities {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+/* nextjs-portal : évite décalage (ex. top: 690px) et impact sur le layout — hors layer pour priorité sur les styles inline */
+nextjs-portal,
+nextjs-portal[data-cursor-element-id] {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  transform: translate(0, 0) !important;
 }
 
 /* Animations personnalisées */
@@ -163,6 +200,13 @@
 
 .delay-1000 {
   animation-delay: 1000ms;
+}
+
+/* RichTextEditor : afficher le placeholder quand la zone est vide */
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
 }
 
 

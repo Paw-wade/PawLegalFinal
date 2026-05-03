@@ -129,7 +129,7 @@ export function getRealInputValues<T extends Record<string, any>>(
   inputRefs: Record<string, RefObject<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>>,
   formData: T
 ): T {
-  const realValues = { ...formData };
+  const realValues: Record<string, any> = { ...formData };
 
   Object.entries(inputRefs).forEach(([key, ref]) => {
     if (ref.current) {
@@ -139,6 +139,6 @@ export function getRealInputValues<T extends Record<string, any>>(
     }
   });
 
-  return realValues;
+  return realValues as T;
 }
 

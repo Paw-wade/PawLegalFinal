@@ -86,7 +86,6 @@ export default function SetupPasswordPage() {
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
-    email: '',
   });
 
   // États pour les erreurs de validation
@@ -95,7 +94,6 @@ export default function SetupPasswordPage() {
   // Refs pour détecter l'auto-remplissage
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const confirmPasswordInputRef = useRef<HTMLInputElement>(null);
-  const emailInputRef = useRef<HTMLInputElement>(null);
 
   // Vérifier si l'utilisateur est connecté
   useEffect(() => {
@@ -110,10 +108,9 @@ export default function SetupPasswordPage() {
     inputRefs: {
       password: passwordInputRef,
       confirmPassword: confirmPasswordInputRef,
-      email: emailInputRef,
     },
     formData,
-    setFormData: (updater) => setFormData(updater),
+    setFormData: (updater) => setFormData(updater as React.SetStateAction<typeof formData>),
   });
 
   const validateField = (name: string, value: string) => {
@@ -144,13 +141,6 @@ export default function SetupPasswordPage() {
           delete errors.confirmPassword;
         }
         break;
-      case 'email':
-        if (value && value.trim().length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
-          errors.email = 'Email invalide';
-        } else {
-          delete errors.email;
-        }
-        break;
     }
     
     setFieldErrors(errors);
@@ -172,7 +162,6 @@ export default function SetupPasswordPage() {
     const realValues = getRealInputValues({
       password: passwordInputRef,
       confirmPassword: confirmPasswordInputRef,
-      email: emailInputRef,
     }, formData);
 
     // Mettre à jour l'état avec les valeurs réelles
@@ -181,12 +170,9 @@ export default function SetupPasswordPage() {
     // Valider tous les champs avec les valeurs réelles
     validateField('password', realValues.password);
     validateField('confirmPassword', realValues.confirmPassword);
-    if (realValues.email) {
-      validateField('email', realValues.email);
-    }
 
     // Vérifier s'il y a des erreurs
-    if (fieldErrors.password || fieldErrors.confirmPassword || fieldErrors.email) {
+    if (fieldErrors.password || fieldErrors.confirmPassword) {
       setError('Veuillez corriger les erreurs dans le formulaire');
       return;
     }
@@ -202,21 +188,12 @@ export default function SetupPasswordPage() {
       return;
     }
 
-    if (realValues.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(realValues.email.trim())) {
-      setError('Veuillez entrer une adresse email valide');
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      const setupData: { password: string; email?: string } = {
+      const setupData: { password: string } = {
         password: realValues.password,
       };
-
-      if (realValues.email && realValues.email.trim()) {
-        setupData.email = realValues.email.trim().toLowerCase();
-      }
 
       const response = await authAPI.setupPassword(setupData);
 
@@ -227,11 +204,11 @@ export default function SetupPasswordPage() {
         });
 
         if (result?.ok) {
-          // Rediriger vers le tableau de bord
-          router.push('/client');
+          // Proposer de compléter le profil (nouveaux comptes)
+          router.push('/auth/complete-profile');
         } else {
-          // Si la connexion automatique échoue, rediriger quand même
-          router.push('/client');
+          // Si la connexion automatique échoue, proposer quand même la complétion du profil
+          router.push('/auth/complete-profile');
         }
       }
     } catch (err: any) {
@@ -279,31 +256,6 @@ export default function SetupPasswordPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email (optionnel)</Label>
-                <Input
-                  ref={emailInputRef}
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  onBlur={(e) => validateField('email', e.target.value)}
-                  placeholder="votre@email.com"
-                  autoComplete="email"
-                  className={fieldErrors.email ? 'border-red-500 focus:border-red-500' : ''}
-                />
-                {fieldErrors.email && (
-                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                    <span>⚠️</span>
-                    <span>{fieldErrors.email}</span>
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Vous pourrez ajouter votre email plus tard dans les paramètres
-                </p>
-              </div>
-
               <div className="space-y-2">
                 <Label htmlFor="password">Mot de passe *</Label>
                 <div className="relative">

@@ -179,10 +179,10 @@ export default function DossierPDFPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
             <div>
               <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#f97316', margin: '0 0 6px 0', lineHeight: '1.2' }}>
-                Paw Legal
+                Ada Papers
               </h1>
               <p style={{ fontSize: '11px', color: '#666', margin: '0', lineHeight: '1.4' }}>
-                Service d&apos;accompagnement juridique
+                Service d&apos;Accompagnement aux démarches administratives
               </p>
             </div>
             <div style={{ textAlign: 'right', fontSize: '10px', color: '#666', lineHeight: '1.5' }}>
@@ -203,9 +203,9 @@ export default function DossierPDFPage() {
           
           {/* Coordonnées de l'entreprise */}
           <div style={{ marginTop: '15px', fontSize: '9px', color: '#666', lineHeight: '1.6', padding: '8px', backgroundColor: '#f9fafb', borderRadius: '4px' }}>
-            <p style={{ margin: '2px 0', fontWeight: 'bold' }}>Paw Legal</p>
-            <p style={{ margin: '2px 0' }}>Service d&apos;accompagnement juridique</p>
-            <p style={{ margin: '2px 0' }}>Email: contact@pawlegal.fr</p>
+            <p style={{ margin: '2px 0', fontWeight: 'bold' }}>Ada Papers</p>
+            <p style={{ margin: '2px 0' }}>Service d&apos;Accompagnement aux démarches administratives</p>
+            <p style={{ margin: '2px 0' }}>Email: contact@adapapers.fr</p>
             <p style={{ margin: '2px 0' }}>Téléphone: +33 (0)1 XX XX XX XX</p>
           </div>
         </div>
@@ -394,8 +394,8 @@ export default function DossierPDFPage() {
 
         {/* Pied de page */}
         <div className="pdf-footer avoid-break" style={{ marginTop: '35px', paddingTop: '18px', borderTop: '2px solid #ddd', textAlign: 'center', fontSize: '9px', color: '#666', lineHeight: '1.6', backgroundColor: '#f9fafb', padding: '15px 10px', borderRadius: '4px' }}>
-          <p style={{ margin: '5px 0', fontWeight: 'bold' }}>Paw Legal - Service d&apos;accompagnement juridique</p>
-          <p style={{ margin: '5px 0' }}>Email: contact@pawlegal.fr | Téléphone: +33 (0)1 XX XX XX XX</p>
+          <p style={{ margin: '5px 0', fontWeight: 'bold' }}>Ada Papers - Service d&apos;Accompagnement aux démarches administratives</p>
+          <p style={{ margin: '5px 0' }}>Email: contact@adapapers.fr | Téléphone: +33 (0)1 XX XX XX XX</p>
           <p style={{ margin: '12px 0 6px 0', fontStyle: 'italic', fontSize: '8px', color: '#888' }}>
             Ce document est confidentiel et destiné uniquement au client concerné.
           </p>

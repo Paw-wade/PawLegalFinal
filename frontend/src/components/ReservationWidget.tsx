@@ -97,12 +97,17 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
       localStorage.setItem('reservationWidgetOpen', 'true');
     }
   };
-  // Date du jour au format YYYY-MM-DD
-  const getTodayDate = () => new Date().toISOString().split('T')[0];
+  // Date du jour au format YYYY-MM-DD (timezone locale, sans décalage UTC)
+  const getTodayDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
-  // Liste des motifs basée sur les types de demandes de dossier
+  // Liste des motifs de rendez-vous
   const motifsOptions = [
-    { value: 'Consultation', label: 'Consultation' },
     { value: 'premiere_demande_titre', label: 'Je fais une première demande de titre de séjour' },
     { value: 'renouvellement_titre', label: 'Je demande le renouvellement de mon titre de séjour' },
     { value: 'changement_statut', label: 'Je demande un changement de statut' },
@@ -110,16 +115,11 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
     { value: 'nationalite_francaise', label: 'Je demande la nationalité française' },
     { value: 'demande_visa', label: 'Je demande un visa' },
     { value: 'demande_carte_resident', label: 'Je demande une carte de résident' },
-    { value: 'autre_demande', label: 'Autre Demande' },
-    { value: 'pas_reponse_titre', label: 'Je n\'ai pas eu de réponse à ma demande de titre de séjour' },
-    { value: 'pas_reponse_visa', label: 'Je n\'ai pas eu de réponse à ma demande de visa' },
+    { value: 'pas_reponse_titre', label: 'Je n’ai pas eu de réponse à ma demande de titre de séjour' },
+    { value: 'pas_reponse_visa', label: 'Je n’ai pas eu de réponse à ma demande de visa' },
     { value: 'conteste_refus_titre', label: 'Je conteste un refus de titre de séjour' },
-    { value: 'conteste_oqtf', label: 'J\'ai reçu une OQTF (obligation de quitter le territoire)' },
-    { value: 'conteste_refus_asile_cnda', label: 'Je conteste un refus d\'asile auprès de la CNDA' },
-    { value: 'conteste_refus_visa', label: 'Je conteste un refus de visa' },
-    { value: 'Dossier administratif', label: 'Dossier administratif' },
-    { value: 'Suivi de dossier', label: 'Suivi de dossier' },
-    { value: 'Autre', label: 'Autre' },
+    { value: 'conteste_oqtf', label: 'J’ai reçu une OQTF (obligation de quitter le territoire)' },
+    { value: 'autre', label: 'Autre' },
   ];
 
   const [formData, setFormData] = useState({
@@ -129,9 +129,11 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
     telephone: '',
     date: getTodayDate(),
     heure: '',
-    motif: 'Consultation',
+    motif: 'premiere_demande_titre',
     description: '',
   });
+  /** Affiche le champ « objet / précisions » après interaction sur le motif (liste déroulante). */
+  const [motifInteracted, setMotifInteracted] = useState(false);
   const [userProfileLoaded, setUserProfileLoaded] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +150,7 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
   useEffect(() => {
     if (isOpen) {
       setUserProfileLoaded(false);
+      setMotifInteracted(false);
     }
   }, [isOpen]);
 
@@ -367,11 +370,12 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
           prenom: '',
           email: '',
           telephone: '',
-          date: '',
+          date: getTodayDate(),
           heure: '',
-          motif: 'Consultation',
+          motif: 'premiere_demande_titre',
           description: '',
         });
+        setMotifInteracted(false);
         setTimeout(() => setSuccess(null), 5000);
         // Appeler le callback de succès si fourni
         if (onSuccess) {
@@ -413,7 +417,7 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-xl p-3 border border-border max-w-sm relative">
+    <div className="bg-white rounded-xl shadow-2xl p-4 border border-border max-w-md w-[380px] relative">
       <button
         type="button"
         onClick={(e) => {
@@ -606,7 +610,11 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
           <select
             id="motif"
             value={formData.motif}
-            onChange={(e) => setFormData({ ...formData, motif: e.target.value })}
+            onFocus={() => setMotifInteracted(true)}
+            onChange={(e) => {
+              setMotifInteracted(true);
+              setFormData({ ...formData, motif: e.target.value });
+            }}
             required
             className="mt-0.5 flex h-7 w-full rounded border border-input bg-background px-2 py-0.5 text-[11px] ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1"
           >
@@ -617,6 +625,22 @@ export function ReservationWidget({ isOpen: controlledIsOpen, onClose, defaultOp
             ))}
           </select>
         </div>
+
+        {(motifInteracted || !!formData.heure) && formData.motif && (
+          <div>
+            <Label htmlFor="objet-rdv">Objet du rendez-vous (facultatif)</Label>
+            <textarea
+              id="objet-rdv"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value.slice(0, 500) })}
+              rows={3}
+              maxLength={500}
+              placeholder="Précisez brièvement l’objet de votre rendez-vous…"
+              className="mt-0.5 w-full min-h-[4.5rem] rounded border border-input bg-background px-2 py-1 text-[11px] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 resize-y"
+            />
+            <p className="text-[9px] text-muted-foreground mt-0.5">{formData.description.length}/500</p>
+          </div>
+        )}
 
         <Button
           type="submit"

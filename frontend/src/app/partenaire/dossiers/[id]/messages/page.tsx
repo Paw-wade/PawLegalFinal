@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { messagesAPI, dossiersAPI, userAPI } from '@/lib/api';
 import { ArrowLeft, Send, Paperclip, MessageSquare, FileText, X } from 'lucide-react';
 import Link from 'next/link';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm';
@@ -59,6 +60,7 @@ export default function PartenaireDossierMessagesPage() {
     piecesJointes: [] as File[]
   });
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   
   useEffect(() => {
     if (dossierId) {
@@ -141,7 +143,7 @@ export default function PartenaireDossierMessagesPage() {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.sujet.trim() || !newMessage.contenu.trim()) {
-      alert('Veuillez remplir le sujet et le contenu');
+      setToast({ message: 'Veuillez remplir le sujet et le contenu', type: 'warning' });
       return;
     }
     
@@ -181,7 +183,7 @@ export default function PartenaireDossierMessagesPage() {
       console.error('Erreur lors de la suppression:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Erreur lors de la suppression du message';
       setError(errorMessage);
-      alert(`Erreur: ${errorMessage}`);
+      setToast({ message: `Erreur: ${errorMessage}`, type: 'error' });
     }
   };
   
@@ -314,7 +316,7 @@ export default function PartenaireDossierMessagesPage() {
                     <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
                       <span className="text-sm text-gray-700 flex items-center">
                         <FileText className="w-4 h-4 mr-2" />
-                        {file.name} ({(file.size / 1024).toFixed(2)} KB)
+                        {file.name}
                       </span>
                       <button
                         type="button"
@@ -450,6 +452,9 @@ export default function PartenaireDossierMessagesPage() {
           </div>
         )}
       </div>
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }

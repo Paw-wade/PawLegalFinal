@@ -45,7 +45,11 @@ function getRoleLabel(role: string | undefined): string {
     'client': 'Client',
     'admin': 'Administrateur',
     'superadmin': 'Super Administrateur',
+    'partenaire': 'Partenaire',
     'avocat': 'Avocat',
+    'consulat': 'Consulat',
+    'association': 'Association',
+    'collaborateur': 'Collaborateur',
     'assistant': 'Assistant',
     'comptable': 'Comptable',
     'secretaire': 'Secrétaire',
@@ -57,7 +61,7 @@ function getRoleLabel(role: string | undefined): string {
 }
 
 interface HeaderProps {
-  variant?: 'home' | 'client' | 'admin';
+  variant?: 'home' | 'client' | 'admin' | 'partenaire';
   showNav?: boolean;
   navItems?: Array<{ href: string; label: string; active?: boolean; highlight?: boolean }>;
   onMenuClick?: () => void; // Pour le bouton hamburger
@@ -74,11 +78,12 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
   } | null>(null);
   const [mounted, setMounted] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Textes CMS pour le sous-titre du header
   const subtitleHome = useCmsText(
     'layout.header.subtitle_home',
-    "Service d'accompagnement juridique"
+    "Service d'Accompagnement aux démarches administratives"
   );
   const subtitleAdmin = useCmsText(
     'layout.header.subtitle_admin',
@@ -155,12 +160,8 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               // L'utilisateur peut toujours utiliser l'application en mode hors ligne
             } else {
               console.error('Erreur lors de la récupération du profil:', error);
-              // Si le token est invalide (401, 403), le supprimer
-              if (error.response?.status === 401 || error.response?.status === 403) {
-                localStorage.removeItem('token');
-                sessionStorage.removeItem('token');
-                setUserInfo(null);
-              }
+              // Ne plus supprimer automatiquement le token :
+              // l'utilisateur restera connecté tant qu'il ne clique pas sur "Déconnexion".
             }
           }
         } else if (status === 'unauthenticated') {
@@ -238,6 +239,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
     ],
     client: [
       { href: '/client/dossiers', label: 'Mes dossiers', requiresAuth: true },
+      { href: '/client/tarification', label: 'Tarification', requiresAuth: true },
       { href: '/client/rendez-vous', label: 'Rendez-vous', requiresAuth: true },
       { href: '/client/documents', label: 'Documents', requiresAuth: true },
       { href: '/client/messages', label: 'Messages', requiresAuth: true },
@@ -325,61 +327,41 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
   };
 
   return (
-    <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-      <div className="container mx-auto px-4 py-2.5">
-        <div className="flex items-center justify-between">
-          {/* Logo et bouton menu (pour dashboard) */}
-          <div className="flex items-center gap-3">
-            {/* Bouton hamburger pour mobile/tablette sur dashboard - uniquement pour les clients */}
-            {!showNav && onMenuClick && variant === 'client' && (
+    <header className="border-b border-gray-200/80 bg-white/98 backdrop-blur-md sticky top-0 z-[80] shadow-sm safe-top">
+      <div className="w-full max-w-[100vw] mx-auto px-3 sm:px-4 py-2 sm:py-2.5">
+        <div className="flex items-center justify-between gap-2">
+          {/* Logo ; bouton menu (mobile) : sidebar dashboard ou menu nav selon la page */}
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
+            {/* Bouton hamburger spécifique pour le menu latéral des dashboards (client/admin/partenaire) */}
+            {onMenuClick && (variant === 'client' || variant === 'admin' || variant === 'partenaire') && (
               <button
                 onClick={onMenuClick}
-                className="lg:hidden p-2 hover:bg-gray-100 rounded-md transition-colors"
+                className="lg:hidden touch-target p-2 -m-1 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0 flex items-center justify-center"
                 aria-label="Ouvrir le menu"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
             )}
-            {/* Logo - visible UNIQUEMENT sur la page d'accueil (variant === 'home') */}
-            {/* Sur les pages client et admin, le logo est déjà dans la sidebar, donc on ne l'affiche PAS ici */}
             {variant === 'home' && (
               <>
                 <Link
                   href="/"
-                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-xl"
+                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base sm:text-xl max-w-[55vw] sm:max-w-none truncate"
                 >
-                  Paw Legal
+                  Ada Papers
                 </Link>
-                <div className="h-4 w-px bg-gray-300"></div>
-                <p className="text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
+                <div className="hidden md:block h-4 w-px bg-gray-300 flex-shrink-0" />
+                <p className="hidden md:inline text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
                   {subtitleHome}
                 </p>
               </>
             )}
-            {/* Sur les pages client, afficher uniquement le sous-titre (le logo est dans la sidebar) */}
-            {variant === 'client' && (
-              <p className="text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
-                {subtitleClient}
-              </p>
-            )}
-            {/* Sur les pages admin, afficher uniquement le sous-titre */}
-            {variant === 'admin' && (
-              <p className="text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
-                {subtitleAdmin}
-              </p>
-            )}
           </div>
 
-          {/* Navigation - Liens permanents (Domaines, Services, FAQ, Contact, Calculateur, Dashboard) */}
+          {/* Navigation - Liens permanents (Services, FAQ, Forum, Contact, Calculateur, Dashboard) */}
           <nav className="hidden md:flex items-center gap-0.5">
-            <Link
-              href="/domaines"
-              className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-            >
-              Domaines
-            </Link>
             <Link
               href="/services"
               className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
@@ -387,10 +369,22 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               Services
             </Link>
             <Link
+              href="/a-propos"
+              className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+            >
+              À propos
+            </Link>
+            <Link
               href="/faq"
               className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
             >
               FAQ
+            </Link>
+            <Link
+              href="/forum"
+              className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+            >
+              Forum
             </Link>
             <Link
               href="/contact"
@@ -404,8 +398,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
             >
               Calculateur
             </Link>
-            {/* Afficher le bouton Logs si l'utilisateur est admin ou superadmin */}
-            {isAuthenticated && (userRole === 'admin' || userRole === 'superadmin') && (
+            {isAuthenticated && userRole === 'superadmin' && (
               <Link
                 href="/admin/logs"
                 className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
@@ -479,8 +472,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   </Link>
                 );
               })}
-              {/* Afficher le bouton Logs si l'utilisateur est admin ou superadmin */}
-              {isAuthenticated && (userRole === 'admin' || userRole === 'superadmin') && (
+              {isAuthenticated && userRole === 'superadmin' && (
                 <Link
                   href="/admin/logs"
                   className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors"
@@ -512,47 +504,128 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
           )}
 
 
-          {/* Informations utilisateur et actions */}
-          <div className="flex items-center gap-2">
+          {/* Informations utilisateur et actions — cibles tactiles sur mobile */}
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {isAuthenticated ? (
                 <>
-                  {/* Badge de notification */}
-                  <NotificationBadge 
-                    variant="header" 
-                    className="mr-2"
-                  />
-                  
-                  {/* Affichage du nom et de la qualité - TOUJOURS VISIBLE */}
-                  <div className="text-right border-r border-gray-200 pr-2.5 mr-2">
-                    <Link 
-                      href={variant === 'admin' ? '/admin/compte' : '/client/compte'}
-                      className="text-xs font-semibold text-gray-900 hover:text-orange-500 transition-colors cursor-pointer block leading-tight"
+                  <NotificationBadge variant="header" className="mr-0 sm:mr-2" />
+                  {/* Nom + rôle : masquer le sous-titre sur mobile */}
+                  <div className="text-right border-r border-gray-200 pr-2 sm:pr-2.5 mr-1 sm:mr-2 min-w-0 max-w-[100px] sm:max-w-none">
+                    <button
+                      type="button"
+                      onClick={handleDashboardClick}
+                      className="text-xs font-semibold text-gray-900 hover:text-orange-500 transition-colors cursor-pointer block leading-tight truncate text-right w-full"
                     >
                       {userName || 'Utilisateur'}
-                    </Link>
-                    <p className="text-[10px] text-gray-500 font-normal leading-tight">{roleLabel}</p>
+                    </button>
+                    <p className="hidden sm:block text-[10px] text-gray-500 font-normal leading-tight">{roleLabel}</p>
                   </div>
                   <Button 
                     variant="ghost" 
-                    className="text-xs px-2.5 py-1.5 h-auto text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+                    className="hidden sm:inline-flex text-xs px-2.5 py-1.5 min-h-0 text-gray-700 hover:text-gray-900 hover:bg-gray-100"
                     onClick={handleSignOut}
                   >
-                    Déconnexion
+                    <span>Déconnexion</span>
                   </Button>
                 </>
               ) : (
                 <>
-                  <Link href="/auth/signin">
-                    <Button variant="ghost" className="text-xs px-2.5 py-1.5 h-auto text-gray-700 hover:text-gray-900">Connexion</Button>
+                  <Link href="/auth/signin" className="min-h-[44px] sm:min-h-0 flex items-center">
+                    <Button variant="ghost" className="text-xs px-2.5 py-2 sm:py-1.5 h-auto text-gray-700 hover:text-gray-900 touch-target">Connexion</Button>
                   </Link>
-                  <Link href="/auth/signup">
-                    <Button className="text-xs px-3 py-1.5 h-auto">Créer un compte</Button>
+                  <Link href="/auth/signup" className="min-h-[44px] sm:min-h-0 flex items-center">
+                    <Button className="text-xs px-3 py-2 sm:py-1.5 h-auto touch-target">Créer un compte</Button>
                   </Link>
                 </>
               )}
             </div>
         </div>
       </div>
+
+      {/* Menu de navigation mobile (page d'accueil, calculateur, etc.) — plein écran lisible */}
+      {variant === 'home' && mobileNavOpen && (
+        <>
+          {/* Overlay mobile : commence sous le header pour laisser le header cliquable */}
+          <div
+            className="fixed inset-0 top-14 bg-black/50 z-40 md:hidden"
+            onClick={() => setMobileNavOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="fixed top-14 left-0 right-0 bottom-0 z-50 md:hidden bg-white border-b border-gray-200 shadow-lg overflow-y-auto safe-bottom">
+            <nav className="p-4 flex flex-col gap-0.5">
+              <Link
+                href="/services"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+              >
+                Services
+              </Link>
+              <Link
+                href="/a-propos"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+              >
+                À propos
+              </Link>
+              <Link
+                href="/faq"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+              >
+                FAQ
+              </Link>
+              <Link
+                href="/forum"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+              >
+                Forum
+              </Link>
+              <Link
+                href="/contact"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+              >
+                Contact
+              </Link>
+              <Link
+                href="/calculateur"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3.5 rounded-xl text-base font-medium bg-orange-500 text-white hover:bg-orange-600 active:bg-orange-700 transition-colors min-h-[48px] flex items-center"
+              >
+                Calculateur
+              </Link>
+              {isAuthenticated && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => { handleDashboardClick(e); setMobileNavOpen(false); }}
+                    className="w-full text-left px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+                  >
+                    Dashboard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMobileNavOpen(false); handleSignOut(); }}
+                    className="w-full text-left px-4 py-3.5 rounded-xl text-base font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 active:bg-red-100 transition-colors min-h-[48px] flex items-center"
+                  >
+                    Déconnexion
+                  </button>
+                  {userRole === 'superadmin' && (
+                    <Link
+                      href="/admin/logs"
+                      onClick={() => setMobileNavOpen(false)}
+                      className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+                    >
+                      Logs
+                    </Link>
+                  )}
+                </>
+              )}
+            </nav>
+          </div>
+        </>
+      )}
 
       {/* Modal de connexion/inscription */}
       {showAuthModal && (

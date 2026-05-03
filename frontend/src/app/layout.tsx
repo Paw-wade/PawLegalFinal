@@ -1,13 +1,30 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import SessionProvider from '@/providers/SessionProvider';
+import { PushNotificationsBootstrap } from '@/components/PushNotificationsBootstrap';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
+};
 
 export const metadata: Metadata = {
   // Titre court affiché à côté du favicon dans l’onglet
-  title: 'Paw Legal',
+  title: 'Ada Papers',
   // Description SEO (on peut garder la description longue)
   description:
-    'Paw Legal - Service d\'accompagnement juridique spécialisé en droit des étrangers et droit du travail. Accompagnement professionnel pour vos démarches administratives.',
+    "Ada Papers - Service d'Accompagnement aux démarches administratives pour vos titres de séjour, visas et démarches liées au droit des étrangers et du travail.",
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Ada Papers',
+  },
+  icons: {
+    apple: '/ada-papers-logo.png',
+  },
 };
 
 export default function RootLayout({
@@ -17,8 +34,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr">
-      <body className="antialiased">
-        <SessionProvider>{children}</SessionProvider>
+      <body className="antialiased overflow-x-hidden min-w-0 max-w-[100vw]">
+        <SessionProvider>
+          <PushNotificationsBootstrap />
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );

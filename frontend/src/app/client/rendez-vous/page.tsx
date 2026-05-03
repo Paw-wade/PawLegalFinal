@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ReservationWidget } from '@/components/ReservationWidget';
 import { appointmentsAPI, userAPI, dossiersAPI } from '@/lib/api';
+import { Toast } from '@/components/Toast';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -53,6 +54,7 @@ function RendezVousPageContent() {
     type: '',
     priorite: 'normale'
   });
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -211,7 +213,7 @@ function RendezVousPageContent() {
           description: '',
           notes: ''
         });
-        alert('Rendez-vous modifié avec succès ! Vous recevrez une notification.');
+        setToast({ message: '✅ Rendez-vous modifié avec succès.', type: 'success' });
       } else {
         setError(response.data.message || 'Erreur lors de la modification du rendez-vous');
       }
@@ -300,7 +302,7 @@ function RendezVousPageContent() {
           type: '',
           priorite: 'normale'
         });
-        alert('Dossier créé avec succès ! Vous pouvez le consulter dans la section "Mes Dossiers".');
+        setToast({ message: '✅ Dossier créé avec succès.', type: 'success' });
         // Optionnel : rediriger vers les dossiers
         // router.push('/client/dossiers');
       } else {
@@ -319,13 +321,11 @@ function RendezVousPageContent() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Chargement...</p>
+          <p className="text-muted-foreground">Chargement de votre session...</p>
         </div>
       </div>
     );
   }
-
-  if (status === 'unauthenticated') return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -433,24 +433,24 @@ function RendezVousPageContent() {
                 // Déterminer le style de la carte (bordure gauche colorée comme les dossiers)
                 const getCardBorderStyle = () => {
                   if (rdv.statut === 'annule') {
-                    return 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200';
+                    return 'border border-red-300/70 hover:border-red-500/80 hover:shadow-[0_12px_30px_-18px_rgba(239,68,68,0.55)]';
                   }
                   if (rdv.statut === 'termine' || rdv.effectue) {
-                    return 'border-l-4 border-l-green-500 border-t border-r border-b border-gray-200';
+                    return 'border border-green-300/70 hover:border-green-500/80 hover:shadow-[0_12px_30px_-18px_rgba(34,197,94,0.55)]';
                   }
                   if (isPast && !rdv.effectue) {
-                    return 'border-l-4 border-l-red-500 border-t border-r border-b border-gray-200';
+                    return 'border border-red-300/70 hover:border-red-500/80 hover:shadow-[0_12px_30px_-18px_rgba(239,68,68,0.55)]';
                   }
                   if (rdv.statut === 'confirme') {
-                    return 'border-l-4 border-l-blue-500 border-t border-r border-b border-gray-200';
+                    return 'border border-blue-300/70 hover:border-blue-500/80 hover:shadow-[0_12px_30px_-18px_rgba(59,130,246,0.55)]';
                   }
-                  return 'border-l-4 border-l-yellow-500 border-t border-r border-b border-gray-200';
+                  return 'border border-yellow-300/70 hover:border-yellow-500/80 hover:shadow-[0_12px_30px_-18px_rgba(234,179,8,0.55)]';
                 };
 
                 return (
                   <div
                     key={appointmentId}
-                    className={`border rounded-xl p-5 hover:shadow-xl transition-all duration-200 bg-white ${getCardBorderStyle()}`}
+                    className={`rounded-xl p-5 transition-all duration-300 bg-white hover:-translate-y-0.5 ${getCardBorderStyle()}`}
                   >
                     {/* En-tête de la carte */}
                     <div className="flex items-start justify-between mb-3">
@@ -768,6 +768,9 @@ function RendezVousPageContent() {
             </div>
           </div>
         </div>
+      )}
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
     </div>
   );
