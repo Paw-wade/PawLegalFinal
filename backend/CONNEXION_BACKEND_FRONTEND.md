@@ -117,6 +117,8 @@ FRONTEND_URL=https://www.adapapers.fr,https://adapapers.fr,https://adapapers.ver
 
 En local, la valeur par défaut inclut `http://localhost:3000` et `http://localhost:3004`.
 
+**Production (`https://www.adapapers.fr` → `https://api.adapapers.fr`)** : le code fusionne toujours `https://www.adapapers.fr` et `https://adapapers.fr` aux origines CORS. Définissez quand même `FRONTEND_URL` sur le serveur (liste complète : local, préprod, Vercel, etc.) pour les autres domaines et pour la cohérence des logs.
+
 ## 📝 Endpoints Disponibles
 
 ### Authentification
@@ -178,10 +180,15 @@ curl -X POST http://localhost:3005/api/auth/login \
 
 ### Erreur CORS
 
-Si vous voyez une erreur CORS :
-1. Vérifiez que le backend est démarré sur le port 3005
-2. Vérifiez que `cors()` est bien configuré dans `server.js`
-3. Vérifiez l'URL dans les variables d'environnement
+Si le navigateur indique *No 'Access-Control-Allow-Origin' header* sur une requête depuis `https://www.adapapers.fr` vers `https://api.adapapers.fr` :
+
+1. **Redéployez / redémarrez** le backend avec la dernière version : les origines Ada Papers (`www` + apex) sont ajoutées automatiquement dans `utils/frontendOrigins.js`.
+2. Sur l’hébergeur de l’API, définissez au minimum :  
+   `FRONTEND_URL=https://www.adapapers.fr,https://adapapers.fr`  
+   (ajoutez d’autres origines séparées par des virgules si besoin : Vercel, préprod, `http://localhost:3004` pour des tests).
+3. Si un **reverse proxy** (Nginx, Cloudflare) répond aux `OPTIONS` avant Node, il doit laisser passer les en-têtes CORS du backend ou en ajouter les mêmes — sinon la preflight échoue malgré Express.
+
+En local : vérifiez que le backend tourne sur le port 3005 et que `cors()` est actif dans `server.js`.
 
 ### Erreur 401 (Non autorisé)
 
