@@ -64,20 +64,35 @@ export default function AdminDossiersTarificationPage() {
 
   const normalize = (value: any) => String(value || '').toLowerCase().trim();
 
+  /** Recherche insensible aux accents (ex. « traore » trouve « Traoré »). */
+  const fold = (value: any) =>
+    normalize(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
   const matchesFilter = useCallback(
     (dossier: any) => {
-      const needle = normalize(filterText);
-      if (!needle) return true;
-      const haystack = [
-        dossier?.numero,
-        dossier?.titre,
-        getClientName(dossier),
-        dossier?.user?.email,
-        dossier?.clientEmail,
-      ]
-        .map((v) => normalize(v))
-        .join(' ');
-      return haystack.includes(needle);
+      const raw = filterText.trim();
+      if (!raw) return true;
+      const haystack = fold(
+        [
+          dossier?.numero,
+          dossier?.titre,
+          getClientName(dossier),
+          dossier?.user?.email,
+          dossier?.clientEmail,
+          dossier?.tarificationLastNotifySummary,
+        ]
+          .map((v) => String(v || ''))
+          .join(' ')
+      );
+      const tokens = raw
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .split(/\s+/)
+        .filter(Boolean);
+      return tokens.every((t) => haystack.includes(t));
     },
     [filterText]
   );
@@ -198,7 +213,7 @@ export default function AdminDossiersTarificationPage() {
                   </button>
                 </div>
               </div>
-              <div className="mt-1 text-xs text-gray-700">
+              <div className="mt-1 text-xs text-gray-700 space-y-1">
                 {dossier?.fraisExoneres
                   ? 'Exonération active'
                   : fixedAmount > 0
@@ -208,7 +223,23 @@ export default function AdminDossiersTarificationPage() {
                     })} EUR`
                   : dossier?.formuleTarifaire
                   ? `Formule choisie: ${dossier.formuleTarifaire === 'premium' ? 'Premium' : 'Standard'}`
+                  : dossier?.tarificationNotificationSentAt
+                  ? 'Notification tarification déjà envoyée au client (voir détail ci-dessous).'
                   : 'En attente de décision tarification'}
+                {dossier?.tarificationNotificationSentAt && (
+                  <p className="text-[11px] text-gray-500">
+                    Envoyée le{' '}
+                    {new Date(dossier.tarificationNotificationSentAt).toLocaleString('fr-FR', {
+                      dateStyle: 'short',
+                      timeStyle: 'short',
+                    })}
+                  </p>
+                )}
+                {dossier?.tarificationLastNotifySummary ? (
+                  <p className="text-[11px] text-gray-800 whitespace-pre-wrap border border-gray-100 rounded bg-gray-50/80 p-2 max-h-28 overflow-y-auto">
+                    {dossier.tarificationLastNotifySummary}
+                  </p>
+                ) : null}
               </div>
             </div>
           );

@@ -9,8 +9,19 @@
  *
  * PUBLIC_APP_URL (optionnel) : URL canonique pour les liens dans les e-mails
  * (reset password, etc.). Sinon, la première entrée de FRONTEND_URL est utilisée.
+ *
+ * CORS_ALLOW_LOCALHOST : si `false`, n’ajoute pas localhost / 127.0.0.1 (3000, 3004).
+ * Par défaut ils sont toujours autorisés pour développer le front en local contre l’API déployée.
  */
 const ADAPAPERS_SITE_ORIGINS = ['https://www.adapapers.fr', 'https://adapapers.fr'];
+
+/** Next.js local courant : permet d’appeler l’API distante (VPS) depuis le navigateur sans erreur CORS. */
+const LOCAL_DEV_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3004',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3004',
+];
 
 function getFrontendOriginsList() {
   const raw =
@@ -23,7 +34,11 @@ function getFrontendOriginsList() {
     .filter(Boolean);
   const base =
     fromEnv.length > 0 ? fromEnv : ['http://localhost:3000', 'http://localhost:3004'];
-  return [...new Set([...base, ...ADAPAPERS_SITE_ORIGINS])];
+  const merged = [...new Set([...base, ...ADAPAPERS_SITE_ORIGINS])];
+  if (process.env.CORS_ALLOW_LOCALHOST === 'false') {
+    return merged;
+  }
+  return [...new Set([...merged, ...LOCAL_DEV_ORIGINS])];
 }
 
 function getPrimaryFrontendUrl() {

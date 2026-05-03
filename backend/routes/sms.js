@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { protect, authorize } = require('../middleware/auth');
-const { sendSMS, sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+const { sendSMS, sendNotificationSMS, formatPhoneNumber, recordOutboundSms } = require('../sendSMS');
 const User = require('../models/User');
 const Log = require('../models/Log');
 
@@ -34,6 +34,22 @@ router.post(
 
       // Envoyer le SMS
       const result = await sendSMS(to, message);
+
+      try {
+        await recordOutboundSms({
+          to: result.to,
+          message: result.body,
+          templateCode: 'manual',
+          templateName: 'SMS manuel (admin)',
+          twilioSid: result.sid,
+          twilioStatus: result.status,
+          status: result.status === 'sent' || result.status === 'queued' ? 'sent' : 'pending',
+          sentBy: adminId,
+          context: 'manual',
+        });
+      } catch (histErr) {
+        console.error('⚠️ Historique SMS (manuel) non enregistré:', histErr?.message || histErr);
+      }
 
       // Logger l'action
       try {
@@ -175,6 +191,21 @@ router.post(
             sid: result.sid,
             status: result.status
           });
+          try {
+            await recordOutboundSms({
+              to: result.to,
+              message: result.body,
+              templateCode: 'bulk',
+              templateName: 'SMS groupé (admin)',
+              twilioSid: result.sid,
+              twilioStatus: result.status,
+              status: result.status === 'sent' || result.status === 'queued' ? 'sent' : 'pending',
+              sentBy: adminId,
+              context: 'manual',
+            });
+          } catch (histErr) {
+            console.error('⚠️ Historique SMS (bulk) non enregistré:', histErr?.message || histErr);
+          }
         } catch (error) {
           smsErrors.push({
             phone: recipient.phone,
@@ -182,6 +213,20 @@ router.post(
             success: false,
             error: error.message
           });
+          try {
+            await recordOutboundSms({
+              to: formatPhoneNumber(recipient.phone) || recipient.phone,
+              message,
+              templateCode: 'bulk',
+              templateName: 'SMS groupé (admin)',
+              status: 'failed',
+              error: error.message,
+              sentBy: adminId,
+              context: 'manual',
+            });
+          } catch (histErr) {
+            console.error('⚠️ Historique échec bulk non enregistré:', histErr?.message || histErr);
+          }
         }
       }
 

@@ -53,10 +53,12 @@ const smsHistorySchema = new mongoose.Schema({
     ref: 'User',
     index: true
   },
+  /** Origine du SMS (pas d’enum stricte : évite l’échec silencieux de sauvegarde après envoi Twilio). */
   context: {
     type: String,
-    enum: ['appointment', 'dossier', 'document_request', 'message', 'account', 'task', 'otp', 'manual', 'other'],
-    default: 'other'
+    trim: true,
+    default: 'other',
+    index: true,
   },
   contextId: {
     type: String,

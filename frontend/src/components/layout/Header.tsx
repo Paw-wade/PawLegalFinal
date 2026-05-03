@@ -398,8 +398,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
             >
               Calculateur
             </Link>
-            {/* Afficher le bouton Logs si l'utilisateur est admin ou superadmin */}
-            {isAuthenticated && (userRole === 'admin' || userRole === 'superadmin') && (
+            {isAuthenticated && userRole === 'superadmin' && (
               <Link
                 href="/admin/logs"
                 className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
@@ -473,8 +472,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   </Link>
                 );
               })}
-              {/* Afficher le bouton Logs si l'utilisateur est admin ou superadmin */}
-              {isAuthenticated && (userRole === 'admin' || userRole === 'superadmin') && (
+              {isAuthenticated && userRole === 'superadmin' && (
                 <Link
                   href="/admin/logs"
                   className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors"
@@ -613,7 +611,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   >
                     Déconnexion
                   </button>
-                  {(userRole === 'admin' || userRole === 'superadmin') && (
+                  {userRole === 'superadmin' && (
                     <Link
                       href="/admin/logs"
                       onClick={() => setMobileNavOpen(false)}

@@ -14,6 +14,7 @@ import {
   Bell,
   Calculator,
   User,
+  Scale,
 } from 'lucide-react';
 
 /** Icône cercle + € (équivalent visuel à CircleDollarSign pour la tarification en euros) */
@@ -70,6 +71,7 @@ const clientMenuItems: MenuItem[] = [
   { href: '/client/messages', label: 'Messages', icon: MessageSquare },
   { href: '/client/notifications', label: 'Notifications', icon: Bell },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
+  { href: '/lexia', label: 'LEXIA', icon: Scale },
   { href: '/calculateur', label: 'Calculateur', icon: Calculator },
   { href: '/client/compte', label: 'Mon compte', icon: User },
 ];

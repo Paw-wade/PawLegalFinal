@@ -432,12 +432,17 @@ try {
 }
 
 try {
-  if (require.resolve('./routes/creneaux')) {
-    app.use('/api/creneaux', require('./routes/creneaux'));
-    console.log('✅ Route /api/creneaux enregistrée');
-  }
+  app.use('/api/creneaux', require('./routes/creneaux'));
+  console.log('✅ Route /api/creneaux enregistrée');
 } catch (e) {
-  console.log('⚠️ Route /api/creneaux non trouvée');
+  console.error('❌ Impossible d’enregistrer /api/creneaux:', e.message);
+}
+
+try {
+  app.use('/api/lexia', require('./routes/lexia'));
+  console.log('✅ Route /api/lexia enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d’enregistrer /api/lexia:', e.message);
 }
 
 try {

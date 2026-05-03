@@ -18,6 +18,7 @@ function sanitizeDossierForPartenaire(dossier) {
   delete o.montantTarificationFixeAt;
   delete o.montantTarificationFixeBy;
   delete o.tarificationNotificationSentAt;
+  delete o.tarificationLastNotifySummary;
   delete o.paiementTarificationEffectue;
   delete o.paiementTarificationEffectueAt;
   delete o.paiementTarificationEffectueBy;
@@ -3015,6 +3016,10 @@ router.put(
             }
 
             dossier.tarificationNotificationSentAt = new Date();
+            dossier.tarificationLastNotifySummary = String(messageTarif || '')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 2000);
             await dossier.save();
           } else {
             console.warn('⚠️ Notification tarification non envoyée: client introuvable pour ce dossier', dossier._id);

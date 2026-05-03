@@ -210,6 +210,13 @@ const dossierSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
+  /** Résumé du dernier message « notification tarification » envoyé au client (in-app / base pour SMS). */
+  tarificationLastNotifySummary: {
+    type: String,
+    trim: true,
+    maxlength: 2000,
+    required: false,
+  },
   paiementTarificationEffectue: {
     type: Boolean,
     default: false

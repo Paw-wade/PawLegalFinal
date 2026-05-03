@@ -104,8 +104,25 @@ router.post(
           return;
         }
         
-        await sendSMS(formattedPhone, message);
-        
+        const smsResult = await sendSMS(formattedPhone, message);
+
+        try {
+          const { recordOutboundSms } = require('../sendSMS');
+          await recordOutboundSms({
+            to: smsResult.to,
+            message: smsResult.body,
+            templateCode: 'otp',
+            templateName: 'Code OTP',
+            twilioSid: smsResult.sid,
+            twilioStatus: smsResult.status,
+            status: smsResult.status === 'sent' || smsResult.status === 'queued' ? 'sent' : 'pending',
+            context: 'otp',
+            contextId: otp._id.toString(),
+          });
+        } catch (histErr) {
+          console.error('⚠️ Historique SMS OTP non enregistré:', histErr?.message || histErr);
+        }
+
         console.log(`✅ Code OTP envoyé à ${formattedPhone}: ${code}`);
         
         res.json({

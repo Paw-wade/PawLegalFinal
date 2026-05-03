@@ -2637,8 +2637,17 @@ export default function AdminDossiersPage() {
                               Formule : {dossier.formuleTarifaire === 'premium' ? 'Premium' : 'Standard'}
                             </span>
                           ) : dossier.tarificationNotificationSentAt ? (
-                            <span className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-200">
-                              Tarif : non choisi
+                            <span
+                              className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-200 max-w-[min(100%,14rem)] truncate"
+                              title={
+                                dossier.tarificationLastNotifySummary
+                                  ? String(dossier.tarificationLastNotifySummary).slice(0, 900)
+                                  : 'Une notification tarification a été envoyée au client. Ouvrez « Tarif » pour voir l’historique ou renvoyer une notif.'
+                              }
+                            >
+                              {dossier.tarificationLastNotifySummary
+                                ? 'Notif. tarification (voir infobulle)'
+                                : 'Tarif : non choisi (notif. envoyée)'}
                             </span>
                           ) : null}
                           {Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0 && (
@@ -4179,6 +4188,13 @@ export default function AdminDossiersPage() {
 
             <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4 space-y-3">
               <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">2. Notifier le client (in-app)</p>
+              {showTarifModal.tarificationLastNotifySummary ? (
+                <div className="rounded border border-blue-100 bg-white/80 p-2 text-[11px] text-gray-800 max-h-24 overflow-y-auto whitespace-pre-wrap">
+                  <span className="font-semibold text-blue-900">Dernière notif. enregistrée :</span>
+                  <br />
+                  {String(showTarifModal.tarificationLastNotifySummary)}
+                </div>
+              ) : null}
               <p className="text-xs text-blue-900/90">
                 Le message envoyé dépend de l&apos;état du dossier après enregistrement : choix de formule sur le site, montant fixe déjà enregistré, ou frais exonérés si vous cochez l&apos;exonération ci-dessous.
               </p>

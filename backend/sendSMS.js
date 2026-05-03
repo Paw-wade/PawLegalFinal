@@ -434,10 +434,54 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
   }
 }
 
+/**
+ * Enregistre un SMS sortant dans l’historique admin (à appeler après sendSMS si sendNotificationSMS n’est pas utilisé).
+ */
+async function recordOutboundSms({
+  to,
+  message,
+  templateCode = 'manual',
+  templateName = 'SMS',
+  variables = {},
+  twilioSid,
+  twilioStatus,
+  status = 'sent',
+  error,
+  sentBy,
+  sentToUser,
+  context = 'other',
+  contextId = null,
+}) {
+  const SmsHistory = require('./models/SmsHistory');
+  const mongoose = require('mongoose');
+  const doc = {
+    to,
+    message,
+    templateCode,
+    templateName,
+    variables,
+    status,
+    twilioSid: twilioSid || undefined,
+    twilioStatus: twilioStatus || undefined,
+    error: error || undefined,
+    context: context || 'other',
+    contextId: contextId || undefined,
+    sentAt: new Date(),
+  };
+  if (sentBy && mongoose.Types.ObjectId.isValid(String(sentBy))) {
+    doc.sentBy = sentBy;
+  }
+  if (sentToUser && mongoose.Types.ObjectId.isValid(String(sentToUser))) {
+    doc.sentToUser = sentToUser;
+  }
+  return SmsHistory.create(doc);
+}
+
 module.exports = {
   sendSMS,
   sendNotificationSMS,
   formatPhoneNumber,
   fillTemplate,
-  canReceiveSMS
+  canReceiveSMS,
+  recordOutboundSms,
 };
