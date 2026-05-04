@@ -2998,7 +2998,9 @@ router.put(
             );
 
             const phoneUser = await User.findById(clientUserId).select('phone');
-            if (phoneUser?.phone && !dossierForNotification.isStandby && !isMontantTarificationPatch) {
+            // SMS : ne pas utiliser le mode « push d’abord » ici — createNotification déclenche déjà un push
+            // via le hook Notification ; sinon sendNotificationSMS saute le SMS dès qu’un push part.
+            if (phoneUser?.phone && !dossierForNotification.isStandby) {
               const formattedPhone = formatPhoneNumber(phoneUser.phone);
               if (formattedPhone) {
                 await sendNotificationSMS(
@@ -3008,6 +3010,7 @@ router.put(
                   {
                     userId: clientUserId,
                     skipPreferences: true,
+                    preferPush: false,
                     context: 'tarification_reminder',
                     contextId: dossier._id.toString()
                   }
