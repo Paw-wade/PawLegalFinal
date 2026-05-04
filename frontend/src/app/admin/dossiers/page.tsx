@@ -304,7 +304,7 @@ export default function AdminDossiersPage() {
   const [notificationMessage, setNotificationMessage] = useState('');
   const [exonererFraisTarification, setExonererFraisTarification] = useState(false);
   const [fraisExoneresMotifInput, setFraisExoneresMotifInput] = useState('');
-  /** Modal superadmin : montant fixe vs notification tarification (séparés). */
+  /** Modal cabinet : montant fixe vs notification tarification (séparés). */
   const [showTarifModal, setShowTarifModal] = useState<any>(null);
   const [tarifMontantInput, setTarifMontantInput] = useState('');
   const [tarifNotifyMessage, setTarifNotifyMessage] = useState('');
@@ -318,7 +318,9 @@ export default function AdminDossiersPage() {
   const [userFilter, setUserFilter] = useState<string>('all');
   /** Tri liste : jalons datés dans `etapesSupplementaires` (front uniquement). */
   const [dossierSortEtapes, setDossierSortEtapes] = useState<'default' | 'etape_date_asc' | 'etape_date_desc'>('default');
-  const isSuperadmin = (session?.user as any)?.role === 'superadmin';
+  /** Montant fixe + notification tarification : aligné sur le backend (admin ou superadmin). */
+  const canManageTarifModal =
+    (session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin';
 
   // Étapes de base pour garder un workflow cohérent même sans étapes personnalisées.
   const DEFAULT_ADMIN_ETAPES: any[] = [
@@ -2632,7 +2634,7 @@ export default function AdminDossiersPage() {
                           ) : Number(dossier.montantTarificationFixe || 0) > 0 ? (
                             <span
                               className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-100 text-blue-900 border border-blue-200"
-                              title="Montant fixé manuellement par superadmin. Le client n'a pas à choisir Standard/Premium."
+                              title="Montant fixé manuellement par le cabinet. Le client n'a pas à choisir Standard/Premium."
                             >
                               Montant fixe : {Number(dossier.montantTarificationFixe).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR
                             </span>
@@ -2727,7 +2729,7 @@ export default function AdminDossiersPage() {
                         >
                           {dossier.isStandby ? '▶ Reprendre' : '⏸ Stand-by'}
                         </button>
-                        {isSuperadmin && (
+                        {canManageTarifModal && (
                           <>
                             <button
                               type="button"
@@ -4173,7 +4175,7 @@ export default function AdminDossiersPage() {
         </div>
       )}
 
-      {/* Modal superadmin : tarification (montant séparé de la notification) */}
+      {/* Modal cabinet : tarification (montant séparé de la notification) */}
       {showTarifModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
