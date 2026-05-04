@@ -691,9 +691,6 @@ router.get(
   }
 });
 
-// Note : PATCH /api/user/dossiers/:id/formule-tarifaire est enregistré dans server.js (avant ce routeur)
-// pour garantir la résolution de la route en toutes circonstances.
-
 // @route   POST /api/user/dossiers
 // @desc    Créer un nouveau dossier
 // @access  Private
@@ -2129,6 +2126,104 @@ router.post(
   }
 );
 
+// @route   PATCH /api/user/dossiers/:id/formule-tarifaire
+// @desc    Client (ou cabinet) enregistre la formule Standard / Premium
+// @access  Private — client propriétaire / email dossier, ou admin / superadmin
+router.patch(
+  '/:id/formule-tarifaire',
+  [body('formule').isIn(['standard', 'premium']).withMessage('Formule invalide (standard ou premium).')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation',
+          errors: errors.array(),
+        });
+      }
+
+      const dossierId = req.params.id;
+      const { formule } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(dossierId)) {
+        return res.status(400).json({ success: false, message: 'Identifiant de dossier invalide' });
+      }
+
+      const dossier = await Dossier.findById(dossierId);
+      if (!dossier) {
+        return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+      }
+
+      const uid = String(req.user.id);
+      const role = req.user.role;
+      const userEmail = (req.user.email || '').trim().toLowerCase();
+
+      const ownerId = dossier.user
+        ? (dossier.user._id ? dossier.user._id.toString() : dossier.user.toString())
+        : null;
+      const clientEmailLower = dossier.clientEmail ? String(dossier.clientEmail).trim().toLowerCase() : '';
+      const isOwner = ownerId && ownerId === uid;
+      const isEmailClient = Boolean(clientEmailLower && userEmail && userEmail === clientEmailLower);
+      const isStaff = role === 'admin' || role === 'superadmin';
+
+      if (isStaff) {
+        // ok
+      } else if (role === 'client' && (isOwner || isEmailClient)) {
+        // ok
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: 'Accès non autorisé pour enregistrer la formule sur ce dossier.',
+        });
+      }
+
+      if (dossier.fraisExoneres) {
+        return res.status(400).json({
+          success: false,
+          message: 'Les frais de ce dossier ont été exonérés : aucun choix de formule n’est requis.',
+        });
+      }
+      if (Number(dossier.montantTarificationFixe || 0) > 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Un montant de tarification a été fixé par le cabinet : le choix de formule en ligne n’est pas disponible pour ce dossier.',
+        });
+      }
+      if (dossier.paiementTarificationEffectue) {
+        return res.status(400).json({
+          success: false,
+          message: 'Le paiement tarification est déjà enregistré comme effectué.',
+        });
+      }
+
+      dossier.formuleTarifaire = formule;
+      dossier.formuleTarifaireChoisieAt = new Date();
+      dossier.formuleTarifaireReminderSent = true;
+      await dossier.save();
+
+      const updated = await Dossier.findById(dossierId)
+        .populate('user', 'firstName lastName email phone profilePhoto')
+        .populate('createdBy', 'firstName lastName email')
+        .populate('assignedTo', 'firstName lastName email role');
+
+      return res.json({
+        success: true,
+        message: 'Formule de tarification enregistrée.',
+        dossier: updated,
+      });
+    } catch (error) {
+      console.error('Erreur PATCH formule-tarifaire:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+  }
+);
+
 // @route   GET /api/user/dossiers/:id
 // @desc    Récupérer un dossier par ID
 // @access  Private
@@ -2362,17 +2457,19 @@ router.put(
       const isMontantTarificationPatch =
         montantTarificationFixe !== undefined && montantTarificationFixe !== null;
 
-      /** Superadmin : enregistrer uniquement le montant fixe sans aucune notif/SMS « dossier modifié ». */
+      const isCabinetTarifRole = req.user.role === 'admin' || req.user.role === 'superadmin';
+
+      /** Cabinet : enregistrer uniquement le montant fixe sans aucune notif/SMS « dossier modifié ». */
       const skipMontantSilentNotify =
         (req.body.skipDossierModificationNotify === true || req.body.skipDossierModificationNotify === 'true') &&
-        req.user.role === 'superadmin' &&
+        isCabinetTarifRole &&
         isMontantTarificationPatch &&
         !shouldNotifyTarificationClientNow;
 
-      if ((montantTarificationFixe !== undefined || shouldNotifyTarificationClientNow) && req.user.role !== 'superadmin') {
+      if ((montantTarificationFixe !== undefined || shouldNotifyTarificationClientNow) && !isCabinetTarifRole) {
         return res.status(403).json({
           success: false,
-          message: 'Seul le superadmin peut fixer un montant manuel ou envoyer la notification de tarification.'
+          message: 'Seuls l’admin ou le superadmin peuvent fixer un montant manuel ou envoyer la notification de tarification.'
         });
       }
 
@@ -2531,8 +2628,8 @@ router.put(
         }
       }
 
-      // Montant manuel de tarification (superadmin uniquement)
-      if (req.user.role === 'superadmin' && montantTarificationFixe !== undefined) {
+      // Montant manuel de tarification (admin / superadmin)
+      if (isCabinetTarifRole && montantTarificationFixe !== undefined) {
         const rawAmount = typeof montantTarificationFixe === 'string'
           ? montantTarificationFixe.replace(',', '.').trim()
           : montantTarificationFixe;
@@ -2930,8 +3027,8 @@ router.put(
         }
       }
 
-      // Notification tarification envoyée uniquement à la demande du superadmin (à tout moment)
-      if (shouldNotifyTarificationClientNow && req.user.role === 'superadmin') {
+      // Notification tarification envoyée à la demande du cabinet (admin / superadmin)
+      if (shouldNotifyTarificationClientNow && isCabinetTarifRole) {
         try {
           let clientUserId = null;
           if (dossierForNotification.user) {

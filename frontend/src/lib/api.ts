@@ -807,7 +807,7 @@ export const dossiersAPI = {
   updateDossier: (id: string, data: any) =>
     api.put(`/user/dossiers/${id}`, data),
 
-  // Superadmin - notifier tarification à la demande
+  // Admin / superadmin — notifier tarification à la demande (PUT dossier)
   notifyTarification: (id: string) =>
     api.put(`/user/dossiers/${id}`, { notifyTarificationClient: true }),
 
