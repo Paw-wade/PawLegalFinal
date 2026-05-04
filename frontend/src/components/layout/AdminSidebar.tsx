@@ -164,7 +164,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 z-40 bg-neutral-900/25 backdrop-blur-[2px] lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />

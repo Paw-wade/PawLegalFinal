@@ -1383,6 +1383,9 @@ export default function AdminDossiersPage() {
     return parsed;
   };
 
+  const formatTarifMontantFr = (n: number) =>
+    Number(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   const openTarifModal = (dossier: any, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
@@ -1467,6 +1470,14 @@ export default function AdminDossiersPage() {
 
   const handleTarifSendNotification = async () => {
     if (!showTarifModal) return;
+    if (tarifMontantDirty()) {
+      setToast({
+        message:
+          'Le montant saisi ne correspond pas au montant enregistré. Cliquez d’abord sur « Enregistrer le montant uniquement », puis envoyez la notification.',
+        type: 'warning',
+      });
+      return;
+    }
     const dossierId = String(showTarifModal._id || showTarifModal.id || '');
     if (!dossierId) return;
     setTarifSendingNotify(true);
@@ -1482,7 +1493,11 @@ export default function AdminDossiersPage() {
       }
       await dossiersAPI.updateDossier(dossierId, payload);
       await loadDossiers();
-      setToast({ message: 'Notification tarification envoyée au client.', type: 'success' });
+      setToast({
+        message:
+          'Notification tarification envoyée : message in-app, push (si activé) et SMS si le client a un numéro valide.',
+        type: 'success',
+      });
       closeTarifModal();
     } catch (err: any) {
       const message = err?.response?.data?.message || 'Envoi de la notification impossible';
@@ -4171,23 +4186,54 @@ export default function AdminDossiersPage() {
 
             <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 space-y-3">
               <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">1. Montant fixe (sans notification)</p>
-              <Label htmlFor="tarif-montant" className="text-sm">
-                Montant en EUR (0 pour retirer le montant fixe)
+              <div className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Montant actuellement en base : </span>
+                <span className="font-semibold text-gray-900 tabular-nums">
+                  {Number(showTarifModal.montantTarificationFixe || 0) > 0
+                    ? `${formatTarifMontantFr(Number(showTarifModal.montantTarificationFixe || 0))} EUR`
+                    : 'aucun (0 EUR)'}
+                </span>
+              </div>
+              <Label htmlFor="tarif-montant" className="text-sm font-medium">
+                Nouveau montant à enregistrer (EUR)
               </Label>
+              <p className="text-[11px] text-muted-foreground -mt-1">
+                Saisissez le montant qui sera enregistré après « Enregistrer le montant uniquement ». Ce bouton n’envoie{' '}
+                <strong>aucune</strong> notification in-app, <strong>aucun</strong> push et <strong>aucun</strong> SMS.
+              </p>
               <Input
                 id="tarif-montant"
                 value={tarifMontantInput}
                 onChange={(e) => setTarifMontantInput(e.target.value)}
                 placeholder="Ex. 1500 ou 0"
-                className="w-full"
+                className="w-full font-mono text-base"
               />
+              {(() => {
+                const p = parseTarifMontantInput(tarifMontantInput);
+                if (p === null && String(tarifMontantInput).trim() !== '') {
+                  return (
+                    <p className="text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1.5">
+                      Montant illisible — corrigez la saisie (chiffres, virgule ou point décimal).
+                    </p>
+                  );
+                }
+                if (p !== null) {
+                  return (
+                    <p className="text-sm font-semibold text-gray-900 bg-emerald-50 border border-emerald-200 rounded px-3 py-2 tabular-nums">
+                      Après enregistrement : <span className="text-emerald-900">{formatTarifMontantFr(p)} EUR</span>
+                      {p === 0 ? ' (montant fixe retiré)' : null}
+                    </p>
+                  );
+                }
+                return null;
+              })()}
               <Button type="button" variant="outline" onClick={() => void handleTarifSaveMontantOnly()} disabled={tarifSavingMontant}>
                 {tarifSavingMontant ? 'Enregistrement…' : 'Enregistrer le montant uniquement'}
               </Button>
             </div>
 
             <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4 space-y-3">
-              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">2. Notifier le client (in-app)</p>
+              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">2. Notifier le client (in-app + SMS)</p>
               {showTarifModal.tarificationLastNotifySummary ? (
                 <div className="rounded border border-blue-100 bg-white/80 p-2 text-[11px] text-gray-800 max-h-24 overflow-y-auto whitespace-pre-wrap">
                   <span className="font-semibold text-blue-900">Dernière notif. enregistrée :</span>
@@ -4196,11 +4242,19 @@ export default function AdminDossiersPage() {
                 </div>
               ) : null}
               <p className="text-xs text-blue-900/90">
-                Le message envoyé dépend de l&apos;état du dossier après enregistrement : choix de formule sur le site, montant fixe déjà enregistré, ou frais exonérés si vous cochez l&apos;exonération ci-dessous.
+                Le texte automatique dépend de l&apos;état du dossier : formule à choisir, montant fixe déjà enregistré, ou exonération si vous la cochez ci-dessous. Un SMS court est envoyé si le client a un numéro valide (en plus du message in-app et du push).
               </p>
+              <div className="rounded-md border border-blue-200 bg-white/90 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Montant utilisé pour le message « montant fixé » : </span>
+                <span className="font-bold text-blue-950 tabular-nums">
+                  {Number(showTarifModal.montantTarificationFixe || 0) > 0
+                    ? `${formatTarifMontantFr(Number(showTarifModal.montantTarificationFixe || 0))} EUR`
+                    : 'aucun — le client recevra la consigne de choisir une formule'}
+                </span>
+              </div>
               {tarifMontantDirty() ? (
-                <p className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                  Le montant saisi diffère de celui en base : la notification utilisera le montant <strong>déjà enregistré</strong> tant que vous n&apos;avez pas cliqué sur « Enregistrer le montant uniquement ».
+                <p className="text-xs font-medium text-amber-900 bg-amber-50 border border-amber-300 rounded px-2 py-1.5">
+                  Le champ « nouveau montant » ne correspond pas au montant en base : enregistrez d&apos;abord avec « Enregistrer le montant uniquement », puis seulement utilisez « Envoyer la notification ».
                 </p>
               ) : null}
               <div>
@@ -4251,7 +4305,17 @@ export default function AdminDossiersPage() {
                   />
                 </div>
               )}
-              <Button type="button" onClick={() => void handleTarifSendNotification()} disabled={tarifSendingNotify} className="w-full sm:w-auto">
+              <Button
+                type="button"
+                onClick={() => void handleTarifSendNotification()}
+                disabled={tarifSendingNotify || tarifMontantDirty()}
+                className="w-full sm:w-auto"
+                title={
+                  tarifMontantDirty()
+                    ? 'Enregistrez le montant (étape 1) avant d’envoyer la notification'
+                    : undefined
+                }
+              >
                 {tarifSendingNotify ? 'Envoi…' : 'Envoyer la notification tarification'}
               </Button>
             </div>
