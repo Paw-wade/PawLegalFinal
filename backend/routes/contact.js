@@ -115,25 +115,12 @@ router.post(
       // Envoyer un SMS de confirmation au client si un numéro de téléphone est fourni
       if (phone && phone.trim()) {
         try {
-          const { sendSMS, recordOutboundSms } = require('../sendSMS');
-          const smsMessage = `Merci de nous avoir contactés.\n\nNous vous invitons à créer un compte sur notre site afin de faciliter le suivi de votre demande.\n\nÀ très bientôt.`;
-          
-          const smsResult = await sendSMS(phone, smsMessage);
-          try {
-            await recordOutboundSms({
-              to: smsResult.to,
-              message: smsResult.body,
-              templateCode: 'contact_confirmation',
-              templateName: 'Accusé réception contact',
-              twilioSid: smsResult.sid,
-              twilioStatus: smsResult.status,
-              status: smsResult.status === 'sent' || smsResult.status === 'queued' ? 'sent' : 'pending',
-              context: 'contact',
-              contextId: newMessage._id.toString(),
-            });
-          } catch (histErr) {
-            console.error('⚠️ Historique SMS contact non enregistré:', histErr?.message || histErr);
-          }
+          const { sendNotificationSMS } = require('../sendSMS');
+          await sendNotificationSMS(phone, 'contact_confirmation', {}, {
+            skipPreferences: true,
+            context: 'contact',
+            contextId: newMessage._id.toString(),
+          });
           console.log(`✅ SMS de confirmation envoyé à ${phone}`);
         } catch (smsError) {
           console.error('⚠️ Erreur lors de l\'envoi du SMS de confirmation:', smsError);
@@ -165,31 +152,7 @@ router.post(
         // Ne pas bloquer l'envoi du message si les notifications échouent
       }
 
-      // Notifier le superadmin principal par SMS quand un message de contact est reçu
-      try {
-        const superadmin = await User.findOne({ role: 'superadmin', isActive: true }).sort({ createdAt: 1 });
-        if (superadmin && superadmin.phone) {
-          const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
-          const superPhone = formatPhoneNumber(superadmin.phone);
-          if (superPhone) {
-            await sendNotificationSMS(
-              superPhone,
-              'message_received',
-              {
-                senderName: name,
-                subject,
-              },
-              {
-                userId: superadmin._id.toString(),
-                context: 'contact',
-                contextId: newMessage._id.toString(),
-              }
-            );
-          }
-        }
-      } catch (smsError) {
-        console.error('⚠️ Erreur lors de l\'envoi du SMS au superadmin pour un message de contact:', smsError);
-      }
+      // Pas de SMS aux admins : notification in-app + push (hook Notification) suffisent.
 
       res.json({
         success: true,

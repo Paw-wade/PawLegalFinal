@@ -814,6 +814,10 @@ export const dossiersAPI = {
   /** Admin / superadmin : relance paiement tarification (notification in-app + SMS court) */
   sendTarificationPaymentReminder: (dossierId: string) =>
     api.post(`/user/dossiers/${dossierId}/tarification-payment-reminder`),
+
+  /** Admin / superadmin : retirer la dernière demande tarification envoyée (sans formule enregistrée, sans montant fixe) */
+  retractTarificationChoiceRequest: (dossierId: string) =>
+    api.put(`/user/dossiers/${dossierId}`, { retractTarificationChoiceRequest: true }),
   
   // Supprimer un dossier (Admin)
   deleteDossier: (id: string) =>

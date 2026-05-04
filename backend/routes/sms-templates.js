@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
     const templates = await SmsTemplate.find(query)
       .populate('createdBy', 'firstName lastName email')
       .populate('updatedBy', 'firstName lastName email')
-      .sort({ createdAt: -1 });
+      .sort({ category: 1, code: 1 });
 
     res.json({
       success: true,
@@ -62,6 +62,20 @@ router.post('/init-defaults', async (req, res) => {
           { name: 'name', description: 'Nom complet du client', example: 'Jean Dupont' },
           { name: 'date', description: 'Date du rendez-vous', example: '15 janvier 2024' },
           { name: 'time', description: 'Heure du rendez-vous', example: '14:30' }
+        ],
+        category: 'appointment',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'appointment_created',
+        name: 'Rendez-vous enregistré',
+        description: 'SMS envoyé au client lorsque son rendez-vous est créé / enregistré',
+        message: 'Bonjour {{name}}, votre rendez-vous a été enregistré le {{date}} à {{time}}. Ada Papers.',
+        variables: [
+          { name: 'name', description: 'Nom du client', example: 'Jean Dupont' },
+          { name: 'date', description: 'Date du rendez-vous', example: '15 janvier 2024' },
+          { name: 'time', description: 'Heure', example: '14:30' }
         ],
         category: 'appointment',
         isActive: true,
@@ -109,13 +123,13 @@ router.post('/init-defaults', async (req, res) => {
       {
         code: 'dossier_created',
         name: 'Création de dossier',
-        description: 'Message envoyé lors de la création d\'un dossier',
-        message: 'Bonjour, votre dossier "{{dossierTitle}}" a été créé suite à votre rendez-vous du {{appointmentDate}} à {{appointmentTime}}. Référence: {{dossierId}}. Ada Papers.',
+        description: 'Message envoyé lors de la création d\'un dossier (certains parcours envoient aussi appointmentDate / appointmentTime pour une phrase RDV dans un modèle personnalisé)',
+        message: 'Votre dossier "{{dossierTitle}}" a été créé. Référence: {{dossierId}}. Ada Papers.',
         variables: [
           { name: 'dossierTitle', description: 'Titre du dossier', example: 'Demande de titre de séjour' },
           { name: 'dossierId', description: 'Identifiant du dossier', example: 'DOS-2024-001' },
-          { name: 'appointmentDate', description: 'Date du rendez-vous', example: '15 janvier 2024' },
-          { name: 'appointmentTime', description: 'Heure du rendez-vous', example: '14:30' }
+          { name: 'appointmentDate', description: 'Optionnel — création depuis un RDV', example: '15 janvier 2024' },
+          { name: 'appointmentTime', description: 'Optionnel — création depuis un RDV', example: '14:30' }
         ],
         category: 'dossier',
         isActive: true,
@@ -195,7 +209,8 @@ router.post('/init-defaults', async (req, res) => {
         description: 'Message envoyé lorsqu\'un utilisateur reçoit un nouveau message',
         message: 'Vous avez reçu un nouveau message de {{senderName}}. Connectez-vous pour le consulter. Ada Papers.',
         variables: [
-          { name: 'senderName', description: 'Nom de l\'expéditeur', example: 'Cabinet Paw Legal' }
+          { name: 'senderName', description: 'Nom de l\'expéditeur', example: 'Cabinet Ada Papers' },
+          { name: 'subject', description: 'Optionnel — ex. formulaire contact', example: 'Question sur mon dossier' }
         ],
         category: 'message',
         isActive: true,
@@ -277,6 +292,67 @@ router.post('/init-defaults', async (req, res) => {
           { name: 'partenaireName', description: 'Nom du partenaire ou de l\'organisme', example: 'Association Solidarité' }
         ],
         category: 'dossier',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'tarification_choice_reminder',
+        name: 'Tarification — rappel choix / espace client',
+        description: 'SMS client lorsque le cabinet demande un choix de formule ou une action tarification (si aucun modèle actif en base, le serveur applique un libellé court par défaut)',
+        message: 'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.',
+        variables: [{ name: 'dossierTitle', description: 'Titre du dossier (contexte)', example: 'Demande de titre de séjour' }],
+        category: 'dossier',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'tarification_payment_reminder',
+        name: 'Tarification — relance paiement',
+        description: 'SMS court lors d\'une relance paiement tarification (même comportement de repli que tarification_choice_reminder si modèle inactif)',
+        message: 'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.',
+        variables: [{ name: 'numero', description: 'Référence courte dossier', example: 'DOS-001' }],
+        category: 'dossier',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'frais_tarification_exoneres',
+        name: 'Tarification — frais exonérés',
+        description: 'SMS client lorsque les frais de tarification sont exonérés',
+        message: 'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.',
+        variables: [{ name: 'dossierTitle', description: 'Titre du dossier', example: 'Demande de titre de séjour' }],
+        category: 'dossier',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'manual',
+        name: 'SMS manuel (corps libre)',
+        description: 'Utilisé pour certains envois programmés avec le texte dans la variable message (ex. montant fixe tarification)',
+        message: '{{message}}',
+        variables: [{ name: 'message', description: 'Texte complet du SMS', example: 'Dossier DOS-001 : montant fixe 150,00 EUR. Ada Papers.' }],
+        category: 'other',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'otp',
+        name: 'Code OTP (inscription / vérification)',
+        description: 'Code à 6 chiffres envoyé par SMS lors de l\'inscription ou vérifications similaires',
+        message: 'Votre code de vérification Paw Legal est : {{code}}. Valide pendant 10 minutes.',
+        variables: [{ name: 'code', description: 'Code à 6 chiffres', example: '123456' }],
+        category: 'account',
+        isActive: true,
+        isSystem: true
+      },
+      {
+        code: 'contact_confirmation',
+        name: 'Accusé de réception — formulaire contact',
+        description: 'SMS envoyé au visiteur après envoi du formulaire de contact (si numéro renseigné)',
+        message:
+          'Merci de nous avoir contactés. Nous vous invitons à créer un compte sur notre site afin de faciliter le suivi de votre demande. À très bientôt. Ada Papers.',
+        variables: [],
+        category: 'other',
         isActive: true,
         isSystem: true
       }
