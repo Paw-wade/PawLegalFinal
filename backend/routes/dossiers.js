@@ -8,6 +8,20 @@ const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
+/** Montant fixe cabinet (number, chaîne, Decimal128, etc.) — même logique que le front. */
+function normalizeMontantTarificationFixe(v) {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.max(0, v);
+  if (typeof v === 'object' && typeof v?.toString === 'function') {
+    const s = String(v.toString()).replace(/\s/g, '').replace(',', '.');
+    const n = Number(s);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  const s = String(v).replace(/\s/g, '').replace(',', '.');
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
 // Helper function pour créer une notification
 function sanitizeDossierForPartenaire(dossier) {
   const o = dossier && typeof dossier.toObject === 'function' ? dossier.toObject() : { ...dossier };
@@ -141,8 +155,15 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
         );
       }
       
-      // SMS si téléphone disponible (ex. renommage du dossier seul → pas de SMS)
-      if (!skipClientPing && !skipClientSmsBecauseStandby && !changes.skipSms && userInfo.user && userInfo.user.phone) {
+      // SMS uniquement au client — pas de SMS aux admins (push + in-app via createNotification).
+      if (
+        userInfo.role === 'client' &&
+        !skipClientPing &&
+        !skipClientSmsBecauseStandby &&
+        !changes.skipSms &&
+        userInfo.user &&
+        userInfo.user.phone
+      ) {
         try {
           const formattedPhone = formatPhoneNumber(userInfo.user.phone);
           if (formattedPhone) {
@@ -454,31 +475,6 @@ router.post(
                     userId: finalUserId ? finalUserId.toString() : null
                   }
                 );
-              }
-
-              // SMS au superadmin principal (s'il a un téléphone)
-              try {
-                const superadmin = await User.findOne({ role: 'superadmin', isActive: true }).sort({ createdAt: 1 });
-                if (superadmin && superadmin.phone) {
-                  const superPhone = formatPhoneNumber(superadmin.phone);
-                  if (superPhone) {
-                    await sendNotificationSMS(
-                      superPhone,
-                      'dossier_created',
-                      {
-                        dossierTitle: dossier.titre || dossier.numero || 'Nouveau dossier',
-                        dossierId: dossier.numero || dossier._id.toString(),
-                      },
-                      {
-                        userId: superadmin._id.toString(),
-                        context: 'dossier',
-                        contextId: dossier._id.toString(),
-                      }
-                    );
-                  }
-                }
-              } catch (smsAdminError) {
-                console.error('⚠️ Erreur lors de l\'envoi du SMS au superadmin pour la création de dossier:', smsAdminError);
               }
             }
           }
@@ -843,8 +839,6 @@ router.post(
       const isClientCreator = (req.user && req.user.role === 'client') || (!req.user && user && user.role === 'client');
       if (isClientCreator) {
         try {
-          const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
-
           const clientId = req.user ? req.user.id : user._id.toString();
           const clientEmail = req.user ? req.user.email : user.email;
           const clientFirstName = req.user ? req.user.firstName : user.firstName;
@@ -872,32 +866,6 @@ router.post(
                 clientEmail
               }
             );
-
-            // SMS (non bloquant) aux admins : permet d'être averti même sans passer par le dashboard
-            if (admin.phone) {
-              try {
-                const formattedPhone = formatPhoneNumber(admin.phone);
-                if (formattedPhone) {
-                  void sendNotificationSMS(
-                    formattedPhone,
-                    'dossier_created',
-                    {
-                      dossierTitle: normalizedTitre || dossier.titre || 'Sans titre',
-                      dossierId: dossier.numero || dossier._id.toString()
-                    },
-                    {
-                      userId: admin._id.toString(),
-                      context: 'dossier',
-                      contextId: dossier._id.toString()
-                    }
-                  ).catch((smsError) => {
-                    console.error(`⚠️ Erreur lors de l'envoi du SMS à l'admin ${admin.email}:`, smsError);
-                  });
-                }
-              } catch (smsFormatError) {
-                console.error(`⚠️ Erreur lors du formatage du téléphone admin ${admin.email}:`, smsFormatError);
-              }
-            }
           }
           console.log(`✅ Notifications envoyées à ${admins.length} administrateur(s) pour le nouveau dossier`);
         } catch (notifError) {
@@ -2009,7 +1977,7 @@ router.post(
       }
 
       const hasPaymentDefined =
-        Number(dossier.montantTarificationFixe || 0) > 0 || !!dossier.formuleTarifaire;
+        normalizeMontantTarificationFixe(dossier.montantTarificationFixe) > 0 || !!dossier.formuleTarifaire;
       if (!hasPaymentDefined) {
         return res.status(400).json({
           success: false,
@@ -2043,7 +2011,7 @@ router.post(
 
       const dossierTitle = dossier.titre || dossier.numero || 'votre dossier';
       const refCourte = (dossier.numero || dossierId.slice(-8)).toString().replace(/\s+/g, '').slice(0, 20);
-      const montantFixe = Number(dossier.montantTarificationFixe || 0);
+      const montantFixe = normalizeMontantTarificationFixe(dossier.montantTarificationFixe);
       const messageInApp =
         montantFixe > 0
           ? `Le règlement de la tarification (${montantFixe.toLocaleString('fr-FR', {
@@ -2184,11 +2152,11 @@ router.patch(
           message: 'Les frais de ce dossier ont été exonérés : aucun choix de formule n’est requis.',
         });
       }
-      if (Number(dossier.montantTarificationFixe || 0) > 0) {
+      if (normalizeMontantTarificationFixe(dossier.montantTarificationFixe) > 0) {
         return res.status(400).json({
           success: false,
           message:
-            'Un montant de tarification a été fixé par le cabinet : le choix de formule en ligne n’est pas disponible pour ce dossier.',
+            'Un montant de tarification a été fixé : le choix de formule en ligne n’est pas disponible pour ce dossier.',
         });
       }
       if (dossier.paiementTarificationEffectue) {
@@ -2443,6 +2411,7 @@ router.put(
         montantTarificationFixe,
         paiementTarificationEffectue,
         notifyTarificationClient,
+        retractTarificationChoiceRequest,
         tarificationClientMessage,
         isStandby,
         standbyReason,
@@ -2454,6 +2423,20 @@ router.put(
         notifyTarificationClient === 'true' ||
         notifyTarificationClient === 1 ||
         notifyTarificationClient === '1';
+      const shouldRetractTarificationChoiceRequest =
+        retractTarificationChoiceRequest === true ||
+        retractTarificationChoiceRequest === 'true' ||
+        retractTarificationChoiceRequest === 1 ||
+        retractTarificationChoiceRequest === '1';
+
+      if (shouldRetractTarificationChoiceRequest && shouldNotifyTarificationClientNow) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Ne combinez pas une rétractation de la demande tarification et un nouvel envoi de notification dans la même requête.',
+        });
+      }
+
       const isMontantTarificationPatch =
         montantTarificationFixe !== undefined && montantTarificationFixe !== null;
 
@@ -2466,10 +2449,16 @@ router.put(
         isMontantTarificationPatch &&
         !shouldNotifyTarificationClientNow;
 
-      if ((montantTarificationFixe !== undefined || shouldNotifyTarificationClientNow) && !isCabinetTarifRole) {
+      if (
+        (montantTarificationFixe !== undefined ||
+          shouldNotifyTarificationClientNow ||
+          shouldRetractTarificationChoiceRequest) &&
+        !isCabinetTarifRole
+      ) {
         return res.status(403).json({
           success: false,
-          message: 'Seuls l’admin ou le superadmin peuvent fixer un montant manuel ou envoyer la notification de tarification.'
+          message:
+            'Seuls l’admin ou le superadmin peuvent fixer un montant manuel, envoyer ou rétracter une notification de tarification.',
         });
       }
 
@@ -2492,7 +2481,7 @@ router.put(
         etapesJson: JSON.stringify(dossier.etapesSupplementaires || []),
         fraisExoneres: !!dossier.fraisExoneres,
         fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
-        montantTarificationFixe: Number(dossier.montantTarificationFixe || 0),
+        montantTarificationFixe: normalizeMontantTarificationFixe(dossier.montantTarificationFixe),
         paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
         isStandby: !!dossier.isStandby,
         standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
@@ -2744,7 +2733,7 @@ router.put(
         etapesJson: JSON.stringify(dossier.etapesSupplementaires || []),
         fraisExoneres: !!dossier.fraisExoneres,
         fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
-        montantTarificationFixe: Number(dossier.montantTarificationFixe || 0),
+        montantTarificationFixe: normalizeMontantTarificationFixe(dossier.montantTarificationFixe),
         paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
         isStandby: !!dossier.isStandby,
         standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
@@ -2802,7 +2791,8 @@ router.put(
         dossierSnapshotBeforeUpdate.fraisExoneresMotif !== dossierSnapshotAfterUpdate.fraisExoneresMotif ||
         dossierSnapshotBeforeUpdate.montantTarificationFixe !== dossierSnapshotAfterUpdate.montantTarificationFixe ||
         dossierSnapshotBeforeUpdate.paiementTarificationEffectue !== dossierSnapshotAfterUpdate.paiementTarificationEffectue ||
-        shouldNotifyTarificationClientNow;
+        shouldNotifyTarificationClientNow ||
+        shouldRetractTarificationChoiceRequest;
 
       const onlyTarificationSettingChanged =
         tarificationFieldsChanged &&
@@ -2837,6 +2827,35 @@ router.put(
         dossierSnapshotBeforeUpdate.montantTarificationFixe === dossierSnapshotAfterUpdate.montantTarificationFixe &&
         dossierSnapshotBeforeUpdate.paiementTarificationEffectue === dossierSnapshotAfterUpdate.paiementTarificationEffectue;
 
+      if (shouldRetractTarificationChoiceRequest) {
+        if (!dossier.tarificationNotificationSentAt) {
+          return res.status(400).json({
+            success: false,
+            message: 'Aucune notification tarification enregistrée pour ce dossier : rien à rétracter.',
+          });
+        }
+        if (dossier.formuleTarifaire) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'Le client a déjà enregistré un choix de formule : la demande ne peut plus être rétractée.',
+          });
+        }
+        if (normalizeMontantTarificationFixe(dossier.montantTarificationFixe) > 0) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'Un montant de tarification fixe est défini pour ce dossier : retirez-le d’abord si vous souhaitez annuler ce type de demande.',
+          });
+        }
+        if (dossier.paiementTarificationEffectue) {
+          return res.status(400).json({
+            success: false,
+            message: 'Le paiement tarification est déjà enregistré comme effectué.',
+          });
+        }
+      }
+
       await dossier.save();
 
       if (shouldUnsetMontantTarificationFixeFields) {
@@ -2844,6 +2863,40 @@ router.put(
           { _id: dossier._id },
           { $unset: { montantTarificationFixe: 1, montantTarificationFixeAt: 1, montantTarificationFixeBy: 1 } }
         );
+      }
+
+      if (shouldRetractTarificationChoiceRequest) {
+        await Dossier.updateOne(
+          { _id: dossier._id },
+          { $unset: { tarificationNotificationSentAt: 1, tarificationLastNotifySummary: 1 } }
+        );
+        let retractClientUserId = null;
+        if (dossier.user) {
+          retractClientUserId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
+        } else if (dossier.clientEmail) {
+          try {
+            const u = await User.findOne({
+              email: String(dossier.clientEmail).trim().toLowerCase(),
+            }).select('_id');
+            if (u) retractClientUserId = u._id.toString();
+          } catch (e) {
+            console.warn('Rétractation tarification : recherche utilisateur par email:', e?.message || e);
+          }
+        }
+        if (retractClientUserId) {
+          const dTitle = dossier.titre || dossier.numero || 'votre dossier';
+          await createNotification(
+            retractClientUserId,
+            'tarification_choice_retracted',
+            'Demande tarification retirée',
+            `Le cabinet a retiré la dernière demande d’action tarification envoyée pour le dossier « ${dTitle} ». Vous pouvez ignorer le message précédent ; une nouvelle demande pourra vous être adressée ultérieurement.`,
+            '/client/tarification',
+            {
+              dossierId: dossier._id.toString(),
+              retractedBy: req.user.id?.toString?.() || String(req.user.id),
+            }
+          );
+        }
       }
 
       // Recharger le dossier avec les données peuplées pour les notifications
@@ -3044,10 +3097,10 @@ router.put(
 
           if (clientUserId) {
             const dossierTitle = dossierForNotification.titre || dossierForNotification.numero || 'votre dossier';
-            const montantFixe = Number(dossierForNotification.montantTarificationFixe || 0);
+            const montantFixe = normalizeMontantTarificationFixe(dossierForNotification.montantTarificationFixe);
             const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
             let titreTarif = 'Choisissez votre formule tarifaire';
-            let messageTarif = `Votre dossier « ${dossierTitle} » nécessite un choix de formule (Standard ou Tawfekh) dans votre espace client, rubrique Tarification.`;
+            let messageTarif = `Une information de tarification est disponible dans votre espace client, rubrique Tarification.`;
             let smsType = 'tarification_choice_reminder';
             let smsData = { dossierTitle };
 
@@ -3072,6 +3125,15 @@ router.put(
               smsData = {
                 message: `Dossier "${dossierTitle}" : montant de tarification fixe ${amountText} EUR. Ada Papers.`
               };
+            } else if (dossierForNotification.formuleTarifaire) {
+              const formuleLabel =
+                dossierForNotification.formuleTarifaire === 'premium'
+                  ? 'Tawfekh (Premium)'
+                  : 'Standard';
+              titreTarif = 'Tarification — formule enregistrée';
+              messageTarif = `Pour le dossier « ${dossierTitle} », la formule « ${formuleLabel} » est déjà enregistrée sur votre compte. Merci de procéder au réglement.`;
+              smsType = 'tarification_choice_reminder';
+              smsData = { dossierTitle };
             }
 
             const tarifMsgExtra =

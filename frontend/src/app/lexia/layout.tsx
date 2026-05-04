@@ -54,7 +54,7 @@ export default function LexiaPublicLayout({ children }: { children: React.ReactN
   if (STAFF_ADMIN_UI_ROLES.has(userRole)) {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted-foreground text-sm">
-        Redirection vers LEXIA (espace équipe)…
+        Redirection vers Ada AI (espace équipe)…
       </div>
     );
   }

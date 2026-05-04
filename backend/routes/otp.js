@@ -2,7 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const OTP = require('../models/OTP');
 const User = require('../models/User');
-const { sendSMS, formatPhoneNumber } = require('../sendSMS');
+const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 const jwt = require('jsonwebtoken');
 
 const router = express.Router();
@@ -83,10 +83,8 @@ router.post(
 
       const otp = await OTP.create(otpData);
 
-      // Envoyer le SMS avec le code OTP
+      // Envoyer le SMS avec le code OTP (modèle `otp` éditable dans Admin → SMS)
       try {
-        const message = `Votre code de vérification Paw Legal est : ${code}. Valide pendant 10 minutes.`;
-        
         // En mode développement, permettre de continuer sans SMS réel si Twilio n'est pas configuré
         const allowWithoutSMS = process.env.NODE_ENV === 'development' && process.env.ALLOW_OTP_WITHOUT_SMS === 'true';
         const twilioNotConfigured = !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN;
@@ -104,24 +102,16 @@ router.post(
           return;
         }
         
-        const smsResult = await sendSMS(formattedPhone, message);
-
-        try {
-          const { recordOutboundSms } = require('../sendSMS');
-          await recordOutboundSms({
-            to: smsResult.to,
-            message: smsResult.body,
-            templateCode: 'otp',
-            templateName: 'Code OTP',
-            twilioSid: smsResult.sid,
-            twilioStatus: smsResult.status,
-            status: smsResult.status === 'sent' || smsResult.status === 'queued' ? 'sent' : 'pending',
+        await sendNotificationSMS(
+          formattedPhone,
+          'otp',
+          { code },
+          {
+            skipPreferences: true,
             context: 'otp',
             contextId: otp._id.toString(),
-          });
-        } catch (histErr) {
-          console.error('⚠️ Historique SMS OTP non enregistré:', histErr?.message || histErr);
-        }
+          }
+        );
 
         console.log(`✅ Code OTP envoyé à ${formattedPhone}: ${code}`);
         

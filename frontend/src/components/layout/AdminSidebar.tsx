@@ -61,7 +61,7 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/carousel', label: 'Carrousel home', icon: Image },
   { href: '/admin/cms', label: 'CMS', icon: FileEdit },
   { href: '/admin/recours', label: 'Documentation', icon: FolderOpen, roles: ['admin', 'superadmin'] },
-  { href: '/admin/lexia', label: 'LEXIA (IA)', icon: Scale, roles: ['admin', 'superadmin'] },
+  { href: '/admin/lexia', label: 'Ada AI', icon: Scale, roles: ['admin', 'superadmin'] },
   { href: '/admin/logs', label: 'Logs', icon: ScrollText, roles: ['superadmin'] },
   { href: '/admin/corbeille', label: 'Corbeille', icon: Trash2 },
   { href: '/forum', label: 'Forum', icon: MessageSquare },

@@ -4,7 +4,7 @@ import LexiaUserClient from './LexiaUserClient';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'LEXIA | Assistant juridique',
+  title: 'Ada AI | Assistant juridique',
   robots: { index: false, follow: false },
 };
 

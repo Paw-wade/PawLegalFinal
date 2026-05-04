@@ -926,7 +926,8 @@ router.post(
                 if (formattedPhone) {
                   await sendNotificationSMS(formattedPhone, 'message_received', {
                     senderName: expediteurName,
-                    messageId: nouveauMessage._id.toString()
+                    messageId: nouveauMessage._id.toString(),
+                    subject: '',
                   }, {
                     userId: destinatairesIds[0].toString(),
                     context: 'message',

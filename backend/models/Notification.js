@@ -34,6 +34,7 @@ const notificationSchema = new mongoose.Schema({
       'forum_thread_created',
       'forum_reply_created',
       'tarification_choice_requested',
+      'tarification_choice_retracted',
       'tarification_payment_reminder',
       'other'
     ]

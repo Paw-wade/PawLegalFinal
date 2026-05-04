@@ -23,6 +23,32 @@ const LEXIA_ALLOWED_ROLES = [
 
 const VALID_PROVIDERS = new Set(['auto', 'anthropic', 'internal']);
 
+/** Heuristique sur la requête de l'outil web_search (affichage UI LEXIA). */
+const LEXIA_SOURCE_TERM_GROUPS = [
+  { key: 'legifrance', terms: ['legifrance', 'légifrance', 'ceseda', 'crpa'] },
+  { key: 'conseil-etat', terms: ["conseil d'état", 'conseil-etat', 'arianeweb', 'conseil etat'] },
+  { key: 'caa', terms: ['caa ', "cour administrative d'appel"] },
+  { key: 'ta', terms: ['tribunal administratif'] },
+  { key: 'cassation', terms: ['cassation', 'courdecassation', 'judilibre'] },
+  { key: 'pappers', terms: ['pappers', 'justice.pappers'] },
+  { key: 'eurlex', terms: ['eur-lex', 'eurlex', 'cjue', 'directive ue', 'règlement ue'] },
+  { key: 'cedh', terms: ['cedh', 'hudoc', 'article 8', 'cour européenne des droits'] },
+  { key: 'gisti', terms: ['gisti'] },
+  { key: 'datagouv', terms: ['data.gouv', 'datagouv', 'open data décisions'] },
+  { key: 'accords', terms: ['accord franco', 'bilatéral', 'ankara', 'cedeao', 'convention franco'] },
+];
+
+function mergeSourcesFromToolUses(toolUses, existing) {
+  const set = new Set(Array.isArray(existing) ? existing : []);
+  for (const tu of toolUses) {
+    const q = String(tu?.input?.query ?? tu?.input?.q ?? '').toLowerCase();
+    for (const { key, terms } of LEXIA_SOURCE_TERM_GROUPS) {
+      if (terms.some((t) => q.includes(t))) set.add(key);
+    }
+  }
+  return [...set];
+}
+
 function extractTextFromContent(content) {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
@@ -95,6 +121,8 @@ async function runAnthropicLexia(trimmed) {
   let conversation = [...trimmed];
   let searched = false;
   let lastText = '';
+  let sourcesFound = [];
+  let totalToolUses = 0;
 
   for (let turn = 0; turn < 10; turn += 1) {
     const payload = {
@@ -124,14 +152,21 @@ async function runAnthropicLexia(trimmed) {
 
     const stop = data.stop_reason;
     if (stop === 'end_turn' || stop === 'max_tokens') {
-      return { text: lastText || '(Réponse vide)', searched };
+      return { text: lastText || '(Réponse vide)', searched, sourcesFound, totalToolUses };
     }
 
     if (stop === 'tool_use' && Array.isArray(blocks)) {
       searched = true;
       const toolUses = blocks.filter((b) => b?.type === 'tool_use' && b?.id);
+      totalToolUses += toolUses.length;
+      sourcesFound = mergeSourcesFromToolUses(toolUses, sourcesFound);
       if (toolUses.length === 0) {
-        return { text: lastText || 'Réponse interrompue (outil sans identifiant).', searched };
+        return {
+          text: lastText || 'Réponse interrompue (outil sans identifiant).',
+          searched,
+          sourcesFound,
+          totalToolUses,
+        };
       }
       const toolResults = toolUses.map((tu) => ({
         type: 'tool_result',
@@ -143,10 +178,15 @@ async function runAnthropicLexia(trimmed) {
       continue;
     }
 
-    return { text: lastText || 'Fin de génération inattendue.', searched };
+    return { text: lastText || 'Fin de génération inattendue.', searched, sourcesFound, totalToolUses };
   }
 
-  return { text: lastText || 'Limite d’échanges avec le modèle atteinte.', searched };
+  return {
+    text: lastText || 'Limite d’échanges avec le modèle atteinte.',
+    searched,
+    sourcesFound,
+    totalToolUses,
+  };
 }
 
 router.get('/config', protect, authorize(...LEXIA_ALLOWED_ROLES), (req, res) => {
@@ -213,10 +253,12 @@ router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) =>
       });
     }
 
-    const { text, searched } = await runAnthropicLexia(trimmed);
+    const { text, searched, sourcesFound, totalToolUses } = await runAnthropicLexia(trimmed);
     return res.json({
       text,
       searched,
+      sourcesFound,
+      totalToolUses,
       provider: 'anthropic',
       resolvedProvider: 'anthropic',
       requestedProvider: requested || normalizeProvider(process.env.LEXIA_PROVIDER),

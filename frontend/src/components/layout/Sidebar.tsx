@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
 import { signOut } from 'next-auth/react';
 import { forumAPI, documentsAPI, dossiersAPI } from '@/lib/api';
+import { normalizeMontantTarificationFixe } from '@/lib/montantTarification';
 import {
   LayoutDashboard,
   FolderOpen,
@@ -71,7 +72,7 @@ const clientMenuItems: MenuItem[] = [
   { href: '/client/messages', label: 'Messages', icon: MessageSquare },
   { href: '/client/notifications', label: 'Notifications', icon: Bell },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
-  { href: '/lexia', label: 'LEXIA', icon: Scale },
+  { href: '/lexia', label: 'Ada AI', icon: Scale },
   { href: '/calculateur', label: 'Calculateur', icon: Calculator },
   { href: '/client/compte', label: 'Mon compte', icon: User },
 ];
@@ -146,7 +147,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       const pending = list.filter((dossier: any) => {
         if (!dossier || dossier.fraisExoneres) return false;
-        const fixedAmount = Number(dossier?.montantTarificationFixe || 0);
+        const fixedAmount = normalizeMontantTarificationFixe(dossier?.montantTarificationFixe);
         // Badge si un paiement est attendu:
         // - montant fixe demandé par l'administration
         // - ou formule non encore choisie.
