@@ -99,6 +99,19 @@ router.use((req, res, next) => {
 // Toutes les routes nécessitent une authentification
 router.use(protect);
 
+const ALLOWED_USER_ROLES = [
+  'client',
+  'admin',
+  'superadmin',
+  'assistant',
+  'comptable',
+  'secretaire',
+  'juriste',
+  'stagiaire',
+  'visiteur',
+  'partenaire',
+];
+
 // @route   GET /api/user/profile
 // @desc    Récupérer le profil de l'utilisateur effectif
 // @access  Private
@@ -667,7 +680,7 @@ router.put(
     body('email').optional().isEmail().normalizeEmail().withMessage('Email invalide'),
     body('phone').optional().trim(),
     body('password').optional().isLength({ min: 8 }).withMessage('Le mot de passe doit contenir au moins 8 caractères'),
-    body('role').optional().isIn(['client', 'admin', 'superadmin', 'partenaire']).withMessage('Rôle invalide'),
+    body('role').optional().isIn(ALLOWED_USER_ROLES).withMessage('Rôle invalide'),
     body('partenaireInfo.typeOrganisme')
       .optional()
       .isIn(['consulat', 'association', 'avocat'])
@@ -741,7 +754,15 @@ router.put(
         user.resetPasswordToken = undefined;
         user.resetPasswordExpires = undefined;
       }
-      if (role) user.role = role;
+      if (role) {
+        if (req.user.role === 'admin' && (role === 'admin' || role === 'superadmin')) {
+          return res.status(403).json({
+            success: false,
+            message: 'Vous n\'avez pas la permission d\'attribuer les rôles admin ou superadmin'
+          });
+        }
+        user.role = role;
+      }
       if (dateNaissance) user.dateNaissance = dateNaissance;
       if (lieuNaissance !== undefined) user.lieuNaissance = lieuNaissance;
       if (nationalite !== undefined) user.nationalite = nationalite;
@@ -969,7 +990,7 @@ router.post(
     }).normalizeEmail(),
     body('password').isLength({ min: 8 }).withMessage('Le mot de passe doit contenir au moins 8 caractères'),
     body('phone').optional().trim(),
-    body('role').optional().isIn(['client', 'admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire', 'visiteur', 'partenaire']).withMessage('Rôle invalide')
+    body('role').optional().isIn(ALLOWED_USER_ROLES).withMessage('Rôle invalide')
   ],
   async (req, res) => {
     try {

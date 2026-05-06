@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { getApiBaseUrl, getAuthToken } from '@/lib/api';
 
-type LexiaProviderMode = 'auto' | 'anthropic' | 'internal';
+type LexiaProviderMode = 'auto' | 'anthropic' | 'gemini' | 'internal';
 
 type ChatMessage = {
   id: number;
@@ -288,6 +288,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   const [lexiaConfig, setLexiaConfig] = useState<{
     envProvider: LexiaProviderMode;
     anthropicConfigured: boolean;
+    geminiConfigured: boolean;
     knowledgeDirRelative?: string;
   } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -385,6 +386,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         setLexiaConfig({
           envProvider: (data?.envProvider as LexiaProviderMode) || 'auto',
           anthropicConfigured: Boolean(data?.anthropicConfigured),
+          geminiConfigured: Boolean(data?.geminiConfigured),
           knowledgeDirRelative:
             typeof data?.knowledgeDirRelative === 'string' ? data.knowledgeDirRelative : undefined,
         });
@@ -1735,14 +1737,16 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                 aria-label="Mode Ada AI"
                 disabled={isLoading}
               >
-                <option value="auto">Auto (serveur : clé → Anthropic, sinon interne)</option>
+                <option value="auto">Auto (serveur : Anthropic, sinon Gemini, sinon interne)</option>
                 <option value="internal">Base documentaire interne uniquement</option>
                 <option value="anthropic">Anthropic (clé API requise)</option>
+                <option value="gemini">Gemini (clé API requise)</option>
               </select>
               {lexiaConfig && (
                 <div className="lexia-provider-hint">
                   Serveur : <strong>{lexiaConfig.envProvider}</strong>
-                  {lexiaConfig.anthropicConfigured ? ' · Anthropic configuré' : ' · Pas de clé Anthropic (Auto → interne)'}
+                  {lexiaConfig.anthropicConfigured ? ' · Anthropic OK' : ' · Anthropic KO'}
+                  {lexiaConfig.geminiConfigured ? ' · Gemini OK' : ' · Gemini KO'}
                   {showServerPaths && lexiaConfig.knowledgeDirRelative
                     ? ` · Corpus : ${lexiaConfig.knowledgeDirRelative}`
                     : null}
