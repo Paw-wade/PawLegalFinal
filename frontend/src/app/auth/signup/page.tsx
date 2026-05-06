@@ -76,6 +76,9 @@ export default function SignupPage() {
   const [isGoogleAvailable, setIsGoogleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  /** true si le compte existe mais l’email d’activation n’a pas pu être envoyé (SMTP/Brevo). */
+  const [activationEmailFailed, setActivationEmailFailed] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -216,16 +219,30 @@ export default function SignupPage() {
 
       if (response.data.success) {
         setError(null);
-        setSuccess(
-          'Vous recevrez un SMS avec votre mot de passe temporaire sous peu. Redirection automatique vers l’accueil…'
-        );
-        if (redirectTimerRef.current) {
-          clearTimeout(redirectTimerRef.current);
+        const emailSent = response.data.emailSent !== false;
+        setActivationEmailFailed(!emailSent);
+
+        if (emailSent) {
+          setSuccess(
+            'Un email avec un lien sécurisé pour choisir votre mot de passe vous a été envoyé. Redirection automatique vers l’accueil…'
+          );
+          if (redirectTimerRef.current) {
+            clearTimeout(redirectTimerRef.current);
+          }
+          redirectTimerRef.current = setTimeout(() => {
+            redirectTimerRef.current = null;
+            router.push('/');
+          }, REDIRECT_DELAY_MS);
+        } else {
+          setSuccess(
+            response.data.message ||
+              'Compte créé, mais l’email d’activation n’a pas pu être envoyé. Vous pouvez réessayer ci-dessous après avoir configuré Brevo ou SMTP sur le serveur.'
+          );
+          if (redirectTimerRef.current) {
+            clearTimeout(redirectTimerRef.current);
+            redirectTimerRef.current = null;
+          }
         }
-        redirectTimerRef.current = setTimeout(() => {
-          redirectTimerRef.current = null;
-          router.push('/');
-        }, REDIRECT_DELAY_MS);
       }
     } catch (err: any) {
       console.error('Erreur lors de la création du compte:', err);
@@ -242,6 +259,30 @@ export default function SignupPage() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendActivation = async () => {
+    const email = formData.email.trim().toLowerCase();
+    if (!email) return;
+    setResendLoading(true);
+    setError(null);
+    try {
+      const { data } = await authAPI.resendActivation({ email });
+      if (data?.emailSent === true) {
+        setActivationEmailFailed(false);
+      }
+      setSuccess(
+        'Si cette adresse correspond à un compte en attente d’activation, un nouvel email vient de vous être envoyé. Vérifiez aussi les courriers indésirables.'
+      );
+    } catch (err: any) {
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Impossible de renvoyer l’email pour le moment.');
+      }
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -291,7 +332,7 @@ export default function SignupPage() {
               <span className="text-2xl">✓</span>
               <div>
                 <h3 className="font-semibold mb-1">Sécurité garantie</h3>
-                <p className="text-white/80 text-sm">Vérification par SMS pour votre sécurité</p>
+                <p className="text-white/80 text-sm">Activation par lien personnel envoyé à votre adresse email</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -348,15 +389,38 @@ export default function SignupPage() {
                 <div
                   role="status"
                   aria-live="polite"
-                  className="mb-6 p-4 bg-emerald-50 border border-emerald-200 border-l-4 border-l-emerald-500 rounded-lg shadow-sm animate-in fade-in duration-300"
+                  className={`mb-6 p-4 border rounded-lg shadow-sm animate-in fade-in duration-300 ${
+                    activationEmailFailed
+                      ? 'bg-amber-50 border-amber-200 border-l-4 border-l-amber-500'
+                      : 'bg-emerald-50 border-emerald-200 border-l-4 border-l-emerald-500'
+                  }`}
                 >
                   <div className="flex items-start gap-3">
                     <span className="text-2xl leading-none" aria-hidden>
-                      ✓
+                      {activationEmailFailed ? '✉️' : '✓'}
                     </span>
-                    <div>
-                      <p className="text-sm font-semibold text-emerald-900">Compte créé avec succès</p>
-                      <p className="text-sm text-emerald-800 mt-1">{success}</p>
+                    <div className="flex-1 space-y-3">
+                      <p
+                        className={`text-sm font-semibold ${activationEmailFailed ? 'text-amber-900' : 'text-emerald-900'}`}
+                      >
+                        {activationEmailFailed ? 'Compte créé — email non envoyé' : 'Compte créé avec succès'}
+                      </p>
+                      <p
+                        className={`text-sm mt-1 ${activationEmailFailed ? 'text-amber-900' : 'text-emerald-800'}`}
+                      >
+                        {success}
+                      </p>
+                      {activationEmailFailed && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                          disabled={resendLoading || !formData.email.trim()}
+                          onClick={() => void handleResendActivation()}
+                        >
+                          {resendLoading ? 'Envoi…' : 'Renvoyer l’email d’activation'}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -480,7 +544,7 @@ export default function SignupPage() {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Une fois votre inscription validée, un SMS contenant votre mot de passe temporaire vous sera envoyé.
+                      Après validation, vous recevrez un email avec un lien pour définir votre mot de passe (aucun mot de passe en clair par SMS).
                     </p>
                   </div>
                 </div>

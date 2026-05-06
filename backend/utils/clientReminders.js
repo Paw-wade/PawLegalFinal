@@ -3,6 +3,8 @@ const DocumentRequest = require('../models/DocumentRequest');
 const Dossier = require('../models/Dossier');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const { sendTransactionalEmail, escapeHtml } = require('./emailNotifications');
+const { getPrimaryFrontendUrl } = require('./frontendOrigins');
 
 /**
  * Rappel J-1 : rendez-vous demain.
@@ -72,11 +74,12 @@ async function checkAppointmentTomorrowReminders() {
       month: 'long',
     });
     const heurePart = rv.heure ? ` à ${rv.heure}` : '';
+    const msgBody = `Vous avez un rendez-vous le ${dateStr}${heurePart}.`;
     await Notification.create({
       user: userId,
       type: 'appointment_reminder',
       titre: 'Rappel : rendez-vous demain',
-      message: `Vous avez un rendez-vous le ${dateStr}${heurePart}.`,
+      message: msgBody,
       lien: '/client/rendez-vous',
       metadata: {
         rendezVousId: rv._id.toString(),
@@ -84,6 +87,21 @@ async function checkAppointmentTomorrowReminders() {
         resolvedFromEmail: !rv.user && !!rv.email,
       },
     });
+    try {
+      const uMail = await User.findById(userId).select('email firstName').lean();
+      if (uMail?.email && String(uMail.email).trim()) {
+        const appUrl = getPrimaryFrontendUrl();
+        await sendTransactionalEmail({
+          to: uMail.email,
+          toName: uMail.firstName || '',
+          subject: 'Rappel : rendez-vous demain — Ada Papers',
+          htmlContent: `<p>Bonjour ${escapeHtml(uMail.firstName || '')},</p><p>${escapeHtml(msgBody)}</p><p><a href="${appUrl}/client/rendez-vous">Mes rendez-vous</a></p>`,
+          textContent: `${msgBody}\n${appUrl}/client/rendez-vous`,
+        });
+      }
+    } catch (mailErr) {
+      console.error('⚠️ Email rappel RDV J-1:', mailErr);
+    }
     sent += 1;
   }
 

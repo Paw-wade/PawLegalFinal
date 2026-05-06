@@ -299,6 +299,11 @@ export default api;
 export const authAPI = {
   register: (data: { firstName: string; lastName: string; email: string; phone: string }) =>
     api.post('/auth/register', data),
+
+  resendActivation: (data: { email: string }) => api.post('/auth/resend-activation', data),
+
+  completeSignup: (data: { token: string; password: string }) =>
+    api.post('/auth/complete-signup', data),
   
   login: (data: { email: string; password: string }) =>
     api.post('/auth/login', data),
@@ -811,7 +816,7 @@ export const dossiersAPI = {
   notifyTarification: (id: string) =>
     api.put(`/user/dossiers/${id}`, { notifyTarificationClient: true }),
 
-  /** Admin / superadmin : relance paiement tarification (notification in-app + SMS court) */
+  /** Admin / superadmin : relance paiement tarification (notification in-app + email) */
   sendTarificationPaymentReminder: (dossierId: string) =>
     api.post(`/user/dossiers/${dossierId}/tarification-payment-reminder`),
 
@@ -1393,6 +1398,38 @@ export const smsPreferencesAPI = {
   }) => {
     return api.put('/user/sms-preferences', data);
   },
+};
+
+export const emailConsoleAPI = {
+  initDefaults: () => api.post('/email/init-defaults'),
+  sendDirect: (data: { to: string; toName?: string; subject: string; htmlContent: string; textContent?: string }) =>
+    api.post('/email/send', data),
+
+  getTemplates: (params?: { category?: string; isActive?: boolean; search?: string }) =>
+    api.get('/email/templates', { params }),
+  createTemplate: (data: {
+    code: string;
+    name: string;
+    description?: string;
+    subject: string;
+    htmlContent: string;
+    textContent?: string;
+    variables?: Array<{ name: string; description?: string; example?: string }>;
+    category?: string;
+    isActive?: boolean;
+  }) => api.post('/email/templates', data),
+  updateTemplate: (id: string, data: any) => api.put(`/email/templates/${id}`, data),
+  deleteTemplate: (id: string) => api.delete(`/email/templates/${id}`),
+  previewTemplate: (id: string, variables: Record<string, any>) =>
+    api.post(`/email/templates/${id}/preview`, { variables }),
+  sendTemplateTest: (id: string, to: string, toName: string, variables: Record<string, any>) =>
+    api.post(`/email/templates/${id}/send-test`, { to, toName, variables }),
+
+  getEvents: () => api.get('/email/events'),
+  updateEvent: (id: string, data: any) => api.put(`/email/events/${id}`, data),
+
+  getLogs: (params?: { to?: string; status?: string; eventKey?: string; templateCode?: string; page?: number; limit?: number }) =>
+    api.get('/email/logs', { params }),
 };
 
 

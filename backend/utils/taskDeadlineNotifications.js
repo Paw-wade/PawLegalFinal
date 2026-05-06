@@ -1,6 +1,8 @@
 const Task = require('../models/Task');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const { sendTransactionalEmail, escapeHtml } = require('./emailNotifications');
+const { getPrimaryFrontendUrl } = require('./frontendOrigins');
 
 /**
  * Vérifie les tâches avec échéance et envoie des notifications
@@ -121,6 +123,22 @@ async function checkTaskDeadlines() {
             }
           });
 
+          try {
+            const ru = await User.findById(recipientId).select('email firstName').lean();
+            if (ru?.email && String(ru.email).trim()) {
+              const appUrl = getPrimaryFrontendUrl();
+              await sendTransactionalEmail({
+                to: ru.email,
+                toName: ru.firstName || '',
+                subject: `${titre} — Ada Papers`,
+                htmlContent: `<p>Bonjour,</p><p>${escapeHtml(message)}</p><p><a href="${appUrl}/admin/taches">Voir les tâches</a></p>`,
+                textContent: `${message}\n\n${appUrl}/admin/taches`,
+              });
+            }
+          } catch (mailErr) {
+            console.error('⚠️ Email rappel échéance tâche:', mailErr);
+          }
+
           notificationsSent++;
         } catch (notifError) {
           console.error(`Erreur lors de l'envoi de la notification d'échéance à ${recipientId}:`, notifError);
@@ -163,9 +181,10 @@ async function checkOverdueTasks() {
     const admins = await User.find({
       role: { $in: ['admin', 'superadmin'] },
       isActive: { $ne: false }
-    });
+    }).select('email firstName');
 
     let notificationsSent = 0;
+    const appUrl = getPrimaryFrontendUrl();
 
     // Pour chaque tâche en retard
     for (const task of overdueTasks) {
@@ -236,13 +255,28 @@ async function checkOverdueTasks() {
           await Notification.insertManyWithPush(notifications);
           notificationsSent += notifications.length;
           console.log(`✅ ${notifications.length} notifications créées pour la tâche en retard: ${taskTitle}`);
+          const notifMsg = `La tâche "${taskTitle}" assignée à ${assignedNames} est en retard de ${daysOverdue} jour${daysOverdue > 1 ? 's' : ''} (échéance: ${deadlineDateFormatted}).`;
+          for (const admin of admins) {
+            if (!admin.email || !String(admin.email).trim()) continue;
+            try {
+              await sendTransactionalEmail({
+                to: admin.email,
+                toName: admin.firstName || '',
+                subject: `Tâche en retard — Ada Papers`,
+                htmlContent: `<p>${escapeHtml(notifMsg)}</p><p><a href="${appUrl}/admin/taches">Voir les tâches</a></p>`,
+                textContent: `${notifMsg}\n${appUrl}/admin/taches`,
+              });
+            } catch (mailErr) {
+              console.error('⚠️ Email tâche en retard:', mailErr);
+            }
+          }
         } catch (notifError) {
           console.error('❌ Erreur lors de la création des notifications:', notifError);
         }
       }
     }
 
-    console.log(`✅ Vérification des tâches en retard terminée. ${notificationsSent} notification(s) (push + in-app, sans SMS admin).`);
+    console.log(`✅ Vérification des tâches en retard terminée. ${notificationsSent} notification(s) (+ emails).`);
     return { success: true, count: overdueTasks.length, notificationsSent };
   } catch (error) {
     console.error('❌ Erreur lors de la vérification des tâches en retard:', error);

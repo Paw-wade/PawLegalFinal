@@ -74,8 +74,6 @@ export default function CompleteProfilePage() {
   const [isChecking, setIsChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
-  const [isExpired, setIsExpired] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('client');
@@ -147,20 +145,7 @@ export default function CompleteProfilePage() {
         if (res.data.success && res.data.user) {
           const role = res.data.user.role || 'client';
           setUserRole(role);
-          // Vérifier le délai de 7 jours
-          if (role !== 'admin' && role !== 'superadmin' && res.data.user.createdAt) {
-            const daysSinceCreation = Math.floor((Date.now() - new Date(res.data.user.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-            const remaining = 7 - daysSinceCreation;
-            setDaysRemaining(remaining);
-            setIsExpired(remaining < 0);
-          }
-          // Vérifier le paramètre expired dans l'URL
-          if (typeof window !== 'undefined') {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('expired') === 'true') {
-              setIsExpired(true);
-            }
-          }
+          // Plus de délai bloquant de 7 jours : on laisse l'utilisateur compléter son profil sans blocage.
           // Charger les données existantes si le profil est partiellement complété
           if (res.data.user) {
             loadExistingProfile(res.data.user);
@@ -178,32 +163,19 @@ export default function CompleteProfilePage() {
 
       userAPI.getProfile()
         .then((res) => {
-          if (res.data.success && res.data.user) {
-            const apiUser = res.data.user;
-            const r = apiUser.role || roleFromSession;
-            setUserRole(r);
-            if (r !== 'admin' && r !== 'superadmin' && apiUser.createdAt) {
-              const daysSinceCreation = Math.floor(
-                (Date.now() - new Date(apiUser.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-              );
-              const remaining = 7 - daysSinceCreation;
-              setDaysRemaining(remaining);
-              setIsExpired(remaining < 0);
+            if (res.data.success && res.data.user) {
+              const apiUser = res.data.user;
+              const r = apiUser.role || roleFromSession;
+              setUserRole(r);
+              loadExistingProfile(apiUser);
             }
-            loadExistingProfile(apiUser);
-          }
         })
         .catch(() => {
           loadExistingProfile(session.user as any);
         })
         .finally(() => setIsChecking(false));
 
-      if (typeof window !== 'undefined') {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('expired') === 'true') {
-          setIsExpired(true);
-        }
-      }
+      // On ne tient plus compte du paramètre expired : plus de blocage automatique.
       return;
     }
 
@@ -431,51 +403,7 @@ export default function CompleteProfilePage() {
               </div>
             )}
             
-            {/* Message d'avertissement pour le délai de 7 jours */}
-            {userRole !== 'admin' && userRole !== 'superadmin' && daysRemaining !== null && (
-              <div className={`mb-6 p-4 rounded-lg border-l-4 shadow-sm ${
-                isExpired 
-                  ? 'bg-red-50 border-red-500' 
-                  : daysRemaining <= 2 
-                    ? 'bg-orange-50 border-orange-500' 
-                    : 'bg-blue-50 border-blue-500'
-              }`}>
-                {isExpired ? (
-                  <div className="flex items-start gap-2">
-                    <span className="text-xl">⚠️</span>
-                    <div>
-                      <p className="text-sm font-semibold text-red-800 mb-1">Délai dépassé</p>
-                      <p className="text-sm text-red-700">
-                        Votre profil n'a pas été complété dans les 7 jours suivant la création de votre compte. 
-                        Votre compte est maintenant bloqué. Veuillez compléter votre profil pour réactiver votre compte.
-                      </p>
-                    </div>
-                  </div>
-                ) : daysRemaining <= 2 ? (
-                  <div className="flex items-start gap-2">
-                    <span className="text-xl">⏰</span>
-                    <div>
-                      <p className="text-sm font-semibold text-orange-800 mb-1">Délai proche</p>
-                      <p className="text-sm text-orange-700">
-                        Il vous reste {daysRemaining} jour{daysRemaining > 1 ? 's' : ''} pour compléter votre profil. 
-                        Après ce délai, votre compte sera bloqué.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-2">
-                    <span className="text-xl">ℹ️</span>
-                    <div>
-                      <p className="text-sm font-semibold text-blue-800 mb-1">Information importante</p>
-                      <p className="text-sm text-blue-700">
-                        Vous avez {daysRemaining} jours pour compléter votre profil. 
-                        Après ce délai, votre compte sera bloqué.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Plus de blocage après 7 jours : pas de message de compte bloqué ici. */}
 
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Section Photo de profil */}
