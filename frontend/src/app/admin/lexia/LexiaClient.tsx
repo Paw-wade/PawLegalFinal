@@ -606,6 +606,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
     nameFromGoogle ||
     (sessionUser.email ? sessionUser.email.split('@')[0] : '') ||
     'Maître';
+  const nowHour = new Date().getHours();
+  const greeting = nowHour >= 18 ? 'Bonsoir' : 'Bonjour';
 
   return (
     <>
@@ -628,8 +630,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           .lexia-root {
             --lexia-chrome: 5.25rem;
             min-height: calc(100dvh - var(--lexia-chrome));
-            height: calc(100dvh - var(--lexia-chrome));
-            max-height: calc(100dvh - var(--lexia-chrome));
+            height: auto;
+            max-height: none;
           }
         }
 
@@ -676,7 +678,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
             left: 0;
             top: 0;
             bottom: 0;
-            width: min(288px, 88vw);
+            width: min(320px, 92vw);
             max-width: 100%;
             transform: translateX(-102%);
             box-shadow: 8px 0 32px -8px hsl(0 0% 0% / 0.2);
@@ -705,17 +707,47 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           gap: 10px;
           overflow: hidden;
         }
+        @media (max-width: 639px) {
+          .lexia-sidebar-inner {
+            padding: 10px 8px 12px;
+            gap: 8px;
+          }
+        }
         .lexia-sidebar-scroll {
           flex: 1;
           min-height: 0;
           overflow-y: auto;
           overflow-x: hidden;
+          overscroll-behavior: contain;
+          scrollbar-gutter: stable;
           display: flex;
           flex-direction: column;
           gap: 10px;
           padding-right: 2px;
           scrollbar-width: thin;
           scrollbar-color: hsl(var(--border)) transparent;
+        }
+        .lexia-sidebar-scroll::-webkit-scrollbar {
+          width: 8px;
+        }
+        .lexia-sidebar-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .lexia-sidebar-scroll::-webkit-scrollbar-thumb {
+          background: hsl(var(--border));
+          border-radius: 9999px;
+          border: 2px solid transparent;
+          background-clip: padding-box;
+        }
+        .lexia-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+          background: hsl(var(--muted-foreground));
+          background-clip: padding-box;
+        }
+        @media (max-width: 639px) {
+          .lexia-sidebar-scroll {
+            gap: 8px;
+            padding-right: 0;
+          }
         }
         .lexia-sidebar-top {
           display: flex;
@@ -739,6 +771,13 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           cursor: pointer;
           transition: border-color 0.15s, background 0.15s, color 0.15s;
         }
+        @media (max-width: 639px) {
+          .lexia-home-nav {
+            padding: 8px 10px;
+            font-size: 11px;
+            line-height: 1.3;
+          }
+        }
         .lexia-home-nav:hover {
           border-color: hsl(var(--ring));
           color: hsl(var(--foreground));
@@ -760,6 +799,13 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           cursor: pointer;
           transition: border-color 0.15s, background 0.15s;
         }
+        @media (max-width: 639px) {
+          .lexia-new-chat {
+            padding: 8px 10px;
+            font-size: 11px;
+            line-height: 1.3;
+          }
+        }
         .lexia-new-chat:hover {
           border-color: hsl(var(--primary));
           background: hsl(var(--primary) / 0.06);
@@ -772,6 +818,12 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           color: hsl(var(--muted-foreground));
           padding: 4px 6px 2px;
           flex-shrink: 0;
+        }
+        @media (max-width: 639px) {
+          .lexia-sidebar-section-h {
+            font-size: 9px;
+            padding: 3px 4px 2px;
+          }
         }
         .lexia-hist-list {
           display: flex;
@@ -856,7 +908,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         }
         .lexia-sidebar-cat-head {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           gap: 8px;
           width: 100%;
           padding: 8px 10px;
@@ -880,6 +932,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           flex: 1;
           min-width: 0;
           line-height: 1.3;
+          white-space: normal;
+          word-break: break-word;
         }
         .lexia-sidebar-cat-chev {
           font-size: 9px;
@@ -967,6 +1021,12 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         @media (min-width: 640px) {
           .lexia-header-row { gap: 12px; margin-bottom: 10px; }
         }
+        @media (max-width: 639px) {
+          .lexia-header {
+            padding: 7px 10px 7px;
+          }
+          .lexia-header-row { gap: 7px; }
+        }
         .lexia-burger {
           flex-shrink: 0;
           width: 40px;
@@ -983,6 +1043,16 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           padding: 0;
           transition: border-color 0.15s, background 0.15s;
         }
+        @media (max-width: 639px) {
+          .lexia-burger {
+            width: 34px;
+            height: 34px;
+            gap: 4px;
+          }
+          .lexia-burger-line {
+            width: 16px;
+          }
+        }
         .lexia-burger:hover {
           border-color: hsl(var(--ring));
           background: hsl(var(--muted));
@@ -994,7 +1064,6 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           border-radius: 1px;
           background: hsl(var(--foreground));
         }
-        .lexia-scales { font-size: 28px; line-height: 1; }
         .lexia-header-titles {
           flex: 1;
           min-width: 0;
@@ -1002,10 +1071,16 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         .lexia-header-titles h1 {
           font-size: 1.05rem;
           font-weight: 700;
-          color: hsl(var(--foreground));
+          color: #f97316;
           letter-spacing: -0.02em;
           line-height: 1.2;
           margin: 0;
+        }
+        @media (max-width: 639px) {
+          .lexia-header-titles h1 {
+            font-size: 0.93rem;
+            line-height: 1.15;
+          }
         }
         @media (min-width: 640px) {
           .lexia-header-titles h1 {
@@ -1038,6 +1113,23 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           font-weight: 600;
           letter-spacing: 0.04em;
           text-transform: uppercase;
+          flex-shrink: 0;
+          min-width: 122px;
+          justify-content: center;
+        }
+        @media (max-width: 639px) {
+          .lexia-status-pill {
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            gap: 0;
+            font-size: 0;
+            justify-content: center;
+          }
+          .lexia-dot {
+            width: 5px;
+            height: 5px;
+          }
         }
         .lexia-status-pill.idle {
           background: hsl(var(--muted));
@@ -1090,9 +1182,10 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         .lexia-dd-chev { font-size: 8px; margin-left: auto; flex-shrink: 0; transition: transform 0.2s; }
         .lexia-dd-btn.open .lexia-dd-chev { transform: rotate(180deg); }
         .lexia-dd-panel {
-          position: relative;
+          position: absolute;
           margin-top: 6px;
           left: 0;
+          top: 100%;
           right: 0;
           width: 100%;
           background: hsl(var(--background));
@@ -1146,12 +1239,20 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         .lexia-messages {
           min-height: 0;
           overflow-x: hidden;
+          overscroll-behavior: contain;
+          scrollbar-gutter: stable;
           padding: 8px 14px 6px;
           display: flex;
           flex-direction: column;
           gap: 10px;
           scrollbar-width: thin;
           scrollbar-color: hsl(var(--border)) transparent;
+        }
+        @media (max-width: 639px) {
+          .lexia-messages {
+            padding: 8px 10px 6px;
+            gap: 10px;
+          }
         }
         .lexia-messages--accueil {
           flex: 0 0 auto;
@@ -1163,8 +1264,10 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         }
         @media (max-width: 1023px) {
           .lexia-messages--accueil {
+            flex: 1 1 auto;
             overflow-y: auto;
-            max-height: calc(100dvh - 12rem);
+            max-height: none;
+            justify-content: center;
           }
         }
         .lexia-messages--chat {
@@ -1202,6 +1305,11 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           gap: 0;
           animation: lexia-rise 0.45s ease both;
           margin: 0;
+        }
+        @media (max-width: 639px) {
+          .lexia-accueil {
+            max-width: 100%;
+          }
         }
         .lexia-accueil-badge {
           display: inline-flex;
@@ -1370,6 +1478,9 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
 
         .lexia-msg { display: flex; gap: 13px; animation: lexia-rise 0.3s ease both; }
         .lexia-msg.user { flex-direction: row-reverse; }
+        @media (max-width: 639px) {
+          .lexia-msg { gap: 8px; }
+        }
 
         .lexia-avatar {
           width: 34px; height: 34px;
@@ -1378,6 +1489,13 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           font-size: 15px;
           flex-shrink: 0;
           margin-top: 2px;
+        }
+        @media (max-width: 639px) {
+          .lexia-avatar {
+            width: 30px;
+            height: 30px;
+            font-size: 13px;
+          }
         }
         .lexia-avatar-ai {
           background: hsl(var(--primary));
@@ -1395,6 +1513,15 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           border-radius: var(--radius);
           font-size: 13.5px;
           line-height: 1.7;
+          min-width: 0;
+        }
+        @media (max-width: 639px) {
+          .lexia-bubble {
+            max-width: calc(100% - 42px);
+            padding: 10px 12px;
+            font-size: 12.5px;
+            line-height: 1.55;
+          }
         }
         .lexia-bubble-ai {
           background: hsl(var(--background));
@@ -1579,6 +1706,12 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           backdrop-filter: blur(12px);
           border-top: 1px solid hsl(var(--border));
         }
+        @media (max-width: 639px) {
+          .lexia-input-area {
+            padding: 8px 8px 8px;
+            padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+          }
+        }
         @media (min-width: 640px) {
           .lexia-input-area {
             padding: 8px 14px 10px;
@@ -1595,20 +1728,33 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           padding-bottom: 0 !important;
           margin-top: 0;
         }
+        @media (max-width: 1023px) {
+          .lexia-main-column--home .lexia-input-area {
+            margin-top: auto;
+            padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)) !important;
+          }
+        }
         .lexia-input-wrap {
           display: flex;
           align-items: flex-end;
           gap: 10px;
           background: hsl(var(--background));
-          border: 1px solid hsl(var(--border));
+          border: 1px solid #f97316;
           border-radius: var(--radius);
           padding: 10px 10px 10px 16px;
           max-width: 46rem;
           margin: 0 auto;
         }
+        @media (max-width: 639px) {
+          .lexia-input-wrap {
+            padding: 8px 8px 8px 10px;
+            gap: 8px;
+            border-radius: calc(var(--radius) - 2px);
+          }
+        }
         .lexia-input-wrap:focus-within {
-          border-color: hsl(var(--ring));
-          box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2);
+          border-color: #ea580c;
+          box-shadow: 0 0 0 3px rgb(249 115 22 / 0.2);
         }
         .lexia-input-area textarea {
           flex: 1;
@@ -1621,6 +1767,12 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           max-height: 130px;
           min-height: 22px;
           line-height: 1.55;
+        }
+        @media (max-width: 639px) {
+          .lexia-input-area textarea {
+            font-size: 16px;
+            line-height: 1.45;
+          }
         }
         .lexia-input-area textarea::placeholder { color: hsl(var(--muted-foreground)); }
         .lexia-send-btn {
@@ -1650,6 +1802,14 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           margin-top: 3px;
           margin-bottom: 0;
           line-height: 1.2;
+        }
+        @media (max-width: 639px) {
+          .lexia-header-titles p {
+            display: none;
+          }
+          .lexia-input-hint {
+            font-size: 10px;
+          }
         }
       `}</style>
 
@@ -1697,20 +1857,6 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                   </div>
                 ))}
               </div>
-
-              <div className="lexia-sidebar-section-h" style={{ marginTop: 10 }}>
-                Thématiques
-              </div>
-              {categories.map((cat) => (
-                <SidebarCategoryBlock
-                  key={cat.id}
-                  cat={cat}
-                  onSelect={(p) => {
-                    setOpenMenu(null);
-                    void sendMessage(p);
-                  }}
-                />
-              ))}
 
               <div className="lexia-sidebar-section-h" style={{ marginTop: 10 }}>
                 Sources
@@ -1786,7 +1932,6 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                 <span className="lexia-burger-line" />
                 <span className="lexia-burger-line" />
               </button>
-              <div className="lexia-scales">⚖️</div>
               <div className="lexia-header-titles">
                 <h1>Ada AI — Agent juridique</h1>
                 <p>
@@ -1809,7 +1954,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
               <div className="lexia-accueil">
                 <div className="lexia-accueil-badge">Ada AI · Assistant juridique</div>
                 <h2 className="lexia-accueil-hello">
-                  Bonjour, {lexiaWelcomeName}.
+                  {greeting}, {lexiaWelcomeName}.
                   <br />
                   <em>Heureux de vous retrouver.</em>
                 </h2>

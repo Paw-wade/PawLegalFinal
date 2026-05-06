@@ -277,6 +277,8 @@ export default function HomePage() {
     return 0;
   });
   const [selectedSolutionIndex, setSelectedSolutionIndex] = useState(0);
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  const lexiaHref = role === 'admin' || role === 'superadmin' ? '/admin/lexia' : '/lexia';
 
   return (
     <div className="min-h-screen bg-background flex flex-col scroll-smooth overflow-x-hidden max-w-[100vw]">
@@ -1005,6 +1007,15 @@ export default function HomePage() {
       )}
       
       {/* Badge flottant pour ouvrir l'outil de prise de rendez-vous */}
+      <Link
+        href={lexiaHref}
+        className="fixed bottom-24 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:bg-orange-600 hover:shadow-xl md:bottom-6 md:right-6"
+        aria-label="Accéder à Ada AI"
+      >
+        <span className="text-base leading-none">⚖️</span>
+        <span>Ada AI</span>
+      </Link>
+
       <ReservationBadge 
         onOpen={() => {
           setIsWidgetOpen(true);
