@@ -15,6 +15,10 @@ import {
   collaborativeDraftsAPI,
   dossierDocumentDraftsAPI,
 } from '@/lib/api';
+import {
+  normalizeMontantTarificationFixe as normalizeMontantTarifField,
+  parseMontantSaisieFlexible,
+} from '@/lib/montantTarification';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getDossierMinEtapeDateMs } from '@/lib/dossierUtils';
 import {
@@ -69,6 +73,8 @@ function Input({ className = '', type, value, onChange, ...props }: any) {
     <input
       type={type}
       className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      value={value}
+      onChange={onChange}
       {...props}
     />
   );
@@ -304,7 +310,7 @@ export default function AdminDossiersPage() {
   const [notificationMessage, setNotificationMessage] = useState('');
   const [exonererFraisTarification, setExonererFraisTarification] = useState(false);
   const [fraisExoneresMotifInput, setFraisExoneresMotifInput] = useState('');
-  /** Modal superadmin : montant fixe vs notification tarification (séparés). */
+  /** Modal cabinet : montant fixe + notification (flux simplifié). */
   const [showTarifModal, setShowTarifModal] = useState<any>(null);
   const [tarifMontantInput, setTarifMontantInput] = useState('');
   const [tarifNotifyMessage, setTarifNotifyMessage] = useState('');
@@ -312,13 +318,16 @@ export default function AdminDossiersPage() {
   const [tarifExoMotif, setTarifExoMotif] = useState('');
   const [tarifSavingMontant, setTarifSavingMontant] = useState(false);
   const [tarifSendingNotify, setTarifSendingNotify] = useState(false);
+  const [tarifRetracting, setTarifRetracting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'pending' | 'in_progress' | 'standby' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
   >('all');
   const [userFilter, setUserFilter] = useState<string>('all');
   /** Tri liste : jalons datés dans `etapesSupplementaires` (front uniquement). */
   const [dossierSortEtapes, setDossierSortEtapes] = useState<'default' | 'etape_date_asc' | 'etape_date_desc'>('default');
-  const isSuperadmin = (session?.user as any)?.role === 'superadmin';
+  /** Tarification : admin ou superadmin uniquement. */
+  const canManageTarifModal =
+    (session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin';
 
   // Étapes de base pour garder un workflow cohérent même sans étapes personnalisées.
   const DEFAULT_ADMIN_ETAPES: any[] = [
@@ -1373,22 +1382,15 @@ export default function AdminDossiersPage() {
     }
   };
 
-  const parseTarifMontantInput = (s: string): number | null => {
-    const normalized = String(s || '')
-      .replace(/\s/g, '')
-      .replace(',', '.')
-      .trim();
-    const parsed = Number(normalized || '0');
-    if (!Number.isFinite(parsed) || parsed < 0) return null;
-    return parsed;
-  };
+  const formatTarifMontantFr = (n: number) =>
+    Number(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const openTarifModal = (dossier: any, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
-    const cur = Number(dossier?.montantTarificationFixe || 0);
+    const cur = normalizeMontantTarifField(dossier?.montantTarificationFixe);
     setShowTarifModal(dossier);
     setTarifMontantInput(cur > 0 ? String(cur) : '');
     setTarifNotifyMessage('');
@@ -1402,32 +1404,81 @@ export default function AdminDossiersPage() {
     setTarifNotifyMessage('');
     setTarifExonerer(false);
     setTarifExoMotif('');
+    setTarifRetracting(false);
   };
 
-  const tarifMontantDirty = () => {
-    if (!showTarifModal) return false;
-    const p = parseTarifMontantInput(tarifMontantInput);
-    if (p === null) return true;
-    const base = Number(showTarifModal.montantTarificationFixe || 0);
-    return Math.abs(p - base) > 0.0001;
+  const canRetractTarificationChoiceRequest = (d: any) =>
+    !!d?.tarificationNotificationSentAt &&
+    !d?.formuleTarifaire &&
+    normalizeMontantTarifField(d?.montantTarificationFixe) <= 0 &&
+    !d?.paiementTarificationEffectue;
+
+  const handleRetractTarificationChoiceRequest = async () => {
+    if (!showTarifModal) return;
+    const dossierId = String(showTarifModal._id || showTarifModal.id || '');
+    if (!dossierId || !canRetractTarificationChoiceRequest(showTarifModal)) return;
+    if (
+      !confirm(
+        'Rétracter la demande tarification envoyée au client ?\n\nLes marqueurs « notification envoyée » seront effacés et le client recevra une notification in-app (et push si activé) l’informant que la demande est retirée.'
+      )
+    ) {
+      return;
+    }
+    setTarifRetracting(true);
+    setError(null);
+    try {
+      const { data } = await dossiersAPI.retractTarificationChoiceRequest(dossierId);
+      if (!data?.success) {
+        setToast({
+          message: data?.message || 'Rétractation refusée par le serveur.',
+          type: 'error',
+        });
+        return;
+      }
+      await loadDossiers();
+      setToast({
+        message: 'Demande tarification rétractée. Le client a été notifié in-app.',
+        type: 'success',
+      });
+      closeTarifModal();
+    } catch (err: any) {
+      const message = err?.response?.data?.message || 'Rétractation impossible';
+      setToast({ message, type: 'error' });
+    } finally {
+      setTarifRetracting(false);
+    }
   };
 
   const handleTarifSaveMontantOnly = async () => {
     if (!showTarifModal) return;
     const dossierId = String(showTarifModal._id || showTarifModal.id || '');
     if (!dossierId) return;
-    const parsed = parseTarifMontantInput(tarifMontantInput);
+    const trimmedMontant = String(tarifMontantInput ?? '').trim();
+    const parsed = parseMontantSaisieFlexible(tarifMontantInput);
     if (parsed === null) {
-      setToast({ message: 'Montant invalide.', type: 'error' });
+      setToast({
+        message:
+          trimmedMontant === ''
+            ? 'Saisissez un montant (chiffres). Utilisez 0 pour retirer le montant fixe du dossier.'
+            : 'Format de montant non reconnu. Exemples : 1500, 1500,50, 1 500,50 ou 1.500,50. Utilisez 0 pour retirer le montant fixe.',
+        type: 'error',
+      });
       return;
     }
     setTarifSavingMontant(true);
     setError(null);
     try {
-      await dossiersAPI.updateDossier(dossierId, {
+      const { data } = await dossiersAPI.updateDossier(dossierId, {
         montantTarificationFixe: parsed,
         skipDossierModificationNotify: true,
       });
+      if (!data?.success) {
+        setToast({
+          message: data?.message || 'Enregistrement du montant refusé par le serveur.',
+          type: 'error',
+        });
+        return;
+      }
       await loadDossiers();
       setToast({
         message: parsed > 0 ? 'Montant enregistré (aucune notification envoyée).' : 'Montant fixe retiré.',
@@ -1445,6 +1496,7 @@ export default function AdminDossiersPage() {
           return {
             ...prev,
             montantTarificationFixe: parsed,
+            montantTarificationFixeAt: new Date().toISOString(),
             fraisExoneres: false,
             fraisExoneresMotif: undefined,
           };
@@ -1469,10 +1521,28 @@ export default function AdminDossiersPage() {
     if (!showTarifModal) return;
     const dossierId = String(showTarifModal._id || showTarifModal.id || '');
     if (!dossierId) return;
+    const montantRaw = String(tarifMontantInput ?? '').trim();
+    if (montantRaw !== '') {
+      const p = parseMontantSaisieFlexible(tarifMontantInput);
+      if (p === null) {
+        setToast({
+          message:
+            'Montant invalide. Exemples acceptés : 1500, 1500,50 ou 1 500,50. Videz le champ pour notifier sans modifier le montant en base.',
+          type: 'error',
+        });
+        return;
+      }
+    }
     setTarifSendingNotify(true);
     setError(null);
     try {
       const payload: Record<string, unknown> = { notifyTarificationClient: true };
+      if (montantRaw !== '') {
+        const p = parseMontantSaisieFlexible(tarifMontantInput);
+        if (p !== null) {
+          payload.montantTarificationFixe = p;
+        }
+      }
       const msg = tarifNotifyMessage.trim();
       if (msg) payload.tarificationClientMessage = msg;
       if (tarifExonerer) {
@@ -1480,9 +1550,20 @@ export default function AdminDossiersPage() {
         const m = tarifExoMotif.trim();
         if (m) payload.fraisExoneresMotif = m;
       }
-      await dossiersAPI.updateDossier(dossierId, payload);
+      const { data } = await dossiersAPI.updateDossier(dossierId, payload);
+      if (!data?.success) {
+        setToast({
+          message: data?.message || 'Envoi de la notification refusé par le serveur.',
+          type: 'error',
+        });
+        return;
+      }
       await loadDossiers();
-      setToast({ message: 'Notification tarification envoyée au client.', type: 'success' });
+      setToast({
+        message:
+          'Notification tarification envoyée : message in-app, push (si activé) et SMS si le client a un numéro valide.',
+        type: 'success',
+      });
       closeTarifModal();
     } catch (err: any) {
       const message = err?.response?.data?.message || 'Envoi de la notification impossible';
@@ -2614,12 +2695,23 @@ export default function AdminDossiersPage() {
                             >
                               Frais exonérés
                             </span>
-                          ) : Number(dossier.montantTarificationFixe || 0) > 0 ? (
+                          ) : normalizeMontantTarifField(dossier.montantTarificationFixe) > 0 ? (
                             <span
-                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-100 text-blue-900 border border-blue-200"
-                              title="Montant fixé manuellement par superadmin. Le client n'a pas à choisir Standard/Premium."
+                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-100 text-blue-900 border border-blue-200 max-w-[min(100%,18rem)] truncate"
+                              title={[
+                                "Montant fixé par le cabinet — le client n'a pas à choisir Standard / Premium.",
+                                dossier.montantTarificationFixeAt
+                                  ? `Dernière fixation / modification : ${new Date(dossier.montantTarificationFixeAt).toLocaleString('fr-FR')}.`
+                                  : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' ')}
                             >
-                              Montant fixe : {Number(dossier.montantTarificationFixe).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR
+                              Montant :{' '}
+                              {formatTarifMontantFr(normalizeMontantTarifField(dossier.montantTarificationFixe))} EUR
+                              {dossier.montantTarificationFixeAt
+                                ? ` · ${new Date(dossier.montantTarificationFixeAt).toLocaleDateString('fr-FR')}`
+                                : ''}
                             </span>
                           ) : dossier.formuleTarifaire ? (
                             <span
@@ -2638,16 +2730,17 @@ export default function AdminDossiersPage() {
                             </span>
                           ) : dossier.tarificationNotificationSentAt ? (
                             <span
-                              className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-200 max-w-[min(100%,14rem)] truncate"
-                              title={
+                              className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-200"
+                              title={[
+                                `Tarif notifié au client le ${new Date(dossier.tarificationNotificationSentAt).toLocaleString('fr-FR')}.`,
                                 dossier.tarificationLastNotifySummary
-                                  ? String(dossier.tarificationLastNotifySummary).slice(0, 900)
-                                  : 'Une notification tarification a été envoyée au client. Ouvrez « Tarif » pour voir l’historique ou renvoyer une notif.'
-                              }
+                                  ? String(dossier.tarificationLastNotifySummary).trim().slice(0, 500)
+                                  : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' ')}
                             >
-                              {dossier.tarificationLastNotifySummary
-                                ? 'Notif. tarification (voir infobulle)'
-                                : 'Tarif : non choisi (notif. envoyée)'}
+                              Tarif notifié
                             </span>
                           ) : null}
                           {Array.isArray(dossier.transmittedTo) && dossier.transmittedTo.length > 0 && (
@@ -2712,13 +2805,13 @@ export default function AdminDossiersPage() {
                         >
                           {dossier.isStandby ? '▶ Reprendre' : '⏸ Stand-by'}
                         </button>
-                        {isSuperadmin && (
+                        {canManageTarifModal && (
                           <>
                             <button
                               type="button"
                               onClick={(e) => openTarifModal(dossier, e)}
                               className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md text-xs font-semibold transition-colors border bg-white border-blue-300 text-blue-700 hover:bg-blue-50"
-                              title="Montant fixe, notification client (tarification / exonération) et message in-app."
+                              title="Montant fixe cabinet (prioritaire sur les formules) : enregistrer + notifier le client, ou enregistrer sans notifier."
                             >
                               Tarif
                             </button>
@@ -4158,65 +4251,99 @@ export default function AdminDossiersPage() {
         </div>
       )}
 
-      {/* Modal superadmin : tarification (montant séparé de la notification) */}
+      {/* Modal cabinet : tarification — montant fixe (prioritaire sur le choix de formule client) + notification */}
       {showTarifModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Tarification — {showTarifModal.titre || showTarifModal.numero || 'Dossier'}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                L&apos;enregistrement du montant et l&apos;envoi de la notification au client sont deux actions distinctes.
+                Un <strong>montant fixe</strong> enregistré par le cabinet <strong>remplace</strong> le choix entre les deux formules côté client. Vous pouvez l’enregistrer avec notification au client en <strong>un seul clic</strong>, ou sans notification.
               </p>
             </div>
 
             <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">1. Montant fixe (sans notification)</p>
-              <Label htmlFor="tarif-montant" className="text-sm">
-                Montant en EUR (0 pour retirer le montant fixe)
+              <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Montant fixe cabinet (EUR)</p>
+              <p className="text-[11px] text-muted-foreground">
+                <strong>Champ rempli</strong> : ce montant est envoyé au serveur (notification ou enregistrement silencieux).{' '}
+                <strong>Champ vide</strong> : le montant en base n’est pas modifié lors de la notification. Saisissez{' '}
+                <span className="font-mono">0</span> pour retirer le montant fixe.
+              </p>
+              <div className="rounded-md border border-gray-300 bg-white px-3 py-2 text-[11px] text-muted-foreground">
+                Montant actuellement en base :{' '}
+                <span className="font-semibold text-gray-900 tabular-nums">
+                  {normalizeMontantTarifField(showTarifModal.montantTarificationFixe) > 0
+                    ? `${formatTarifMontantFr(normalizeMontantTarifField(showTarifModal.montantTarificationFixe))} EUR`
+                    : 'aucun'}
+                </span>
+              </div>
+              <Label htmlFor="tarif-montant" className="text-sm font-medium">
+                Montant à appliquer (optionnel si vous ne faites qu’informer)
               </Label>
               <Input
                 id="tarif-montant"
                 value={tarifMontantInput}
                 onChange={(e) => setTarifMontantInput(e.target.value)}
-                placeholder="Ex. 1500 ou 0"
-                className="w-full"
+                placeholder="Ex. 1500 — vide = ne pas changer — 0 = retirer"
+                className="w-full font-mono text-base"
               />
-              <Button type="button" variant="outline" onClick={() => void handleTarifSaveMontantOnly()} disabled={tarifSavingMontant}>
-                {tarifSavingMontant ? 'Enregistrement…' : 'Enregistrer le montant uniquement'}
-              </Button>
-            </div>
-
-            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4 space-y-3">
-              <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">2. Notifier le client (in-app)</p>
+              {(() => {
+                const trimmed = String(tarifMontantInput ?? '').trim();
+                if (trimmed === '') return null;
+                const p = parseMontantSaisieFlexible(tarifMontantInput);
+                if (p === null) {
+                  return (
+                    <p className="text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1.5">
+                      Montant illisible — corrigez la saisie.
+                    </p>
+                  );
+                }
+                return (
+                  <p className="text-sm font-semibold text-gray-900 bg-emerald-50 border border-emerald-200 rounded px-3 py-2 tabular-nums">
+                    Sera enregistré : <span className="text-emerald-900">{formatTarifMontantFr(p)} EUR</span>
+                    {p === 0 ? ' (montant fixe retiré du dossier)' : null}
+                  </p>
+                );
+              })()}
               {showTarifModal.tarificationLastNotifySummary ? (
-                <div className="rounded border border-blue-100 bg-white/80 p-2 text-[11px] text-gray-800 max-h-24 overflow-y-auto whitespace-pre-wrap">
-                  <span className="font-semibold text-blue-900">Dernière notif. enregistrée :</span>
+                <div className="rounded border border-gray-200 bg-white p-2 text-[11px] text-gray-800 max-h-20 overflow-y-auto whitespace-pre-wrap">
+                  <span className="font-semibold text-gray-700">Dernière notification enregistrée :</span>
                   <br />
                   {String(showTarifModal.tarificationLastNotifySummary)}
                 </div>
               ) : null}
-              <p className="text-xs text-blue-900/90">
-                Le message envoyé dépend de l&apos;état du dossier après enregistrement : choix de formule sur le site, montant fixe déjà enregistré, ou frais exonérés si vous cochez l&apos;exonération ci-dessous.
-              </p>
-              {tarifMontantDirty() ? (
-                <p className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                  Le montant saisi diffère de celui en base : la notification utilisera le montant <strong>déjà enregistré</strong> tant que vous n&apos;avez pas cliqué sur « Enregistrer le montant uniquement ».
-                </p>
+              {canRetractTarificationChoiceRequest(showTarifModal) ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-amber-900">Rétracter la demande</p>
+                  <p className="text-[11px] text-amber-900/90 leading-snug">
+                    Une demande tarification a été envoyée au client, qui n’a pas encore enregistré de formule. Vous pouvez
+                    retirer cette demande : les indicateurs « notifié » seront effacés et le client recevra une notification
+                    in-app (aucun SMS automatique pour cette action).
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-amber-300 text-amber-950 hover:bg-amber-100 text-sm"
+                    disabled={tarifRetracting || tarifSendingNotify || tarifSavingMontant}
+                    onClick={() => void handleRetractTarificationChoiceRequest()}
+                  >
+                    {tarifRetracting ? 'Rétractation…' : 'Rétracter la demande envoyée au client'}
+                  </Button>
+                </div>
               ) : null}
               <div>
                 <Label htmlFor="tarif-notify-msg" className="text-sm mb-1 block">
-                  Message complémentaire pour le client (optionnel)
+                  Message complémentaire pour le client (optionnel, in-app uniquement)
                 </Label>
                 <Textarea
                   id="tarif-notify-msg"
                   value={tarifNotifyMessage}
                   onChange={(e) => setTarifNotifyMessage(e.target.value)}
-                  placeholder="Consignes de paiement, délais, modalités… (affiché dans la notification in-app)"
-                  rows={4}
+                  placeholder="Consignes de paiement, délais…"
+                  rows={3}
                   className="w-full text-sm"
                   maxLength={2000}
                 />
-                <p className="text-[11px] text-muted-foreground mt-1">Ajouté sous le texte automatique de la notification (max. 2000 caractères).</p>
               </div>
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
@@ -4225,14 +4352,14 @@ export default function AdminDossiersPage() {
                   checked={tarifExonerer}
                   onChange={(e) => setTarifExonerer(e.target.checked)}
                   disabled={
-                    Number(showTarifModal.montantTarificationFixe || 0) > 0 ||
-                    (parseTarifMontantInput(tarifMontantInput) ?? 0) > 0
+                    normalizeMontantTarifField(showTarifModal.montantTarificationFixe) > 0 ||
+                    (parseMontantSaisieFlexible(tarifMontantInput) ?? -1) > 0
                   }
                 />
                 <span className="text-sm">
                   <span className="font-semibold text-gray-900 block">Exonérer les frais de tarification</span>
                   <span className="text-muted-foreground text-xs">
-                    Appliquée à l&apos;envoi de la notification. Incompatible avec un montant fixe {'>'} 0 (en base ou saisi).
+                    À l’envoi de la notification uniquement. Incompatible avec un montant fixe {'>'} 0 (base ou champ).
                   </span>
                 </span>
               </label>
@@ -4251,13 +4378,32 @@ export default function AdminDossiersPage() {
                   />
                 </div>
               )}
-              <Button type="button" onClick={() => void handleTarifSendNotification()} disabled={tarifSendingNotify} className="w-full sm:w-auto">
-                {tarifSendingNotify ? 'Envoi…' : 'Envoyer la notification tarification'}
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <Button
+                  type="button"
+                  onClick={() => void handleTarifSendNotification()}
+                  disabled={tarifSendingNotify || tarifSavingMontant || tarifRetracting}
+                  className="w-full sm:flex-1"
+                >
+                  {tarifSendingNotify ? 'Envoi…' : 'Enregistrer et notifier le client'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleTarifSaveMontantOnly()}
+                  disabled={tarifSavingMontant || tarifSendingNotify || tarifRetracting}
+                  className="w-full sm:flex-1"
+                >
+                  {tarifSavingMontant ? 'Enregistrement…' : 'Enregistrer sans notifier'}
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Le bouton bleu enregistre le montant (si le champ est rempli) et envoie in-app, push et SMS tarification. Le second enregistre le montant <strong>sans</strong> aucune notification.
+              </p>
             </div>
 
             <div className="flex justify-end pt-1">
-              <Button type="button" variant="outline" onClick={closeTarifModal} disabled={tarifSavingMontant || tarifSendingNotify}>
+              <Button type="button" variant="outline" onClick={closeTarifModal} disabled={tarifSavingMontant || tarifSendingNotify || tarifRetracting}>
                 Fermer
               </Button>
             </div>

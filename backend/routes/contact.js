@@ -6,6 +6,7 @@ const { body, validationResult } = require('express-validator');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 
 const router = express.Router();
 
@@ -112,36 +113,34 @@ router.post(
 
       console.log('✅ Nouveau message de contact enregistré:', newMessage._id);
 
-      // Envoyer un SMS de confirmation au client si un numéro de téléphone est fourni
-      if (phone && phone.trim()) {
+      // Envoyer un e-mail de confirmation au client
+      if (email && String(email).trim()) {
         try {
-          const { sendSMS, recordOutboundSms } = require('../sendSMS');
-          const smsMessage = `Merci de nous avoir contactés.\n\nNous vous invitons à créer un compte sur notre site afin de faciliter le suivi de votre demande.\n\nÀ très bientôt.`;
-          
-          const smsResult = await sendSMS(phone, smsMessage);
-          try {
-            await recordOutboundSms({
-              to: smsResult.to,
-              message: smsResult.body,
-              templateCode: 'contact_confirmation',
-              templateName: 'Accusé réception contact',
-              twilioSid: smsResult.sid,
-              twilioStatus: smsResult.status,
-              status: smsResult.status === 'sent' || smsResult.status === 'queued' ? 'sent' : 'pending',
-              context: 'contact',
-              contextId: newMessage._id.toString(),
-            });
-          } catch (histErr) {
-            console.error('⚠️ Historique SMS contact non enregistré:', histErr?.message || histErr);
-          }
-          console.log(`✅ SMS de confirmation envoyé à ${phone}`);
-        } catch (smsError) {
-          console.error('⚠️ Erreur lors de l\'envoi du SMS de confirmation:', smsError);
-          // Ne pas bloquer l'envoi du message si le SMS échoue
+          await sendTransactionalEmail({
+            to: email,
+            toName: name || '',
+            subject: 'Confirmation de réception de votre demande — Ada Papers',
+            htmlContent: `
+              <p>Nous vous remercions pour votre message.</p>
+              <p>Votre demande a bien été enregistrée sous la référence <strong>${escapeHtml(newMessage._id.toString())}</strong>.</p>
+              <p><strong>Sujet :</strong> ${escapeHtml(subject)}</p>
+              <p>Notre équipe analysera votre demande et vous répondra dans les meilleurs délais, en principe sous 24 à 48 heures ouvrées.</p>
+              <p>Pour faciliter le suivi de votre dossier, nous vous invitons à conserver cet e-mail.</p>
+            `,
+            textContent: `Nous vous remercions pour votre message.
+
+Votre demande a bien été enregistrée sous la référence ${newMessage._id.toString()}.
+Sujet : ${subject}
+
+Notre équipe analysera votre demande et vous répondra dans les meilleurs délais, en principe sous 24 à 48 heures ouvrées.
+Pour faciliter le suivi de votre dossier, nous vous invitons à conserver cet e-mail.`,
+          });
+        } catch (emailError) {
+          console.error('⚠️ Erreur lors de l\'envoi de l\'email de confirmation contact:', emailError);
         }
       }
 
-      // Notifier tous les admins
+      // Notifier tous les admins + e-mail d’alerte
       try {
         const admins = await User.find({ role: { $in: ['admin', 'superadmin'] } });
         
@@ -158,6 +157,29 @@ router.post(
               subject: subject
             }
           });
+
+          if (admin.email) {
+            await sendTransactionalEmail({
+              to: admin.email,
+              toName: `${admin.firstName || ''} ${admin.lastName || ''}`.trim(),
+              subject: `Nouveau message de contact — ${subject}`,
+              htmlContent: `
+                <p>Un nouveau message de contact a été reçu sur la plateforme.</p>
+                <p><strong>Expéditeur :</strong> ${escapeHtml(name)} (${escapeHtml(email)})</p>
+                ${phone ? `<p><strong>Téléphone :</strong> ${escapeHtml(phone)}</p>` : ''}
+                <p><strong>Sujet :</strong> ${escapeHtml(subject)}</p>
+                <p><strong>Message :</strong><br/>${escapeHtml(message).replace(/\n/g, '<br/>')}</p>
+                <p>Vous pouvez consulter et traiter ce message depuis l’espace d’administration.</p>
+              `,
+              textContent: `Un nouveau message de contact a été reçu.
+
+Expéditeur : ${name} (${email})
+${phone ? `Téléphone : ${phone}\n` : ''}Sujet : ${subject}
+Message : ${message}
+
+Vous pouvez consulter et traiter ce message depuis l’espace d’administration.`,
+            });
+          }
         }
         console.log(`✅ Notifications envoyées à ${admins.length} admin(s)`);
       } catch (notifError) {
@@ -165,31 +187,7 @@ router.post(
         // Ne pas bloquer l'envoi du message si les notifications échouent
       }
 
-      // Notifier le superadmin principal par SMS quand un message de contact est reçu
-      try {
-        const superadmin = await User.findOne({ role: 'superadmin', isActive: true }).sort({ createdAt: 1 });
-        if (superadmin && superadmin.phone) {
-          const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
-          const superPhone = formatPhoneNumber(superadmin.phone);
-          if (superPhone) {
-            await sendNotificationSMS(
-              superPhone,
-              'message_received',
-              {
-                senderName: name,
-                subject,
-              },
-              {
-                userId: superadmin._id.toString(),
-                context: 'contact',
-                contextId: newMessage._id.toString(),
-              }
-            );
-          }
-        }
-      } catch (smsError) {
-        console.error('⚠️ Erreur lors de l\'envoi du SMS au superadmin pour un message de contact:', smsError);
-      }
+      // Pas de SMS aux admins : notification in-app + push (hook Notification) suffisent.
 
       res.json({
         success: true,
@@ -553,7 +551,6 @@ router.post(
       }
 
       const Dossier = require('../models/Dossier');
-      const { sendNotificationSMS } = require('../sendSMS');
 
       // Extraire nom et prénom du message
       const nameParts = (message.name || '').split(' ');
@@ -582,28 +579,29 @@ router.post(
       message.repondu = true;
       await message.save();
 
-      // Envoyer une notification SMS si un numéro de téléphone est disponible
-      try {
-        const phoneNumber = message.phone || req.body.clientTelephone;
-        if (phoneNumber) {
-          await sendNotificationSMS(
-            phoneNumber,
-            'dossier_created',
-            {
-              dossierTitle: newDossier.titre || 'Votre dossier',
-              dossierId: newDossier.numero || newDossier._id.toString()
-            },
-            {
-              context: 'dossier',
-              contextId: newDossier._id.toString(),
-              skipPreferences: true // Toujours envoyer ce SMS car c'est une confirmation importante
-            }
-          );
-          console.log(`✅ SMS envoyé à ${phoneNumber} pour la création du dossier ${newDossier.numero || newDossier._id}`);
+      // Envoyer un e-mail de confirmation de création de dossier
+      if (message.email) {
+        try {
+          await sendTransactionalEmail({
+            to: message.email,
+            toName: message.name || '',
+            subject: `Votre dossier a été créé — Référence ${newDossier.numero || newDossier._id}`,
+            htmlContent: `
+              <p>Nous vous confirmons la création de votre dossier suite à votre message de contact.</p>
+              <p><strong>Référence du dossier :</strong> ${escapeHtml(newDossier.numero || newDossier._id.toString())}</p>
+              <p><strong>Intitulé :</strong> ${escapeHtml(newDossier.titre || 'Sans titre')}</p>
+              <p>Nos équipes prendront en charge votre demande et vous informeront des prochaines étapes depuis votre espace Ada Papers.</p>
+            `,
+            textContent: `Nous vous confirmons la création de votre dossier suite à votre message de contact.
+
+Référence du dossier : ${newDossier.numero || newDossier._id.toString()}
+Intitulé : ${newDossier.titre || 'Sans titre'}
+
+Nos équipes prendront en charge votre demande et vous informeront des prochaines étapes depuis votre espace Ada Papers.`,
+          });
+        } catch (mailErr) {
+          console.error('⚠️ Erreur lors de l\'envoi de l\'email de confirmation dossier:', mailErr);
         }
-      } catch (smsError) {
-        console.error('⚠️ Erreur lors de l\'envoi du SMS:', smsError);
-        // Ne pas bloquer la création du dossier si le SMS échoue
       }
 
       // Notifier tous les admins de la création du dossier

@@ -10,6 +10,7 @@ const { getFrontendOriginsList } = require('./utils/frontendOrigins');
 dotenv.config();
 
 const app = express();
+let isDatabaseConnected = false;
 
 /* =========================
    MIDDLEWARE
@@ -56,16 +57,18 @@ const connectDB = async () => {
     const mongoURI = process.env.MONGODB_URI;
 
     if (!mongoURI) {
-      console.error('❌ MONGODB_URI manquant');
-      process.exit(1);
+      console.warn('⚠️ MONGODB_URI manquant — démarrage en mode dégradé (sans base de données)');
+      isDatabaseConnected = false;
+      return;
     }
 
     const conn = await mongoose.connect(mongoURI);
 
     console.log(`✅ MongoDB connecté : ${conn.connection.host}`);
+    isDatabaseConnected = true;
   } catch (error) {
-    console.error('❌ Erreur MongoDB:', error.message);
-    process.exit(1);
+    console.warn(`⚠️ MongoDB indisponible (${error.message}) — démarrage en mode dégradé`);
+    isDatabaseConnected = false;
   }
 };
 
@@ -151,6 +154,13 @@ try {
 } catch (e) {}
 
 try {
+  app.use('/api/email', require('./routes/email'));
+  console.log('✅ Route /api/email enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/email:', e.message);
+}
+
+try {
   app.use('/api/creneaux', require('./routes/creneaux'));
   console.log('✅ Route /api/creneaux enregistrée');
 } catch (e) {
@@ -198,6 +208,18 @@ try {
 
 app.use(require('./middleware/errorHandler'));
 
+/* =========================
+   HEALTHCHECK
+========================= */
+
+app.get("/api-status", (req, res) => {
+  res.json({
+    success: true,
+    message: "API active",
+    database: isDatabaseConnected ? "connectée" : "indisponible"
+  });
+});
+
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -215,9 +237,20 @@ const startServer = async () => {
 
     const PORT = process.env.PORT || 3005;
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`🚀 Serveur démarré sur le port ${PORT}`);
       console.log(`📡 API: /api`);
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(
+          `❌ Port ${PORT} déjà utilisé (EADDRINUSE). Arrêtez l'autre instance ou changez PORT dans .env.`
+        );
+        console.error('   Windows: netstat -ano | findstr :' + PORT);
+        process.exit(1);
+      }
+      throw err;
     });
 
   } catch (error) {
@@ -227,15 +260,3 @@ const startServer = async () => {
 };
 
 startServer();
-
-/* =========================
-   HEALTHCHECK
-========================= */
-
-app.get("/api-status", (req, res) => {
-  res.json({
-    success: true,
-    message: "API active",
-    database: "connectée"
-  });
-});

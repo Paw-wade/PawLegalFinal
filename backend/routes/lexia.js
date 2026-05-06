@@ -6,6 +6,7 @@ const { searchAndCompose, getKnowledgeDir } = require('../services/lexiaInternal
 
 const router = express.Router();
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /** Aligné sur `User.role` (models/User.js) — tout compte actif connecté peut utiliser LEXIA. */
 const LEXIA_ALLOWED_ROLES = [
@@ -21,7 +22,33 @@ const LEXIA_ALLOWED_ROLES = [
   'partenaire',
 ];
 
-const VALID_PROVIDERS = new Set(['auto', 'anthropic', 'internal']);
+const VALID_PROVIDERS = new Set(['auto', 'anthropic', 'gemini', 'internal']);
+
+/** Heuristique sur la requête de l'outil web_search (affichage UI LEXIA). */
+const LEXIA_SOURCE_TERM_GROUPS = [
+  { key: 'legifrance', terms: ['legifrance', 'légifrance', 'ceseda', 'crpa'] },
+  { key: 'conseil-etat', terms: ["conseil d'état", 'conseil-etat', 'arianeweb', 'conseil etat'] },
+  { key: 'caa', terms: ['caa ', "cour administrative d'appel"] },
+  { key: 'ta', terms: ['tribunal administratif'] },
+  { key: 'cassation', terms: ['cassation', 'courdecassation', 'judilibre'] },
+  { key: 'pappers', terms: ['pappers', 'justice.pappers'] },
+  { key: 'eurlex', terms: ['eur-lex', 'eurlex', 'cjue', 'directive ue', 'règlement ue'] },
+  { key: 'cedh', terms: ['cedh', 'hudoc', 'article 8', 'cour européenne des droits'] },
+  { key: 'gisti', terms: ['gisti'] },
+  { key: 'datagouv', terms: ['data.gouv', 'datagouv', 'open data décisions'] },
+  { key: 'accords', terms: ['accord franco', 'bilatéral', 'ankara', 'cedeao', 'convention franco'] },
+];
+
+function mergeSourcesFromToolUses(toolUses, existing) {
+  const set = new Set(Array.isArray(existing) ? existing : []);
+  for (const tu of toolUses) {
+    const q = String(tu?.input?.query ?? tu?.input?.q ?? '').toLowerCase();
+    for (const { key, terms } of LEXIA_SOURCE_TERM_GROUPS) {
+      if (terms.some((t) => q.includes(t))) set.add(key);
+    }
+  }
+  return [...set];
+}
 
 function extractTextFromContent(content) {
   if (typeof content === 'string') return content;
@@ -47,9 +74,12 @@ function resolveEffectiveProvider(body) {
   const fromBody = body?.provider != null ? normalizeProvider(body.provider) : null;
   const fromEnv = normalizeProvider(process.env.LEXIA_PROVIDER);
   const base = fromBody || fromEnv;
-  const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  const hasAnthropicKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY);
   if (base === 'auto') {
-    return hasKey ? 'anthropic' : 'internal';
+    if (hasAnthropicKey) return 'anthropic';
+    if (hasGeminiKey) return 'gemini';
+    return 'internal';
   }
   return base;
 }
@@ -95,6 +125,8 @@ async function runAnthropicLexia(trimmed) {
   let conversation = [...trimmed];
   let searched = false;
   let lastText = '';
+  let sourcesFound = [];
+  let totalToolUses = 0;
 
   for (let turn = 0; turn < 10; turn += 1) {
     const payload = {
@@ -124,14 +156,21 @@ async function runAnthropicLexia(trimmed) {
 
     const stop = data.stop_reason;
     if (stop === 'end_turn' || stop === 'max_tokens') {
-      return { text: lastText || '(Réponse vide)', searched };
+      return { text: lastText || '(Réponse vide)', searched, sourcesFound, totalToolUses };
     }
 
     if (stop === 'tool_use' && Array.isArray(blocks)) {
       searched = true;
       const toolUses = blocks.filter((b) => b?.type === 'tool_use' && b?.id);
+      totalToolUses += toolUses.length;
+      sourcesFound = mergeSourcesFromToolUses(toolUses, sourcesFound);
       if (toolUses.length === 0) {
-        return { text: lastText || 'Réponse interrompue (outil sans identifiant).', searched };
+        return {
+          text: lastText || 'Réponse interrompue (outil sans identifiant).',
+          searched,
+          sourcesFound,
+          totalToolUses,
+        };
       }
       const toolResults = toolUses.map((tu) => ({
         type: 'tool_result',
@@ -143,10 +182,71 @@ async function runAnthropicLexia(trimmed) {
       continue;
     }
 
-    return { text: lastText || 'Fin de génération inattendue.', searched };
+    return { text: lastText || 'Fin de génération inattendue.', searched, sourcesFound, totalToolUses };
   }
 
-  return { text: lastText || 'Limite d’échanges avec le modèle atteinte.', searched };
+  return {
+    text: lastText || 'Limite d’échanges avec le modèle atteinte.',
+    searched,
+    sourcesFound,
+    totalToolUses,
+  };
+}
+
+async function runGeminiLexia(trimmed) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    const err = new Error('MISSING_GEMINI_API_KEY');
+    err.code = 'MISSING_GEMINI_API_KEY';
+    throw err;
+  }
+
+  const model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+  const endpoint = `${GEMINI_API_BASE}/${encodeURIComponent(model)}:generateContent`;
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-goog-api-key': key,
+    },
+    body: JSON.stringify({
+      contents: trimmed.map((m) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      })),
+      generationConfig: {
+        temperature: 0.2,
+      },
+    }),
+  });
+
+  const raw = await res.text();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    const err = new Error(raw.slice(0, 500) || 'Reponse Gemini invalide');
+    err.status = res.status;
+    throw err;
+  }
+
+  if (!res.ok) {
+    const msg = data?.error?.message || raw.slice(0, 800);
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
+
+  const parts = data?.candidates?.[0]?.content?.parts;
+  const text = Array.isArray(parts)
+    ? parts
+        .map((p) => (typeof p?.text === 'string' ? p.text : ''))
+        .filter(Boolean)
+        .join('\n')
+        .trim()
+    : '';
+
+  return { text: text || '(Reponse vide)' };
 }
 
 router.get('/config', protect, authorize(...LEXIA_ALLOWED_ROLES), (req, res) => {
@@ -155,6 +255,7 @@ router.get('/config', protect, authorize(...LEXIA_ALLOWED_ROLES), (req, res) => 
   res.json({
     envProvider: normalizeProvider(process.env.LEXIA_PROVIDER),
     anthropicConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+    geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
     ...(isStaff
       ? {
           knowledgeDir,
@@ -199,6 +300,13 @@ router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) =>
         provider: 'anthropic',
       });
     }
+    if (effective === 'gemini' && !process.env.GEMINI_API_KEY) {
+      return res.status(503).json({
+        error:
+          'Mode Gemini demande mais **GEMINI_API_KEY** est absente. Utilisez le mode **interne** ou **auto** sans clé, ou definissez la variable.',
+        provider: 'gemini',
+      });
+    }
 
     if (effective === 'internal') {
       const knowledgeDir = getKnowledgeDir();
@@ -213,10 +321,23 @@ router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) =>
       });
     }
 
-    const { text, searched } = await runAnthropicLexia(trimmed);
+    if (effective === 'gemini') {
+      const { text } = await runGeminiLexia(trimmed);
+      return res.json({
+        text,
+        searched: false,
+        provider: 'gemini',
+        resolvedProvider: 'gemini',
+        requestedProvider: requested || normalizeProvider(process.env.LEXIA_PROVIDER),
+      });
+    }
+
+    const { text, searched, sourcesFound, totalToolUses } = await runAnthropicLexia(trimmed);
     return res.json({
       text,
       searched,
+      sourcesFound,
+      totalToolUses,
       provider: 'anthropic',
       resolvedProvider: 'anthropic',
       requestedProvider: requested || normalizeProvider(process.env.LEXIA_PROVIDER),
@@ -226,6 +347,12 @@ router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) =>
       return res.status(503).json({
         error:
           'Clé API Anthropic absente : définissez ANTHROPIC_API_KEY sur le serveur backend, ou utilisez le mode interne (LEXIA_PROVIDER=internal ou auto sans clé).',
+      });
+    }
+    if (e.code === 'MISSING_GEMINI_API_KEY') {
+      return res.status(503).json({
+        error:
+          'Cle API Gemini absente : definissez GEMINI_API_KEY sur le serveur backend, ou utilisez le mode interne (LEXIA_PROVIDER=internal ou auto sans cle).',
       });
     }
     return res.status(502).json({

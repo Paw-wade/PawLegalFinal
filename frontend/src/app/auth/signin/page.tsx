@@ -242,9 +242,6 @@ export default function SignInPage() {
             <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-foreground mb-2">Connexion</h1>
-                <p className="text-muted-foreground">
-                  Connectez-vous à votre compte Ada Papers
-                </p>
               </div>
             </div>
 
@@ -261,9 +258,6 @@ export default function SignInPage() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 space-y-2">
-                <p className="text-xs text-blue-900/80 text-center font-medium">
-                  Connexion rapide avec Google
-                </p>
                 <Button
                   type="button"
                   variant="outline"

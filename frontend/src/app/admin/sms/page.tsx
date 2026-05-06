@@ -133,8 +133,6 @@ export default function AdminSmsPage() {
     }
     if (activeTab === 'templates') {
       loadTemplates();
-      // Initialiser les templates par défaut s'ils n'existent pas
-      initDefaultTemplates();
     } else if (activeTab === 'history') {
       loadHistory();
       loadStats();
@@ -143,27 +141,14 @@ export default function AdminSmsPage() {
     }
   }, [status, session, activeTab, searchTemplate, categoryFilter, isActiveFilter, historyPage, historyFilters]);
 
-  const initDefaultTemplates = async () => {
-    try {
-      const res = await smsTemplatesAPI.getTemplates();
-      // Si aucun template n'existe, initialiser les templates par défaut
-      if (res.data.count === 0) {
-        try {
-          await smsTemplatesAPI.initDefaults();
-          // Recharger les templates après initialisation
-          setTimeout(() => loadTemplates(), 500);
-        } catch (error) {
-          console.error('Erreur lors de l\'initialisation des templates:', error);
-        }
-      }
-    } catch (error) {
-      console.error('Erreur lors de la vérification des templates:', error);
-    }
-  };
-
   const loadTemplates = async () => {
     try {
       setLoadingTemplates(true);
+      try {
+        await smsTemplatesAPI.initDefaults();
+      } catch (syncErr) {
+        console.warn('Synchronisation des modèles SMS (init-defaults):', syncErr);
+      }
       const params: any = {};
       if (searchTemplate) params.search = searchTemplate;
       if (categoryFilter) params.category = categoryFilter;
@@ -212,6 +197,11 @@ export default function AdminSmsPage() {
   const loadSendData = async () => {
     try {
       setLoadingSendData(true);
+      try {
+        await smsTemplatesAPI.initDefaults();
+      } catch (syncErr) {
+        console.warn('Synchronisation des modèles SMS:', syncErr);
+      }
       const [tplRes, usersRes] = await Promise.all([
         smsTemplatesAPI.getTemplates({}),
         userAPI.getAllUsers(),
@@ -574,6 +564,11 @@ export default function AdminSmsPage() {
           <div className="p-6">
             {activeTab === 'templates' ? (
               <div className="space-y-6">
+                <p className="text-sm text-muted-foreground rounded-lg border border-border bg-muted/30 px-3 py-2">
+                  La liste inclut tous les codes utilisés par l&apos;application. À l&apos;ouverture de cet onglet, les modèles
+                  système manquants sont ajoutés automatiquement (sans écraser vos textes déjà enregistrés). Utilisez le bouton
+                  « Synchroniser » pour forcer une mise à jour après déploiement.
+                </p>
                 {/* Filters */}
                 <div className="flex flex-wrap gap-4 items-end">
                   <div className="flex-1 min-w-[200px]">
@@ -619,13 +614,13 @@ export default function AdminSmsPage() {
                         try {
                           await smsTemplatesAPI.initDefaults();
                           loadTemplates();
-                          alert('Templates par défaut initialisés avec succès !');
+                          alert('Modèles système synchronisés : les entrées manquantes ont été ajoutées (les modèles existants ne sont pas écrasés).');
                         } catch (error: any) {
                           alert(error.response?.data?.message || 'Erreur lors de l\'initialisation');
                         }
                       }}
                     >
-                      🔄 Initialiser les templates par défaut
+                      🔄 Synchroniser les modèles système
                     </Button>
                     <Button onClick={() => setShowCreateModal(true)}>+ Nouveau Template</Button>
                   </div>

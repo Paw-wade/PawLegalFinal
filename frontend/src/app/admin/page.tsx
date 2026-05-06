@@ -24,34 +24,8 @@ export default function AdminDashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   
-  // Vérifier le délai de 7 jours pour la complétion du profil (sauf pour admin/superadmin)
-  useEffect(() => {
-    if (status === 'authenticated' && session) {
-      const userRole = (session.user as any)?.role;
-      
-      // Vérifier le délai de 7 jours pour la complétion du profil (sauf pour admin/superadmin)
-      if (userRole !== 'admin' && userRole !== 'superadmin') {
-        const profilComplete = (session.user as any)?.profilComplete;
-        if (!profilComplete) {
-          // Charger les informations utilisateur pour vérifier le délai
-          userAPI.getProfile().then(res => {
-            if (res.data.success && res.data.user) {
-              if (res.data.user.createdAt) {
-                const daysSinceCreation = Math.floor((Date.now() - new Date(res.data.user.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-                if (daysSinceCreation >= 7) {
-                  // Le délai est dépassé, rediriger vers la page de complétion avec un message
-                  router.push('/auth/complete-profile?expired=true');
-                  return;
-                }
-              }
-            }
-          }).catch(() => {
-            // En cas d'erreur, continuer
-          });
-        }
-      }
-    }
-  }, [session, status, router]);
+  // Anciennement : vérification du délai de 7 jours pour la complétion du profil.
+  // Cette logique est supprimée : plus de blocage auto après 7 jours.
   const [stats, setStats] = useState({
     utilisateurs: 0,
     dossiers: 0,

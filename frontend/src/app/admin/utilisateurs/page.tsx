@@ -691,6 +691,12 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                         <option value="client">Client</option>
                         <option value="admin">Admin</option>
                         <option value="superadmin">Super Admin</option>
+                        <option value="assistant">Assistant</option>
+                        <option value="comptable">Comptable</option>
+                        <option value="secretaire">Secretaire</option>
+                        <option value="juriste">Juriste</option>
+                        <option value="stagiaire">Stagiaire</option>
+                        <option value="visiteur">Visiteur</option>
                         <option value="partenaire">Partenaire</option>
                       </select>
                     </div>
@@ -1515,8 +1521,9 @@ export default function AdminUtilisateursPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              setSelectedUserId(user._id || user.id);
-                              setIsModalOpen(true);
+                              const targetId = user._id || user.id;
+                              if (!targetId) return;
+                              router.push(`/admin/utilisateurs/${encodeURIComponent(targetId)}`);
                             }}
                           >
                             Voir / Modifier

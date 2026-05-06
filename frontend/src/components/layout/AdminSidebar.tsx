@@ -18,6 +18,7 @@ import {
   Star,
   Bell,
   Smartphone,
+  Mail,
   Image,
   FileEdit,
   ScrollText,
@@ -58,10 +59,11 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/temoignages', label: 'Témoignages', icon: Star },
   { href: '/admin/notifications', label: 'Notifications', icon: Bell },
   { href: '/admin/sms', label: 'SMS', icon: Smartphone },
+  { href: '/admin/emails', label: 'Emails', icon: Mail },
   { href: '/admin/carousel', label: 'Carrousel home', icon: Image },
   { href: '/admin/cms', label: 'CMS', icon: FileEdit },
   { href: '/admin/recours', label: 'Documentation', icon: FolderOpen, roles: ['admin', 'superadmin'] },
-  { href: '/admin/lexia', label: 'LEXIA (IA)', icon: Scale, roles: ['admin', 'superadmin'] },
+  { href: '/admin/lexia', label: 'Ada AI', icon: Scale, roles: ['admin', 'superadmin'] },
   { href: '/admin/logs', label: 'Logs', icon: ScrollText, roles: ['superadmin'] },
   { href: '/admin/corbeille', label: 'Corbeille', icon: Trash2 },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
@@ -164,7 +166,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 z-40 bg-neutral-900/25 backdrop-blur-[2px] lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />

@@ -3,7 +3,8 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const RendezVous = require('../models/RendezVous');
 const { protect, authorize } = require('../middleware/auth');
-const { sendNotificationSMS } = require('../sendSMS');
+const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
+const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 
 /** Libellés des motifs (formulaire public) — pour les notifications admin. */
 const MOTIF_RDV_LABELS = {
@@ -24,6 +25,19 @@ const MOTIF_RDV_LABELS = {
 function getMotifRdvLabel(motifKey) {
   const k = String(motifKey || '').trim();
   return MOTIF_RDV_LABELS[k] || k || 'Non renseigné';
+}
+
+async function resolveRdvClientEmail(rendezVous) {
+  if (rendezVous.email && String(rendezVous.email).trim()) return String(rendezVous.email).trim();
+  const u = rendezVous.user;
+  if (u && typeof u === 'object' && u.email) return String(u.email).trim();
+  const uid = u && (u._id || u);
+  if (uid) {
+    const UserModel = require('../models/User');
+    const doc = await UserModel.findById(uid).select('email').lean();
+    if (doc?.email) return String(doc.email).trim();
+  }
+  return null;
 }
 
 // @route   POST /api/appointments
@@ -203,41 +217,92 @@ router.post(
         console.error('⚠️ Erreur lors de la création des notifications de rendez-vous (non bloquant):', notifError);
       }
 
-      // Si un admin a créé un rendez-vous pour un client, envoyer aussi un SMS au client
+      // Emails : demandeur + équipe (priorité email, pas de SMS)
+      try {
+        const dateLabelReq = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+        const motifLabelMail = getMotifRdvLabel(rendezVous.motif);
+        // Évite un doublon avec le mail « RDV planifié » lorsque c’est l’admin qui réserve pour un client.
+        if (!(bookingByAdmin && userId)) {
+          await sendTransactionalEmail({
+            to: email,
+            toName: `${prenom || ''} ${nom}`.trim() || 'Client',
+            subject: 'Demande de rendez-vous bien reçue — Ada Papers',
+            htmlContent: `<p>Bonjour ${escapeHtml(prenom || nom)},</p><p>Nous accusons réception de votre demande de rendez-vous.</p><p><strong>Date souhaitée :</strong> ${escapeHtml(dateLabelReq)} à ${escapeHtml(heure)}.</p><p><strong>Motif déclaré :</strong> ${escapeHtml(motifLabelMail)}.</p><p>Notre équipe va examiner votre demande et vous adressera une confirmation, ou une proposition d’ajustement de créneau, par e-mail dans les meilleurs délais.</p><p style="margin-top:16px;font-size:13px;color:#555;">Accès à votre espace : ${escapeHtml(getPrimaryFrontendUrl())}</p>`,
+            textContent: `Bonjour ${prenom || nom || ''},
+
+Nous accusons réception de votre demande de rendez-vous.
+
+Date souhaitée : ${dateLabelReq} à ${heure}
+Motif déclaré : ${motifLabelMail}
+
+Notre équipe va examiner votre demande et vous adressera une confirmation, ou une proposition d’ajustement de créneau, par e-mail dans les meilleurs délais.
+
+Accès à votre espace : ${getPrimaryFrontendUrl()}`,
+          });
+        }
+        const adminsMail = await User.find({
+          role: { $in: ['admin', 'superadmin'] },
+          isActive: { $ne: false },
+        })
+          .select('email firstName')
+          .lean();
+        for (const adm of adminsMail) {
+          if (!adm.email) continue;
+          await sendTransactionalEmail({
+            to: adm.email,
+            toName: adm.firstName || '',
+            subject: `Nouvelle demande de RDV — ${prenom || ''} ${nom || ''}`.trim(),
+            htmlContent: `<p>Une nouvelle demande de rendez-vous a été soumise.</p><p><strong>Demandeur :</strong> ${escapeHtml(prenom)} ${escapeHtml(nom)}<br/><strong>E-mail :</strong> ${escapeHtml(email)}${telephone ? `<br/><strong>Téléphone :</strong> ${escapeHtml(telephone)}` : ''}</p><p><strong>Date/heure demandées :</strong> ${escapeHtml(dateLabelReq)} à ${escapeHtml(heure)}.</p><p><strong>Motif :</strong> ${escapeHtml(motifLabelMail)}.</p><p>Merci de traiter cette demande depuis l’espace d’administration.</p>`,
+            textContent: `Une nouvelle demande de rendez-vous a été soumise.
+
+Demandeur : ${prenom} ${nom}
+E-mail : ${email}${telephone ? `\nTéléphone : ${telephone}` : ''}
+Date/heure demandées : ${dateLabelReq} à ${heure}
+Motif : ${motifLabelMail}
+
+Merci de traiter cette demande depuis l’espace d’administration.`,
+          });
+        }
+      } catch (mailErr) {
+        console.error('⚠️ Emails RDV (création) non bloquant:', mailErr);
+      }
+
+      // Si un admin a créé un rendez-vous pour un client : notification par email uniquement
       if (bookingByAdmin && userId) {
         try {
-          const client = await User.findById(userId).select('firstName lastName phone');
-          const phone = client?.phone;
-          if (phone) {
+          const client = await User.findById(userId).select('firstName lastName email');
+          const clientMail = client?.email && String(client.email).trim();
+          if (clientMail) {
             const name =
               `${client?.firstName || ''} ${client?.lastName || ''}`.trim() ||
               `${prenom || ''} ${nom || ''}`.trim() ||
               'Client';
-
             const dateLabelSms = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
               day: 'numeric',
               month: 'long',
-              year: 'numeric'
+              year: 'numeric',
             });
+            await sendTransactionalEmail({
+              to: clientMail,
+              toName: name,
+              subject: 'Rendez-vous enregistré — Ada Papers',
+              htmlContent: `<p>Bonjour ${escapeHtml(name)},</p><p>Un rendez-vous a été planifié à votre nom.</p><p><strong>Date :</strong> ${escapeHtml(dateLabelSms)}<br/><strong>Heure :</strong> ${escapeHtml(rendezVous.heure)}</p><p>Ce rendez-vous est actuellement en attente de validation finale. Vous recevrez une confirmation par e-mail dès sa prise en charge.</p>`,
+              textContent: `Bonjour ${name},
 
-            await sendNotificationSMS(
-              phone,
-              'appointment_created',
-              {
-                name,
-                date: dateLabelSms,
-                time: rendezVous.heure
-              },
-              {
-                userId: userId.toString(),
-                skipPreferences: true,
-                context: 'appointment',
-                contextId: rendezVous._id.toString()
-              }
-            );
+Un rendez-vous a été planifié à votre nom.
+Date : ${dateLabelSms}
+Heure : ${rendezVous.heure}
+
+Ce rendez-vous est actuellement en attente de validation finale. Vous recevrez une confirmation par e-mail dès sa prise en charge.`,
+            });
           }
-        } catch (smsErr) {
-          console.error('⚠️ Erreur lors de l\'envoi du SMS de création de RDV (non bloquant):', smsErr);
+        } catch (mailErr) {
+          console.error('⚠️ Email création RDV (admin) non bloquant:', mailErr);
         }
       }
 
@@ -615,28 +680,30 @@ router.patch(
             }
           });
 
-          // Envoyer un SMS si le téléphone est disponible
-          if (rendezVous.telephone) {
-            try {
+          try {
+            const clientMail = await resolveRdvClientEmail(rendezVous);
+            if (clientMail) {
               const dateFormatted = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
-                day: 'numeric'
+                day: 'numeric',
               });
-              await sendNotificationSMS(rendezVous.telephone, 'appointment_cancelled', {
-                name: `${rendezVous.prenom} ${rendezVous.nom}`,
-                date: dateFormatted,
-                time: rendezVous.heure
-              }, {
-                userId: rendezVous.user?._id || rendezVous.user,
-                context: 'appointment',
-                contextId: rendezVous._id.toString()
+              await sendTransactionalEmail({
+                to: clientMail,
+                toName: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim(),
+                subject: 'Rendez-vous annulé — Ada Papers',
+                htmlContent: `<p>Bonjour,</p><p>Nous confirmons la prise en compte de votre annulation de rendez-vous.</p><p><strong>Créneau annulé :</strong> ${escapeHtml(dateFormatted)} à ${escapeHtml(rendezVous.heure)}.</p><p>Si vous souhaitez reprendre rendez-vous, vous pouvez soumettre une nouvelle demande depuis votre espace client.</p>`,
+                textContent: `Bonjour,
+
+Nous confirmons la prise en compte de votre annulation de rendez-vous.
+Créneau annulé : ${dateFormatted} à ${rendezVous.heure}.
+
+Si vous souhaitez reprendre rendez-vous, vous pouvez soumettre une nouvelle demande depuis votre espace client.`,
               });
-              console.log(`✅ SMS d'annulation envoyé à ${rendezVous.telephone}`);
-            } catch (smsError) {
-              console.error('⚠️ Erreur lors de l\'envoi du SMS (non bloquant):', smsError.message);
             }
+          } catch (mailErr) {
+            console.error('⚠️ Email annulation RDV (non bloquant):', mailErr);
           }
         } catch (notifError) {
           console.error('Erreur lors de la création de la notification:', notifError);
@@ -834,28 +901,30 @@ router.put(
               }
             });
 
-            // Envoyer un SMS si le téléphone est disponible
-            if (rendezVous.telephone) {
-              try {
+            try {
+              const clientMail = await resolveRdvClientEmail(rendezVous);
+              if (clientMail) {
                 const dateFormatted = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
                   weekday: 'long',
                   year: 'numeric',
                   month: 'long',
-                  day: 'numeric'
+                  day: 'numeric',
                 });
-                await sendNotificationSMS(rendezVous.telephone, 'appointment_updated', {
-                  name: `${rendezVous.prenom} ${rendezVous.nom}`,
-                  date: dateFormatted,
-                  time: rendezVous.heure
-                }, {
-                  userId: rendezVous.user?._id || rendezVous.user,
-                  context: 'appointment',
-                  contextId: rendezVous._id.toString()
+                await sendTransactionalEmail({
+                  to: clientMail,
+                  toName: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim(),
+                  subject: 'Rendez-vous modifié — Ada Papers',
+                  htmlContent: `<p>Bonjour,</p><p>Votre rendez-vous a fait l’objet d’une mise à jour.</p><p>${escapeHtml(notificationMessage)}</p><p>Nous vous invitons à vérifier les détails actualisés dans votre espace client.</p>`,
+                  textContent: `Bonjour,
+
+Votre rendez-vous a fait l’objet d’une mise à jour.
+${notificationMessage}
+
+Nous vous invitons à vérifier les détails actualisés dans votre espace client.`,
                 });
-                console.log(`✅ SMS de modification envoyé à ${rendezVous.telephone}`);
-              } catch (smsError) {
-                console.error('⚠️ Erreur lors de l\'envoi du SMS (non bloquant):', smsError.message);
               }
+            } catch (mailErr) {
+              console.error('⚠️ Email modification RDV (non bloquant):', mailErr);
             }
           }
         } catch (notifError) {
@@ -996,46 +1065,45 @@ router.patch(
         }
       }
 
-      // SMS de confirmation/annulation : doit partir même si rendez-vous.user est manquant.
+      // Email de confirmation / annulation (priorité email — pas de SMS en doublon)
       if (statut && statut !== oldStatut && (statut === 'confirme' || statut === 'annule')) {
         try {
-          let smsPhone = rendezVous.telephone || rendezVous.user?.phone || null;
-          if (!smsPhone && rendezVous.user?._id) {
-            const UserModel = require('../models/User');
-            const u = await UserModel.findById(rendezVous.user._id).select('phone');
-            if (u?.phone) smsPhone = u.phone;
-          }
-
-          if (!smsPhone) {
-            console.warn(`⚠️ SMS non envoyé (aucun téléphone) pour le rendez-vous ${rendezVous._id}`);
+          const clientMail = await resolveRdvClientEmail(rendezVous);
+          if (!clientMail) {
+            console.warn(`⚠️ Email RDV non envoyé (pas d’adresse) pour ${rendezVous._id}`);
           } else {
             const dateFormatted = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
               weekday: 'long',
               year: 'numeric',
               month: 'long',
-              day: 'numeric'
+              day: 'numeric',
             });
-            const smsData = {
-              name: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim() || 'Client',
-              date: dateFormatted,
-              time: rendezVous.heure
-            };
-            await sendNotificationSMS(
-              smsPhone,
-              statut === 'confirme' ? 'appointment_confirmed' : 'appointment_cancelled',
-              smsData,
-              {
-                userId: rendezVous.user?._id || rendezVous.user || undefined,
-                skipPreferences: true,
-                context: 'appointment',
-                contextId: rendezVous._id.toString()
-              }
-            );
-            console.log(`✅ SMS envoyé à ${smsPhone} pour le rendez-vous ${rendezVous._id}`);
+            const isOk = statut === 'confirme';
+            await sendTransactionalEmail({
+              to: clientMail,
+              toName: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim() || 'Client',
+              subject: isOk ? 'Rendez-vous confirmé — Ada Papers' : 'Rendez-vous annulé — Ada Papers',
+              htmlContent: isOk
+                ? `<p>Bonjour,</p><p>Nous vous confirmons que votre rendez-vous est désormais validé.</p><p><strong>Date :</strong> ${escapeHtml(dateFormatted)}<br/><strong>Heure :</strong> ${escapeHtml(rendezVous.heure)}</p><p>Merci de vous présenter à l’heure prévue avec vos documents utiles.</p>`
+                : `<p>Bonjour,</p><p>Nous vous informons que votre rendez-vous prévu a été annulé.</p><p><strong>Créneau concerné :</strong> ${escapeHtml(dateFormatted)} à ${escapeHtml(rendezVous.heure)}</p><p>Vous pouvez effectuer une nouvelle demande de rendez-vous à votre convenance.</p>`,
+              textContent: isOk
+                ? `Bonjour,
+
+Nous vous confirmons que votre rendez-vous est désormais validé.
+Date : ${dateFormatted}
+Heure : ${rendezVous.heure}
+
+Merci de vous présenter à l’heure prévue avec vos documents utiles.`
+                : `Bonjour,
+
+Nous vous informons que votre rendez-vous prévu a été annulé.
+Créneau concerné : ${dateFormatted} à ${rendezVous.heure}
+
+Vous pouvez effectuer une nouvelle demande de rendez-vous à votre convenance.`,
+            });
           }
-        } catch (smsError) {
-          console.error('⚠️ Erreur lors de l\'envoi du SMS (non bloquant):', smsError.message);
-          // Ne pas bloquer la réponse si l'envoi de SMS échoue
+        } catch (mailErr) {
+          console.error('⚠️ Email confirmation/annulation RDV (non bloquant):', mailErr);
         }
       }
 

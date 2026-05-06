@@ -2,10 +2,89 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const OTP = require('../models/OTP');
 const User = require('../models/User');
-const { sendSMS, formatPhoneNumber } = require('../sendSMS');
+const EmailTemplate = require('../models/EmailTemplate');
+const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+const { sendTransactionalEmailDetailed } = require('../utils/emailNotifications');
 const jwt = require('jsonwebtoken');
 
 const router = express.Router();
+const WELCOME_TEMPLATE_CODE = 'account_welcome';
+const OTP_WELCOME_FALLBACK = {
+  subject: 'Bienvenue sur Ada Papers, {{firstName}} !',
+  htmlContent:
+    '<p>Bienvenue sur Ada Papers, {{firstName}} !</p><p>Nous sommes ravis de vous accueillir. Votre espace personnel est maintenant actif.</p><p><strong>CE QUE VOUS POUVEZ FAIRE DÈS MAINTENANT</strong></p><p>📁 <strong>Création et suivi de dossier</strong><br/>Créez un dossier d’accompagnement et suivez l’avancement de votre dossier en temps réel, de la création jusqu’à la finalisation.</p><p>⏱️ <strong>Calculateur de délais</strong><br/>Anticipez vos échéances et planifiez vos démarches sereinement.</p><p>🤖 <strong>Ada AI</strong><br/>Obtenez des réponses claires et vérifiées, corroborées par des décisions de justice et adaptées à votre situation. Recevez également des recommandations sur les démarches à suivre.</p><p>💬 <strong>Accompagnement humain</strong><br/>Notre équipe reste disponible à chaque étape depuis votre espace.</p><p><strong>Accédez à votre espace :</strong> https://adapapers.fr</p><p>Cordialement,<br/>L’équipe Ada Papers</p><p style="font-size:12px;color:#666;">© 2025 Ada Papers — adapapers.fr<br/>Si vous n’êtes pas à l’origine de cette inscription, ignorez ce message.</p>',
+  textContent:
+    'Bienvenue sur Ada Papers, {{firstName}} !\n\nNous sommes ravis de vous accueillir. Votre espace personnel est maintenant actif.\n\nCE QUE VOUS POUVEZ FAIRE DÈS MAINTENANT\n\n📁 Création et suivi de dossier\nCréez un dossier d’accompagnement et suivez l’avancement de votre dossier en temps réel, de la création jusqu’à la finalisation.\n\n⏱️ Calculateur de délais\nAnticipez vos échéances et planifiez vos démarches sereinement.\n\n🤖 Ada AI\nObtenez des réponses claires et vérifiées, corroborées par des décisions de justice et adaptées à votre situation. Recevez également des recommandations sur les démarches à suivre.\n\n💬 Accompagnement humain\nNotre équipe reste disponible à chaque étape depuis votre espace.\n\nAccédez à votre espace : https://adapapers.fr\n\nCordialement,\nL’équipe Ada Papers\n\n© 2025 Ada Papers — adapapers.fr\nSi vous n’êtes pas à l’origine de cette inscription, ignorez ce message.',
+};
+
+function renderTemplateWithVariables(template, variables = {}) {
+  return String(template || '').replace(/\{\{(.*?)\}\}/g, (_, key) => {
+    const value = variables[String(key).trim()];
+    return value == null ? '' : String(value);
+  });
+}
+
+async function ensureWelcomeTemplateExistsForOtp() {
+  try {
+    const existing = await EmailTemplate.findOne({ code: WELCOME_TEMPLATE_CODE }).select('_id').lean();
+    if (existing) return;
+    await EmailTemplate.create({
+      code: WELCOME_TEMPLATE_CODE,
+      name: 'Bienvenue utilisateur',
+      description: 'Envoyé après validation du compte (lien d’activation / OTP).',
+      subject: OTP_WELCOME_FALLBACK.subject,
+      htmlContent: OTP_WELCOME_FALLBACK.htmlContent,
+      textContent: OTP_WELCOME_FALLBACK.textContent,
+      category: 'account',
+      isSystem: true,
+      isActive: true,
+      variables: [
+        { name: 'firstName', description: 'Prénom', example: 'Ablaye' },
+        { name: 'lastName', description: 'Nom', example: 'Diop' },
+      ],
+    });
+  } catch (error) {
+    console.warn('⚠️ Impossible de créer le template account_welcome via OTP:', error.message || error);
+  }
+}
+
+async function sendWelcomeEmailAfterOtpValidation(user) {
+  if (!user?.email) return;
+  await ensureWelcomeTemplateExistsForOtp();
+  let subject = OTP_WELCOME_FALLBACK.subject;
+  let htmlContent = OTP_WELCOME_FALLBACK.htmlContent;
+  let textContent = OTP_WELCOME_FALLBACK.textContent;
+
+  try {
+    const tpl = await EmailTemplate.findOne({ code: WELCOME_TEMPLATE_CODE, isActive: true })
+      .sort({ version: -1, updatedAt: -1 })
+      .lean();
+    if (tpl?.subject && tpl?.htmlContent) {
+      subject = tpl.subject;
+      htmlContent = tpl.htmlContent;
+      textContent = tpl.textContent || textContent;
+    }
+  } catch (error) {
+    console.warn('⚠️ Lecture template account_welcome impossible via OTP:', error.message || error);
+  }
+
+  const variables = {
+    firstName: user.firstName || '',
+    lastName: user.lastName || '',
+    email: user.email || '',
+  };
+
+  const detail = await sendTransactionalEmailDetailed({
+    to: user.email,
+    toName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+    subject: renderTemplateWithVariables(subject, variables),
+    htmlContent: renderTemplateWithVariables(htmlContent, variables),
+    textContent: renderTemplateWithVariables(textContent, variables),
+  });
+  if (!detail.ok) {
+    console.warn('⚠️ Email de bienvenue non envoyé après OTP:', detail.error || 'inconnu');
+  }
+}
 
 // Générer un token JWT
 const generateToken = (id) => {
@@ -83,10 +162,8 @@ router.post(
 
       const otp = await OTP.create(otpData);
 
-      // Envoyer le SMS avec le code OTP
+      // Envoyer le SMS avec le code OTP (modèle `otp` éditable dans Admin → SMS)
       try {
-        const message = `Votre code de vérification Paw Legal est : ${code}. Valide pendant 10 minutes.`;
-        
         // En mode développement, permettre de continuer sans SMS réel si Twilio n'est pas configuré
         const allowWithoutSMS = process.env.NODE_ENV === 'development' && process.env.ALLOW_OTP_WITHOUT_SMS === 'true';
         const twilioNotConfigured = !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN;
@@ -104,24 +181,16 @@ router.post(
           return;
         }
         
-        const smsResult = await sendSMS(formattedPhone, message);
-
-        try {
-          const { recordOutboundSms } = require('../sendSMS');
-          await recordOutboundSms({
-            to: smsResult.to,
-            message: smsResult.body,
-            templateCode: 'otp',
-            templateName: 'Code OTP',
-            twilioSid: smsResult.sid,
-            twilioStatus: smsResult.status,
-            status: smsResult.status === 'sent' || smsResult.status === 'queued' ? 'sent' : 'pending',
+        await sendNotificationSMS(
+          formattedPhone,
+          'otp',
+          { code },
+          {
+            skipPreferences: true,
             context: 'otp',
             contextId: otp._id.toString(),
-          });
-        } catch (histErr) {
-          console.error('⚠️ Historique SMS OTP non enregistré:', histErr?.message || histErr);
-        }
+          }
+        );
 
         console.log(`✅ Code OTP envoyé à ${formattedPhone}: ${code}`);
         
@@ -344,6 +413,9 @@ router.post(
       } catch (logError) {
         console.error('Erreur lors de l\'enregistrement du log:', logError);
       }
+
+      // Bienvenue uniquement après validation OTP.
+      await sendWelcomeEmailAfterOtpValidation(user);
 
       res.json({
         success: true,

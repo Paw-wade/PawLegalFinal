@@ -5,8 +5,23 @@ const Dossier = require('../models/Dossier');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
+const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 
 const router = express.Router();
+
+/** Montant fixe cabinet (number, chaîne, Decimal128, etc.) — même logique que le front. */
+function normalizeMontantTarificationFixe(v) {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.max(0, v);
+  if (typeof v === 'object' && typeof v?.toString === 'function') {
+    const s = String(v.toString()).replace(/\s/g, '').replace(',', '.');
+    const n = Number(s);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  const s = String(v).replace(/\s/g, '').replace(',', '.');
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
 
 // Helper function pour créer une notification
 function sanitizeDossierForPartenaire(dossier) {
@@ -62,10 +77,9 @@ const createNotification = async (userId, type, titre, message, lien = null, met
 const notifyDossierModification = async (dossier, modifier, changes = {}) => {
   try {
     if (changes.skipAllPingAndSms === true) {
-      console.log('⏭️ notifyDossierModification ignorée (montant tarification — aucun ping / SMS).');
+      console.log('⏭️ notifyDossierModification ignorée (montant tarification — aucun ping / email).');
       return;
     }
-    const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
     const modifierName = `${modifier.firstName} ${modifier.lastName}`;
     const modifierRole = modifier.role;
     const dossierTitle = dossier.titre || dossier.numero || 'Votre dossier';
@@ -141,23 +155,30 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
         );
       }
       
-      // SMS si téléphone disponible (ex. renommage du dossier seul → pas de SMS)
-      if (!skipClientPing && !skipClientSmsBecauseStandby && !changes.skipSms && userInfo.user && userInfo.user.phone) {
+      // Email au client uniquement (priorité email — pas de SMS en doublon)
+      if (
+        userInfo.role === 'client' &&
+        !skipClientPing &&
+        !skipClientSmsBecauseStandby &&
+        !changes.skipSms &&
+        userInfo.user &&
+        userInfo.user.email
+      ) {
         try {
-          const formattedPhone = formatPhoneNumber(userInfo.user.phone);
-          if (formattedPhone) {
-            await sendNotificationSMS(formattedPhone, 'dossier_updated', {
-              dossierTitle: dossierTitle,
-              statut: changes.newStatut || dossier.statut,
-              modifierName: modifierName
-            }, {
-              userId: userInfo.userId,
-              context: 'dossier',
-              contextId: dossier._id.toString()
-            });
-          }
-        } catch (smsError) {
-          console.error(`⚠️ Erreur lors de l'envoi du SMS à ${userInfo.user.email}:`, smsError);
+          await sendTransactionalEmail({
+            to: userInfo.user.email,
+            toName: `${userInfo.user.firstName || ''} ${userInfo.user.lastName || ''}`.trim(),
+            subject: 'Votre dossier a été mis à jour — Ada Papers',
+            htmlContent: `<p>Bonjour,</p><p>Nous vous informons qu’une mise à jour a été effectuée sur votre dossier.</p><p>${escapeHtml(notificationMessage)}</p><p>Nous vous invitons à consulter votre espace client pour prendre connaissance des informations détaillées.</p>`,
+            textContent: `Bonjour,
+
+Nous vous informons qu’une mise à jour a été effectuée sur votre dossier.
+${notificationMessage}
+
+Nous vous invitons à consulter votre espace client pour prendre connaissance des informations détaillées.`,
+          });
+        } catch (emailErr) {
+          console.error(`⚠️ Erreur lors de l'envoi de l'email dossier à ${userInfo.user.email}:`, emailErr);
         }
       }
     }
@@ -324,12 +345,11 @@ router.post(
         try {
           const RendezVous = require('../models/RendezVous');
           const rendezVous = await RendezVous.findById(rendezVousId);
-          const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
           
           if (rendezVous) {
             // Notifier le client (utilisateur connecté ou coordonnées du rendez-vous)
             if (finalUserId && user) {
-              // Client connecté - notification et SMS
+              // Client connecté — notification + email
               try {
                 await createNotification(
                   finalUserId,
@@ -344,25 +364,22 @@ router.post(
                 );
                 console.log(`✅ Notification créée pour le client: ${user.email}`);
 
-                // Envoyer un SMS au client si le téléphone est disponible
-                if (user.phone) {
+                if (user.email) {
                   try {
-                    const formattedPhone = formatPhoneNumber(user.phone);
-                    if (formattedPhone) {
-                      await sendNotificationSMS(formattedPhone, 'dossier_created', {
-                        dossierTitle: dossier.titre,
-                        dossierId: dossier.numero || dossier._id.toString(),
-                        appointmentDate: new Date(rendezVous.date).toLocaleDateString('fr-FR'),
-                        appointmentTime: rendezVous.heure
-                      }, {
-                        userId: finalUserId.toString(),
-                        context: 'dossier',
-                        contextId: dossier._id.toString()
-                      });
-                      console.log(`✅ SMS envoyé au client: ${formattedPhone}`);
-                    }
-                  } catch (smsError) {
-                    console.error('⚠️ Erreur lors de l\'envoi du SMS au client:', smsError);
+                    await sendTransactionalEmail({
+                      to: user.email,
+                      toName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+                      subject: 'Nouveau dossier créé — Ada Papers',
+                      htmlContent: `<p>Bonjour ${escapeHtml(user.firstName || '')},</p><p>Nous vous confirmons la création de votre dossier « ${escapeHtml(dossier.titre)} » à la suite de votre rendez-vous.</p><p><strong>Date du rendez-vous :</strong> ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p><p>Votre dossier est désormais pris en charge par notre équipe. Vous serez informé(e) des prochaines étapes depuis votre espace client.</p>`,
+                      textContent: `Bonjour ${user.firstName || ''},
+
+Nous vous confirmons la création de votre dossier "${dossier.titre}" à la suite de votre rendez-vous.
+Date du rendez-vous : ${new Date(rendezVous.date).toLocaleDateString('fr-FR')} à ${rendezVous.heure}
+
+Votre dossier est désormais pris en charge par notre équipe. Vous serez informé(e) des prochaines étapes depuis votre espace client.`,
+                    });
+                  } catch (mailErr) {
+                    console.error('⚠️ Erreur email dossier créé (client):', mailErr);
                   }
                 }
               } catch (clientNotifError) {
@@ -386,46 +403,40 @@ router.post(
                   );
                   console.log(`✅ Notification créée pour le client: ${clientEmail}`);
 
-                  // Envoyer un SMS si le téléphone est disponible
-                  if (userByEmail.phone) {
+                  if (userByEmail.email) {
                     try {
-                      const formattedPhone = formatPhoneNumber(userByEmail.phone);
-                      if (formattedPhone) {
-                        await sendNotificationSMS(formattedPhone, 'dossier_created', {
-                          dossierTitle: dossier.titre,
-                          dossierId: dossier.numero || dossier._id.toString(),
-                          appointmentDate: new Date(rendezVous.date).toLocaleDateString('fr-FR'),
-                          appointmentTime: rendezVous.heure
-                        }, {
-                          userId: userByEmail._id.toString(),
-                          context: 'dossier',
-                          contextId: dossier._id.toString()
-                        });
-                        console.log(`✅ SMS envoyé au client: ${formattedPhone}`);
-                      }
-                    } catch (smsError) {
-                      console.error('⚠️ Erreur lors de l\'envoi du SMS au client:', smsError);
+                      await sendTransactionalEmail({
+                        to: userByEmail.email,
+                        toName: `${userByEmail.firstName || ''} ${userByEmail.lastName || ''}`.trim(),
+                        subject: 'Nouveau dossier créé — Ada Papers',
+                        htmlContent: `<p>Bonjour,</p><p>Nous vous confirmons la création du dossier « ${escapeHtml(dossier.titre)} » à la suite de votre rendez-vous.</p><p><strong>Date du rendez-vous :</strong> ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p><p>Notre équipe assurera le suivi de votre dossier et vous contactera en cas de besoin complémentaire.</p>`,
+                        textContent: `Bonjour,
+
+Nous vous confirmons la création du dossier "${dossier.titre}" à la suite de votre rendez-vous.
+Date du rendez-vous : ${new Date(rendezVous.date).toLocaleDateString('fr-FR')} à ${rendezVous.heure}
+
+Notre équipe assurera le suivi de votre dossier et vous contactera en cas de besoin complémentaire.`,
+                      });
+                    } catch (mailErr) {
+                      console.error('⚠️ Erreur email dossier créé:', mailErr);
                     }
                   }
-                } else if (clientTelephone) {
-                  // Client non inscrit mais avec téléphone - envoyer SMS uniquement
+                } else if (clientEmail && String(clientEmail).trim()) {
                   try {
-                    const formattedPhone = formatPhoneNumber(clientTelephone);
-                    if (formattedPhone) {
-                      await sendNotificationSMS(formattedPhone, 'dossier_created', {
-                        dossierTitle: dossier.titre,
-                        dossierId: dossier.numero || dossier._id.toString(),
-                        appointmentDate: new Date(rendezVous.date).toLocaleDateString('fr-FR'),
-                        appointmentTime: rendezVous.heure
-                      }, {
-                        context: 'dossier',
-                        contextId: dossier._id.toString(),
-                        clientEmail: clientEmail
-                      });
-                      console.log(`✅ SMS envoyé au client non inscrit: ${formattedPhone}`);
-                    }
-                  } catch (smsError) {
-                    console.error('⚠️ Erreur lors de l\'envoi du SMS au client non inscrit:', smsError);
+                    await sendTransactionalEmail({
+                      to: String(clientEmail).trim(),
+                      toName: `${clientPrenom || ''} ${clientNom || ''}`.trim(),
+                      subject: 'Nouveau dossier créé — Ada Papers',
+                      htmlContent: `<p>Bonjour,</p><p>Nous vous confirmons la création du dossier « ${escapeHtml(dossier.titre)} » à la suite de votre rendez-vous.</p><p><strong>Date du rendez-vous :</strong> ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p><p>Nos équipes reviendront vers vous en cas de pièce ou information complémentaire.</p>`,
+                      textContent: `Bonjour,
+
+Nous vous confirmons la création du dossier "${dossier.titre}" à la suite de votre rendez-vous.
+Date du rendez-vous : ${new Date(rendezVous.date).toLocaleDateString('fr-FR')} à ${rendezVous.heure}
+
+Nos équipes reviendront vers vous en cas de pièce ou information complémentaire.`,
+                    });
+                  } catch (mailErr) {
+                    console.error('⚠️ Erreur email dossier (invité):', mailErr);
                   }
                 }
               } catch (clientNotifError) {
@@ -454,31 +465,6 @@ router.post(
                     userId: finalUserId ? finalUserId.toString() : null
                   }
                 );
-              }
-
-              // SMS au superadmin principal (s'il a un téléphone)
-              try {
-                const superadmin = await User.findOne({ role: 'superadmin', isActive: true }).sort({ createdAt: 1 });
-                if (superadmin && superadmin.phone) {
-                  const superPhone = formatPhoneNumber(superadmin.phone);
-                  if (superPhone) {
-                    await sendNotificationSMS(
-                      superPhone,
-                      'dossier_created',
-                      {
-                        dossierTitle: dossier.titre || dossier.numero || 'Nouveau dossier',
-                        dossierId: dossier.numero || dossier._id.toString(),
-                      },
-                      {
-                        userId: superadmin._id.toString(),
-                        context: 'dossier',
-                        contextId: dossier._id.toString(),
-                      }
-                    );
-                  }
-                }
-              } catch (smsAdminError) {
-                console.error('⚠️ Erreur lors de l\'envoi du SMS au superadmin pour la création de dossier:', smsAdminError);
               }
             }
           }
@@ -691,9 +677,6 @@ router.get(
   }
 });
 
-// Note : PATCH /api/user/dossiers/:id/formule-tarifaire est enregistré dans server.js (avant ce routeur)
-// pour garantir la résolution de la route en toutes circonstances.
-
 // @route   POST /api/user/dossiers
 // @desc    Créer un nouveau dossier
 // @access  Private
@@ -846,8 +829,6 @@ router.post(
       const isClientCreator = (req.user && req.user.role === 'client') || (!req.user && user && user.role === 'client');
       if (isClientCreator) {
         try {
-          const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
-
           const clientId = req.user ? req.user.id : user._id.toString();
           const clientEmail = req.user ? req.user.email : user.email;
           const clientFirstName = req.user ? req.user.firstName : user.firstName;
@@ -875,32 +856,6 @@ router.post(
                 clientEmail
               }
             );
-
-            // SMS (non bloquant) aux admins : permet d'être averti même sans passer par le dashboard
-            if (admin.phone) {
-              try {
-                const formattedPhone = formatPhoneNumber(admin.phone);
-                if (formattedPhone) {
-                  void sendNotificationSMS(
-                    formattedPhone,
-                    'dossier_created',
-                    {
-                      dossierTitle: normalizedTitre || dossier.titre || 'Sans titre',
-                      dossierId: dossier.numero || dossier._id.toString()
-                    },
-                    {
-                      userId: admin._id.toString(),
-                      context: 'dossier',
-                      contextId: dossier._id.toString()
-                    }
-                  ).catch((smsError) => {
-                    console.error(`⚠️ Erreur lors de l'envoi du SMS à l'admin ${admin.email}:`, smsError);
-                  });
-                }
-              } catch (smsFormatError) {
-                console.error(`⚠️ Erreur lors du formatage du téléphone admin ${admin.email}:`, smsFormatError);
-              }
-            }
           }
           console.log(`✅ Notifications envoyées à ${admins.length} administrateur(s) pour le nouveau dossier`);
         } catch (notifError) {
@@ -2012,7 +1967,7 @@ router.post(
       }
 
       const hasPaymentDefined =
-        Number(dossier.montantTarificationFixe || 0) > 0 || !!dossier.formuleTarifaire;
+        normalizeMontantTarificationFixe(dossier.montantTarificationFixe) > 0 || !!dossier.formuleTarifaire;
       if (!hasPaymentDefined) {
         return res.status(400).json({
           success: false,
@@ -2046,7 +2001,7 @@ router.post(
 
       const dossierTitle = dossier.titre || dossier.numero || 'votre dossier';
       const refCourte = (dossier.numero || dossierId.slice(-8)).toString().replace(/\s+/g, '').slice(0, 20);
-      const montantFixe = Number(dossier.montantTarificationFixe || 0);
+      const montantFixe = normalizeMontantTarificationFixe(dossier.montantTarificationFixe);
       const messageInApp =
         montantFixe > 0
           ? `Le règlement de la tarification (${montantFixe.toLocaleString('fr-FR', {
@@ -2071,52 +2026,45 @@ router.post(
         });
       }
 
-      const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
-      let smsSent = false;
-      let smsSkipped = null;
+      let emailSent = false;
+      let emailSkipped = null;
 
-      const phoneUser = await User.findById(clientUserId).select('phone');
+      const mailUser = await User.findById(clientUserId).select('email firstName');
       if (dossier.isStandby) {
-        smsSkipped = 'dossier_standby';
-      } else if (!phoneUser?.phone) {
-        smsSkipped = 'no_phone';
+        emailSkipped = 'dossier_standby';
+      } else if (!mailUser?.email || !String(mailUser.email).trim()) {
+        emailSkipped = 'no_email';
       } else {
-        const formattedPhone = formatPhoneNumber(phoneUser.phone);
-        if (!formattedPhone) {
-          smsSkipped = 'invalid_phone';
-        } else {
-          try {
-            await sendNotificationSMS(
-              formattedPhone,
-              'tarification_payment_reminder',
-              { numero: refCourte },
-              {
-                userId: clientUserId,
-                skipPreferences: true,
-                context: 'tarification_payment_reminder',
-                contextId: dossierId,
-                sentBy: req.user.id
-              }
-            );
-            smsSent = true;
-          } catch (smsErr) {
-            console.error('⚠️ SMS relance tarification:', smsErr);
-            smsSkipped = smsErr.message || 'sms_error';
-          }
+        try {
+          emailSent = await sendTransactionalEmail({
+            to: mailUser.email,
+            toName: mailUser.firstName || '',
+            subject: 'Rappel : tarification — Ada Papers',
+            htmlContent: `<p>Bonjour,</p><p>${escapeHtml(messageInApp)}</p><p>Nous vous invitons à régulariser la situation depuis votre espace client, rubrique Tarification.</p><p>En cas de difficulté, notre équipe reste à votre disposition.</p>`,
+            textContent: `${messageInApp}
+
+Nous vous invitons à régulariser la situation depuis votre espace client, rubrique Tarification.
+En cas de difficulté, notre équipe reste à votre disposition.`,
+          });
+          if (!emailSent) emailSkipped = 'brevo_error';
+        } catch (mailErr) {
+          console.error('⚠️ Email relance tarification:', mailErr);
+          emailSkipped = mailErr.message || 'email_error';
         }
       }
 
       const parts = ['notification in-app'];
-      if (smsSent) parts.push('SMS');
-      const smsHint =
-        smsSent ? '' : ` — SMS non envoyé${smsSkipped ? ` (${smsSkipped})` : ''}`;
+      if (emailSent) parts.push('email');
+      const hint = emailSent ? '' : ` — email non envoyé${emailSkipped ? ` (${emailSkipped})` : ''}`;
 
       return res.json({
         success: true,
-        message: `Relance enregistrée (${parts.join(' + ')})${smsHint}.`,
+        message: `Relance enregistrée (${parts.join(' + ')})${hint}.`,
         notificationCreated: true,
-        smsSent,
-        smsSkipped: smsSent ? null : smsSkipped
+        emailSent,
+        emailSkipped: emailSent ? null : emailSkipped,
+        smsSent: false,
+        smsSkipped: null,
       });
     } catch (error) {
       console.error('Erreur relance tarification:', error);
@@ -2124,6 +2072,104 @@ router.post(
         success: false,
         message: 'Erreur serveur',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  }
+);
+
+// @route   PATCH /api/user/dossiers/:id/formule-tarifaire
+// @desc    Client (ou cabinet) enregistre la formule Standard / Premium
+// @access  Private — client propriétaire / email dossier, ou admin / superadmin
+router.patch(
+  '/:id/formule-tarifaire',
+  [body('formule').isIn(['standard', 'premium']).withMessage('Formule invalide (standard ou premium).')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation',
+          errors: errors.array(),
+        });
+      }
+
+      const dossierId = req.params.id;
+      const { formule } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(dossierId)) {
+        return res.status(400).json({ success: false, message: 'Identifiant de dossier invalide' });
+      }
+
+      const dossier = await Dossier.findById(dossierId);
+      if (!dossier) {
+        return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+      }
+
+      const uid = String(req.user.id);
+      const role = req.user.role;
+      const userEmail = (req.user.email || '').trim().toLowerCase();
+
+      const ownerId = dossier.user
+        ? (dossier.user._id ? dossier.user._id.toString() : dossier.user.toString())
+        : null;
+      const clientEmailLower = dossier.clientEmail ? String(dossier.clientEmail).trim().toLowerCase() : '';
+      const isOwner = ownerId && ownerId === uid;
+      const isEmailClient = Boolean(clientEmailLower && userEmail && userEmail === clientEmailLower);
+      const isStaff = role === 'admin' || role === 'superadmin';
+
+      if (isStaff) {
+        // ok
+      } else if (role === 'client' && (isOwner || isEmailClient)) {
+        // ok
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: 'Accès non autorisé pour enregistrer la formule sur ce dossier.',
+        });
+      }
+
+      if (dossier.fraisExoneres) {
+        return res.status(400).json({
+          success: false,
+          message: 'Les frais de ce dossier ont été exonérés : aucun choix de formule n’est requis.',
+        });
+      }
+      if (normalizeMontantTarificationFixe(dossier.montantTarificationFixe) > 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Un montant de tarification a été fixé : le choix de formule en ligne n’est pas disponible pour ce dossier.',
+        });
+      }
+      if (dossier.paiementTarificationEffectue) {
+        return res.status(400).json({
+          success: false,
+          message: 'Le paiement tarification est déjà enregistré comme effectué.',
+        });
+      }
+
+      dossier.formuleTarifaire = formule;
+      dossier.formuleTarifaireChoisieAt = new Date();
+      dossier.formuleTarifaireReminderSent = true;
+      await dossier.save();
+
+      const updated = await Dossier.findById(dossierId)
+        .populate('user', 'firstName lastName email phone profilePhoto')
+        .populate('createdBy', 'firstName lastName email')
+        .populate('assignedTo', 'firstName lastName email role');
+
+      return res.json({
+        success: true,
+        message: 'Formule de tarification enregistrée.',
+        dossier: updated,
+      });
+    } catch (error) {
+      console.error('Erreur PATCH formule-tarifaire:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       });
     }
   }
@@ -2348,6 +2394,7 @@ router.put(
         montantTarificationFixe,
         paiementTarificationEffectue,
         notifyTarificationClient,
+        retractTarificationChoiceRequest,
         tarificationClientMessage,
         isStandby,
         standbyReason,
@@ -2359,20 +2406,42 @@ router.put(
         notifyTarificationClient === 'true' ||
         notifyTarificationClient === 1 ||
         notifyTarificationClient === '1';
+      const shouldRetractTarificationChoiceRequest =
+        retractTarificationChoiceRequest === true ||
+        retractTarificationChoiceRequest === 'true' ||
+        retractTarificationChoiceRequest === 1 ||
+        retractTarificationChoiceRequest === '1';
+
+      if (shouldRetractTarificationChoiceRequest && shouldNotifyTarificationClientNow) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Ne combinez pas une rétractation de la demande tarification et un nouvel envoi de notification dans la même requête.',
+        });
+      }
+
       const isMontantTarificationPatch =
         montantTarificationFixe !== undefined && montantTarificationFixe !== null;
 
-      /** Superadmin : enregistrer uniquement le montant fixe sans aucune notif/SMS « dossier modifié ». */
+      const isCabinetTarifRole = req.user.role === 'admin' || req.user.role === 'superadmin';
+
+      /** Cabinet : enregistrer uniquement le montant fixe sans aucune notif/SMS « dossier modifié ». */
       const skipMontantSilentNotify =
         (req.body.skipDossierModificationNotify === true || req.body.skipDossierModificationNotify === 'true') &&
-        req.user.role === 'superadmin' &&
+        isCabinetTarifRole &&
         isMontantTarificationPatch &&
         !shouldNotifyTarificationClientNow;
 
-      if ((montantTarificationFixe !== undefined || shouldNotifyTarificationClientNow) && req.user.role !== 'superadmin') {
+      if (
+        (montantTarificationFixe !== undefined ||
+          shouldNotifyTarificationClientNow ||
+          shouldRetractTarificationChoiceRequest) &&
+        !isCabinetTarifRole
+      ) {
         return res.status(403).json({
           success: false,
-          message: 'Seul le superadmin peut fixer un montant manuel ou envoyer la notification de tarification.'
+          message:
+            'Seuls l’admin ou le superadmin peuvent fixer un montant manuel, envoyer ou rétracter une notification de tarification.',
         });
       }
 
@@ -2395,7 +2464,7 @@ router.put(
         etapesJson: JSON.stringify(dossier.etapesSupplementaires || []),
         fraisExoneres: !!dossier.fraisExoneres,
         fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
-        montantTarificationFixe: Number(dossier.montantTarificationFixe || 0),
+        montantTarificationFixe: normalizeMontantTarificationFixe(dossier.montantTarificationFixe),
         paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
         isStandby: !!dossier.isStandby,
         standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
@@ -2531,8 +2600,8 @@ router.put(
         }
       }
 
-      // Montant manuel de tarification (superadmin uniquement)
-      if (req.user.role === 'superadmin' && montantTarificationFixe !== undefined) {
+      // Montant manuel de tarification (admin / superadmin)
+      if (isCabinetTarifRole && montantTarificationFixe !== undefined) {
         const rawAmount = typeof montantTarificationFixe === 'string'
           ? montantTarificationFixe.replace(',', '.').trim()
           : montantTarificationFixe;
@@ -2647,7 +2716,7 @@ router.put(
         etapesJson: JSON.stringify(dossier.etapesSupplementaires || []),
         fraisExoneres: !!dossier.fraisExoneres,
         fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
-        montantTarificationFixe: Number(dossier.montantTarificationFixe || 0),
+        montantTarificationFixe: normalizeMontantTarificationFixe(dossier.montantTarificationFixe),
         paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
         isStandby: !!dossier.isStandby,
         standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
@@ -2705,7 +2774,8 @@ router.put(
         dossierSnapshotBeforeUpdate.fraisExoneresMotif !== dossierSnapshotAfterUpdate.fraisExoneresMotif ||
         dossierSnapshotBeforeUpdate.montantTarificationFixe !== dossierSnapshotAfterUpdate.montantTarificationFixe ||
         dossierSnapshotBeforeUpdate.paiementTarificationEffectue !== dossierSnapshotAfterUpdate.paiementTarificationEffectue ||
-        shouldNotifyTarificationClientNow;
+        shouldNotifyTarificationClientNow ||
+        shouldRetractTarificationChoiceRequest;
 
       const onlyTarificationSettingChanged =
         tarificationFieldsChanged &&
@@ -2740,6 +2810,35 @@ router.put(
         dossierSnapshotBeforeUpdate.montantTarificationFixe === dossierSnapshotAfterUpdate.montantTarificationFixe &&
         dossierSnapshotBeforeUpdate.paiementTarificationEffectue === dossierSnapshotAfterUpdate.paiementTarificationEffectue;
 
+      if (shouldRetractTarificationChoiceRequest) {
+        if (!dossier.tarificationNotificationSentAt) {
+          return res.status(400).json({
+            success: false,
+            message: 'Aucune notification tarification enregistrée pour ce dossier : rien à rétracter.',
+          });
+        }
+        if (dossier.formuleTarifaire) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'Le client a déjà enregistré un choix de formule : la demande ne peut plus être rétractée.',
+          });
+        }
+        if (normalizeMontantTarificationFixe(dossier.montantTarificationFixe) > 0) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'Un montant de tarification fixe est défini pour ce dossier : retirez-le d’abord si vous souhaitez annuler ce type de demande.',
+          });
+        }
+        if (dossier.paiementTarificationEffectue) {
+          return res.status(400).json({
+            success: false,
+            message: 'Le paiement tarification est déjà enregistré comme effectué.',
+          });
+        }
+      }
+
       await dossier.save();
 
       if (shouldUnsetMontantTarificationFixeFields) {
@@ -2747,6 +2846,40 @@ router.put(
           { _id: dossier._id },
           { $unset: { montantTarificationFixe: 1, montantTarificationFixeAt: 1, montantTarificationFixeBy: 1 } }
         );
+      }
+
+      if (shouldRetractTarificationChoiceRequest) {
+        await Dossier.updateOne(
+          { _id: dossier._id },
+          { $unset: { tarificationNotificationSentAt: 1, tarificationLastNotifySummary: 1 } }
+        );
+        let retractClientUserId = null;
+        if (dossier.user) {
+          retractClientUserId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
+        } else if (dossier.clientEmail) {
+          try {
+            const u = await User.findOne({
+              email: String(dossier.clientEmail).trim().toLowerCase(),
+            }).select('_id');
+            if (u) retractClientUserId = u._id.toString();
+          } catch (e) {
+            console.warn('Rétractation tarification : recherche utilisateur par email:', e?.message || e);
+          }
+        }
+        if (retractClientUserId) {
+          const dTitle = dossier.titre || dossier.numero || 'votre dossier';
+          await createNotification(
+            retractClientUserId,
+            'tarification_choice_retracted',
+            'Demande tarification retirée',
+            `Le cabinet a retiré la dernière demande d’action tarification envoyée pour le dossier « ${dTitle} ». Vous pouvez ignorer le message précédent ; une nouvelle demande pourra vous être adressée ultérieurement.`,
+            '/client/tarification',
+            {
+              dossierId: dossier._id.toString(),
+              retractedBy: req.user.id?.toString?.() || String(req.user.id),
+            }
+          );
+        }
       }
 
       // Recharger le dossier avec les données peuplées pour les notifications
@@ -2906,23 +3039,21 @@ router.put(
                 ...(motif ? { fraisExoneresMotif: motif.slice(0, 200) } : {})
               }
             );
-            const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
-            const phoneUser = await User.findById(userIdExo).select('phone');
-            if (phoneUser?.phone && !dossierForNotification.isStandby) {
-              const formattedPhone = formatPhoneNumber(phoneUser.phone);
-              if (formattedPhone) {
-                await sendNotificationSMS(
-                  formattedPhone,
-                  'frais_tarification_exoneres',
-                  { dossierTitle },
-                  {
-                    userId: userIdExo,
-                    skipPreferences: true,
-                    context: 'dossier',
-                    contextId: dossierForNotification._id.toString()
-                  }
-                );
-              }
+            const mailUserExo = await User.findById(userIdExo).select('email firstName');
+            if (
+              mailUserExo?.email &&
+              String(mailUserExo.email).trim() &&
+              !dossierForNotification.isStandby
+            ) {
+              await sendTransactionalEmail({
+                to: mailUserExo.email,
+                toName: mailUserExo.firstName || '',
+                subject: 'Frais de tarification exonérés — Ada Papers',
+                htmlContent: `<p>${escapeHtml(messageExo).replace(/\n/g, '<br/>')}</p><p>Cette information est également consultable dans votre espace client, rubrique Tarification.</p>`,
+                textContent: `${messageExo}
+
+Cette information est également consultable dans votre espace client, rubrique Tarification.`,
+              });
             }
           }
         } catch (exoErr) {
@@ -2930,8 +3061,8 @@ router.put(
         }
       }
 
-      // Notification tarification envoyée uniquement à la demande du superadmin (à tout moment)
-      if (shouldNotifyTarificationClientNow && req.user.role === 'superadmin') {
+      // Notification tarification envoyée à la demande du cabinet (admin / superadmin)
+      if (shouldNotifyTarificationClientNow && isCabinetTarifRole) {
         try {
           let clientUserId = null;
           if (dossierForNotification.user) {
@@ -2947,12 +3078,9 @@ router.put(
 
           if (clientUserId) {
             const dossierTitle = dossierForNotification.titre || dossierForNotification.numero || 'votre dossier';
-            const montantFixe = Number(dossierForNotification.montantTarificationFixe || 0);
-            const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+            const montantFixe = normalizeMontantTarificationFixe(dossierForNotification.montantTarificationFixe);
             let titreTarif = 'Choisissez votre formule tarifaire';
-            let messageTarif = `Votre dossier « ${dossierTitle} » nécessite un choix de formule (Standard ou Tawfekh) dans votre espace client, rubrique Tarification.`;
-            let smsType = 'tarification_choice_reminder';
-            let smsData = { dossierTitle };
+            let messageTarif = `Une information de tarification est disponible dans votre espace client, rubrique Tarification.`;
 
             if (dossierForNotification.fraisExoneres) {
               const motif = dossierForNotification.fraisExoneresMotif
@@ -2962,8 +3090,6 @@ router.put(
               messageTarif = motif
                 ? `Vous êtes exonéré(e) des frais de tarification pour le dossier « ${dossierTitle} ». Motif : ${motif}`
                 : `Vous êtes exonéré(e) des frais de tarification pour le dossier « ${dossierTitle} ».`;
-              smsType = 'frais_tarification_exoneres';
-              smsData = { dossierTitle };
             } else if (montantFixe > 0) {
               const amountText = montantFixe.toLocaleString('fr-FR', {
                 minimumFractionDigits: 2,
@@ -2971,10 +3097,13 @@ router.put(
               });
               titreTarif = 'Montant du paiement convenu avec Ada Papers.';
               messageTarif = `Pour le dossier « ${dossierTitle} », le montant à payer a été fixé à ${amountText} EUR.`;
-              smsType = 'manual';
-              smsData = {
-                message: `Dossier "${dossierTitle}" : montant de tarification fixe ${amountText} EUR. Ada Papers.`
-              };
+            } else if (dossierForNotification.formuleTarifaire) {
+              const formuleLabel =
+                dossierForNotification.formuleTarifaire === 'premium'
+                  ? 'Tawfekh (Premium)'
+                  : 'Standard';
+              titreTarif = 'Tarification — formule enregistrée';
+              messageTarif = `Pour le dossier « ${dossierTitle} », la formule « ${formuleLabel} » est déjà enregistrée sur votre compte. Merci de procéder au réglement.`;
             }
 
             const tarifMsgExtra =
@@ -2997,22 +3126,21 @@ router.put(
               }
             );
 
-            const phoneUser = await User.findById(clientUserId).select('phone');
-            if (phoneUser?.phone && !dossierForNotification.isStandby && !isMontantTarificationPatch) {
-              const formattedPhone = formatPhoneNumber(phoneUser.phone);
-              if (formattedPhone) {
-                await sendNotificationSMS(
-                  formattedPhone,
-                  smsType,
-                  smsData,
-                  {
-                    userId: clientUserId,
-                    skipPreferences: true,
-                    context: 'tarification_reminder',
-                    contextId: dossier._id.toString()
-                  }
-                );
-              }
+            const mailUserTarif = await User.findById(clientUserId).select('email firstName');
+            if (
+              mailUserTarif?.email &&
+              String(mailUserTarif.email).trim() &&
+              !dossierForNotification.isStandby
+            ) {
+              await sendTransactionalEmail({
+                to: mailUserTarif.email,
+                toName: mailUserTarif.firstName || '',
+                subject: `${titreTarif} — Ada Papers`,
+                htmlContent: `<p>${escapeHtml(messageTarif).replace(/\n/g, '<br/>')}</p><p>Nous vous remercions de réaliser les actions demandées depuis votre espace client dans les meilleurs délais.</p>`,
+                textContent: `${messageTarif}
+
+Nous vous remercions de réaliser les actions demandées depuis votre espace client dans les meilleurs délais.`,
+              });
             }
 
             dossier.tarificationNotificationSentAt = new Date();
@@ -3572,28 +3700,25 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
         transmittedBy: req.user.id.toString()
       }
     });
-    // SMS pour le partenaire (si téléphone disponible et préférences OK)
     try {
-      if (partenaire.phone) {
-        const formattedPhone = formatPhoneNumber(partenaire.phone);
-        if (formattedPhone) {
-          await sendNotificationSMS(
-            formattedPhone,
-            'dossier_transmitted',
-            {
-              dossierTitle: dossier.titre || dossier.numero || 'Sans titre',
-              partenaireName: partenaire.partenaireInfo?.nomOrganisme || `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() || 'Partenaire',
-            },
-            {
-              userId: partenaire._id.toString(),
-              context: 'dossier',
-              contextId: dossier._id.toString(),
-            }
-          );
-        }
+      if (partenaire.email && String(partenaire.email).trim()) {
+        const titre = dossier.titre || dossier.numero || 'Sans titre';
+        await sendTransactionalEmail({
+          to: partenaire.email,
+          toName:
+            partenaire.partenaireInfo?.nomOrganisme ||
+            `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() ||
+            'Partenaire',
+          subject: 'Nouveau dossier transmis — Ada Papers',
+          htmlContent: `<p>Bonjour,</p><p>Un nouveau dossier vous a été transmis : <strong>${escapeHtml(titre)}</strong>.</p><p>Nous vous invitons à vous connecter à votre espace partenaire afin de consulter les pièces disponibles et donner suite à cette transmission.</p>`,
+          textContent: `Bonjour,
+
+Un nouveau dossier vous a été transmis : ${titre}.
+Nous vous invitons à vous connecter à votre espace partenaire afin de consulter les pièces disponibles et donner suite à cette transmission.`,
+        });
       }
-    } catch (smsError) {
-      console.error('⚠️ Erreur lors de l\'envoi du SMS au partenaire pour la transmission du dossier:', smsError);
+    } catch (mailErr) {
+      console.error('⚠️ Email transmission partenaire:', mailErr);
     }
     
     // Notifier aussi le client si le dossier a un propriétaire
@@ -3612,29 +3737,25 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
           partenaireId: partenaireId.toString ? partenaireId.toString() : String(partenaireId)
         }
       });
-      // SMS pour le client (si téléphone disponible et préférences OK)
       try {
-        const clientUser = await User.findById(userId);
-        if (clientUser?.phone) {
-          const formattedPhone = formatPhoneNumber(clientUser.phone);
-          if (formattedPhone) {
-            await sendNotificationSMS(
-              formattedPhone,
-              'dossier_transmitted',
-              {
-                dossierTitle: dossier.titre || dossier.numero || 'Sans titre',
-                partenaireName: partenaire.partenaireInfo?.nomOrganisme || partenaire.email || 'un partenaire',
-              },
-              {
-                userId: clientUser._id.toString(),
-                context: 'dossier',
-                contextId: dossier._id.toString(),
-              }
-            );
-          }
+        const clientUser = await User.findById(userId).select('email firstName');
+        const pn =
+          partenaire.partenaireInfo?.nomOrganisme || partenaire.email || 'un partenaire';
+        if (clientUser?.email && String(clientUser.email).trim()) {
+          const titre = dossier.titre || dossier.numero || 'Sans titre';
+          await sendTransactionalEmail({
+            to: clientUser.email,
+            toName: clientUser.firstName || '',
+            subject: 'Votre dossier a été transmis — Ada Papers',
+            htmlContent: `<p>Bonjour,</p><p>Nous vous informons que votre dossier <strong>${escapeHtml(titre)}</strong> a été transmis à <strong>${escapeHtml(pn)}</strong>.</p><p>Cette transmission vise à permettre le traitement de votre demande dans les meilleures conditions.</p>`,
+            textContent: `Bonjour,
+
+Nous vous informons que votre dossier ${titre} a été transmis à ${pn}.
+Cette transmission vise à permettre le traitement de votre demande dans les meilleures conditions.`,
+          });
         }
-      } catch (smsError) {
-        console.error('⚠️ Erreur lors de l\'envoi du SMS au client pour la transmission du dossier:', smsError);
+      } catch (mailErr) {
+        console.error('⚠️ Email transmission client:', mailErr);
       }
     }
     

@@ -47,7 +47,7 @@ const Input = React.forwardRef<HTMLInputElement, any>(
     return (
       <input
         ref={ref}
-        className={`flex h-11 w-full rounded-md border-2 border-input bg-background px-4 py-2.5 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus:border-primary transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+        className={`flex h-10 sm:h-11 w-full rounded-md border-2 border-input bg-background px-3 sm:px-4 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus:border-primary transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
         {...props}
       />
     );
@@ -76,6 +76,10 @@ export default function SignupPage() {
   const [isGoogleAvailable, setIsGoogleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  /** true si le compte existe mais l’email d’activation n’a pas pu être envoyé (SMTP/Brevo). */
+  const [activationEmailFailed, setActivationEmailFailed] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -195,7 +199,10 @@ export default function SignupPage() {
       return;
     }
 
-    // Le fait de cliquer sur "Créer mon compte" vaut acceptation CGU + Politique de confidentialité.
+    if (!acceptedTerms) {
+      setError('Veuillez accepter les Conditions Générales d’Utilisation et la Politique de confidentialité.');
+      return;
+    }
 
     // Validation simple de l'email côté client
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -216,16 +223,30 @@ export default function SignupPage() {
 
       if (response.data.success) {
         setError(null);
-        setSuccess(
-          'Vous recevrez un SMS avec votre mot de passe temporaire sous peu. Redirection automatique vers l’accueil…'
-        );
-        if (redirectTimerRef.current) {
-          clearTimeout(redirectTimerRef.current);
+        const emailSent = response.data.emailSent !== false;
+        setActivationEmailFailed(!emailSent);
+
+        if (emailSent) {
+          setSuccess(
+            'Un email avec un lien sécurisé pour choisir votre mot de passe vous a été envoyé. Redirection automatique vers l’accueil…'
+          );
+          if (redirectTimerRef.current) {
+            clearTimeout(redirectTimerRef.current);
+          }
+          redirectTimerRef.current = setTimeout(() => {
+            redirectTimerRef.current = null;
+            router.push('/');
+          }, REDIRECT_DELAY_MS);
+        } else {
+          setSuccess(
+            response.data.message ||
+              'Compte créé, mais l’email d’activation n’a pas pu être envoyé. Vous pouvez réessayer ci-dessous après avoir configuré Brevo ou SMTP sur le serveur.'
+          );
+          if (redirectTimerRef.current) {
+            clearTimeout(redirectTimerRef.current);
+            redirectTimerRef.current = null;
+          }
         }
-        redirectTimerRef.current = setTimeout(() => {
-          redirectTimerRef.current = null;
-          router.push('/');
-        }, REDIRECT_DELAY_MS);
       }
     } catch (err: any) {
       console.error('Erreur lors de la création du compte:', err);
@@ -242,6 +263,30 @@ export default function SignupPage() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendActivation = async () => {
+    const email = formData.email.trim().toLowerCase();
+    if (!email) return;
+    setResendLoading(true);
+    setError(null);
+    try {
+      const { data } = await authAPI.resendActivation({ email });
+      if (data?.emailSent === true) {
+        setActivationEmailFailed(false);
+      }
+      setSuccess(
+        'Si cette adresse correspond à un compte en attente d’activation, un nouvel email vient de vous être envoyé. Vérifiez aussi les courriers indésirables.'
+      );
+    } catch (err: any) {
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Impossible de renvoyer l’email pour le moment.');
+      }
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -291,7 +336,7 @@ export default function SignupPage() {
               <span className="text-2xl">✓</span>
               <div>
                 <h3 className="font-semibold mb-1">Sécurité garantie</h3>
-                <p className="text-white/80 text-sm">Vérification par SMS pour votre sécurité</p>
+                <p className="text-white/80 text-sm">Activation par lien personnel envoyé à votre adresse email</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -307,9 +352,9 @@ export default function SignupPage() {
         </div>
       </div>
 
-      <div className="w-full lg:w-1/2 flex items-center justify-center px-4 py-12">
+      <div className="w-full lg:w-1/2 flex items-center justify-center px-4 py-6 sm:py-12">
         <div className="w-full max-w-md">
-          <div className="text-center mb-6">
+          <div className="text-center mb-4 sm:mb-6">
             <Link href="/" className="inline-block">
               <div className="flex flex-col items-center">
                 <span className="text-3xl font-bold text-orange-500 hover:text-orange-600 transition-colors">
@@ -323,18 +368,15 @@ export default function SignupPage() {
           </div>
           
           <div className="bg-white rounded-xl shadow-xl border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-5 sm:px-8 py-4 sm:py-6 border-b border-border">
               <div className="text-center">
-                <h1 className="text-3xl font-bold text-foreground mb-2">
+                <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-1 sm:mb-2">
                   Création de compte
                 </h1>
-                <p className="text-muted-foreground">
-                  Créez votre compte Ada Papers
-                </p>
               </div>
             </div>
 
-            <div className="p-8">
+            <div className="p-5 sm:p-8">
               {error && (
                 <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm">
                   <div className="flex items-center gap-2">
@@ -348,29 +390,49 @@ export default function SignupPage() {
                 <div
                   role="status"
                   aria-live="polite"
-                  className="mb-6 p-4 bg-emerald-50 border border-emerald-200 border-l-4 border-l-emerald-500 rounded-lg shadow-sm animate-in fade-in duration-300"
+                  className={`mb-6 p-4 border rounded-lg shadow-sm animate-in fade-in duration-300 ${
+                    activationEmailFailed
+                      ? 'bg-amber-50 border-amber-200 border-l-4 border-l-amber-500'
+                      : 'bg-emerald-50 border-emerald-200 border-l-4 border-l-emerald-500'
+                  }`}
                 >
                   <div className="flex items-start gap-3">
                     <span className="text-2xl leading-none" aria-hidden>
-                      ✓
+                      {activationEmailFailed ? '✉️' : '✓'}
                     </span>
-                    <div>
-                      <p className="text-sm font-semibold text-emerald-900">Compte créé avec succès</p>
-                      <p className="text-sm text-emerald-800 mt-1">{success}</p>
+                    <div className="flex-1 space-y-3">
+                      <p
+                        className={`text-sm font-semibold ${activationEmailFailed ? 'text-amber-900' : 'text-emerald-900'}`}
+                      >
+                        {activationEmailFailed ? 'Compte créé — email non envoyé' : 'Compte créé avec succès'}
+                      </p>
+                      <p
+                        className={`text-sm mt-1 ${activationEmailFailed ? 'text-amber-900' : 'text-emerald-800'}`}
+                      >
+                        {success}
+                      </p>
+                      {activationEmailFailed && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                          disabled={resendLoading || !formData.email.trim()}
+                          onClick={() => void handleResendActivation()}
+                        >
+                          {resendLoading ? 'Envoi…' : 'Renvoyer l’email d’activation'}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-6" aria-busy={isLoading || !!success}>
-                <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 space-y-2">
-                  <p className="text-xs text-blue-900/80 text-center font-medium">
-                    Inscription rapide avec Google
-                  </p>
+              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6" aria-busy={isLoading || !!success}>
+                <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5 sm:p-3 space-y-2">
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full h-12 text-base font-semibold bg-white"
+                    className="w-full h-10 sm:h-12 text-sm sm:text-base font-semibold bg-white"
                     onClick={handleGoogleSignup}
                     disabled={!isGoogleAvailable || isGoogleLoading || isLoading || !!success}
                   >
@@ -382,13 +444,13 @@ export default function SignupPage() {
                     ) : (
                       <span className="flex items-center gap-2">
                         <span>🔵</span>
-                        <span>Continuer l&apos;inscription avec Google</span>
+                        <span>S&apos;inscrire avec Google</span>
                       </span>
                     )}
                   </Button>
                 </div>
 
-                <div className="relative py-1">
+                <div className="relative py-0.5 sm:py-1">
                   <div className="absolute inset-0 flex items-center" aria-hidden>
                     <span className="w-full border-t border-border" />
                   </div>
@@ -397,8 +459,8 @@ export default function SignupPage() {
                   </div>
                 </div>
 
-                <div className="space-y-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-4 sm:space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName">Prénom *</Label>
                       <Input
@@ -480,16 +542,37 @@ export default function SignupPage() {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Une fois votre inscription validée, un SMS contenant votre mot de passe temporaire vous sera envoyé.
+                      Après validation, vous recevrez un email avec un lien pour définir votre mot de passe (aucun mot de passe en clair par SMS).
                     </p>
                   </div>
                 </div>
 
-                <div className="space-y-3 pt-1">
+                <div className="space-y-2.5 sm:space-y-3 pt-1">
+                  <label className="flex items-start gap-2.5 text-[11px] text-muted-foreground leading-snug">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-3.5 w-3.5 rounded border border-input accent-orange-500"
+                      checked={acceptedTerms}
+                      onChange={(e) => setAcceptedTerms(e.target.checked)}
+                      disabled={isLoading || !!success}
+                      required
+                    />
+                    <span>
+                      J&apos;accepte les{' '}
+                      <Link href="/cgu" className="text-primary hover:underline font-semibold">
+                        Conditions Générales d&apos;Utilisation
+                      </Link>{' '}
+                      et la{' '}
+                      <Link href="/politique-confidentialite" className="text-primary hover:underline font-semibold">
+                        Politique de confidentialité
+                      </Link>
+                      .
+                    </span>
+                  </label>
                   <Button
                     type="submit"
-                    className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                    disabled={isLoading || !!success}
+                    className="w-full h-10 sm:h-12 text-sm sm:text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                    disabled={isLoading || !!success || !acceptedTerms}
                   >
                     {success ? (
                       <span className="flex items-center justify-center gap-2">
@@ -507,17 +590,6 @@ export default function SignupPage() {
                       </span>
                     )}
                   </Button>
-                  <p className="text-[11px] text-muted-foreground leading-snug">
-                    En créant un compte, vous acceptez les{' '}
-                    <Link href="/cgu" className="text-primary hover:underline font-semibold">
-                      Conditions Générales d&apos;Utilisation
-                    </Link>{' '}
-                    et la{' '}
-                    <Link href="/politique-confidentialite" className="text-primary hover:underline font-semibold">
-                      Politique de confidentialité
-                    </Link>
-                    .
-                  </p>
                 </div>
               </form>
 

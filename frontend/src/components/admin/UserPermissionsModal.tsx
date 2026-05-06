@@ -22,8 +22,15 @@ const DOMAINES = [
 ];
 
 const ROLES = [
+  { id: 'client', label: 'Client', color: 'bg-slate-100 text-slate-800' },
   { id: 'superadmin', label: 'Super Admin', color: 'bg-purple-100 text-purple-800' },
   { id: 'admin', label: 'Admin', color: 'bg-green-100 text-green-800' },
+  { id: 'assistant', label: 'Assistant', color: 'bg-indigo-100 text-indigo-800' },
+  { id: 'comptable', label: 'Comptable', color: 'bg-amber-100 text-amber-800' },
+  { id: 'secretaire', label: 'Secretaire', color: 'bg-cyan-100 text-cyan-800' },
+  { id: 'juriste', label: 'Juriste', color: 'bg-emerald-100 text-emerald-800' },
+  { id: 'stagiaire', label: 'Stagiaire', color: 'bg-lime-100 text-lime-800' },
+  { id: 'visiteur', label: 'Visiteur', color: 'bg-zinc-100 text-zinc-800' },
   { id: 'partenaire', label: 'Partenaire', color: 'bg-blue-100 text-blue-800' },
 ];
 
@@ -79,7 +86,7 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
       // Superadmin peut créer tous les rôles
       return ROLES;
     } else if (currentUserRole === 'admin') {
-      // Admin peut créer tous les rôles sauf superadmin et admin
+      // Admin peut créer/modifier tous les rôles métier et partenaire, sauf admin/superadmin.
       return ROLES.filter(role => role.id !== 'superadmin' && role.id !== 'admin');
     } else {
       // Autres rôles ne peuvent pas créer d'utilisateurs (ne devrait pas arriver)
@@ -636,7 +643,7 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
               )}
               {currentUserRole === 'admin' && (
                 <p className="text-sm text-muted-foreground mt-2">
-                  Note: Seul un Super Admin peut créer des comptes Super Admin et Admin.
+                  Note: En tant qu&apos;admin, vous pouvez attribuer les rôles métier (assistant, comptable, secretaire, juriste, stagiaire, visiteur), mais pas admin/superadmin.
                 </p>
               )}
 

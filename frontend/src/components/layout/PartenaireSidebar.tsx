@@ -26,7 +26,7 @@ const menuItems = [
   { href: '/calculateur', label: 'Calculateur', icon: Calculator },
   { href: '/partenaire/rendez-vous', label: 'Rendez-vous', icon: Calendar },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
-  { href: '/lexia', label: 'LEXIA', icon: Scale },
+  { href: '/lexia', label: 'Ada AI', icon: Scale },
   { href: '/partenaire/compte', label: 'Mon compte', icon: User },
 ];
 

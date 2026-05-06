@@ -6,7 +6,6 @@ const Task = require('../models/Task');
 const User = require('../models/User');
 const Dossier = require('../models/Dossier');
 const Notification = require('../models/Notification');
-const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 
 // @route   GET /api/tasks
 // @desc    Récupérer toutes les tâches (Admin seulement)

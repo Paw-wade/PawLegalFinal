@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { dossiersAPI } from '@/lib/api';
+import { normalizeMontantTarificationFixe } from '@/lib/montantTarification';
 
 function getClientName(dossier: any) {
   const userName = [dossier?.user?.firstName, dossier?.user?.lastName].filter(Boolean).join(' ').trim();
@@ -22,6 +23,7 @@ export default function AdminDossiersTarificationPage() {
   const [filterText, setFilterText] = useState('');
   const [updatingPaymentId, setUpdatingPaymentId] = useState<string | null>(null);
   const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [retractingId, setRetractingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -131,6 +133,52 @@ export default function AdminDossiersTarificationPage() {
     }
   };
 
+  const canRetractTarificationRequest = (dossier: any) =>
+    !!dossier?.tarificationNotificationSentAt &&
+    !dossier?.formuleTarifaire &&
+    normalizeMontantTarificationFixe(dossier?.montantTarificationFixe) <= 0 &&
+    !dossier?.paiementTarificationEffectue;
+
+  const handleRetractTarificationRequest = async (dossier: any) => {
+    const id = String(dossier?._id || dossier?.id || '');
+    if (!id || !canRetractTarificationRequest(dossier)) return;
+    if (
+      !confirm(
+        `Rétracter la demande tarification pour « ${dossier?.titre || dossier?.numero || id} » ?\n\nLe client sera notifié in-app que la demande est retirée.`
+      )
+    ) {
+      return;
+    }
+    setRetractingId(id);
+    setFeedback(null);
+    try {
+      const res = await dossiersAPI.retractTarificationChoiceRequest(id);
+      if (res.data?.success) {
+        setFeedback({ type: 'success', text: res.data.message || 'Demande rétractée.' });
+        setDossiers((prev) =>
+          prev.map((item: any) =>
+            String(item?._id || item?.id || '') === id
+              ? {
+                  ...item,
+                  tarificationNotificationSentAt: undefined,
+                  tarificationLastNotifySummary: undefined,
+                }
+              : item
+          )
+        );
+      } else {
+        setFeedback({ type: 'error', text: res.data?.message || 'Rétractation refusée.' });
+      }
+    } catch (e: any) {
+      setFeedback({
+        type: 'error',
+        text: e?.response?.data?.message || e?.message || 'Erreur lors de la rétractation.',
+      });
+    } finally {
+      setRetractingId(null);
+    }
+  };
+
   const handlePaymentReminder = async (dossier: any) => {
     const id = String(dossier?._id || dossier?.id || '');
     if (!id || !canTogglePayment(dossier) || dossier?.paiementTarificationEffectue) return;
@@ -153,7 +201,11 @@ export default function AdminDossiersTarificationPage() {
     }
   };
 
-  const renderList = (items: any[], emptyText: string, opts?: { showPaymentReminder?: boolean }) => {
+  const renderList = (
+    items: any[],
+    emptyText: string,
+    opts?: { showPaymentReminder?: boolean; showRetractTarification?: boolean }
+  ) => {
     if (!items.length) {
       return <p className="text-sm text-gray-500">{emptyText}</p>;
     }
@@ -166,6 +218,7 @@ export default function AdminDossiersTarificationPage() {
           const paymentToggleAllowed = canTogglePayment(dossier);
           const showRelance =
             !!opts?.showPaymentReminder && paymentToggleAllowed && !paymentDone;
+          const showRetract = !!opts?.showRetractTarification && canRetractTarificationRequest(dossier);
           return (
             <div
               key={String(id)}
@@ -179,6 +232,17 @@ export default function AdminDossiersTarificationPage() {
                   <span className="text-xs text-gray-600">{dossier?.titre || 'Sans titre'}</span>
                 </Link>
                 <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
+                  {showRetract && (
+                    <button
+                      type="button"
+                      disabled={retractingId === String(id)}
+                      onClick={() => handleRetractTarificationRequest(dossier)}
+                      className="rounded-md px-3 py-1.5 text-xs font-semibold border border-amber-600 bg-amber-50 text-amber-950 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Effacer la demande notifiée tant que le client n’a pas choisi de formule (notification in-app au client)"
+                    >
+                      {retractingId === String(id) ? 'Rétractation…' : 'Rétracter la demande'}
+                    </button>
+                  )}
                   {showRelance && (
                     <button
                       type="button"
@@ -317,12 +381,14 @@ export default function AdminDossiersTarificationPage() {
 
       <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
         <h2 className="text-sm font-semibold text-amber-900 mb-3">Sans paiement défini ({filteredWithoutPayment.length})</h2>
-        {renderList(filteredWithoutPayment, 'Aucun dossier en attente de décision tarification.')}
+        {renderList(filteredWithoutPayment, 'Aucun dossier en attente de décision tarification.', {
+          showRetractTarification: true,
+        })}
       </section>
 
       <section className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
         <h2 className="text-sm font-semibold text-emerald-900 mb-3">Exonération ({filteredExonerated.length})</h2>
-        {renderList(filteredExonerated, 'Aucun dossier exonéré actuellement.')}
+        {renderList(filteredExonerated, 'Aucun dossier exonéré actuellement.', { showRetractTarification: true })}
       </section>
     </main>
   );

@@ -230,6 +230,8 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
   let templateCode = type;
   let templateName = type;
   let variables = data;
+  /** True si un enregistrement SmsTemplate actif a servi à composer le message (hors fallback erreur). */
+  let usedActiveDbTemplate = false;
   
   // Vérifier les préférences utilisateur si un userId est fourni
   if (options.userId && !options.skipPreferences) {
@@ -253,15 +255,10 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
     });
     
     if (template) {
+      usedActiveDbTemplate = true;
       templateCode = template.code;
       templateName = template.name;
-      // For document requests, force the short canonical wording and ignore
-      // any long custom template stored in DB.
-      if (type === 'document_request') {
-        message = fillTemplate('{{isUrgentText}}{{bodyLine1}} Ada Papers.', data);
-      } else {
-        message = fillTemplate(template.message, data);
-      }
+      message = fillTemplate(template.message, data);
     } else {
       // Fallback sur les messages par défaut si aucun template trouvé
       const defaultMessages = {
@@ -283,10 +280,17 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
         /** Fallback si le template DB `password_reset_temp` est absent ou inactif */
         password_reset_temp:
           'Bonjour {{firstName}} {{lastName}}, votre code de vérification pour réinitialiser votre mot de passe est : {{tempPassword}}. Ce code est valable 10 minutes. Ada Papers.',
-        tarification_choice_reminder: `Votre dossier "{{dossierTitle}}" est en cours. Choisissez votre formule tarifaire dans votre espace client. Ada Papers.`,
-        /** Relance admin : message court (1 segment GSM ~160c) — {{numero}} = ref. dossier courte */
-        tarification_payment_reminder: `Rappel Ada Papers: reglement tarif dossier {{numero}} en attente. Espace client > Tarification.`,
-        frais_tarification_exoneres: `Votre dossier "{{dossierTitle}}" : vous êtes exonéré(e) des frais. Ada Papers.`,
+        tarification_choice_reminder:
+          'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.',
+        tarification_payment_reminder:
+          'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.',
+        frais_tarification_exoneres:
+          'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.',
+        /** SMS générique (ex. notification admin ou montant fixe tarification avec corps dans data.message) */
+        manual: '{{message}}',
+        otp: 'Votre code de vérification Paw Legal est : {{code}}. Valide pendant 10 minutes.',
+        contact_confirmation:
+          'Merci de nous avoir contactés. Nous vous invitons à créer un compte sur notre site afin de faciliter le suivi de votre demande. À très bientôt. Ada Papers.',
       };
       
       const defaultTemplate = defaultMessages[type] || data.message || 'Vous avez reçu une notification de Ada Papers.';
@@ -296,6 +300,19 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
     console.error('Erreur lors du chargement du template:', error);
     // Fallback sur un message simple
     message = data.message || 'Vous avez reçu une notification de Ada Papers.';
+  }
+
+  // SMS « tarification » : libellé court par défaut si aucun template actif en base.
+  const SMS_TARIFICATION_ESPACE_CLIENT =
+    'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.';
+  if (
+    !usedActiveDbTemplate &&
+    (type === 'tarification_choice_reminder' ||
+      type === 'tarification_payment_reminder' ||
+      type === 'frais_tarification_exoneres' ||
+      (type === 'manual' && String(options.context || '') === 'tarification_reminder'))
+  ) {
+    message = SMS_TARIFICATION_ESPACE_CLIENT;
   }
   
   // Envoyer le SMS

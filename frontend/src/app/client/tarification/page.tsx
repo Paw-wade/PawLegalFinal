@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI } from '@/lib/api';
+import { normalizeMontantTarificationFixe } from '@/lib/montantTarification';
 import { tarificationFormules } from '@/data/tarificationConfig';
 import type { TarifFormuleId } from '@/data/tarificationConfig';
 import { Button } from '@/components/ui/Button';
@@ -25,6 +26,9 @@ export default function ClientTarificationPage() {
       const res = await dossiersAPI.getMyDossiers();
       const list = res.data?.dossiers || res.data?.data || [];
       setDossiers(Array.isArray(list) ? list : []);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('tarificationUpdated'));
+      }
     } catch (e) {
       console.error(e);
       setDossiers([]);
@@ -42,6 +46,15 @@ export default function ClientTarificationPage() {
   }, [status, router, load]);
 
   useEffect(() => {
+    if (status !== 'authenticated') return;
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [status, load]);
+
+  useEffect(() => {
     if (!dossiers.length) {
       setSelectedDossierId('');
       return;
@@ -55,8 +68,11 @@ export default function ClientTarificationPage() {
   const selectedDossier = dossiers.find((d) => (d._id || d.id) === selectedDossierId);
   const currentFormule = selectedDossier?.formuleTarifaire as TarifFormuleId | undefined;
   const fraisExoneresPourDossier = !!selectedDossier?.fraisExoneres;
-  const montantTarificationFixe = Number(selectedDossier?.montantTarificationFixe || 0);
+  const montantTarificationFixe = normalizeMontantTarificationFixe(selectedDossier?.montantTarificationFixe);
   const hasMontantFixe = montantTarificationFixe > 0;
+  /** Dès qu’un montant fixe cabinet ou une exonération s’applique, plus de choix de formule en ligne. */
+  const lockFormuleChoice = fraisExoneresPourDossier || hasMontantFixe;
+  const paiementTarifEffectue = !!selectedDossier?.paiementTarificationEffectue;
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -122,8 +138,23 @@ export default function ClientTarificationPage() {
           </span>
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Tarification</h1>
           <p className="text-gray-600 max-w-2xl leading-relaxed">
-            Choisissez la formule adaptée à votre dossier. Le paiement peut être effectué{' '}
-            <strong>en plusieurs fois</strong> (sur demande).
+            {fraisExoneresPourDossier ? (
+              <>
+                Les frais de tarification cabinet ont été exonérés pour ce dossier : aucune formule ni paiement tarifaire
+                cabinet n’est attendu.
+              </>
+            ) : hasMontantFixe ? (
+              <>
+                Le cabinet a fixé un <strong>montant de tarification</strong> pour votre dossier : le choix de formule
+                (Standard / Tawfekh) n’est plus disponible en ligne. Les modalités de paiement figurent ci-dessous ; le
+                règlement peut être effectué <strong>en plusieurs fois</strong> (sur demande).
+              </>
+            ) : (
+              <>
+                Choisissez la formule adaptée à votre dossier. Le paiement peut être effectué{' '}
+                <strong>en plusieurs fois</strong> (sur demande).
+              </>
+            )}
           </p>
         </div>
 
@@ -164,14 +195,21 @@ export default function ClientTarificationPage() {
                 </div>
               ) : hasMontantFixe ? (
                 <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-900">
-                  <p className="font-semibold">Montant convenu avec Ada Papers.</p>
+                  <p className="font-semibold">Montant fixé par le cabinet (notification envoyée)</p>
                   <p className="text-blue-800/90 mt-1">
-                    Montant à régler: {montantTarificationFixe.toLocaleString('fr-FR', {
+                    <strong>Paiement demandé :</strong>{' '}
+                    {montantTarificationFixe.toLocaleString('fr-FR', {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}{' '}
-                    EUR. Aucun choix de formule n’est requis pour ce dossier.
+                    EUR. Le choix de formule en ligne n’est plus proposé : ce montant remplace les barèmes Standard /
+                    Tawfekh pour ce dossier.
                   </p>
+                  {paiementTarifEffectue ? (
+                    <p className="mt-2 text-xs font-semibold text-emerald-800">
+                      Paiement tarification enregistré comme effectué par le cabinet.
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 currentFormule && (
@@ -200,12 +238,22 @@ export default function ClientTarificationPage() {
                 <div className="rounded-[11px] border border-gray-100 bg-white px-4 py-3.5 sm:px-5 sm:py-4">
                   <div className="flex flex-wrap items-baseline justify-between gap-2 gap-y-1 mb-3">
                     <h2 className="text-base sm:text-lg font-bold text-gray-900">
-                      Modalités de paiement
+                      {hasMontantFixe ? 'Paiement demandé pour ce dossier' : 'Modalités de paiement'}
                       <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-orange-600 align-middle">
-                        Tarification ouverte
+                        {hasMontantFixe ? 'Montant cabinet' : 'Tarification ouverte'}
                       </span>
                     </h2>
                   </div>
+                  {hasMontantFixe ? (
+                    <p className="text-sm font-semibold text-gray-900 mb-3 tabular-nums">
+                      Montant à régler :{' '}
+                      {montantTarificationFixe.toLocaleString('fr-FR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{' '}
+                      EUR
+                    </p>
+                  ) : null}
                   <p className="text-xs text-gray-600 mb-3 leading-snug">
                     Règlement par WERO, PayPal ou virement — indiquez la référence du dossier sur le libellé ou le message.
                   </p>
@@ -236,13 +284,16 @@ export default function ClientTarificationPage() {
               </div>
             )}
 
-            <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 mb-8 text-sm text-amber-950">
-              <p className="font-semibold mb-1">💡 La formule Premium est la plus choisie par nos clients</p>
-              <p className="text-amber-900/90">
-                Elle couvre la délégation complète de votre demande. La Plateforme vérifie les pièces, introduit la demande, en assure le suivi et les échanges avec l'administion, fait toutes démarches nécessaires à la satisfaction rapide de la demande.
-              </p>
-            </div>
+            {!lockFormuleChoice ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 mb-8 text-sm text-amber-950">
+                <p className="font-semibold mb-1">💡 La formule Premium est la plus choisie par nos clients</p>
+                <p className="text-amber-900/90">
+                  Elle couvre la délégation complète de votre demande. La Plateforme vérifie les pièces, introduit la demande, en assure le suivi et les échanges avec l'administion, fait toutes démarches nécessaires à la satisfaction rapide de la demande.
+                </p>
+              </div>
+            ) : null}
 
+            {!lockFormuleChoice ? (
             <div className="grid gap-8 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-start">
               <div className="space-y-2 border border-gray-200 rounded-xl bg-gray-50/60 p-2">
                 {tarificationFormules.map((f, index) => (
@@ -321,6 +372,15 @@ export default function ClientTarificationPage() {
                 </div>
               </div>
             </div>
+            ) : (
+              <div className="mb-8 flex flex-wrap gap-3">
+                <Link href="/client/dossiers">
+                  <Button variant="outline" size="lg" className="min-w-[160px]">
+                    Retour aux dossiers
+                  </Button>
+                </Link>
+              </div>
+            )}
           </>
         )}
       </main>
