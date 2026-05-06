@@ -24,6 +24,20 @@ const LEXIA_ALLOWED_ROLES = [
 
 const VALID_PROVIDERS = new Set(['auto', 'anthropic', 'gemini', 'internal']);
 
+function buildTemporalGuardrailPrompt() {
+  const now = new Date();
+  const isoNow = now.toISOString();
+  const dateOnly = isoNow.slice(0, 10);
+  return [
+    '## RÈGLE TEMPORELLE STRICTE',
+    `Date serveur courante (UTC) : ${dateOnly} (${isoNow})`,
+    'Tu dois considérer cette date comme la seule référence temporelle valide pour "aujourd\'hui".',
+    'Interdiction d\'inventer une autre année/date.',
+    'Si l\'utilisateur te contredit sur la date, rappelle calmement la date serveur ci-dessus.',
+    'Si une date locale est nécessaire, indique que seule la date UTC serveur est certaine.',
+  ].join('\n');
+}
+
 /** Heuristique sur la requête de l'outil web_search (affichage UI LEXIA). */
 const LEXIA_SOURCE_TERM_GROUPS = [
   { key: 'legifrance', terms: ['legifrance', 'légifrance', 'ceseda', 'crpa'] },
@@ -118,7 +132,7 @@ async function anthropicMessagesCreate(body) {
   return data;
 }
 
-async function runAnthropicLexia(trimmed) {
+async function runAnthropicLexia(trimmed, temporalGuardrail) {
   const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
   let includeWebSearch = process.env.ANTHROPIC_WEB_SEARCH !== 'false';
 
@@ -132,7 +146,7 @@ async function runAnthropicLexia(trimmed) {
     const payload = {
       model,
       max_tokens: 8192,
-      system: LEXIA_SYSTEM_PROMPT,
+      system: `${LEXIA_SYSTEM_PROMPT}\n\n${temporalGuardrail}`,
       messages: conversation,
     };
     if (includeWebSearch) {
@@ -193,7 +207,7 @@ async function runAnthropicLexia(trimmed) {
   };
 }
 
-async function runGeminiLexia(trimmed) {
+async function runGeminiLexia(trimmed, temporalGuardrail) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
     const err = new Error('MISSING_GEMINI_API_KEY');
@@ -210,6 +224,9 @@ async function runGeminiLexia(trimmed) {
       'x-goog-api-key': key,
     },
     body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: `${LEXIA_SYSTEM_PROMPT}\n\n${temporalGuardrail}` }],
+      },
       contents: trimmed.map((m) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],
@@ -292,6 +309,8 @@ router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) =>
 
     const requested = req.body?.provider != null ? normalizeProvider(req.body.provider) : null;
     const effective = resolveEffectiveProvider(req.body);
+    const temporalGuardrail = buildTemporalGuardrailPrompt();
+    const serverNowIso = new Date().toISOString();
 
     if (effective === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
       return res.status(503).json({
@@ -318,21 +337,26 @@ router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) =>
         sources,
         resolvedProvider: 'internal',
         requestedProvider: requested || normalizeProvider(process.env.LEXIA_PROVIDER),
+        serverNow: serverNowIso,
       });
     }
 
     if (effective === 'gemini') {
-      const { text } = await runGeminiLexia(trimmed);
+      const { text } = await runGeminiLexia(trimmed, temporalGuardrail);
       return res.json({
         text,
         searched: false,
         provider: 'gemini',
         resolvedProvider: 'gemini',
         requestedProvider: requested || normalizeProvider(process.env.LEXIA_PROVIDER),
+        serverNow: serverNowIso,
       });
     }
 
-    const { text, searched, sourcesFound, totalToolUses } = await runAnthropicLexia(trimmed);
+    const { text, searched, sourcesFound, totalToolUses } = await runAnthropicLexia(
+      trimmed,
+      temporalGuardrail
+    );
     return res.json({
       text,
       searched,
@@ -341,6 +365,7 @@ router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) =>
       provider: 'anthropic',
       resolvedProvider: 'anthropic',
       requestedProvider: requested || normalizeProvider(process.env.LEXIA_PROVIDER),
+      serverNow: serverNowIso,
     });
   } catch (e) {
     if (e.code === 'MISSING_API_KEY') {
