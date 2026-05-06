@@ -632,6 +632,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
             min-height: calc(100dvh - var(--lexia-chrome));
             height: auto;
             max-height: none;
+            margin-top: 8px;
           }
         }
 
@@ -1261,6 +1262,12 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           align-items: center;
           padding-bottom: 0 !important;
           padding-top: 0 !important;
+        }
+        @media (min-width: 1024px) {
+          .lexia-messages--accueil {
+            flex: 1 1 auto;
+            justify-content: center;
+          }
         }
         @media (max-width: 1023px) {
           .lexia-messages--accueil {
@@ -1962,16 +1969,12 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                   Posez une question ci-dessous ou choisissez une suggestion pour lancer une analyse. Vos conversations
                   passées restent disponibles dans le menu à gauche (icône menu).
                 </p>
-                <p className="lexia-accueil-hint">
-                  Jurisprudence droit des étrangers sur {SOURCES_LIST.length} bases documentaires — moteur réglable
-                  depuis le menu latéral.
-                </p>
                 <div className="lexia-qgrid">
                   {[
-                    "Jurisprudence récente : OQTF prononcée contre un étudiant régulièrement inscrit. Quels moyens ont été retenus ?",
-                    "Refus de récépissé lors d'un renouvellement de titre étudiant : quels recours ?",
-                    'Référé-mesures utiles pour obtenir un rendez-vous préfectoral : décisions favorables.',
-                    'Dysfonctionnements ANEF et leurs conséquences juridiques : jurisprudence des TA.',
+                    'Changement de statut étudiant vers salarié : quelles conditions légales (diplôme, contrat, rémunération, autorisation de travail) sont exigées ?',
+                    'Quelles sont les principales causes d’OQTF visant les étudiants étrangers ?',
+                    'En cas d’OQTF contre un étudiant, quels moyens sont les plus efficaces en référé-suspension et au fond ?',
+                    'Retard de traitement d’un renouvellement de titre étudiant : quelles actions urgentes engager ?',
                   ].map((p, i) => (
                     <button key={i} type="button" className="lexia-qcard" onClick={() => void sendMessage(p)}>
                       {p}
@@ -1999,10 +2002,10 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                     </p>
                     <div className="lexia-qgrid">
                       {[
-                        "Jurisprudence récente : OQTF prononcée contre un étudiant régulièrement inscrit. Quels moyens ont été retenus ?",
-                        "Refus de récépissé lors d'un renouvellement de titre étudiant : quels recours ?",
-                        'Référé-mesures utiles pour obtenir un rendez-vous préfectoral : décisions favorables.',
-                        'Dysfonctionnements ANEF et leurs conséquences juridiques : jurisprudence des TA.',
+                        'Changement de statut étudiant vers salarié : quelles conditions légales (diplôme, contrat, rémunération, autorisation de travail) sont exigées ?',
+                        'Quelles sont les principales causes d’OQTF visant les étudiants étrangers ?',
+                        'En cas d’OQTF contre un étudiant, quels moyens sont les plus efficaces en référé-suspension et au fond ?',
+                        'Retard de traitement d’un renouvellement de titre étudiant : quelles actions urgentes engager ?',
                       ].map((p, i) => (
                         <button key={i} type="button" className="lexia-qcard" onClick={() => void sendMessage(p)}>
                           {p}
@@ -2094,7 +2097,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                     void sendMessage(input.trim());
                   }
                 }}
-                placeholder="Ex. : Recherche les décisions du Conseil d'État sur l'OQTF d'un étudiant inscrit…"
+                placeholder="Recherchez des informations fiables relatives à votre situation..."
                 rows={1}
                 disabled={isLoading}
               />
