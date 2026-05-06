@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
+const EmailTemplate = require('../models/EmailTemplate');
 const { protect } = require('../middleware/auth');
 const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
@@ -46,6 +47,86 @@ function buildSignupActivationEmailPayload(user, activationUrl) {
           `,
     textContent: `Bonjour ${user.firstName},\n\nPour activer votre compte et choisir votre mot de passe, ouvrez ce lien dans votre navigateur :\n${activationUrl}\n\nCe lien est personnel et expire automatiquement.`,
   };
+}
+
+const WELCOME_TEMPLATE_CODE = 'account_welcome';
+const DEFAULT_WELCOME_TEMPLATE = {
+  code: WELCOME_TEMPLATE_CODE,
+  name: 'Bienvenue utilisateur',
+  description: 'Envoyé après validation du compte (lien d’activation / OTP).',
+  subject: 'Bienvenue sur Ada Papers, {{firstName}} !',
+  htmlContent:
+    '<p>Bienvenue sur Ada Papers, {{firstName}} !</p><p>Nous sommes ravis de vous accueillir. Votre espace personnel est maintenant actif.</p><p><strong>CE QUE VOUS POUVEZ FAIRE DÈS MAINTENANT</strong></p><p>📁 <strong>Création et suivi de dossier</strong><br/>Créez un dossier d’accompagnement et suivez l’avancement de votre dossier en temps réel, de la création jusqu’à la finalisation.</p><p>⏱️ <strong>Calculateur de délais</strong><br/>Anticipez vos échéances et planifiez vos démarches sereinement.</p><p>🤖 <strong>Ada AI</strong><br/>Obtenez des réponses claires et vérifiées, corroborées par des décisions de justice et adaptées à votre situation. Recevez également des recommandations sur les démarches à suivre.</p><p>💬 <strong>Accompagnement humain</strong><br/>Notre équipe reste disponible à chaque étape depuis votre espace.</p><p><strong>Accédez à votre espace :</strong> https://adapapers.fr</p><p>Cordialement,<br/>L’équipe Ada Papers</p><p style="font-size:12px;color:#666;">© 2025 Ada Papers — adapapers.fr<br/>Si vous n’êtes pas à l’origine de cette inscription, ignorez ce message.</p>',
+  textContent:
+    'Bienvenue sur Ada Papers, {{firstName}} !\n\nNous sommes ravis de vous accueillir. Votre espace personnel est maintenant actif.\n\nCE QUE VOUS POUVEZ FAIRE DÈS MAINTENANT\n\n📁 Création et suivi de dossier\nCréez un dossier d’accompagnement et suivez l’avancement de votre dossier en temps réel, de la création jusqu’à la finalisation.\n\n⏱️ Calculateur de délais\nAnticipez vos échéances et planifiez vos démarches sereinement.\n\n🤖 Ada AI\nObtenez des réponses claires et vérifiées, corroborées par des décisions de justice et adaptées à votre situation. Recevez également des recommandations sur les démarches à suivre.\n\n💬 Accompagnement humain\nNotre équipe reste disponible à chaque étape depuis votre espace.\n\nAccédez à votre espace : https://adapapers.fr\n\nCordialement,\nL’équipe Ada Papers\n\n© 2025 Ada Papers — adapapers.fr\nSi vous n’êtes pas à l’origine de cette inscription, ignorez ce message.',
+  category: 'account',
+  isSystem: true,
+  isActive: true,
+  variables: [
+    { name: 'firstName', description: 'Prénom', example: 'Ablaye' },
+    { name: 'lastName', description: 'Nom', example: 'Diop' },
+  ],
+};
+
+function renderTemplateWithVariables(template, variables = {}) {
+  return String(template || '').replace(/\{\{(.*?)\}\}/g, (_, key) => {
+    const value = variables[String(key).trim()];
+    return value == null ? '' : String(value);
+  });
+}
+
+async function ensureWelcomeTemplateExists() {
+  try {
+    const existing = await EmailTemplate.findOne({ code: WELCOME_TEMPLATE_CODE }).select('_id').lean();
+    if (existing) return;
+    await EmailTemplate.create(DEFAULT_WELCOME_TEMPLATE);
+    console.log('✅ Template email account_welcome créé automatiquement.');
+  } catch (e) {
+    // Ne jamais bloquer l'inscription si la base est indisponible ou contrainte unique en concurrence.
+    console.warn('⚠️ Impossible de garantir la présence du template account_welcome:', e.message || e);
+  }
+}
+
+async function sendWelcomeEmailOnAccountCreated(user) {
+  if (!user?.email) return false;
+  let subject = DEFAULT_WELCOME_TEMPLATE.subject;
+  let htmlContent = DEFAULT_WELCOME_TEMPLATE.htmlContent;
+  let textContent = DEFAULT_WELCOME_TEMPLATE.textContent;
+
+  try {
+    const tpl = await EmailTemplate.findOne({
+      code: WELCOME_TEMPLATE_CODE,
+      isActive: true,
+    })
+      .sort({ version: -1, updatedAt: -1 })
+      .lean();
+    if (tpl?.subject && tpl?.htmlContent) {
+      subject = tpl.subject;
+      htmlContent = tpl.htmlContent;
+      textContent = tpl.textContent || textContent;
+    }
+  } catch (e) {
+    console.warn('⚠️ Lecture template account_welcome impossible, fallback par défaut:', e.message || e);
+  }
+
+  const variables = {
+    firstName: user.firstName || '',
+    lastName: user.lastName || '',
+    email: user.email || '',
+  };
+
+  const detailed = await sendTransactionalEmailDetailed({
+    to: user.email,
+    toName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+    subject: renderTemplateWithVariables(subject, variables),
+    htmlContent: renderTemplateWithVariables(htmlContent, variables),
+    textContent: renderTemplateWithVariables(textContent, variables),
+  });
+
+  if (!detailed.ok) {
+    console.warn('⚠️ Email de bienvenue non envoyé:', detailed.error || 'inconnu');
+  }
+  return detailed.ok;
 }
 
 const getDaysRemainingForUser = (user) => {
@@ -161,6 +242,7 @@ router.post(
 
       const activationToken = generateSignupActivationToken(user._id);
       const activationUrl = `${getPrimaryFrontendUrl()}/auth/activate?token=${encodeURIComponent(activationToken)}`;
+      await ensureWelcomeTemplateExists();
 
       const activationDetail = await sendTransactionalEmailDetailed(
         buildSignupActivationEmailPayload(user, activationUrl)
@@ -315,6 +397,9 @@ router.post(
       user.password = password;
       user.needsPasswordSetup = false;
       await user.save();
+      // Bienvenue uniquement après validation du compte par lien signé.
+      await ensureWelcomeTemplateExists();
+      await sendWelcomeEmailOnAccountCreated(user);
 
       try {
         const Log = require('../models/Log');
@@ -441,13 +526,6 @@ router.post(
         console.error('Erreur lors de l\'initialisation du log de connexion:', logError);
       }
 
-      // Calculer les jours restants pour compléter le profil (sauf pour admin/superadmin)
-      let daysRemaining = null;
-      if (user.role !== 'admin' && user.role !== 'superadmin' && !user.profilComplete) {
-        const daysSinceCreation = Math.floor((Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-        daysRemaining = Math.max(0, 7 - daysSinceCreation);
-      }
-
       res.json({
         success: true,
         message: 'Connexion réussie',
@@ -462,8 +540,7 @@ router.post(
           phoneVerified: user.phoneVerified,
           needsPasswordSetup: user.needsPasswordSetup,
           profilComplete: user.profilComplete || false,
-          createdAt: user.createdAt,
-          daysRemaining
+          createdAt: user.createdAt
         }
       });
     } catch (error) {

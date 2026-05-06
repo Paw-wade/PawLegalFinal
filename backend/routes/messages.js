@@ -9,7 +9,8 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const Dossier = require('../models/Dossier');
 const { protect, authorize } = require('../middleware/auth');
-const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
+const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 
 // Configuration de multer pour les pièces jointes
 const storage = multer.diskStorage({
@@ -919,24 +920,43 @@ router.post(
             });
             console.log(`✅ Notification créée pour destinataire principal: ${destinatairesIds[0].toString()}`);
 
-            // Envoyer un SMS si le destinataire est un utilisateur (client)
-            if (typeMessage === 'admin_to_user' && destinatairePrincipal.phone) {
+            // E-mail de notification de nouveau message (priorité e-mail)
+            if (destinatairePrincipal.email) {
               try {
-                const formattedPhone = formatPhoneNumber(destinatairePrincipal.phone);
-                if (formattedPhone) {
-                  await sendNotificationSMS(formattedPhone, 'message_received', {
-                    senderName: expediteurName,
-                    messageId: nouveauMessage._id.toString(),
-                    subject: '',
-                  }, {
-                    userId: destinatairesIds[0].toString(),
-                    context: 'message',
-                    contextId: nouveauMessage._id.toString()
-                  });
-                  console.log(`✅ SMS envoyé à ${formattedPhone}`);
-                }
-              } catch (smsError) {
-                console.error('⚠️ Erreur lors de l\'envoi du SMS:', smsError);
+                const messagePreview = String(contenu || '')
+                  .replace(/\s+/g, ' ')
+                  .trim()
+                  .slice(0, 500);
+                const conversationPath =
+                  destinatairePrincipal.role === 'client'
+                    ? `/client/messages/${nouveauMessage._id}`
+                    : destinatairePrincipal.role === 'partenaire'
+                      ? `/partenaire/messages/${nouveauMessage._id}`
+                      : `/admin/messages/${nouveauMessage._id}`;
+                const conversationUrl = `${getPrimaryFrontendUrl()}${conversationPath}`;
+                await sendTransactionalEmail({
+                  to: destinatairePrincipal.email,
+                  toName: `${destinatairePrincipal.firstName || ''} ${destinatairePrincipal.lastName || ''}`.trim(),
+                  subject: `Nouveau message : ${sujet || 'Sans objet'} — Ada Papers`,
+                  htmlContent: `
+                    <p>Vous avez reçu un nouveau message dans votre espace Ada Papers.</p>
+                    <p><strong>Expéditeur :</strong> ${escapeHtml(expediteurName)}</p>
+                    <p><strong>Objet :</strong> ${escapeHtml(sujet || 'Sans objet')}</p>
+                    <p><strong>Aperçu :</strong><br/>${escapeHtml(messagePreview || '(aucun contenu)')}</p>
+                    <p>Pour répondre, connectez-vous à votre espace et ouvrez la conversation.</p>
+                    <p><a href="${conversationUrl}">Ouvrir la conversation</a></p>
+                  `,
+                  textContent: `Vous avez reçu un nouveau message dans votre espace Ada Papers.
+
+Expéditeur : ${expediteurName}
+Objet : ${sujet || 'Sans objet'}
+Aperçu : ${messagePreview || '(aucun contenu)'}
+
+Connectez-vous à votre espace pour lire et répondre au message :
+${conversationUrl}`,
+                });
+              } catch (emailError) {
+                console.error('⚠️ Erreur lors de l\'envoi de l\'email de notification message:', emailError);
               }
             }
           } catch (notifError) {

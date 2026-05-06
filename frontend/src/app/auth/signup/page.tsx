@@ -47,7 +47,7 @@ const Input = React.forwardRef<HTMLInputElement, any>(
     return (
       <input
         ref={ref}
-        className={`flex h-11 w-full rounded-md border-2 border-input bg-background px-4 py-2.5 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus:border-primary transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+        className={`flex h-10 sm:h-11 w-full rounded-md border-2 border-input bg-background px-3 sm:px-4 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus:border-primary transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
         {...props}
       />
     );
@@ -79,6 +79,7 @@ export default function SignupPage() {
   /** true si le compte existe mais l’email d’activation n’a pas pu être envoyé (SMTP/Brevo). */
   const [activationEmailFailed, setActivationEmailFailed] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -198,7 +199,10 @@ export default function SignupPage() {
       return;
     }
 
-    // Le fait de cliquer sur "Créer mon compte" vaut acceptation CGU + Politique de confidentialité.
+    if (!acceptedTerms) {
+      setError('Veuillez accepter les Conditions Générales d’Utilisation et la Politique de confidentialité.');
+      return;
+    }
 
     // Validation simple de l'email côté client
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -348,9 +352,9 @@ export default function SignupPage() {
         </div>
       </div>
 
-      <div className="w-full lg:w-1/2 flex items-center justify-center px-4 py-12">
+      <div className="w-full lg:w-1/2 flex items-center justify-center px-4 py-6 sm:py-12">
         <div className="w-full max-w-md">
-          <div className="text-center mb-6">
+          <div className="text-center mb-4 sm:mb-6">
             <Link href="/" className="inline-block">
               <div className="flex flex-col items-center">
                 <span className="text-3xl font-bold text-orange-500 hover:text-orange-600 transition-colors">
@@ -364,18 +368,15 @@ export default function SignupPage() {
           </div>
           
           <div className="bg-white rounded-xl shadow-xl border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-8 py-6 border-b border-border">
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-5 sm:px-8 py-4 sm:py-6 border-b border-border">
               <div className="text-center">
-                <h1 className="text-3xl font-bold text-foreground mb-2">
+                <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-1 sm:mb-2">
                   Création de compte
                 </h1>
-                <p className="text-muted-foreground">
-                  Créez votre compte Ada Papers
-                </p>
               </div>
             </div>
 
-            <div className="p-8">
+            <div className="p-5 sm:p-8">
               {error && (
                 <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm">
                   <div className="flex items-center gap-2">
@@ -426,15 +427,12 @@ export default function SignupPage() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-6" aria-busy={isLoading || !!success}>
-                <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 space-y-2">
-                  <p className="text-xs text-blue-900/80 text-center font-medium">
-                    Inscription rapide avec Google
-                  </p>
+              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6" aria-busy={isLoading || !!success}>
+                <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5 sm:p-3 space-y-2">
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full h-12 text-base font-semibold bg-white"
+                    className="w-full h-10 sm:h-12 text-sm sm:text-base font-semibold bg-white"
                     onClick={handleGoogleSignup}
                     disabled={!isGoogleAvailable || isGoogleLoading || isLoading || !!success}
                   >
@@ -446,13 +444,13 @@ export default function SignupPage() {
                     ) : (
                       <span className="flex items-center gap-2">
                         <span>🔵</span>
-                        <span>Continuer l&apos;inscription avec Google</span>
+                        <span>S&apos;inscrire avec Google</span>
                       </span>
                     )}
                   </Button>
                 </div>
 
-                <div className="relative py-1">
+                <div className="relative py-0.5 sm:py-1">
                   <div className="absolute inset-0 flex items-center" aria-hidden>
                     <span className="w-full border-t border-border" />
                   </div>
@@ -461,8 +459,8 @@ export default function SignupPage() {
                   </div>
                 </div>
 
-                <div className="space-y-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-4 sm:space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName">Prénom *</Label>
                       <Input
@@ -549,11 +547,32 @@ export default function SignupPage() {
                   </div>
                 </div>
 
-                <div className="space-y-3 pt-1">
+                <div className="space-y-2.5 sm:space-y-3 pt-1">
+                  <label className="flex items-start gap-2.5 text-[11px] text-muted-foreground leading-snug">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-3.5 w-3.5 rounded border border-input accent-orange-500"
+                      checked={acceptedTerms}
+                      onChange={(e) => setAcceptedTerms(e.target.checked)}
+                      disabled={isLoading || !!success}
+                      required
+                    />
+                    <span>
+                      J&apos;accepte les{' '}
+                      <Link href="/cgu" className="text-primary hover:underline font-semibold">
+                        Conditions Générales d&apos;Utilisation
+                      </Link>{' '}
+                      et la{' '}
+                      <Link href="/politique-confidentialite" className="text-primary hover:underline font-semibold">
+                        Politique de confidentialité
+                      </Link>
+                      .
+                    </span>
+                  </label>
                   <Button
                     type="submit"
-                    className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                    disabled={isLoading || !!success}
+                    className="w-full h-10 sm:h-12 text-sm sm:text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                    disabled={isLoading || !!success || !acceptedTerms}
                   >
                     {success ? (
                       <span className="flex items-center justify-center gap-2">
@@ -571,17 +590,6 @@ export default function SignupPage() {
                       </span>
                     )}
                   </Button>
-                  <p className="text-[11px] text-muted-foreground leading-snug">
-                    En créant un compte, vous acceptez les{' '}
-                    <Link href="/cgu" className="text-primary hover:underline font-semibold">
-                      Conditions Générales d&apos;Utilisation
-                    </Link>{' '}
-                    et la{' '}
-                    <Link href="/politique-confidentialite" className="text-primary hover:underline font-semibold">
-                      Politique de confidentialité
-                    </Link>
-                    .
-                  </p>
                 </div>
               </form>
 

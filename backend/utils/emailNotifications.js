@@ -19,6 +19,51 @@ function hasSmtpConfigured() {
   return Boolean(SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS && EMAIL_FROM);
 }
 
+function toPlainTextFromHtml(html = '') {
+  return String(html)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+function ensureProfessionalEmailContent({ toName = '', htmlContent = '', textContent = '' }) {
+  const fallbackName = toName && String(toName).trim() ? String(toName).trim() : 'Madame, Monsieur';
+  const hello = `Bonjour ${escapeHtml(fallbackName)},`;
+  const helloText = `Bonjour ${fallbackName},`;
+  const closingHtml = '<p>Cordialement,<br/>L’équipe Ada Papers</p>';
+  const closingText = 'Cordialement,\nL’équipe Ada Papers';
+
+  let html = String(htmlContent || '').trim();
+  let text = String(textContent || '').trim();
+
+  if (!html && text) {
+    html = `<p>${escapeHtml(text).replace(/\n/g, '<br/>')}</p>`;
+  }
+  if (!text && html) {
+    text = toPlainTextFromHtml(html);
+  }
+
+  if (!/bonjour|madame|monsieur/i.test(html)) {
+    html = `<p>${hello}</p>\n${html}`;
+  }
+  if (!/cordialement|bien à vous|salutations distinguées/i.test(html)) {
+    html = `${html}\n${closingHtml}`;
+  }
+
+  if (!/bonjour|madame|monsieur/i.test(text)) {
+    text = `${helloText}\n\n${text}`;
+  }
+  if (!/cordialement|bien à vous|salutations distinguées/i.test(text)) {
+    text = `${text}\n\n${closingText}`;
+  }
+
+  return { htmlContent: html, textContent: text };
+}
+
 async function withTimeout(promise, timeoutMs, label) {
   let timer = null;
   try {
@@ -69,12 +114,13 @@ async function sendTransactionalEmailDetailed({ to, toName = '', subject, htmlCo
     return { ok: false, error: 'no_recipient' };
   }
 
+  const normalizedContent = ensureProfessionalEmailContent({ toName, htmlContent, textContent });
   const payload = {
     to: addr,
     toName,
     subject,
-    htmlContent,
-    textContent: textContent || '',
+    htmlContent: normalizedContent.htmlContent,
+    textContent: normalizedContent.textContent || '',
   };
 
   if (hasBrevoConfigured()) {
@@ -110,4 +156,5 @@ module.exports = {
   sendEmailViaSmtp,
   hasBrevoConfigured,
   hasSmtpConfigured,
+  ensureProfessionalEmailContent,
 };

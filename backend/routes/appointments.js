@@ -232,8 +232,17 @@ router.post(
             to: email,
             toName: `${prenom || ''} ${nom}`.trim() || 'Client',
             subject: 'Demande de rendez-vous bien reçue — Ada Papers',
-            htmlContent: `<p>Bonjour ${escapeHtml(prenom || nom)},</p><p>Nous avons bien enregistré votre demande de rendez-vous le <strong>${escapeHtml(dateLabelReq)}</strong> à <strong>${escapeHtml(heure)}</strong>.</p><p>Motif : ${escapeHtml(motifLabelMail)}.</p><p>Nous vous confirmerons ou vous recontacterons par <strong>email</strong>.</p><p style="margin-top:16px;font-size:13px;color:#555;">${escapeHtml(getPrimaryFrontendUrl())}</p>`,
-            textContent: `Bonjour,\n\nVotre demande de rendez-vous du ${dateLabelReq} à ${heure} (${motifLabelMail}) a bien été enregistrée.\n\nL'équipe Ada Papers`,
+            htmlContent: `<p>Bonjour ${escapeHtml(prenom || nom)},</p><p>Nous accusons réception de votre demande de rendez-vous.</p><p><strong>Date souhaitée :</strong> ${escapeHtml(dateLabelReq)} à ${escapeHtml(heure)}.</p><p><strong>Motif déclaré :</strong> ${escapeHtml(motifLabelMail)}.</p><p>Notre équipe va examiner votre demande et vous adressera une confirmation, ou une proposition d’ajustement de créneau, par e-mail dans les meilleurs délais.</p><p style="margin-top:16px;font-size:13px;color:#555;">Accès à votre espace : ${escapeHtml(getPrimaryFrontendUrl())}</p>`,
+            textContent: `Bonjour ${prenom || nom || ''},
+
+Nous accusons réception de votre demande de rendez-vous.
+
+Date souhaitée : ${dateLabelReq} à ${heure}
+Motif déclaré : ${motifLabelMail}
+
+Notre équipe va examiner votre demande et vous adressera une confirmation, ou une proposition d’ajustement de créneau, par e-mail dans les meilleurs délais.
+
+Accès à votre espace : ${getPrimaryFrontendUrl()}`,
           });
         }
         const adminsMail = await User.find({
@@ -248,8 +257,15 @@ router.post(
             to: adm.email,
             toName: adm.firstName || '',
             subject: `Nouvelle demande de RDV — ${prenom || ''} ${nom || ''}`.trim(),
-            htmlContent: `<p>Nouvelle demande de rendez-vous.</p><p><strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong> — ${escapeHtml(email)}${telephone ? ` — ${escapeHtml(telephone)}` : ''}</p><p>Date : ${escapeHtml(dateLabelReq)} à ${escapeHtml(heure)}</p><p>Motif : ${escapeHtml(motifLabelMail)}</p>`,
-            textContent: `Nouveau RDV : ${prenom} ${nom}, ${email}, ${dateLabelReq} ${heure}. Motif: ${motifLabelMail}`,
+            htmlContent: `<p>Une nouvelle demande de rendez-vous a été soumise.</p><p><strong>Demandeur :</strong> ${escapeHtml(prenom)} ${escapeHtml(nom)}<br/><strong>E-mail :</strong> ${escapeHtml(email)}${telephone ? `<br/><strong>Téléphone :</strong> ${escapeHtml(telephone)}` : ''}</p><p><strong>Date/heure demandées :</strong> ${escapeHtml(dateLabelReq)} à ${escapeHtml(heure)}.</p><p><strong>Motif :</strong> ${escapeHtml(motifLabelMail)}.</p><p>Merci de traiter cette demande depuis l’espace d’administration.</p>`,
+            textContent: `Une nouvelle demande de rendez-vous a été soumise.
+
+Demandeur : ${prenom} ${nom}
+E-mail : ${email}${telephone ? `\nTéléphone : ${telephone}` : ''}
+Date/heure demandées : ${dateLabelReq} à ${heure}
+Motif : ${motifLabelMail}
+
+Merci de traiter cette demande depuis l’espace d’administration.`,
           });
         }
       } catch (mailErr) {
@@ -275,8 +291,14 @@ router.post(
               to: clientMail,
               toName: name,
               subject: 'Rendez-vous enregistré — Ada Papers',
-              htmlContent: `<p>Bonjour ${escapeHtml(name)},</p><p>Un rendez-vous a été planifié pour vous le <strong>${escapeHtml(dateLabelSms)}</strong> à <strong>${escapeHtml(rendezVous.heure)}</strong>.</p><p>Vous recevrez une confirmation par email lorsque le rendez-vous sera validé.</p>`,
-              textContent: `Bonjour ${name},\n\nUn rendez-vous a été enregistré pour le ${dateLabelSms} à ${rendezVous.heure}.\n\nAda Papers`,
+              htmlContent: `<p>Bonjour ${escapeHtml(name)},</p><p>Un rendez-vous a été planifié à votre nom.</p><p><strong>Date :</strong> ${escapeHtml(dateLabelSms)}<br/><strong>Heure :</strong> ${escapeHtml(rendezVous.heure)}</p><p>Ce rendez-vous est actuellement en attente de validation finale. Vous recevrez une confirmation par e-mail dès sa prise en charge.</p>`,
+              textContent: `Bonjour ${name},
+
+Un rendez-vous a été planifié à votre nom.
+Date : ${dateLabelSms}
+Heure : ${rendezVous.heure}
+
+Ce rendez-vous est actuellement en attente de validation finale. Vous recevrez une confirmation par e-mail dès sa prise en charge.`,
             });
           }
         } catch (mailErr) {
@@ -671,8 +693,13 @@ router.patch(
                 to: clientMail,
                 toName: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim(),
                 subject: 'Rendez-vous annulé — Ada Papers',
-                htmlContent: `<p>Bonjour,</p><p>Vous avez annulé votre rendez-vous du <strong>${escapeHtml(dateFormatted)}</strong> à <strong>${escapeHtml(rendezVous.heure)}</strong>.</p>`,
-                textContent: `Votre rendez-vous du ${dateFormatted} à ${rendezVous.heure} a bien été annulé.`,
+                htmlContent: `<p>Bonjour,</p><p>Nous confirmons la prise en compte de votre annulation de rendez-vous.</p><p><strong>Créneau annulé :</strong> ${escapeHtml(dateFormatted)} à ${escapeHtml(rendezVous.heure)}.</p><p>Si vous souhaitez reprendre rendez-vous, vous pouvez soumettre une nouvelle demande depuis votre espace client.</p>`,
+                textContent: `Bonjour,
+
+Nous confirmons la prise en compte de votre annulation de rendez-vous.
+Créneau annulé : ${dateFormatted} à ${rendezVous.heure}.
+
+Si vous souhaitez reprendre rendez-vous, vous pouvez soumettre une nouvelle demande depuis votre espace client.`,
               });
             }
           } catch (mailErr) {
@@ -887,8 +914,13 @@ router.put(
                   to: clientMail,
                   toName: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim(),
                   subject: 'Rendez-vous modifié — Ada Papers',
-                  htmlContent: `<p>Bonjour,</p><p>${escapeHtml(notificationMessage)}</p>`,
-                  textContent: notificationMessage,
+                  htmlContent: `<p>Bonjour,</p><p>Votre rendez-vous a fait l’objet d’une mise à jour.</p><p>${escapeHtml(notificationMessage)}</p><p>Nous vous invitons à vérifier les détails actualisés dans votre espace client.</p>`,
+                  textContent: `Bonjour,
+
+Votre rendez-vous a fait l’objet d’une mise à jour.
+${notificationMessage}
+
+Nous vous invitons à vérifier les détails actualisés dans votre espace client.`,
                 });
               }
             } catch (mailErr) {
@@ -1052,11 +1084,22 @@ router.patch(
               toName: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim() || 'Client',
               subject: isOk ? 'Rendez-vous confirmé — Ada Papers' : 'Rendez-vous annulé — Ada Papers',
               htmlContent: isOk
-                ? `<p>Bonjour,</p><p>Votre rendez-vous du <strong>${escapeHtml(dateFormatted)}</strong> à <strong>${escapeHtml(rendezVous.heure)}</strong> est <strong>confirmé</strong>.</p><p>À bientôt,<br/>Ada Papers</p>`
-                : `<p>Bonjour,</p><p>Votre rendez-vous du <strong>${escapeHtml(dateFormatted)}</strong> à <strong>${escapeHtml(rendezVous.heure)}</strong> est <strong>annulé</strong>.</p><p>Ada Papers</p>`,
+                ? `<p>Bonjour,</p><p>Nous vous confirmons que votre rendez-vous est désormais validé.</p><p><strong>Date :</strong> ${escapeHtml(dateFormatted)}<br/><strong>Heure :</strong> ${escapeHtml(rendezVous.heure)}</p><p>Merci de vous présenter à l’heure prévue avec vos documents utiles.</p>`
+                : `<p>Bonjour,</p><p>Nous vous informons que votre rendez-vous prévu a été annulé.</p><p><strong>Créneau concerné :</strong> ${escapeHtml(dateFormatted)} à ${escapeHtml(rendezVous.heure)}</p><p>Vous pouvez effectuer une nouvelle demande de rendez-vous à votre convenance.</p>`,
               textContent: isOk
-                ? `Votre rendez-vous du ${dateFormatted} à ${rendezVous.heure} est confirmé. Ada Papers.`
-                : `Votre rendez-vous du ${dateFormatted} à ${rendezVous.heure} est annulé. Ada Papers.`,
+                ? `Bonjour,
+
+Nous vous confirmons que votre rendez-vous est désormais validé.
+Date : ${dateFormatted}
+Heure : ${rendezVous.heure}
+
+Merci de vous présenter à l’heure prévue avec vos documents utiles.`
+                : `Bonjour,
+
+Nous vous informons que votre rendez-vous prévu a été annulé.
+Créneau concerné : ${dateFormatted} à ${rendezVous.heure}
+
+Vous pouvez effectuer une nouvelle demande de rendez-vous à votre convenance.`,
             });
           }
         } catch (mailErr) {

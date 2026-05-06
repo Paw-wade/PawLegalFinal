@@ -24,10 +24,12 @@ const DEFAULT_TEMPLATES = [
   {
     code: 'account_welcome',
     name: 'Bienvenue utilisateur',
-    description: 'Envoyé lors de la création de compte',
-    subject: 'Bienvenue sur Ada Papers',
-    htmlContent: '<p>Bonjour {{firstName}},</p><p>Bienvenue sur Ada Papers.</p>',
-    textContent: 'Bonjour {{firstName}}, bienvenue sur Ada Papers.',
+    description: 'Envoyé après validation du compte (lien d’activation / OTP)',
+    subject: 'Bienvenue sur Ada Papers, {{firstName}} !',
+    htmlContent:
+      '<p>Bienvenue sur Ada Papers, {{firstName}} !</p><p>Nous sommes ravis de vous accueillir. Votre espace personnel est maintenant actif.</p><p><strong>CE QUE VOUS POUVEZ FAIRE DÈS MAINTENANT</strong></p><p>📁 <strong>Création et suivi de dossier</strong><br/>Créez un dossier d’accompagnement et suivez l’avancement de votre dossier en temps réel, de la création jusqu’à la finalisation.</p><p>⏱️ <strong>Calculateur de délais</strong><br/>Anticipez vos échéances et planifiez vos démarches sereinement.</p><p>🤖 <strong>Ada AI</strong><br/>Obtenez des réponses claires et vérifiées, corroborées par des décisions de justice et adaptées à votre situation. Recevez également des recommandations sur les démarches à suivre.</p><p>💬 <strong>Accompagnement humain</strong><br/>Notre équipe reste disponible à chaque étape depuis votre espace.</p><p><strong>Accédez à votre espace :</strong> https://adapapers.fr</p><p>Cordialement,<br/>L’équipe Ada Papers</p><p style="font-size:12px;color:#666;">© 2025 Ada Papers — adapapers.fr<br/>Si vous n’êtes pas à l’origine de cette inscription, ignorez ce message.</p>',
+    textContent:
+      'Bienvenue sur Ada Papers, {{firstName}} !\n\nNous sommes ravis de vous accueillir. Votre espace personnel est maintenant actif.\n\nCE QUE VOUS POUVEZ FAIRE DÈS MAINTENANT\n\n📁 Création et suivi de dossier\nCréez un dossier d’accompagnement et suivez l’avancement de votre dossier en temps réel, de la création jusqu’à la finalisation.\n\n⏱️ Calculateur de délais\nAnticipez vos échéances et planifiez vos démarches sereinement.\n\n🤖 Ada AI\nObtenez des réponses claires et vérifiées, corroborées par des décisions de justice et adaptées à votre situation. Recevez également des recommandations sur les démarches à suivre.\n\n💬 Accompagnement humain\nNotre équipe reste disponible à chaque étape depuis votre espace.\n\nAccédez à votre espace : https://adapapers.fr\n\nCordialement,\nL’équipe Ada Papers\n\n© 2025 Ada Papers — adapapers.fr\nSi vous n’êtes pas à l’origine de cette inscription, ignorez ce message.',
     category: 'account',
     isSystem: true,
     variables: [{ name: 'firstName', description: 'Prénom', example: 'Ablaye' }],
@@ -37,8 +39,10 @@ const DEFAULT_TEMPLATES = [
     name: 'Code de réinitialisation',
     description: 'Code temporaire envoyé pour récupérer le compte',
     subject: 'Code de réinitialisation',
-    htmlContent: '<p>Votre code est <strong>{{code}}</strong> (valide 10 minutes).</p>',
-    textContent: 'Votre code est {{code}} (valide 10 minutes).',
+    htmlContent:
+      '<p>Bonjour,</p><p>Vous avez demandé la réinitialisation de votre mot de passe.</p><p>Votre code de vérification est : <strong>{{code}}</strong>.</p><p>Ce code est valable pendant 10 minutes. Pour des raisons de sécurité, ne le partagez avec personne.</p><p>Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet e-mail.</p><p>Cordialement,<br/>L’équipe Ada Papers</p>',
+    textContent:
+      'Bonjour,\n\nVous avez demandé la réinitialisation de votre mot de passe.\n\nVotre code de vérification est : {{code}}.\nCe code est valable pendant 10 minutes. Pour des raisons de sécurité, ne le partagez avec personne.\n\nSi vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet e-mail.\n\nCordialement,\nL’équipe Ada Papers',
     category: 'account',
     isSystem: true,
     variables: [{ name: 'code', description: 'Code OTP', example: '123456' }],
@@ -48,8 +52,10 @@ const DEFAULT_TEMPLATES = [
     name: 'Dossier créé',
     description: 'Confirmation de création de dossier',
     subject: 'Votre dossier {{dossierNumero}} a été créé',
-    htmlContent: '<p>Votre dossier <strong>{{dossierNumero}}</strong> est créé.</p>',
-    textContent: 'Votre dossier {{dossierNumero}} est créé.',
+    htmlContent:
+      '<p>Bonjour,</p><p>Nous vous confirmons la création de votre dossier <strong>{{dossierNumero}}</strong>.</p><p>Notre équipe procédera à l’analyse de votre situation et vous informera des prochaines étapes dès que nécessaire.</p><p>Nous vous invitons à consulter régulièrement votre espace personnel pour suivre l’avancement.</p><p>Cordialement,<br/>L’équipe Ada Papers</p>',
+    textContent:
+      'Bonjour,\n\nNous vous confirmons la création de votre dossier {{dossierNumero}}.\n\nNotre équipe procédera à l’analyse de votre situation et vous informera des prochaines étapes dès que nécessaire.\nNous vous invitons à consulter régulièrement votre espace personnel pour suivre l’avancement.\n\nCordialement,\nL’équipe Ada Papers',
     category: 'dossier',
     isSystem: true,
     variables: [{ name: 'dossierNumero', description: 'Référence dossier', example: 'DOS-001' }],
@@ -59,8 +65,10 @@ const DEFAULT_TEMPLATES = [
     name: 'Changement de statut dossier',
     description: 'Notification de changement de statut',
     subject: 'Mise à jour de votre dossier {{dossierNumero}}',
-    htmlContent: '<p>Le statut de votre dossier {{dossierNumero}} est maintenant: <strong>{{status}}</strong>.</p>',
-    textContent: 'Le statut de votre dossier {{dossierNumero}} est maintenant: {{status}}.',
+    htmlContent:
+      '<p>Bonjour,</p><p>Le statut de votre dossier <strong>{{dossierNumero}}</strong> a été mis à jour.</p><p>Nouveau statut : <strong>{{status}}</strong>.</p><p>Pour davantage de détails, nous vous invitons à consulter votre espace client.</p><p>Cordialement,<br/>L’équipe Ada Papers</p>',
+    textContent:
+      'Bonjour,\n\nLe statut de votre dossier {{dossierNumero}} a été mis à jour.\nNouveau statut : {{status}}.\n\nPour davantage de détails, nous vous invitons à consulter votre espace client.\n\nCordialement,\nL’équipe Ada Papers',
     category: 'dossier',
     isSystem: true,
     variables: [
@@ -73,8 +81,10 @@ const DEFAULT_TEMPLATES = [
     name: 'Nouveau message',
     description: 'Alerte email pour nouveau message interne',
     subject: 'Nouveau message reçu',
-    htmlContent: '<p>Vous avez reçu un nouveau message de {{senderName}}.</p>',
-    textContent: 'Vous avez reçu un nouveau message de {{senderName}}.',
+    htmlContent:
+      '<p>Bonjour,</p><p>Vous avez reçu un nouveau message de <strong>{{senderName}}</strong> dans votre espace Ada Papers.</p><p>Nous vous invitons à vous connecter afin de consulter son contenu et y répondre si nécessaire.</p><p>Cordialement,<br/>L’équipe Ada Papers</p>',
+    textContent:
+      'Bonjour,\n\nVous avez reçu un nouveau message de {{senderName}} dans votre espace Ada Papers.\nNous vous invitons à vous connecter afin de consulter son contenu et y répondre si nécessaire.\n\nCordialement,\nL’équipe Ada Papers',
     category: 'message',
     isSystem: true,
     variables: [{ name: 'senderName', description: 'Expéditeur', example: 'Cabinet Ada Papers' }],

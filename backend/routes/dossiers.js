@@ -169,8 +169,13 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
             to: userInfo.user.email,
             toName: `${userInfo.user.firstName || ''} ${userInfo.user.lastName || ''}`.trim(),
             subject: 'Votre dossier a été mis à jour — Ada Papers',
-            htmlContent: `<p>Bonjour,</p><p>${escapeHtml(notificationMessage)}</p>`,
-            textContent: notificationMessage,
+            htmlContent: `<p>Bonjour,</p><p>Nous vous informons qu’une mise à jour a été effectuée sur votre dossier.</p><p>${escapeHtml(notificationMessage)}</p><p>Nous vous invitons à consulter votre espace client pour prendre connaissance des informations détaillées.</p>`,
+            textContent: `Bonjour,
+
+Nous vous informons qu’une mise à jour a été effectuée sur votre dossier.
+${notificationMessage}
+
+Nous vous invitons à consulter votre espace client pour prendre connaissance des informations détaillées.`,
           });
         } catch (emailErr) {
           console.error(`⚠️ Erreur lors de l'envoi de l'email dossier à ${userInfo.user.email}:`, emailErr);
@@ -365,8 +370,13 @@ router.post(
                       to: user.email,
                       toName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
                       subject: 'Nouveau dossier créé — Ada Papers',
-                      htmlContent: `<p>Bonjour ${escapeHtml(user.firstName || '')},</p><p>Un nouveau dossier « ${escapeHtml(dossier.titre)} » a été créé suite à votre rendez-vous du ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p>`,
-                      textContent: `Un nouveau dossier "${dossier.titre}" a été créé suite à votre rendez-vous.`,
+                      htmlContent: `<p>Bonjour ${escapeHtml(user.firstName || '')},</p><p>Nous vous confirmons la création de votre dossier « ${escapeHtml(dossier.titre)} » à la suite de votre rendez-vous.</p><p><strong>Date du rendez-vous :</strong> ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p><p>Votre dossier est désormais pris en charge par notre équipe. Vous serez informé(e) des prochaines étapes depuis votre espace client.</p>`,
+                      textContent: `Bonjour ${user.firstName || ''},
+
+Nous vous confirmons la création de votre dossier "${dossier.titre}" à la suite de votre rendez-vous.
+Date du rendez-vous : ${new Date(rendezVous.date).toLocaleDateString('fr-FR')} à ${rendezVous.heure}
+
+Votre dossier est désormais pris en charge par notre équipe. Vous serez informé(e) des prochaines étapes depuis votre espace client.`,
                     });
                   } catch (mailErr) {
                     console.error('⚠️ Erreur email dossier créé (client):', mailErr);
@@ -399,8 +409,13 @@ router.post(
                         to: userByEmail.email,
                         toName: `${userByEmail.firstName || ''} ${userByEmail.lastName || ''}`.trim(),
                         subject: 'Nouveau dossier créé — Ada Papers',
-                        htmlContent: `<p>Bonjour,</p><p>Un nouveau dossier « ${escapeHtml(dossier.titre)} » a été créé suite à votre rendez-vous du ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p>`,
-                        textContent: `Nouveau dossier "${dossier.titre}" créé suite à votre rendez-vous.`,
+                        htmlContent: `<p>Bonjour,</p><p>Nous vous confirmons la création du dossier « ${escapeHtml(dossier.titre)} » à la suite de votre rendez-vous.</p><p><strong>Date du rendez-vous :</strong> ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p><p>Notre équipe assurera le suivi de votre dossier et vous contactera en cas de besoin complémentaire.</p>`,
+                        textContent: `Bonjour,
+
+Nous vous confirmons la création du dossier "${dossier.titre}" à la suite de votre rendez-vous.
+Date du rendez-vous : ${new Date(rendezVous.date).toLocaleDateString('fr-FR')} à ${rendezVous.heure}
+
+Notre équipe assurera le suivi de votre dossier et vous contactera en cas de besoin complémentaire.`,
                       });
                     } catch (mailErr) {
                       console.error('⚠️ Erreur email dossier créé:', mailErr);
@@ -412,8 +427,13 @@ router.post(
                       to: String(clientEmail).trim(),
                       toName: `${clientPrenom || ''} ${clientNom || ''}`.trim(),
                       subject: 'Nouveau dossier créé — Ada Papers',
-                      htmlContent: `<p>Bonjour,</p><p>Un nouveau dossier « ${escapeHtml(dossier.titre)} » a été créé suite à votre rendez-vous du ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p>`,
-                      textContent: `Nouveau dossier "${dossier.titre}" créé suite à votre rendez-vous.`,
+                      htmlContent: `<p>Bonjour,</p><p>Nous vous confirmons la création du dossier « ${escapeHtml(dossier.titre)} » à la suite de votre rendez-vous.</p><p><strong>Date du rendez-vous :</strong> ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p><p>Nos équipes reviendront vers vous en cas de pièce ou information complémentaire.</p>`,
+                      textContent: `Bonjour,
+
+Nous vous confirmons la création du dossier "${dossier.titre}" à la suite de votre rendez-vous.
+Date du rendez-vous : ${new Date(rendezVous.date).toLocaleDateString('fr-FR')} à ${rendezVous.heure}
+
+Nos équipes reviendront vers vous en cas de pièce ou information complémentaire.`,
                     });
                   } catch (mailErr) {
                     console.error('⚠️ Erreur email dossier (invité):', mailErr);
@@ -2020,8 +2040,11 @@ router.post(
             to: mailUser.email,
             toName: mailUser.firstName || '',
             subject: 'Rappel : tarification — Ada Papers',
-            htmlContent: `<p>Bonjour,</p><p>${escapeHtml(messageInApp)}</p>`,
-            textContent: messageInApp,
+            htmlContent: `<p>Bonjour,</p><p>${escapeHtml(messageInApp)}</p><p>Nous vous invitons à régulariser la situation depuis votre espace client, rubrique Tarification.</p><p>En cas de difficulté, notre équipe reste à votre disposition.</p>`,
+            textContent: `${messageInApp}
+
+Nous vous invitons à régulariser la situation depuis votre espace client, rubrique Tarification.
+En cas de difficulté, notre équipe reste à votre disposition.`,
           });
           if (!emailSent) emailSkipped = 'brevo_error';
         } catch (mailErr) {
@@ -3026,8 +3049,10 @@ router.put(
                 to: mailUserExo.email,
                 toName: mailUserExo.firstName || '',
                 subject: 'Frais de tarification exonérés — Ada Papers',
-                htmlContent: `<p>${escapeHtml(messageExo).replace(/\n/g, '<br/>')}</p>`,
-                textContent: messageExo,
+                htmlContent: `<p>${escapeHtml(messageExo).replace(/\n/g, '<br/>')}</p><p>Cette information est également consultable dans votre espace client, rubrique Tarification.</p>`,
+                textContent: `${messageExo}
+
+Cette information est également consultable dans votre espace client, rubrique Tarification.`,
               });
             }
           }
@@ -3111,8 +3136,10 @@ router.put(
                 to: mailUserTarif.email,
                 toName: mailUserTarif.firstName || '',
                 subject: `${titreTarif} — Ada Papers`,
-                htmlContent: `<p>${escapeHtml(messageTarif).replace(/\n/g, '<br/>')}</p>`,
-                textContent: messageTarif,
+                htmlContent: `<p>${escapeHtml(messageTarif).replace(/\n/g, '<br/>')}</p><p>Nous vous remercions de réaliser les actions demandées depuis votre espace client dans les meilleurs délais.</p>`,
+                textContent: `${messageTarif}
+
+Nous vous remercions de réaliser les actions demandées depuis votre espace client dans les meilleurs délais.`,
               });
             }
 
@@ -3683,8 +3710,11 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
             `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() ||
             'Partenaire',
           subject: 'Nouveau dossier transmis — Ada Papers',
-          htmlContent: `<p>Bonjour,</p><p>Un dossier vous a été transmis : <strong>${escapeHtml(titre)}</strong>.</p><p>Connectez-vous à votre espace partenaire pour le consulter.</p>`,
-          textContent: `Un dossier vous a été transmis : ${titre}. Ada Papers.`,
+          htmlContent: `<p>Bonjour,</p><p>Un nouveau dossier vous a été transmis : <strong>${escapeHtml(titre)}</strong>.</p><p>Nous vous invitons à vous connecter à votre espace partenaire afin de consulter les pièces disponibles et donner suite à cette transmission.</p>`,
+          textContent: `Bonjour,
+
+Un nouveau dossier vous a été transmis : ${titre}.
+Nous vous invitons à vous connecter à votre espace partenaire afin de consulter les pièces disponibles et donner suite à cette transmission.`,
         });
       }
     } catch (mailErr) {
@@ -3717,8 +3747,11 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
             to: clientUser.email,
             toName: clientUser.firstName || '',
             subject: 'Votre dossier a été transmis — Ada Papers',
-            htmlContent: `<p>Bonjour,</p><p>Votre dossier <strong>${escapeHtml(titre)}</strong> a été transmis à <strong>${escapeHtml(pn)}</strong>.</p>`,
-            textContent: `Votre dossier ${titre} a été transmis à ${pn}. Ada Papers.`,
+            htmlContent: `<p>Bonjour,</p><p>Nous vous informons que votre dossier <strong>${escapeHtml(titre)}</strong> a été transmis à <strong>${escapeHtml(pn)}</strong>.</p><p>Cette transmission vise à permettre le traitement de votre demande dans les meilleures conditions.</p>`,
+            textContent: `Bonjour,
+
+Nous vous informons que votre dossier ${titre} a été transmis à ${pn}.
+Cette transmission vise à permettre le traitement de votre demande dans les meilleures conditions.`,
           });
         }
       } catch (mailErr) {

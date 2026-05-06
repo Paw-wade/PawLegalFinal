@@ -9,6 +9,8 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
 const { sendNotificationSMS } = require('../sendSMS');
+const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
+const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 
 // Toutes les routes nécessitent une authentification
 router.use(protect);
@@ -281,6 +283,47 @@ router.post(
       } catch (notifError) {
         console.error('⚠️ Erreur lors de la création de la notification:', notifError);
         // Ne pas bloquer la création de la demande si la notification échoue
+      }
+
+      // Envoi e-mail détaillé au client (priorité e-mail)
+      if (clientUser.email) {
+        try {
+          const dossierRef = dossier.numero || dossier._id.toString();
+          const batchTotal = Math.max(
+            1,
+            Number.parseInt(String(batchDocumentCount), 10) || 1
+          );
+          const isMultiple = batchTotal > 1;
+          const intro = isUrgent
+            ? 'Cette demande est marquée comme urgente.'
+            : 'Merci de transmettre les pièces demandées dans les meilleurs délais.';
+          const bodyLine = isMultiple
+            ? `${batchTotal} documents sont attendus pour votre dossier.`
+            : `Le document attendu est : ${documentTypeLabel}.`;
+          await sendTransactionalEmail({
+            to: clientUser.email,
+            toName: `${clientUser.firstName || ''} ${clientUser.lastName || ''}`.trim(),
+            subject: isUrgent
+              ? `Demande urgente de documents — Dossier ${dossierRef}`
+              : `Demande de documents — Dossier ${dossierRef}`,
+            htmlContent: `
+              <p>Nous vous informons qu'une demande de document a été ajoutée à votre dossier <strong>${escapeHtml(dossierRef)}</strong>.</p>
+              <p><strong>${escapeHtml(bodyLine)}</strong></p>
+              <p>${escapeHtml(intro)}</p>
+              ${message ? `<p><strong>Message de l’équipe :</strong><br/>${escapeHtml(message).replace(/\n/g, '<br/>')}</p>` : ''}
+              <p>Vous pouvez déposer vos documents directement depuis votre espace client.</p>
+              <p><a href="${getPrimaryFrontendUrl()}/client/documents">Accéder à mes documents</a></p>
+            `,
+            textContent: `Une demande de document a été ajoutée à votre dossier ${dossierRef}.
+
+${bodyLine}
+${intro}
+${message ? `Message de l’équipe :\n${message}\n` : ''}
+Déposez vos documents depuis votre espace client : ${getPrimaryFrontendUrl()}/client/documents`,
+          });
+        } catch (emailErr) {
+          console.error('⚠️ Erreur lors de l\'envoi de l\'email de demande de document:', emailErr);
+        }
       }
 
       // Envoyer un SMS si configuré et non explicitement ignoré
