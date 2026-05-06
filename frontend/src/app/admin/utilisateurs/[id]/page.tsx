@@ -38,6 +38,25 @@ export default function AdminUserDetailPage() {
     role: 'client',
     isActive: true,
     profilComplete: false,
+    dateNaissance: '',
+    lieuNaissance: '',
+    nationalite: '',
+    sexe: '',
+    numeroEtranger: '',
+    numeroTitre: '',
+    typeTitre: '',
+    dateDelivrance: '',
+    dateExpiration: '',
+    adressePostale: '',
+    ville: '',
+    codePostal: '',
+    pays: 'France',
+    partenaireInfo: {
+      typeOrganisme: '',
+      nomOrganisme: '',
+      adresseOrganisme: '',
+      contactPrincipal: '',
+    },
   });
 
   useEffect(() => {
@@ -65,6 +84,25 @@ export default function AdminUserDetailPage() {
           role: u?.role || 'client',
           isActive: u?.isActive !== false,
           profilComplete: Boolean(u?.profilComplete),
+          dateNaissance: u?.dateNaissance ? new Date(u.dateNaissance).toISOString().split('T')[0] : '',
+          lieuNaissance: u?.lieuNaissance || '',
+          nationalite: u?.nationalite || '',
+          sexe: u?.sexe || '',
+          numeroEtranger: u?.numeroEtranger || '',
+          numeroTitre: u?.numeroTitre || '',
+          typeTitre: u?.typeTitre || '',
+          dateDelivrance: u?.dateDelivrance ? new Date(u.dateDelivrance).toISOString().split('T')[0] : '',
+          dateExpiration: u?.dateExpiration ? new Date(u.dateExpiration).toISOString().split('T')[0] : '',
+          adressePostale: u?.adressePostale || '',
+          ville: u?.ville || '',
+          codePostal: u?.codePostal || '',
+          pays: u?.pays || 'France',
+          partenaireInfo: {
+            typeOrganisme: u?.partenaireInfo?.typeOrganisme || '',
+            nomOrganisme: u?.partenaireInfo?.nomOrganisme || '',
+            adresseOrganisme: u?.partenaireInfo?.adresseOrganisme || '',
+            contactPrincipal: u?.partenaireInfo?.contactPrincipal || '',
+          },
         });
       } catch (e: any) {
         setError(e?.response?.data?.message || 'Impossible de charger cet utilisateur');
@@ -248,6 +286,201 @@ export default function AdminUserDetailPage() {
                 </label>
               </div>
             </div>
+
+            <div className="border rounded-lg p-4 bg-muted/20 space-y-4">
+              <p className="text-sm font-semibold">Identité du client</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Date de naissance</label>
+                  <input
+                    type="date"
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.dateNaissance || ''}
+                    onChange={(e) => setForm({ ...form, dateNaissance: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Lieu de naissance</label>
+                  <input
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.lieuNaissance || ''}
+                    onChange={(e) => setForm({ ...form, lieuNaissance: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Nationalité</label>
+                  <input
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.nationalite || ''}
+                    onChange={(e) => setForm({ ...form, nationalite: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Sexe</label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2.5 text-sm bg-white"
+                    value={form.sexe || ''}
+                    onChange={(e) => setForm({ ...form, sexe: e.target.value })}
+                  >
+                    <option value="">Sélectionner</option>
+                    <option value="M">M</option>
+                    <option value="F">F</option>
+                    <option value="Autre">Autre</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="border rounded-lg p-4 bg-muted/20 space-y-4">
+              <p className="text-sm font-semibold">Titre de séjour</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Numéro étranger</label>
+                  <input
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.numeroEtranger || ''}
+                    onChange={(e) => setForm({ ...form, numeroEtranger: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Numéro titre</label>
+                  <input
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.numeroTitre || ''}
+                    onChange={(e) => setForm({ ...form, numeroTitre: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Type titre</label>
+                  <input
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.typeTitre || ''}
+                    onChange={(e) => setForm({ ...form, typeTitre: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Date délivrance</label>
+                  <input
+                    type="date"
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.dateDelivrance || ''}
+                    onChange={(e) => setForm({ ...form, dateDelivrance: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Date expiration</label>
+                  <input
+                    type="date"
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.dateExpiration || ''}
+                    onChange={(e) => setForm({ ...form, dateExpiration: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border rounded-lg p-4 bg-muted/20 space-y-4">
+              <p className="text-sm font-semibold">Adresse</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Adresse postale</label>
+                  <input
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.adressePostale || ''}
+                    onChange={(e) => setForm({ ...form, adressePostale: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Ville</label>
+                  <input
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.ville || ''}
+                    onChange={(e) => setForm({ ...form, ville: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Code postal</label>
+                  <input
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.codePostal || ''}
+                    onChange={(e) => setForm({ ...form, codePostal: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Pays</label>
+                  <input
+                    className="w-full border rounded-md px-3 py-2.5 text-sm"
+                    value={form.pays || ''}
+                    onChange={(e) => setForm({ ...form, pays: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {form.role === 'partenaire' && (
+              <div className="border rounded-lg p-4 bg-muted/20 space-y-4">
+                <p className="text-sm font-semibold">Informations partenaire</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground">Type d’organisme</label>
+                    <select
+                      className="w-full border rounded-md px-3 py-2.5 text-sm bg-white"
+                      value={form.partenaireInfo?.typeOrganisme || ''}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          partenaireInfo: { ...(form.partenaireInfo || {}), typeOrganisme: e.target.value },
+                        })
+                      }
+                    >
+                      <option value="">Sélectionner</option>
+                      <option value="consulat">Consulat</option>
+                      <option value="association">Association</option>
+                      <option value="avocat">Avocat</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-foreground">Nom organisme</label>
+                    <input
+                      className="w-full border rounded-md px-3 py-2.5 text-sm"
+                      value={form.partenaireInfo?.nomOrganisme || ''}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          partenaireInfo: { ...(form.partenaireInfo || {}), nomOrganisme: e.target.value },
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <label className="text-sm font-medium text-foreground">Adresse organisme</label>
+                    <input
+                      className="w-full border rounded-md px-3 py-2.5 text-sm"
+                      value={form.partenaireInfo?.adresseOrganisme || ''}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          partenaireInfo: { ...(form.partenaireInfo || {}), adresseOrganisme: e.target.value },
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <label className="text-sm font-medium text-foreground">Contact principal</label>
+                    <input
+                      className="w-full border rounded-md px-3 py-2.5 text-sm"
+                      value={form.partenaireInfo?.contactPrincipal || ''}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          partenaireInfo: { ...(form.partenaireInfo || {}), contactPrincipal: e.target.value },
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="px-5 py-4 md:px-6 border-t bg-white flex flex-wrap gap-3">

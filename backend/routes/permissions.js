@@ -548,6 +548,27 @@ router.get('/roles/presets', async (req, res) => {
           { domaine: 'rendez_vous', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
           { domaine: 'messages', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false }
         ]
+      },
+      visiteur: {
+        roles: ['visiteur'],
+        permissions: [
+          // Accès autorisés
+          { domaine: 'tableau_de_bord', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
+          { domaine: 'dossiers', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
+          // Refus strict sur le reste (dont documents)
+          { domaine: 'utilisateurs', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'taches', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'rendez_vous', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'creneaux', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'messages', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'documents', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'temoignages', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'notifications', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'sms', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'cms', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'logs', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
+          { domaine: 'corbeille', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false }
+        ]
       }
     };
 
