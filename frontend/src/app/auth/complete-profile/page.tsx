@@ -77,6 +77,7 @@ export default function CompleteProfilePage() {
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('client');
+  const isExpired = false; // désactivé — plus de blocage automatique
   const [formData, setFormData] = useState({
     // Champs communs
     numeroEtranger: '',
