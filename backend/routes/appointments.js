@@ -583,6 +583,13 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
       });
     }
 
+    if (!rendezVous.archived) {
+      return res.status(400).json({
+        success: false,
+        message: 'Seuls les rendez-vous archivés peuvent être supprimés. Archivez d’abord le rendez-vous.'
+      });
+    }
+
     await RendezVous.findByIdAndDelete(req.params.id);
 
     res.json({

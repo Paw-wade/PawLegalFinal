@@ -77,7 +77,7 @@ export function getAccessDeniedMessage(route: string): string {
     '/admin/notifications': 'Notifications',
     '/admin/sms': 'SMS',
     '/admin/cms': 'CMS',
-    '/admin/lexia': 'Ada AI',
+    '/admin/lexia': 'Paw AI',
     '/admin/logs': 'Logs',
     '/admin/corbeille': 'Corbeille',
   };

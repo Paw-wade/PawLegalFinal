@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
-/** Même périmètre que la sidebar admin (hors partenaire / client). */
+/** Rôles équipe avec espace /admin (hors client / partenaire). */
 const STAFF_ADMIN_UI_ROLES = new Set([
   'admin',
   'superadmin',
@@ -15,6 +15,8 @@ const STAFF_ADMIN_UI_ROLES = new Set([
   'juriste',
   'stagiaire',
 ]);
+
+const PAW_AI_FULL_ACCESS_ROLES = new Set(['admin', 'superadmin']);
 
 export default function LexiaPublicLayout({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
@@ -29,8 +31,12 @@ export default function LexiaPublicLayout({ children }: { children: React.ReactN
   useEffect(() => {
     if (status !== 'authenticated' || !session?.user) return;
     const userRole = (session.user as { role?: string })?.role || 'client';
-    if (STAFF_ADMIN_UI_ROLES.has(userRole)) {
+    if (PAW_AI_FULL_ACCESS_ROLES.has(userRole)) {
       router.replace('/admin/lexia');
+      return;
+    }
+    if (STAFF_ADMIN_UI_ROLES.has(userRole)) {
+      router.replace('/admin');
     }
   }, [status, session, router]);
 
@@ -51,10 +57,19 @@ export default function LexiaPublicLayout({ children }: { children: React.ReactN
   }
 
   const userRole = (session.user as { role?: string })?.role || 'client';
+
+  if (PAW_AI_FULL_ACCESS_ROLES.has(userRole)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-muted-foreground text-sm">
+        Redirection vers Paw AI (espace équipe)…
+      </div>
+    );
+  }
+
   if (STAFF_ADMIN_UI_ROLES.has(userRole)) {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted-foreground text-sm">
-        Redirection vers Ada AI (espace équipe)…
+        Redirection…
       </div>
     );
   }

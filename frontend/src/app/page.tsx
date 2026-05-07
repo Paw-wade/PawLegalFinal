@@ -1010,10 +1010,10 @@ export default function HomePage() {
       <Link
         href={lexiaHref}
         className="fixed bottom-24 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:bg-orange-600 hover:shadow-xl md:bottom-6 md:right-6"
-        aria-label="Accéder à Ada AI"
+        aria-label="Accéder à Paw AI"
       >
         <span className="text-base leading-none">⚖️</span>
-        <span>Ada AI</span>
+        <span>Paw AI</span>
       </Link>
 
       <ReservationBadge 

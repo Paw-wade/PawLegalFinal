@@ -40,11 +40,14 @@ function Label({ className = '', children, ...props }: any) {
 }
 
 export default function ForgotPasswordPage() {
+  const [method, setMethod] = useState<'email' | 'sms'>('email');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -55,8 +58,15 @@ export default function ForgotPasswordPage() {
     setErrorMessage(null);
 
     try {
-      if (step === 1) {
-        const { data } = await authAPI.forgotPassword({ phone });
+      if (step === 1 && method === 'email') {
+        const { data } = await authAPI.forgotPassword({ email });
+        let msg = 'Si cet email est associé à un compte, un lien de réinitialisation a été envoyé.';
+        if (data?.message && typeof data.message === 'string') {
+          msg = data.message;
+        }
+        setSuccessMessage(msg);
+      } else if (step === 1 && method === 'sms') {
+        const { data } = await authAPI.forgotPasswordByPhone({ phone });
         let msg =
           'Si ce numéro est associé à un compte, un code de vérification vient de vous être envoyé par SMS.';
         if (data?.message && typeof data.message === 'string') {
@@ -119,8 +129,7 @@ export default function ForgotPasswordPage() {
               <div className="text-center">
                 <h1 className="text-3xl font-bold text-foreground mb-2">Mot de passe oublié</h1>
                 <p className="text-muted-foreground text-sm">
-                  Étape 1 : indiquez le numéro de téléphone associé à votre compte pour recevoir un code de vérification par SMS.
-                  Étape 2 : saisissez ce code et choisissez un nouveau mot de passe.
+                  Par défaut, réinitialisez votre mot de passe par email. Si besoin, vous pouvez utiliser la méthode alternative par SMS.
                 </p>
               </div>
             </div>
@@ -138,22 +147,39 @@ export default function ForgotPasswordPage() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Numéro de téléphone associé au compte *</Label>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    autoComplete="tel"
-                    value={phone}
-                    onChange={(e: any) => setPhone(e.target.value)}
-                    placeholder="07 68 03 33 58"
-                    required
-                    disabled={isSubmitting || step === 2}
-                  />
-                </div>
+                {method === 'email' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email associé au compte *</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e: any) => setEmail(e.target.value)}
+                      placeholder="vous@exemple.com"
+                      required
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Numéro de téléphone associé au compte *</Label>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      autoComplete="tel"
+                      value={phone}
+                      onChange={(e: any) => setPhone(e.target.value)}
+                      placeholder="07 68 03 33 58"
+                      required
+                      disabled={isSubmitting || step === 2}
+                    />
+                  </div>
+                )}
 
-                {step === 2 && (
+                {method === 'sms' && step === 2 && (
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="code">Code de vérification reçu par SMS *</Label>
@@ -170,16 +196,27 @@ export default function ForgotPasswordPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="password">Nouveau mot de passe *</Label>
-                      <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        value={password}
-                        onChange={(e: any) => setPassword(e.target.value)}
-                        placeholder="Au moins 8 caractères"
-                        required
-                        disabled={isSubmitting}
-                      />
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          name="password"
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={(e: any) => setPassword(e.target.value)}
+                          placeholder="Au moins 8 caractères"
+                          required
+                          disabled={isSubmitting}
+                          className="pr-24"
+                        />
+                        <button
+                          type="button"
+                          className="absolute inset-y-0 right-3 my-auto h-7 text-xs text-primary hover:underline"
+                          onClick={() => setShowPassword((v) => !v)}
+                          aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                        >
+                          {showPassword ? 'Masquer' : 'Afficher'}
+                        </button>
+                      </div>
                     </div>
                   </>
                 )}
@@ -191,11 +228,47 @@ export default function ForgotPasswordPage() {
                 >
                   {isSubmitting
                     ? 'Envoi en cours...'
-                    : step === 1
+                    : step === 1 && method === 'email'
+                    ? 'Envoyer le lien de récupération'
+                    : step === 1 && method === 'sms'
                     ? 'Envoyer le code de vérification'
                     : 'Valider le nouveau mot de passe'}
                 </Button>
               </form>
+
+              <div className="mt-4 text-center">
+                {method === 'email' ? (
+                  <button
+                    type="button"
+                    className="text-sm text-primary hover:underline font-semibold"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      setMethod('sms');
+                      setStep(1);
+                      setSuccessMessage(null);
+                      setErrorMessage(null);
+                    }}
+                  >
+                    Utiliser un autre moyen (SMS)
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-sm text-primary hover:underline font-semibold"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      setMethod('email');
+                      setStep(1);
+                      setCode('');
+                      setPassword('');
+                      setSuccessMessage(null);
+                      setErrorMessage(null);
+                    }}
+                  >
+                    Revenir à la récupération par email
+                  </button>
+                )}
+              </div>
 
               <div className="mt-6 pt-4 border-t border-border text-center">
                 <p className="text-sm text-muted-foreground">

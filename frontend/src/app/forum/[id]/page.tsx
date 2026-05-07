@@ -35,6 +35,7 @@ interface ForumPost {
   parentPost?: string | { _id: string };
   createdAt: string;
   createdBy?: {
+    _id?: string;
     prenom?: string;
     nom?: string;
     role?: string;
@@ -56,6 +57,7 @@ interface ForumPost {
     nom?: string;
     role?: string;
   };
+  updatedAt?: string;
 }
 
 interface ThreadResponse {
@@ -89,6 +91,9 @@ export default function ForumThreadPage() {
   const [updatingThread, setUpdatingThread] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [verifyingPostId, setVerifyingPostId] = useState<string | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState('');
+  const [savingPostId, setSavingPostId] = useState<string | null>(null);
   const [openShareId, setOpenShareId] = useState<string | null>(null);
   const shareMenuRef = useRef<HTMLDivElement | null>(null);
   const mainReplyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -98,6 +103,7 @@ export default function ForumThreadPage() {
 
   const userRole = (session?.user as any)?.role || 'client';
   const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+  const currentUserId = ((session?.user as any)?._id || (session?.user as any)?.id || '').toString();
   const canReplyToThread = !!thread && thread.status !== 'resolved' && thread.status !== 'closed' && thread.status !== 'archived';
 
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -381,6 +387,45 @@ export default function ForumThreadPage() {
     } finally {
       setVerifyingPostId(null);
     }
+  };
+
+  const handleAdminStartEditPost = (post: ForumPost) => {
+    setEditingPostId(post._id);
+    setEditingBody(post.body || '');
+  };
+
+  const handleAdminCancelEditPost = () => {
+    setEditingPostId(null);
+    setEditingBody('');
+  };
+
+  const handleAdminSavePostEdit = async (postId: string) => {
+    const normalizedBody = editingBody.trim();
+    if (!normalizedBody) return;
+    try {
+      setSavingPostId(postId);
+      setError(null);
+      const response = await forumAPI.updatePostAsAdmin(postId, { body: normalizedBody });
+      const updated = response.data?.data as ForumPost;
+      if (updated) {
+        setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, ...updated } : p)));
+      } else {
+        setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, body: normalizedBody } : p)));
+      }
+      handleAdminCancelEditPost();
+    } catch (err) {
+      console.error('Erreur lors de la modification de la réponse (admin):', err);
+      setError("Impossible de modifier la réponse.");
+    } finally {
+      setSavingPostId(null);
+    }
+  };
+
+  const canEditPost = (post: ForumPost) => {
+    if (isAdmin) return true;
+    if (!currentUserId) return false;
+    const postAuthorId = (post.createdBy?._id || '').toString();
+    return !!postAuthorId && postAuthorId === currentUserId;
   };
 
   return (
@@ -703,9 +748,38 @@ export default function ForumThreadPage() {
                                 <div className="mb-1 text-[11px] text-gray-500 break-words">
                                   {getAuthorLabel(post.createdBy, post.guestName)}
                                 </div>
-                                <p className="text-gray-800 whitespace-pre-line break-words">
-                                  {post.body}
-                                </p>
+                                {canEditPost(post) && editingPostId === post._id ? (
+                                  <div className="space-y-2">
+                                    <textarea
+                                      value={editingBody}
+                                      onChange={(e) => setEditingBody(e.target.value)}
+                                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 min-h-[90px]"
+                                      placeholder="Modifier la réponse..."
+                                    />
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <button
+                                        type="button"
+                                        disabled={savingPostId === post._id || !editingBody.trim()}
+                                        onClick={() => handleAdminSavePostEdit(post._id)}
+                                        className="inline-flex items-center justify-center px-2.5 py-1 rounded-md bg-orange-500 text-white text-[11px] font-medium hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                      >
+                                        {savingPostId === post._id ? 'Enregistrement...' : 'Enregistrer'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={savingPostId === post._id}
+                                        onClick={handleAdminCancelEditPost}
+                                        className="inline-flex items-center justify-center px-2.5 py-1 rounded-md border border-gray-300 bg-white text-[11px] text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+                                      >
+                                        Annuler
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-gray-800 whitespace-pre-line break-words">
+                                    {post.body}
+                                  </p>
+                                )}
                                 <div className="mt-2 flex w-full flex-row flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500">
                                   <span className="break-words">
                                     {post.createdAt
@@ -833,49 +907,65 @@ export default function ForumThreadPage() {
                                   </form>
                                 )}
                               </div>
-                              {isAdmin && (
+                              {(isAdmin || canEditPost(post)) && (
                                 <div className="flex flex-row sm:flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
+                                  {isAdmin && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        disabled={verifyingPostId === post._id}
+                                        onClick={() =>
+                                          handleAdminVerifyPost(post._id, {
+                                            isVerified: !post.isVerified,
+                                            isRejected: false,
+                                          })
+                                        }
+                                        className="text-[10px] text-emerald-700 hover:text-emerald-800 disabled:opacity-60"
+                                      >
+                                        {verifyingPostId === post._id
+                                          ? 'Mise à jour...'
+                                          : post.isVerified
+                                            ? 'Retirer Vérifiée'
+                                            : 'Marquer Vérifiée'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={verifyingPostId === post._id}
+                                        onClick={() =>
+                                          handleAdminVerifyPost(post._id, {
+                                            isRejected: !post.isRejected,
+                                            isVerified: false,
+                                          })
+                                        }
+                                        className="text-[10px] text-red-700 hover:text-red-800 disabled:opacity-60"
+                                      >
+                                        {verifyingPostId === post._id
+                                          ? 'Mise à jour...'
+                                          : post.isRejected
+                                            ? 'Retirer Désapprouvée'
+                                            : 'Marquer Désapprouvée'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={deletingPostId === post._id}
+                                        onClick={() => handleAdminDeletePost(post._id)}
+                                        className="text-[10px] text-red-600 hover:text-red-700 disabled:opacity-60"
+                                      >
+                                        {deletingPostId === post._id ? 'Suppression...' : 'Supprimer'}
+                                      </button>
+                                    </>
+                                  )}
                                   <button
                                     type="button"
-                                    disabled={verifyingPostId === post._id}
+                                    disabled={savingPostId === post._id}
                                     onClick={() =>
-                                      handleAdminVerifyPost(post._id, {
-                                        isVerified: !post.isVerified,
-                                        isRejected: false,
-                                      })
+                                      editingPostId === post._id
+                                        ? handleAdminCancelEditPost()
+                                        : handleAdminStartEditPost(post)
                                     }
-                                    className="text-[10px] text-emerald-700 hover:text-emerald-800 disabled:opacity-60"
+                                    className="text-[10px] text-gray-700 hover:text-gray-900 disabled:opacity-60"
                                   >
-                                    {verifyingPostId === post._id
-                                      ? 'Mise à jour...'
-                                      : post.isVerified
-                                        ? 'Retirer Vérifiée'
-                                        : 'Marquer Vérifiée'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={verifyingPostId === post._id}
-                                    onClick={() =>
-                                      handleAdminVerifyPost(post._id, {
-                                        isRejected: !post.isRejected,
-                                        isVerified: false,
-                                      })
-                                    }
-                                    className="text-[10px] text-red-700 hover:text-red-800 disabled:opacity-60"
-                                  >
-                                    {verifyingPostId === post._id
-                                      ? 'Mise à jour...'
-                                      : post.isRejected
-                                        ? 'Retirer Désapprouvée'
-                                        : 'Marquer Désapprouvée'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={deletingPostId === post._id}
-                                    onClick={() => handleAdminDeletePost(post._id)}
-                                    className="text-[10px] text-red-600 hover:text-red-700 disabled:opacity-60"
-                                  >
-                                    {deletingPostId === post._id ? 'Suppression...' : 'Supprimer'}
+                                    {editingPostId === post._id ? 'Fermer édition' : 'Modifier'}
                                   </button>
                                 </div>
                               )}

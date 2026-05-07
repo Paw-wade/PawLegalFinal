@@ -63,7 +63,7 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/carousel', label: 'Carrousel home', icon: Image },
   { href: '/admin/cms', label: 'CMS', icon: FileEdit },
   { href: '/admin/recours', label: 'Documentation', icon: FolderOpen, roles: ['admin', 'superadmin'] },
-  { href: '/admin/lexia', label: 'Ada AI', icon: Scale, roles: ['admin', 'superadmin'] },
+  { href: '/admin/lexia', label: 'Paw AI', icon: Scale, roles: ['admin', 'superadmin'] },
   { href: '/admin/logs', label: 'Logs', icon: ScrollText, roles: ['superadmin'] },
   { href: '/admin/corbeille', label: 'Corbeille', icon: Trash2 },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
@@ -166,7 +166,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-neutral-900/25 backdrop-blur-[2px] lg:hidden"
+          className="fixed inset-0 z-[60] bg-neutral-900/25 backdrop-blur-[2px] lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -176,7 +176,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
       <aside
         className={`
           w-64 bg-white border-r border-gray-200 flex flex-col
-          fixed top-0 left-0 bottom-0 z-50 lg:bottom-auto lg:h-screen lg:min-h-screen
+          fixed top-0 left-0 bottom-0 z-[70] lg:bottom-auto lg:h-screen lg:min-h-screen
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0

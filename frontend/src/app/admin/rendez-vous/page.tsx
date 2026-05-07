@@ -141,16 +141,22 @@ const DEFAULT_RDV_HEURES = [
   '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00',
 ];
 
+/** Rendez-vous terminé côté métier : statut ou marqué effectué (sans imposer archived). */
+function isRdvTerminated(rdv: any) {
+  const s = rdv.statut || '';
+  return s === 'termine' || s === 'terminé' || rdv.effectue === true;
+}
+
 export default function AdminRendezVousPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [rendezVous, setRendezVous] = useState<any[]>([]);
   const [filter, setFilter] = useState('all'); // all, today, week, month
-  const [statusFilter, setStatusFilter] = useState<'all' | 'en_attente' | 'confirme' | 'annule' | 'termine'>('all');
-  const [showArchived, setShowArchived] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'en_attente' | 'confirme' | 'annule' | 'termine' | 'archived'>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [deletingAppointmentId, setDeletingAppointmentId] = useState<string | null>(null);
   const [editingRdv, setEditingRdv] = useState<any | null>(null);
   const [showAdminBookingModal, setShowAdminBookingModal] = useState(false);
   const [clientUsers, setClientUsers] = useState<any[]>([]);
@@ -205,14 +211,14 @@ export default function AdminRendezVousPage() {
         loadAppointments();
       }
     }
-  }, [session, status, router, filter, showArchived]);
+  }, [session, status, router, filter]);
 
   const loadAppointments = async () => {
     setIsLoading(true);
     setError(null);
     try {
       console.log('🔄 Chargement des rendez-vous admin...');
-      const response = await appointmentsAPI.getAllAppointments();
+      const response = await appointmentsAPI.getAllAppointments({ includeArchived: 'true' });
       console.log('✅ Réponse getAllAppointments:', response.data);
       
       if (response.data.success) {
@@ -597,16 +603,6 @@ export default function AdminRendezVousPage() {
             >
               🗓️ Ce mois
             </button>
-            <button
-              onClick={() => setShowArchived(!showArchived)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                showArchived 
-                  ? 'bg-gray-600 text-white shadow-md' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {showArchived ? '📦 Afficher les actifs' : '📦 Afficher les archivés'}
-            </button>
             <Button onClick={loadAppointments} variant="outline" className="ml-auto">
               🔄 Actualiser
             </Button>
@@ -615,7 +611,7 @@ export default function AdminRendezVousPage() {
 
         {/* Statistiques rapides */}
         {!isLoading && rendezVous.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-3">
             <button
               type="button"
               onClick={() => setStatusFilter('en_attente')}
@@ -627,7 +623,7 @@ export default function AdminRendezVousPage() {
             >
               <p className="text-xs text-yellow-700 font-semibold mb-1 uppercase tracking-wide">En attente</p>
               <p className="text-2xl font-bold text-yellow-900">
-                {rendezVous.filter((r: any) => r.statut === 'en_attente').length}
+                {rendezVous.filter((r: any) => !r.archived && r.statut === 'en_attente').length}
               </p>
             </button>
             <button
@@ -641,7 +637,7 @@ export default function AdminRendezVousPage() {
             >
               <p className="text-xs text-blue-700 font-semibold mb-1 uppercase tracking-wide">Confirmés</p>
               <p className="text-2xl font-bold text-blue-900">
-                {rendezVous.filter((r: any) => r.statut === 'confirme' || r.statut === 'confirmé').length}
+                {rendezVous.filter((r: any) => !r.archived && (r.statut === 'confirme' || r.statut === 'confirmé')).length}
               </p>
             </button>
             <button
@@ -655,7 +651,7 @@ export default function AdminRendezVousPage() {
             >
               <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Annulés</p>
               <p className="text-2xl font-bold text-red-900">
-                {rendezVous.filter((r: any) => r.statut === 'annule' || r.statut === 'annulé').length}
+                {rendezVous.filter((r: any) => !r.archived && (r.statut === 'annule' || r.statut === 'annulé')).length}
               </p>
             </button>
             <button
@@ -669,7 +665,21 @@ export default function AdminRendezVousPage() {
             >
               <p className="text-xs text-green-700 font-semibold mb-1 uppercase tracking-wide">Terminés</p>
               <p className="text-2xl font-bold text-green-900">
-                {rendezVous.filter((r: any) => r.statut === 'termine' || r.statut === 'terminé').length}
+                {rendezVous.filter((r: any) => isRdvTerminated(r)).length}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('archived')}
+              className={`text-left bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
+                statusFilter === 'archived'
+                  ? 'ring-2 ring-slate-500/60 shadow-md'
+                  : 'hover:shadow-md hover:-translate-y-0.5'
+              }`}
+            >
+              <p className="text-xs text-slate-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {rendezVous.filter((r: any) => r.archived === true).length}
               </p>
             </button>
           </div>
@@ -680,7 +690,7 @@ export default function AdminRendezVousPage() {
           <div className="flex items-center justify-between mb-4 text-xs text-muted-foreground">
             <div>
               {statusFilter === 'all' ? (
-                <span>Tous les statuts de rendez-vous sont affichés.</span>
+                <span>Les rendez-vous archivés sont dans l’onglet « Archivés ». Sélectionnez un filtre pour affiner.</span>
               ) : (
                 <span>
                   Filtre statut :{' '}
@@ -689,6 +699,7 @@ export default function AdminRendezVousPage() {
                     {statusFilter === 'confirme' && 'Confirmés'}
                     {statusFilter === 'annule' && 'Annulés'}
                     {statusFilter === 'termine' && 'Terminés'}
+                    {statusFilter === 'archived' && 'Archivés'}
                   </span>
                 </span>
               )}
@@ -730,11 +741,13 @@ export default function AdminRendezVousPage() {
           ) : (() => {
             const filteredByStatus = rendezVous.filter((rdv: any) => {
               const statut = rdv.statut || 'en_attente';
-              if (statusFilter === 'all') return true;
+              if (statusFilter === 'all') return !rdv.archived;
+              if (statusFilter === 'archived') return rdv.archived === true;
+              if (statusFilter === 'termine') return isRdvTerminated(rdv);
+              if (rdv.archived) return false;
               if (statusFilter === 'en_attente') return statut === 'en_attente';
               if (statusFilter === 'confirme') return statut === 'confirme' || statut === 'confirmé';
               if (statusFilter === 'annule') return statut === 'annule' || statut === 'annulé';
-              if (statusFilter === 'termine') return statut === 'termine' || statut === 'terminé';
               return true;
             });
 
@@ -787,17 +800,19 @@ export default function AdminRendezVousPage() {
                 }
                 const statut = rdv.statut || 'en_attente';
                 
-                const getStatutColor = (statut: string) => {
+                const terminated = isRdvTerminated(rdv);
+                
+                const getStatutColor = (statut: string, done: boolean) => {
+                  if (done || statut === 'termine' || statut === 'terminé') return 'bg-gray-100 text-gray-800';
                   if (statut === 'confirme' || statut === 'confirmé') return 'bg-green-100 text-green-800';
                   if (statut === 'annule' || statut === 'annulé') return 'bg-red-100 text-red-800';
-                  if (statut === 'termine' || statut === 'terminé') return 'bg-gray-100 text-gray-800';
                   return 'bg-yellow-100 text-yellow-800';
                 };
 
-                const getStatutLabel = (statut: string) => {
+                const getStatutLabel = (statut: string, done: boolean) => {
+                  if (done || statut === 'termine' || statut === 'terminé') return 'Terminé';
                   if (statut === 'confirme' || statut === 'confirmé') return 'Confirmé';
                   if (statut === 'annule' || statut === 'annulé') return 'Annulé';
-                  if (statut === 'termine' || statut === 'terminé') return 'Terminé';
                   return 'En attente';
                 };
                 
@@ -842,8 +857,8 @@ export default function AdminRendezVousPage() {
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(statut)}`}>
-                          {getStatutLabel(statut)}
+                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(statut, terminated)}`}>
+                          {getStatutLabel(statut, terminated)}
                         </span>
                         {rdv.archived && (
                           <span className="px-2 py-1 rounded-md text-xs font-semibold bg-gray-100 text-gray-800">
@@ -914,7 +929,7 @@ export default function AdminRendezVousPage() {
                     {/* Actions */}
                     <div className="pt-3 border-t border-gray-200">
                       <div className="flex items-center justify-end">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           {/* Case à cocher "Effectué" */}
                           {!rdv.effectue && statut !== 'annule' && statut !== 'annulé' && (
                             <Button
@@ -1022,24 +1037,60 @@ export default function AdminRendezVousPage() {
                               📦 Archiver
                             </Button>
                           ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-xs h-8 border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400"
-                              onClick={async () => {
-                                try {
-                                  const response = await appointmentsAPI.archiveAppointment(rdv._id || rdv.id, false);
-                                  if (response.data.success) {
-                                    await loadAppointments();
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-8 border-blue-300 text-blue-600 hover:bg-blue-50 hover:border-blue-400"
+                                onClick={async () => {
+                                  try {
+                                    const response = await appointmentsAPI.archiveAppointment(rdv._id || rdv.id, false);
+                                    if (response.data.success) {
+                                      await loadAppointments();
+                                    }
+                                  } catch (err: any) {
+                                    console.error('Erreur lors du désarchivage:', err);
+                                    setError(err.response?.data?.message || 'Erreur lors du désarchivage');
                                   }
-                                } catch (err: any) {
-                                  console.error('Erreur lors du désarchivage:', err);
-                                  setError(err.response?.data?.message || 'Erreur lors du désarchivage');
-                                }
-                              }}
-                            >
-                              📂 Désarchiver
-                            </Button>
+                                }}
+                              >
+                                📂 Désarchiver
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-8 border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
+                                disabled={deletingAppointmentId === (rdv._id || rdv.id)}
+                                onClick={async () => {
+                                  const id = rdv._id || rdv.id;
+                                  if (
+                                    !confirm(
+                                      'Supprimer définitivement ce rendez-vous archivé ? Cette action est irréversible.'
+                                    )
+                                  ) {
+                                    return;
+                                  }
+                                  setError(null);
+                                  setDeletingAppointmentId(id);
+                                  try {
+                                    const response = await appointmentsAPI.deleteAppointment(id);
+                                    if (response.data.success) {
+                                      setSuccess('Rendez-vous supprimé.');
+                                      await loadAppointments();
+                                    }
+                                  } catch (err: any) {
+                                    console.error('Erreur lors de la suppression:', err);
+                                    setError(err.response?.data?.message || 'Erreur lors de la suppression');
+                                  } finally {
+                                    setDeletingAppointmentId(null);
+                                  }
+                                }}
+                              >
+                                {deletingAppointmentId === (rdv._id || rdv.id)
+                                  ? 'Suppression…'
+                                  : '🗑️ Supprimer'}
+                              </Button>
+                            </>
                           )}
                         </div>
                       </div>

@@ -190,7 +190,7 @@ export default function ClientTarificationPage() {
                 <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
                   <p className="font-semibold">Frais exonérés pour ce dossier</p>
                   <p className="text-emerald-800/90 mt-1">
-                    L’administration n’attend pas de choix de formule tarifaire. Vous pouvez ignorer cette page pour ce dossier.
+                    La Platefoeme n’attend pas de choix de formule tarifaire. Vous pouvez ignorer cette page pour ce dossier.
                   </p>
                 </div>
               ) : hasMontantFixe ? (

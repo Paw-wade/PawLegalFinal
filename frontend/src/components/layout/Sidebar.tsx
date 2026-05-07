@@ -72,7 +72,7 @@ const clientMenuItems: MenuItem[] = [
   { href: '/client/messages', label: 'Messages', icon: MessageSquare },
   { href: '/client/notifications', label: 'Notifications', icon: Bell },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
-  { href: '/lexia', label: 'Ada AI', icon: Scale },
+  { href: '/lexia', label: 'Paw AI', icon: Scale },
   { href: '/calculateur', label: 'Calculateur', icon: Calculator },
   { href: '/client/compte', label: 'Mon compte', icon: User },
 ];
@@ -191,7 +191,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 top-14 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 top-14 bg-black/50 z-[60] lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -199,7 +199,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       <aside
         className={`
           w-[min(16rem,85vw)] max-w-64 bg-white border-r border-gray-200 flex flex-col
-          fixed top-0 left-0 z-50 bottom-0 lg:bottom-auto lg:h-screen lg:min-h-screen
+          fixed top-0 left-0 z-[70] bottom-0 lg:bottom-auto lg:h-screen lg:min-h-screen
           pt-[env(safe-area-inset-top,0)] lg:pt-0
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}

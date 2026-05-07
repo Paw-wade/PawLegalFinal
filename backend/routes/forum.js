@@ -6,6 +6,7 @@ const ForumThread = require('../models/ForumThread');
 const ForumPost = require('../models/ForumPost');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const { sendTransactionalEmailDetailed } = require('../utils/emailNotifications');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -90,6 +91,42 @@ const decoratePostWithLikeState = (postDoc, actorKey) => {
     likesCount: likedByKeys.length + legacyLikes.length,
     liked: (!!actorKey && likedByKeys.includes(actorKey)) || hasLegacyLike,
   };
+};
+
+const getFrontendBaseUrl = () => {
+  const raw = (process.env.FRONTEND_URL || '').toString();
+  const first = raw.split(',').map((s) => s.trim()).find(Boolean);
+  return first || 'https://adapapers.fr';
+};
+
+const getUserDisplayName = (user) => {
+  if (!user) return '';
+  const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+  return fullName || user.email || '';
+};
+
+const sendForumEmailsSafely = async (recipients, { subject, htmlContent, textContent }) => {
+  if (!Array.isArray(recipients) || recipients.length === 0) return;
+  const settled = await Promise.allSettled(
+    recipients.map((r) =>
+      sendTransactionalEmailDetailed({
+        to: r.email,
+        toName: r.name || '',
+        subject,
+        htmlContent,
+        textContent,
+      })
+    )
+  );
+  for (const result of settled) {
+    if (result.status === 'rejected') {
+      console.error('Erreur envoi email forum:', result.reason?.message || result.reason);
+      continue;
+    }
+    if (!result.value?.ok) {
+      console.error('Erreur envoi email forum:', result.value?.error || 'unknown_error');
+    }
+  }
 };
 
 // GET /api/forum/threads - Liste des discussions (publique)
@@ -241,6 +278,49 @@ router.post(
         console.error('Erreur notification forum_thread_created:', notifError);
       }
 
+      // Envoyer un email aux admins + au créateur (si connecté)
+      try {
+        const [adminsWithEmail, authorUser] = await Promise.all([
+          User.find({
+            role: { $in: ['admin', 'superadmin'] },
+            isActive: true,
+            email: { $exists: true, $ne: '' },
+          }).select('email firstName lastName'),
+          authorId
+            ? User.findOne({
+                _id: authorId,
+                isActive: true,
+                email: { $exists: true, $ne: '' },
+              }).select('email firstName lastName')
+            : Promise.resolve(null),
+        ]);
+
+        const byEmail = new Map();
+        for (const admin of adminsWithEmail) {
+          if (!admin?.email) continue;
+          byEmail.set(admin.email.toLowerCase(), {
+            email: admin.email,
+            name: getUserDisplayName(admin),
+          });
+        }
+        if (authorUser?.email) {
+          byEmail.set(authorUser.email.toLowerCase(), {
+            email: authorUser.email,
+            name: getUserDisplayName(authorUser),
+          });
+        }
+
+        const recipients = Array.from(byEmail.values());
+        const threadUrl = `${getFrontendBaseUrl()}/forum/${thread._id}`;
+        await sendForumEmailsSafely(recipients, {
+          subject: `Forum - Nouvelle discussion: ${title}`,
+          htmlContent: `<p>Une nouvelle discussion a été publiée sur le forum.</p><p><strong>Titre :</strong> ${title}</p><p><a href="${threadUrl}">Voir la discussion</a></p>`,
+          textContent: `Une nouvelle discussion a été publiée sur le forum.\nTitre : ${title}\nVoir la discussion : ${threadUrl}`,
+        });
+      } catch (emailError) {
+        console.error('Erreur email forum_thread_created:', emailError);
+      }
+
       res.status(201).json({ success: true, data: thread });
     } catch (error) {
       console.error('Erreur lors de la création de la discussion:', error);
@@ -387,6 +467,63 @@ router.post(
         console.error('Erreur notification forum_reply_created:', notifError);
       }
 
+      // Envoyer un email de notification pour toute nouvelle réponse
+      try {
+        const replyAuthorId = authorId ? authorId.toString() : null;
+        const emailRecipientIds = new Set();
+
+        // Créateur du thread
+        const threadCreatorId = thread.createdBy?.toString();
+        if (threadCreatorId && threadCreatorId !== replyAuthorId) {
+          emailRecipientIds.add(threadCreatorId);
+        }
+
+        // Participants de la discussion
+        const participantIds = await ForumPost.distinct('createdBy', {
+          thread: threadId,
+          isDeleted: false,
+        });
+        for (const pid of participantIds) {
+          const id = pid?.toString();
+          if (id && id !== replyAuthorId) {
+            emailRecipientIds.add(id);
+          }
+        }
+
+        // Admins
+        const admins = await User.find({
+          role: { $in: ['admin', 'superadmin'] },
+          isActive: true,
+        }).select('_id');
+        for (const admin of admins) {
+          const id = admin?._id?.toString?.();
+          if (id && id !== replyAuthorId) {
+            emailRecipientIds.add(id);
+          }
+        }
+
+        if (emailRecipientIds.size > 0) {
+          const users = await User.find({
+            _id: { $in: Array.from(emailRecipientIds) },
+            isActive: true,
+            email: { $exists: true, $ne: '' },
+          }).select('email firstName lastName');
+
+          const recipients = users
+            .filter((u) => !!u?.email)
+            .map((u) => ({ email: u.email, name: getUserDisplayName(u) }));
+          const threadUrl = `${getFrontendBaseUrl()}/forum/${thread._id}`;
+
+          await sendForumEmailsSafely(recipients, {
+            subject: `Forum - Nouvelle réponse: ${thread.title}`,
+            htmlContent: `<p>Une nouvelle réponse a été publiée dans la discussion :</p><p><strong>${thread.title}</strong></p><p><a href="${threadUrl}">Voir la discussion</a></p>`,
+            textContent: `Une nouvelle réponse a été publiée dans la discussion "${thread.title}".\nVoir la discussion : ${threadUrl}`,
+          });
+        }
+      } catch (emailError) {
+        console.error('Erreur email forum_reply_created:', emailError);
+      }
+
       res.status(201).json({ success: true, data: post });
     } catch (error) {
       console.error('Erreur lors de la création de la réponse:', error);
@@ -473,6 +610,54 @@ router.delete(
     } catch (error) {
       console.error('Erreur lors de la suppression de la réponse (admin):', error);
       res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+  }
+);
+
+// PATCH /api/forum/posts/:id - Modifier le texte d'une réponse (admin, sans notification)
+router.patch(
+  '/posts/:id',
+  protect,
+  [
+    body('body')
+      .isString()
+      .isLength({ min: 2 })
+      .withMessage('Le contenu doit contenir au moins 2 caractères'),
+  ],
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const postId = req.params.id;
+      const content = req.body.body.trim();
+      const currentUserId = req.user?.id?.toString?.() || req.user?._id?.toString?.() || '';
+      const currentUserRole = req.user?.role || '';
+
+      const post = await ForumPost.findById(postId);
+      if (!post || post.isDeleted) {
+        return res.status(404).json({ success: false, message: 'Réponse introuvable' });
+      }
+
+      const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
+      const isOwner = !!post.createdBy && post.createdBy.toString() === currentUserId;
+      if (!isAdmin && !isOwner) {
+        return res.status(403).json({
+          success: false,
+          message: "Vous n'êtes pas autorisé à modifier cette réponse.",
+        });
+      }
+
+      post.body = content;
+      post.updatedAt = new Date();
+      await post.save();
+      await post.populate('createdBy', 'prenom nom role');
+      await post.populate('verifiedBy', 'prenom nom role');
+      await post.populate('rejectedBy', 'prenom nom role');
+
+      // Intentionnellement aucune notification utilisateur pour les corrections admin.
+      return res.json({ success: true, data: post });
+    } catch (error) {
+      console.error('Erreur lors de la modification de la réponse (admin):', error);
+      return res.status(500).json({ success: false, message: 'Erreur serveur' });
     }
   }
 );

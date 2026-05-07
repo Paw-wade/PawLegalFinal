@@ -26,7 +26,7 @@ const menuItems = [
   { href: '/calculateur', label: 'Calculateur', icon: Calculator },
   { href: '/partenaire/rendez-vous', label: 'Rendez-vous', icon: Calendar },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
-  { href: '/lexia', label: 'Ada AI', icon: Scale },
+  { href: '/lexia', label: 'Paw AI', icon: Scale },
   { href: '/partenaire/compte', label: 'Mon compte', icon: User },
 ];
 
@@ -66,7 +66,7 @@ export function PartenaireSidebar({ isOpen = true, onClose }: PartenaireSidebarP
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-[60] lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -74,7 +74,7 @@ export function PartenaireSidebar({ isOpen = true, onClose }: PartenaireSidebarP
       <aside
         className={`
           w-64 bg-white border-r border-gray-200 flex flex-col
-          fixed top-0 left-0 bottom-0 z-50 lg:bottom-auto lg:h-screen lg:min-h-screen
+          fixed top-0 left-0 bottom-0 z-[70] lg:bottom-auto lg:h-screen lg:min-h-screen
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0

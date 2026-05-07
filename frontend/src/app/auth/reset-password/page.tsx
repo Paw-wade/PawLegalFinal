@@ -47,6 +47,8 @@ function ResetPasswordContent() {
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -148,31 +150,53 @@ function ResetPasswordContent() {
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="space-y-2">
                     <Label htmlFor="password">Nouveau mot de passe *</Label>
-                    <Input
-                      id="password"
-                      name="password"
-                      type="password"
-                      autoComplete="new-password"
-                      value={password}
-                      onChange={(e: any) => setPassword(e.target.value)}
-                      placeholder="Au moins 8 caractères"
-                      required
-                      disabled={isSubmitting}
-                    />
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        name="password"
+                        type={showPassword ? 'text' : 'password'}
+                        autoComplete="new-password"
+                        value={password}
+                        onChange={(e: any) => setPassword(e.target.value)}
+                        placeholder="Au moins 8 caractères"
+                        required
+                        disabled={isSubmitting}
+                        className="pr-24"
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-3 my-auto h-7 text-xs text-primary hover:underline"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      >
+                        {showPassword ? 'Masquer' : 'Afficher'}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword">Confirmer le nouveau mot de passe *</Label>
-                    <Input
-                      id="confirmPassword"
-                      name="confirmPassword"
-                      type="password"
-                      autoComplete="new-password"
-                      value={confirmPassword}
-                      onChange={(e: any) => setConfirmPassword(e.target.value)}
-                      required
-                      disabled={isSubmitting}
-                    />
+                    <div className="relative">
+                      <Input
+                        id="confirmPassword"
+                        name="confirmPassword"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        autoComplete="new-password"
+                        value={confirmPassword}
+                        onChange={(e: any) => setConfirmPassword(e.target.value)}
+                        required
+                        disabled={isSubmitting}
+                        className="pr-24"
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-3 my-auto h-7 text-xs text-primary hover:underline"
+                        onClick={() => setShowConfirmPassword((v) => !v)}
+                        aria-label={showConfirmPassword ? 'Masquer la confirmation du mot de passe' : 'Afficher la confirmation du mot de passe'}
+                      >
+                        {showConfirmPassword ? 'Masquer' : 'Afficher'}
+                      </button>
+                    </div>
                   </div>
 
                   <Button

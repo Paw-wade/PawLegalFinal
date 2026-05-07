@@ -85,6 +85,23 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/auth', require('./routes/auth'));
+
+// ✅ Légifrance — ajoute ces lignes
+try {
+  app.use('/api/legal', require('./routes/legal'));
+  console.log('✅ Route /api/legal enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/legal:', e.message);
+}
+
+try {
+  app.use('/api/judilibre', require('./routes/judilibre'));
+  console.log('✅ Route /api/judilibre enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/judilibre:', e.message);
+}
+
 app.use('/api/contact', require('./routes/contact'));
 
 try {

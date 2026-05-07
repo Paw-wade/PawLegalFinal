@@ -21,6 +21,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
   const { data: session } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const lexiaFullscreen = pathname === '/lexia' || pathname === '/admin/lexia';
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
   // Déterminer si l'utilisateur est admin ou partenaire
@@ -43,7 +44,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
   }, []);
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="flex min-h-0 h-[100dvh] max-h-[100dvh] overflow-hidden bg-background">
       {/* Sidebar client - uniquement pour les clients */}
       {showClientSidebar && (
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -60,7 +61,9 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
       )}
 
       {/* Contenu principal */}
-      <div className={`flex-1 flex flex-col ${(showClientSidebar || showAdminSidebar || showPartenaireSidebar) ? 'ml-0 lg:ml-64' : ''} transition-all duration-300 min-w-0`}>
+      <div
+        className={`flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden transition-all duration-300 ${(showClientSidebar || showAdminSidebar || showPartenaireSidebar) ? 'ml-0 lg:ml-64' : ''}`}
+      >
         {/* Header simplifié (sans navigation) */}
         <Header 
           variant={variant} 
@@ -87,7 +90,11 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
         )}
 
         {/* Contenu — padding mobile et pas de débordement */}
-        <main className="flex-1 overflow-x-hidden w-full max-w-[100vw] px-3 sm:px-4 lg:px-6 pb-6 safe-bottom">
+        <main
+          className={`flex flex-1 flex-col min-h-0 overflow-x-hidden w-full max-w-[100vw] px-3 sm:px-4 lg:px-6 safe-bottom ${
+            lexiaFullscreen ? 'overflow-y-hidden pb-0 pt-0' : 'overflow-y-auto pb-6'
+          }`}
+        >
           {children}
         </main>
       </div>
