@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Ada AI | Assistant juridique',
+  title: 'Paw AI | Assistant juridique',
   robots: { index: false, follow: false },
 };
 

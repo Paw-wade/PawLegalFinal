@@ -314,8 +314,12 @@ export const authAPI = {
   setupPassword: (data: { password: string; email?: string }) =>
     api.post('/auth/setup-password', data),
   
-  // Mot de passe oublié désormais basé sur le téléphone
-  forgotPassword: (data: { phone: string }) =>
+  // Mot de passe oublié par email (par défaut)
+  forgotPassword: (data: { email: string }) =>
+    api.post('/auth/forgot-password', data),
+
+  // Mot de passe oublié via téléphone + code SMS (méthode alternative)
+  forgotPasswordByPhone: (data: { phone: string }) =>
     api.post('/auth/forgot-password-phone', data),
 
   resetPasswordByPhone: (data: { phone: string; code: string; password: string }) =>

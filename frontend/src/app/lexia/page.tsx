@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
-import LexiaUserClient from './LexiaUserClient';
+import PawAiComingSoon from './PawAiComingSoon';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Ada AI | Assistant juridique',
+  title: 'Paw AI | Assistant juridique',
   robots: { index: false, follow: false },
 };
 
-/** LEXIA pour tout utilisateur connecté (corpus sur le VPS via le backend). */
+/** Paw AI : accès complet réservé aux admin (voir /admin/lexia) ; ici message « en conception » pour les autres. */
 export default function LexiaUserPage() {
-  return <LexiaUserClient />;
+  return <PawAiComingSoon />;
 }
