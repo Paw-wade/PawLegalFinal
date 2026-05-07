@@ -17,6 +17,7 @@ type EmailTemplate = {
   isActive: boolean;
   isSystem: boolean;
   variables?: Array<{ name: string; description?: string; example?: string }>;
+  updatedAt?: string;
 };
 
 type EmailEvent = {
@@ -86,6 +87,15 @@ export default function AdminEmailsPage() {
     () => templates.find((t) => t._id === testTemplateId) || null,
     [templates, testTemplateId]
   );
+
+  const templatesForTest = useMemo(() => {
+    const active = templates.filter((t) => t.isActive);
+    return [...active].sort((a, b) => {
+      const aTs = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bTs = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return bTs - aTs;
+    });
+  }, [templates]);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -373,7 +383,7 @@ export default function AdminEmailsPage() {
                 <h2 className="font-semibold">Test via template</h2>
                 <select className="border rounded p-2 w-full" value={testTemplateId} onChange={(e) => setTestTemplateId(e.target.value)}>
                   <option value="">Sélectionner un template</option>
-                  {templates.map((t) => <option key={t._id} value={t._id}>{t.name} ({t.code})</option>)}
+                  {templatesForTest.map((t) => <option key={t._id} value={t._id}>{t.name} ({t.code})</option>)}
                 </select>
                 {selectedTemplate && <p className="text-sm text-muted-foreground">Sujet template: {selectedTemplate.subject}</p>}
                 <input className="border rounded p-2 w-full" placeholder="Destinataire email" value={testTo} onChange={(e) => setTestTo(e.target.value)} />

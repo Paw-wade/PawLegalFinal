@@ -85,6 +85,16 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/auth', require('./routes/auth'));
+
+// ✅ Légifrance — ajoute ces lignes
+try {
+  app.use('/api/legal', require('./routes/legal'));
+  console.log('✅ Route /api/legal enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/legal:', e.message);
+}
+
 app.use('/api/contact', require('./routes/contact'));
 
 try {

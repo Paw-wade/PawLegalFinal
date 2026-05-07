@@ -214,4 +214,3 @@ Si le frontend ne peut pas se connecter au backend :
 **La connexion backend-frontend est maintenant configurée ! 🎉**
 
 
-
