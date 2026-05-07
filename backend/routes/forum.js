@@ -477,6 +477,54 @@ router.delete(
   }
 );
 
+// PATCH /api/forum/posts/:id - Modifier le texte d'une réponse (admin, sans notification)
+router.patch(
+  '/posts/:id',
+  protect,
+  [
+    body('body')
+      .isString()
+      .isLength({ min: 2 })
+      .withMessage('Le contenu doit contenir au moins 2 caractères'),
+  ],
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const postId = req.params.id;
+      const content = req.body.body.trim();
+      const currentUserId = req.user?.id?.toString?.() || req.user?._id?.toString?.() || '';
+      const currentUserRole = req.user?.role || '';
+
+      const post = await ForumPost.findById(postId);
+      if (!post || post.isDeleted) {
+        return res.status(404).json({ success: false, message: 'Réponse introuvable' });
+      }
+
+      const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
+      const isOwner = !!post.createdBy && post.createdBy.toString() === currentUserId;
+      if (!isAdmin && !isOwner) {
+        return res.status(403).json({
+          success: false,
+          message: "Vous n'êtes pas autorisé à modifier cette réponse.",
+        });
+      }
+
+      post.body = content;
+      post.updatedAt = new Date();
+      await post.save();
+      await post.populate('createdBy', 'prenom nom role');
+      await post.populate('verifiedBy', 'prenom nom role');
+      await post.populate('rejectedBy', 'prenom nom role');
+
+      // Intentionnellement aucune notification utilisateur pour les corrections admin.
+      return res.json({ success: true, data: post });
+    } catch (error) {
+      console.error('Erreur lors de la modification de la réponse (admin):', error);
+      return res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+  }
+);
+
 // PATCH /api/forum/posts/:id/verify - Valider / invalider une réponse (admin)
 router.patch(
   '/posts/:id/verify',

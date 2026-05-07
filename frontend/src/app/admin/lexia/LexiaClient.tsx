@@ -1257,7 +1257,10 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         }
         .lexia-messages--accueil {
           flex: 0 0 auto;
-          overflow-y: hidden;
+          overflow-y: auto;
+          min-height: 0;
+          max-height: 100%;
+          -webkit-overflow-scrolling: touch;
           justify-content: flex-start;
           align-items: center;
           padding-bottom: 0 !important;
@@ -1266,15 +1269,14 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         @media (min-width: 1024px) {
           .lexia-messages--accueil {
             flex: 1 1 auto;
-            justify-content: center;
+            justify-content: flex-start;
           }
         }
         @media (max-width: 1023px) {
           .lexia-messages--accueil {
             flex: 1 1 auto;
-            overflow-y: auto;
             max-height: none;
-            justify-content: center;
+            justify-content: flex-start;
           }
         }
         .lexia-messages--chat {

@@ -1078,6 +1078,10 @@ export const forumAPI = {
   deletePostAsAdmin: (postId: string) =>
     api.delete(`/forum/posts/${postId}`),
 
+  // Admin - modifier le texte d'une réponse (sans notification)
+  updatePostAsAdmin: (postId: string, data: { body: string }) =>
+    api.patch(`/forum/posts/${postId}`, data),
+
   // Admin - modérer une réponse (approuver / désapprouver)
   verifyPostAsAdmin: (postId: string, data: { isVerified?: boolean; isRejected?: boolean }) =>
     api.patch(`/forum/posts/${postId}/verify`, data),
