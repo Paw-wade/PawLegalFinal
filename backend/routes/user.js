@@ -682,7 +682,7 @@ router.put(
     body('password').optional().isLength({ min: 8 }).withMessage('Le mot de passe doit contenir au moins 8 caractères'),
     body('role').optional().isIn(ALLOWED_USER_ROLES).withMessage('Rôle invalide'),
     body('partenaireInfo.typeOrganisme')
-      .optional()
+      .optional({ values: 'falsy' })
       .isIn(['consulat', 'association', 'avocat'])
       .withMessage('Type d\'organisme partenaire invalide')
   ],
@@ -780,13 +780,16 @@ router.put(
       if (isActive !== undefined) user.isActive = isActive;
 
       // Mettre à jour les informations partenaire si fournies
-      if (partenaireInfo) {
+      if (partenaireInfo && user.role === 'partenaire') {
         user.partenaireInfo = {
-          typeOrganisme: partenaireInfo.typeOrganisme,
+          typeOrganisme: partenaireInfo.typeOrganisme || undefined,
           nomOrganisme: partenaireInfo.nomOrganisme || '',
           adresseOrganisme: partenaireInfo.adresseOrganisme || '',
           contactPrincipal: partenaireInfo.contactPrincipal || ''
         };
+      } else if (user.role !== 'partenaire') {
+        // Nettoyer les infos partenaire si le rôle n'est plus partenaire
+        user.partenaireInfo = undefined;
       }
 
       await user.save();

@@ -266,8 +266,16 @@ api.interceptors.response.use(
       }
     }
     
-    // Log des erreurs pour le débogage (sauf pour les erreurs déjà gérées ci-dessus)
-    if (!isCmsKeyNotFound && !isForumUnreadCountNotFound) {
+    const isExpectedUserProfileFallback =
+      typeof url === 'string' &&
+      /(?:^|\/)(?:api\/)?user\/[a-f\d]{24}$/i.test(url) &&
+      (error.response?.status === 400 || error.response?.status === 401 || error.response?.status === 403);
+
+    const isExpectedPushAbort =
+      typeof error?.name === 'string' && error.name === 'AbortError';
+
+    // Log des erreurs pour le débogage (sauf erreurs connues non critiques)
+    if (!isCmsKeyNotFound && !isForumUnreadCountNotFound && !isExpectedUserProfileFallback && !isExpectedPushAbort) {
       console.error('❌ Erreur API:', {
         url,
         status: error.response?.status,
@@ -378,8 +386,22 @@ export const userAPI = {
     api.get('/user/expirations', { params }),
   
   // Admin - Récupérer un utilisateur par ID
-  getUserById: (id: string) =>
-    api.get(`/user/${id}`),
+  // Fallback robuste: en contexte non-admin, retourner le profil connecté plutôt qu'un 400/403 bruyant.
+  getUserById: async (id: string) => {
+    const normalizedId = String(id || '').trim();
+    if (!/^[a-f\d]{24}$/i.test(normalizedId)) {
+      throw new Error('ID utilisateur invalide');
+    }
+    try {
+      return await api.get(`/user/${normalizedId}`);
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status === 400 || status === 401 || status === 403) {
+        return api.get('/user/profile');
+      }
+      throw error;
+    }
+  },
   
   // Admin - Mettre à jour un utilisateur par ID
   updateUser: (id: string, data: any) =>

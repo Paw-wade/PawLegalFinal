@@ -120,6 +120,17 @@ export default function AdminUserDetailPage() {
       setError(null);
       setMessage(null);
       const payload: any = { ...form };
+      // N'envoyer les infos partenaire que si le rôle partenaire est sélectionné.
+      if (payload.role === 'partenaire') {
+        payload.partenaireInfo = {
+          typeOrganisme: payload?.partenaireInfo?.typeOrganisme || undefined,
+          nomOrganisme: payload?.partenaireInfo?.nomOrganisme || '',
+          adresseOrganisme: payload?.partenaireInfo?.adresseOrganisme || '',
+          contactPrincipal: payload?.partenaireInfo?.contactPrincipal || '',
+        };
+      } else {
+        delete payload.partenaireInfo;
+      }
       await userAPI.updateUser(userId, payload);
       if (password.trim()) {
         await userAPI.updateUserPassword(userId, { newPassword: password.trim() });
@@ -244,7 +255,13 @@ export default function AdminUserDetailPage() {
                   value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                 >
-                  {ROLE_OPTIONS.map((r) => (
+                  {ROLE_OPTIONS.filter((r) => {
+                    const currentRole = String((session?.user as any)?.role || '');
+                    if (currentRole === 'admin') {
+                      return r !== 'admin' && r !== 'superadmin';
+                    }
+                    return true;
+                  }).map((r) => (
                     <option key={r} value={r}>
                       {r}
                     </option>
