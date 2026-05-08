@@ -358,7 +358,7 @@ router.get('/admin', protect, async (req, res) => {
       query: req.query
     });
     
-    const { statut, date, userId, includeArchived } = req.query;
+    const { statut, date, userId, includeArchived, dateFrom, dateTo, q } = req.query;
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
     let query = {};
 
@@ -390,6 +390,24 @@ router.get('/admin', protect, async (req, res) => {
       const endDate = new Date(date);
       endDate.setHours(23, 59, 59, 999);
       query.date = { $gte: startDate, $lte: endDate };
+    }
+    if (dateFrom || dateTo) {
+      const range = query.date && typeof query.date === 'object' ? { ...query.date } : {};
+      if (dateFrom) {
+        const start = new Date(String(dateFrom));
+        if (!Number.isNaN(start.getTime())) {
+          start.setHours(0, 0, 0, 0);
+          range.$gte = start;
+        }
+      }
+      if (dateTo) {
+        const end = new Date(String(dateTo));
+        if (!Number.isNaN(end.getTime())) {
+          end.setHours(23, 59, 59, 999);
+          range.$lte = end;
+        }
+      }
+      if (Object.keys(range).length > 0) query.date = range;
     }
 
     // Exclure les rendez-vous archivés par défaut (sauf si includeArchived=true)
@@ -431,12 +449,35 @@ router.get('/admin', protect, async (req, res) => {
       .populate('user', 'firstName lastName email')
       .sort({ date: 1, heure: 1 });
 
-    console.log('✅ Rendez-vous trouvés:', rendezVous.length);
+    let filteredRendezVous = rendezVous;
+    const qText = String(q || '').trim().toLowerCase();
+    if (qText) {
+      filteredRendezVous = rendezVous.filter((rdv) => {
+        const user = rdv.user && typeof rdv.user === 'object' ? rdv.user : null;
+        const haystack = [
+          rdv.nom,
+          rdv.prenom,
+          rdv.email,
+          rdv.telephone,
+          rdv.motif,
+          rdv.description,
+          rdv.notes,
+          user?.firstName,
+          user?.lastName,
+          user?.email,
+        ]
+          .map((v) => String(v || '').toLowerCase())
+          .join(' ');
+        return haystack.includes(qText);
+      });
+    }
+
+    console.log('✅ Rendez-vous trouvés:', filteredRendezVous.length);
 
     res.json({
       success: true,
-      data: rendezVous,
-      appointments: rendezVous // Alias pour compatibilité
+      data: filteredRendezVous,
+      appointments: filteredRendezVous // Alias pour compatibilité
     });
   } catch (error) {
     console.error('❌ Erreur lors de la récupération des rendez-vous:', error);

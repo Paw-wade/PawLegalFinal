@@ -147,6 +147,29 @@ function isRdvTerminated(rdv: any) {
   return s === 'termine' || s === 'terminé' || rdv.effectue === true;
 }
 
+function getDateRangeForFilter(period: string) {
+  if (period === 'all') return null;
+  const now = new Date();
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  if (period === 'week') start.setDate(start.getDate() - 7);
+  if (period === 'month') start.setDate(start.getDate() - 30);
+  return { dateFrom: start.toISOString(), dateTo: end.toISOString() };
+}
+
+function getRdvSlaInfo(rdv: any) {
+  const status = String(rdv?.statut || '');
+  if (rdv?.archived || isRdvTerminated(rdv) || status === 'annule' || status === 'annulé') return null;
+  const createdAt = rdv?.createdAt ? new Date(rdv.createdAt) : null;
+  if (!createdAt || Number.isNaN(createdAt.getTime())) return null;
+  const elapsedHours = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60));
+  if (elapsedHours < 24) return { label: 'Nouveau <24h', classes: 'bg-emerald-100 text-emerald-800' };
+  if (elapsedHours < 48) return { label: 'A traiter <48h', classes: 'bg-amber-100 text-amber-900' };
+  return { label: 'Urgent >48h', classes: 'bg-red-100 text-red-800' };
+}
+
 export default function AdminRendezVousPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -165,6 +188,7 @@ export default function AdminRendezVousPage() {
   const [loadingAdminSlots, setLoadingAdminSlots] = useState(false);
   const [adminBookingSubmitting, setAdminBookingSubmitting] = useState(false);
   const [adminBookingError, setAdminBookingError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   // Fonction pour obtenir la date du jour au format YYYY-MM-DD
   const getTodayDate = () => new Date().toISOString().split('T')[0];
   const [adminBookingForm, setAdminBookingForm] = useState({
@@ -213,41 +237,30 @@ export default function AdminRendezVousPage() {
     }
   }, [session, status, router, filter]);
 
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    const timer = setTimeout(() => {
+      void loadAppointments();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   const loadAppointments = async () => {
     setIsLoading(true);
     setError(null);
     try {
       console.log('🔄 Chargement des rendez-vous admin...');
-      const response = await appointmentsAPI.getAllAppointments({ includeArchived: 'true' });
+      const range = getDateRangeForFilter(filter);
+      const response = await appointmentsAPI.getAllAppointments({
+        includeArchived: 'true',
+        ...(range || {}),
+        ...(searchTerm.trim() ? { q: searchTerm.trim() } : {}),
+      });
       console.log('✅ Réponse getAllAppointments:', response.data);
       
       if (response.data.success) {
         const appointments = response.data.data || response.data.appointments || [];
-        
-        // Filtrer selon le filtre sélectionné
-        let filtered = appointments;
-        const now = new Date();
-        
-        if (filter === 'today') {
-          filtered = appointments.filter((apt: any) => {
-            const aptDate = new Date(apt.date);
-            return aptDate.toDateString() === now.toDateString();
-          });
-        } else if (filter === 'week') {
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          filtered = appointments.filter((apt: any) => {
-            const aptDate = new Date(apt.date);
-            return aptDate >= weekAgo;
-          });
-        } else if (filter === 'month') {
-          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          filtered = appointments.filter((apt: any) => {
-            const aptDate = new Date(apt.date);
-            return aptDate >= monthAgo;
-          });
-        }
-        
-        setRendezVous(filtered);
+        setRendezVous(appointments);
       } else {
         const errorMessage = response.data.message || 'Erreur lors du chargement des rendez-vous';
         console.error('❌ Réponse non réussie:', errorMessage);
@@ -607,6 +620,15 @@ export default function AdminRendezVousPage() {
               🔄 Actualiser
             </Button>
           </div>
+          <div className="mt-3">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Rechercher nom, email, téléphone, motif, description..."
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
         </div>
 
         {/* Statistiques rapides */}
@@ -857,6 +879,15 @@ export default function AdminRendezVousPage() {
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                        {(() => {
+                          const sla = getRdvSlaInfo(rdv);
+                          if (!sla) return null;
+                          return (
+                            <span className={`px-2 py-1 rounded-md text-[11px] font-semibold ${sla.classes}`}>
+                              {sla.label}
+                            </span>
+                          );
+                        })()}
                         <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(statut, terminated)}`}>
                           {getStatutLabel(statut, terminated)}
                         </span>

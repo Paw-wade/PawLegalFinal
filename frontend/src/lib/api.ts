@@ -517,6 +517,22 @@ export const logsAPI = {
   },
 };
 
+export const pawSearchAPI = {
+  search: (data: {
+    query?: string;
+    messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    page?: number;
+    limit?: number;
+    filters?: {
+      juridiction?: string;
+      contentType?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    };
+  }) => api.post('/paw-search', data),
+  getConfig: () => api.get('/paw-search/config'),
+};
+
 export const contactAPI = {
   sendMessage: (data: { name: string; email: string; phone?: string; subject: string; message: string }) =>
     api.post('/contact', data),
@@ -641,7 +657,15 @@ export const appointmentsAPI = {
     api.put(`/appointments/${id}`, data),
   
   // Admin - Récupérer tous les rendez-vous
-  getAllAppointments: (params?: { statut?: string; date?: string; userId?: string; includeArchived?: string }) => {
+  getAllAppointments: (params?: {
+    statut?: string;
+    date?: string;
+    userId?: string;
+    includeArchived?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    q?: string;
+  }) => {
     return api.get('/appointments/admin', { params });
   },
   
@@ -832,6 +856,28 @@ export const dossiersAPI = {
   /** Admin / superadmin : retirer la dernière demande tarification envoyée (sans formule enregistrée, sans montant fixe) */
   retractTarificationChoiceRequest: (dossierId: string) =>
     api.put(`/user/dossiers/${dossierId}`, { retractTarificationChoiceRequest: true }),
+
+  /** Admin / superadmin : notifier un utilisateur même sans dossier (in-app/push + email + SMS +33) */
+  notifyTarificationUserStandalone: (payload: { userId: string; motif: string; amount?: number | null }) =>
+    api.post('/user/dossiers/tarification-notify-user', payload),
+
+  /** Client : accepter/refuser une demande de tarification sans dossier */
+  respondStandaloneTarificationRequest: (
+    requestId: string,
+    decision: 'accepted' | 'refused'
+  ) => api.post(`/user/dossiers/tarification-standalone/${requestId}/respond`, { decision }),
+
+  /** Admin / superadmin : lister les demandes de tarification sans dossier */
+  getStandaloneTarificationRequests: (params?: { limit?: number }) =>
+    api.get('/user/dossiers/tarification-standalone', { params }),
+
+  /** Admin / superadmin : relancer une demande sans dossier (cooldown 48h) */
+  remindStandaloneTarificationRequest: (requestId: string) =>
+    api.post(`/user/dossiers/tarification-standalone/${requestId}/remind`),
+
+  /** Admin / superadmin : annuler une demande sans dossier en attente */
+  cancelStandaloneTarificationRequest: (requestId: string) =>
+    api.post(`/user/dossiers/tarification-standalone/${requestId}/cancel`),
   
   // Supprimer un dossier (Admin)
   deleteDossier: (id: string) =>
