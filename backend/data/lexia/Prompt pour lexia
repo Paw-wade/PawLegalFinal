@@ -1,5 +1,4 @@
-/** Aligné sur `backend/lib/lexiaSystemPrompt.js` — référence documentaire ; le serveur envoie ce texte au modèle. */
-export const LEXIA_SYSTEM_PROMPT = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LPaw ai — PROMPT SYSTÈME COMPLET v4
 Agent juridique généraliste · Droit des étrangers prioritaire
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -247,4 +246,4 @@ Synthèse opérationnelle en 5 à 8 lignes :
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FIN DU PROMPT SYSTÈME — Paw ai
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

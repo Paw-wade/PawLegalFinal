@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import { permissionsAPI, userAPI } from '@/lib/api';
 
@@ -53,6 +54,7 @@ interface UserPermissionsModalProps {
 export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: UserPermissionsModalProps) {
   const { data: session } = useSession();
   const currentUserRole = (session?.user as any)?.role || 'client';
+  const [isMounted, setIsMounted] = useState(false);
   const [step, setStep] = useState<'info' | 'roles' | 'permissions' | 'review'>('info');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +97,11 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
   };
   
   const availableRoles = getAvailableRoles();
+
+  useEffect(() => {
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -398,14 +405,14 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !isMounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+  const modalContent = (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-black/50 p-3 backdrop-blur-sm sm:items-center sm:p-6">
+      <div className="my-4 flex max-h-[calc(100dvh-2rem)] w-[min(96vw,1100px)] min-w-0 flex-col overflow-hidden rounded-xl bg-white shadow-2xl sm:my-0 sm:max-h-[90vh]">
         {/* Header */}
-        <div className="border-b p-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold">
+        <div className="flex items-center justify-between border-b px-4 py-4 sm:px-6 sm:py-5">
+          <h2 className="text-xl font-bold sm:text-2xl">
             {userId ? 'Modifier utilisateur' : 'Créer un utilisateur'}
           </h2>
           <button
@@ -417,10 +424,10 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
         </div>
 
         {/* Steps */}
-        <div className="border-b p-4 bg-muted/30">
-          <div className="flex items-center justify-center gap-4">
+        <div className="border-b bg-muted/30 px-3 py-3 sm:px-4 sm:py-4">
+          <div className="flex items-center justify-start gap-3 overflow-x-auto sm:justify-center sm:gap-4">
             {['info', 'roles', 'permissions', 'review'].map((s, idx) => (
-              <div key={s} className="flex items-center gap-2">
+              <div key={s} className="flex flex-shrink-0 items-center gap-2">
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
                     step === s
@@ -444,7 +451,7 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
               <p className="text-sm text-red-600">{error}</p>
@@ -455,7 +462,7 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
           {step === 'info' && (
             <div className="space-y-4">
               <h3 className="text-xl font-bold mb-4">Informations de l'utilisateur</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className="text-sm font-semibold mb-2 block">Prénom *</label>
                   <input
@@ -526,7 +533,7 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
               {selectedRoles.includes('partenaire') && (
                 <div className="mt-6 pt-6 border-t border-gray-200">
                   <h4 className="text-lg font-semibold mb-4">Informations du partenaire</h4>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
                       <label className="text-sm font-semibold mb-2 block">Type d'organisme *</label>
                       <select
@@ -788,7 +795,7 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
               {/* Informations utilisateur */}
               <div className="bg-muted/50 rounded-lg p-4">
                 <h4 className="font-semibold mb-2">Informations</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
                   <div><strong>Nom:</strong> {userInfo.firstName} {userInfo.lastName}</div>
                   <div><strong>Email:</strong> {userInfo.email}</div>
                   <div><strong>Téléphone:</strong> {userInfo.phone || 'Non renseigné'}</div>
@@ -841,7 +848,7 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
         </div>
 
         {/* Footer */}
-        <div className="border-t p-6 flex items-center justify-between">
+        <div className="flex items-center justify-between border-t px-4 py-4 sm:px-6 sm:py-5">
           <button
             onClick={onClose}
             className="px-4 py-2 border border-input rounded-md hover:bg-accent"
@@ -893,5 +900,7 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 

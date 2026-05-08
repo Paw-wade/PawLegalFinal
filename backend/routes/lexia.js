@@ -23,6 +23,162 @@ const LEXIA_ALLOWED_ROLES = [
 ];
 
 const VALID_PROVIDERS = new Set(['auto', 'anthropic', 'gemini', 'internal']);
+const TRUSTED_JURISPRUDENCE_HOSTS = [
+  'legifrance.gouv.fr',
+  'www.legifrance.gouv.fr',
+  'conseil-etat.fr',
+  'www.conseil-etat.fr',
+  'arianeweb.conseil-etat.fr',
+  'justice.pappers.fr',
+  'www.courdecassation.fr',
+  'courdecassation.fr',
+  'eur-lex.europa.eu',
+  'hudoc.echr.coe.int',
+  'gisti.org',
+  'www.gisti.org',
+  'data.gouv.fr',
+  'www.data.gouv.fr',
+];
+
+function isTrustedJurisprudenceUrl(rawUrl) {
+  try {
+    const u = new URL(String(rawUrl || '').trim());
+    const host = (u.hostname || '').toLowerCase();
+    return TRUSTED_JURISPRUDENCE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+  } catch {
+    return false;
+  }
+}
+
+function hasDecisionNumber(referenceLine) {
+  const s = String(referenceLine || '');
+  return /(?:n[°o]\s*[:\-]?\s*[a-z0-9\-./]+)/i.test(s);
+}
+
+function hasDecisionDate(referenceLine) {
+  const s = String(referenceLine || '');
+  const hasNumericDate = /\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/.test(s);
+  const hasLongDate =
+    /\b\d{1,2}\s+(janvier|fevrier|février|mars|avril|mai|juin|juillet|aout|août|septembre|octobre|novembre|decembre|décembre)\s+\d{4}\b/i.test(
+      s
+    );
+  return hasNumericDate || hasLongDate;
+}
+
+async function isLiveJurisprudenceUrl(rawUrl) {
+  const url = String(rawUrl || '').trim();
+  if (!url) return false;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
+  try {
+    const headRes = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (headRes.ok) return true;
+    if (headRes.status !== 405 && headRes.status !== 403) return false;
+  } catch {
+    // fallback GET
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  const controller2 = new AbortController();
+  const timeoutId2 = setTimeout(() => controller2.abort(), 3500);
+  try {
+    const getRes = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller2.signal,
+    });
+    return getRes.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeoutId2);
+  }
+}
+
+async function validateAndSanitizeJurisprudenceBlocks(text) {
+  const src = String(text || '');
+  if (!src.trim()) {
+    return { text: src, citationValidation: { total: 0, valid: 0, rejected: 0 } };
+  }
+
+  const lines = src.split('\n');
+  let i = 0;
+  let total = 0;
+  let valid = 0;
+  let rejected = 0;
+
+  while (i < lines.length) {
+    if (!/^\s*⚖️\s*Référence/i.test(lines[i])) {
+      i += 1;
+      continue;
+    }
+
+    total += 1;
+    const blockStart = i;
+    let blockEnd = i + 1;
+    while (blockEnd < lines.length) {
+      const line = lines[blockEnd];
+      if (/^\s*⚖️\s*Référence/i.test(line)) break;
+      if (/^\s*──\s*SECTION/i.test(line)) break;
+      if (/^\s*━━━━━━━━/.test(line)) break;
+      blockEnd += 1;
+    }
+
+    const block = lines.slice(blockStart, blockEnd);
+    const referenceLine = block.find((l) => /^\s*⚖️\s*Référence/i.test(l)) || '';
+    const sourceLine = block.find((l) => /^\s*🔗\s*Source/i.test(l)) || '';
+    const urlMatch = sourceLine.match(/https?:\/\/[^\s)\]]+/i);
+    const url = urlMatch ? urlMatch[0] : '';
+
+    const numberOk = hasDecisionNumber(referenceLine);
+    const dateOk = hasDecisionDate(referenceLine);
+    const trustedDomainOk = Boolean(url) && isTrustedJurisprudenceUrl(url);
+    const liveUrlOk = trustedDomainOk ? await isLiveJurisprudenceUrl(url) : false;
+    const isValid = numberOk && dateOk && trustedDomainOk && liveUrlOk;
+
+    if (isValid) {
+      valid += 1;
+      i = blockEnd;
+      continue;
+    }
+
+    rejected += 1;
+    const reasons = [];
+    if (!numberOk) reasons.push('numero non detecte');
+    if (!dateOk) reasons.push('date non detectee');
+    if (!url) reasons.push('url absente');
+    else if (!trustedDomainOk) reasons.push('domaine non fiable');
+    else if (!liveUrlOk) reasons.push('url inaccessible');
+
+    const reasonText = reasons.join(', ');
+    lines[blockStart] = '⚖️ Référence   : [RÉFÉRENCE REJETÉE - non vérifiée automatiquement]';
+    for (let k = blockStart + 1; k < blockEnd; k += 1) {
+      if (/^\s*📋\s*Question/i.test(lines[k])) lines[k] = '📋 Question    : [Non affichée - référence invalide]';
+      if (/^\s*🎯\s*Moyen/i.test(lines[k])) lines[k] = '🎯 Moyen       : [Non affiché - référence invalide]';
+      if (/^\s*📌\s*Principe/i.test(lines[k])) lines[k] = '📌 Principe    : [Non affiché - référence invalide]';
+      if (/^\s*✅\s*Applicable/i.test(lines[k])) lines[k] = '✅ Applicable  : [Non - référence invalide]';
+      if (/^\s*🔗\s*Source/i.test(lines[k])) lines[k] = `🔗 Source      : [SOURCE INVALIDE - ${reasonText}]`;
+    }
+
+    i = blockEnd;
+  }
+
+  const note =
+    total > 0
+      ? `\n\n---\n\n### Validation automatique des references\n\n- References detectees: ${total}\n- References validees: ${valid}\n- References rejetees: ${rejected}\n`
+      : '';
+
+  return {
+    text: `${lines.join('\n')}${note}`,
+    citationValidation: { total, valid, rejected },
+  };
+}
 
 function buildTemporalGuardrailPrompt() {
   const now = new Date();
@@ -330,11 +486,13 @@ router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) =>
     if (effective === 'internal') {
       const knowledgeDir = getKnowledgeDir();
       const { text, sources } = await searchAndCompose(trimmed, knowledgeDir);
+      const { text: safeText, citationValidation } = await validateAndSanitizeJurisprudenceBlocks(text);
       return res.json({
-        text,
+        text: safeText,
         searched: true,
         provider: 'internal',
         sources,
+        citationValidation,
         resolvedProvider: 'internal',
         requestedProvider: requested || normalizeProvider(process.env.LEXIA_PROVIDER),
         serverNow: serverNowIso,
@@ -343,10 +501,12 @@ router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) =>
 
     if (effective === 'gemini') {
       const { text } = await runGeminiLexia(trimmed, temporalGuardrail);
+      const { text: safeText, citationValidation } = await validateAndSanitizeJurisprudenceBlocks(text);
       return res.json({
-        text,
+        text: safeText,
         searched: false,
         provider: 'gemini',
+        citationValidation,
         resolvedProvider: 'gemini',
         requestedProvider: requested || normalizeProvider(process.env.LEXIA_PROVIDER),
         serverNow: serverNowIso,
@@ -357,11 +517,13 @@ router.post('/', protect, authorize(...LEXIA_ALLOWED_ROLES), async (req, res) =>
       trimmed,
       temporalGuardrail
     );
+    const { text: safeText, citationValidation } = await validateAndSanitizeJurisprudenceBlocks(text);
     return res.json({
-      text,
+      text: safeText,
       searched,
       sourcesFound,
       totalToolUses,
+      citationValidation,
       provider: 'anthropic',
       resolvedProvider: 'anthropic',
       requestedProvider: requested || normalizeProvider(process.env.LEXIA_PROVIDER),

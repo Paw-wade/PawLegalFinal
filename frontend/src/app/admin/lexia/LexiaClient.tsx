@@ -87,11 +87,19 @@ function escapeHtml(s: string) {
 function formatMessage(raw: string) {
   const text = escapeHtml(raw);
   const rowEmoji =
-    /^(🧾|⚖️|⚖|📋|🎯|📌|✅|🔗|🔄|📊|🛡️|🛡|⏱️|⏱|🌍|⚠️|⚠|❌)/u;
+    /^(🧾|⚖️|⚖|📋|🎯|📌|✅|🔗|🔄|📊|🛡️|🛡|⏱️|⏱|🌍|⚠️|⚠|❌|📐|📎|⚔️|🏛️|🗄️|💡)/u;
   return text
     .split('\n')
     .map((line) => {
       const st = line.trimStart();
+      if (/^──\s*SECTION\s+\d+\s*──/i.test(st)) {
+        const title = st
+          .replace(/^──\s*SECTION\s+\d+\s*──\s*/i, '')
+          .replace(/\s*─+$/, '')
+          .trim();
+        return `<div class="lexia-section-title">${title || st}</div>`;
+      }
+      if (/^─{10,}$/.test(st) || /^━{10,}$/.test(st)) return '<div class="lexia-divider"></div>';
       if (st.startsWith('## ') || st.startsWith('### ')) {
         return `<div class="lexia-section-title">${st.replace(/^#{2,3} /, '')}</div>`;
       }

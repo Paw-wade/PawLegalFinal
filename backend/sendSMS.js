@@ -71,6 +71,10 @@ function formatPhoneNumber(phone) {
   return cleaned;
 }
 
+function isFrenchPhone(formattedPhone) {
+  return typeof formattedPhone === 'string' && formattedPhone.startsWith('+33');
+}
+
 /**
  * Envoie un SMS via Twilio
  * @param {string} to - numéro du destinataire, ex: '+33612345678' ou '0612345678'
@@ -102,6 +106,11 @@ async function sendSMS(to, body, options = {}) {
     const formattedTo = formatPhoneNumber(to);
     if (!formattedTo) {
       throw new Error(`Numéro de téléphone invalide: ${to}`);
+    }
+
+    // Règle métier : SMS uniquement pour les numéros français (+33).
+    if (!isFrenchPhone(formattedTo)) {
+      throw new Error('SMS non autorisé pour cet indicatif. Seuls les numéros +33 peuvent recevoir un SMS.');
     }
 
     // Préparer les options du message
