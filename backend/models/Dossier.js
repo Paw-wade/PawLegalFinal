@@ -65,6 +65,19 @@ const dossierSchema = new mongoose.Schema({
     enum: ['basse', 'normale', 'haute', 'urgente'],
     default: 'normale'
   },
+  isPinned: {
+    type: Boolean,
+    default: false
+  },
+  pinnedAt: {
+    type: Date,
+    required: false
+  },
+  pinnedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
   dateEcheance: {
     type: Date
   },
@@ -206,6 +219,20 @@ const dossierSchema = new mongoose.Schema({
     ref: 'User',
     required: false
   },
+  // Tarifications multiples (prestations différentes) fixées par le cabinet
+  tarificationPrestations: [
+    {
+      label: { type: String, trim: true, required: true, maxlength: 160 },
+      montant: { type: Number, min: 0, required: true },
+      statut: {
+        type: String,
+        enum: ['a_regler', 'reglee'],
+        default: 'a_regler',
+      },
+      createdAt: { type: Date, default: Date.now },
+      createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+    },
+  ],
   tarificationNotificationSentAt: {
     type: Date,
     required: false

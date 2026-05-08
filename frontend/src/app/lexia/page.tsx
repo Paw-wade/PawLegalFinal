@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import PawAiComingSoon from './PawAiComingSoon';
+import LexiaClient from '../admin/lexia/LexiaClient';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +8,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/** Paw AI : accès complet réservé aux admin (voir /admin/lexia) ; ici message « en conception » pour les autres. */
 export default function LexiaUserPage() {
-  return <PawAiComingSoon />;
+  return <LexiaClient audience="user" />;
 }

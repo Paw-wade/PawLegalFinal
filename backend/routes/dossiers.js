@@ -4,10 +4,13 @@ const { body, validationResult } = require('express-validator');
 const Dossier = require('../models/Dossier');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const StandaloneTarificationRequest = require('../models/StandaloneTarificationRequest');
 const { protect, authorize } = require('../middleware/auth');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
+const { sendSMS, formatPhoneNumber } = require('../sendSMS');
 
 const router = express.Router();
+const MIN_REMINDER_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48h
 
 /** Montant fixe cabinet (number, chaîne, Decimal128, etc.) — même logique que le front. */
 function normalizeMontantTarificationFixe(v) {
@@ -32,6 +35,7 @@ function sanitizeDossierForPartenaire(dossier) {
   delete o.montantTarificationFixe;
   delete o.montantTarificationFixeAt;
   delete o.montantTarificationFixeBy;
+  delete o.tarificationPrestations;
   delete o.tarificationNotificationSentAt;
   delete o.tarificationLastNotifySummary;
   delete o.paiementTarificationEffectue;
@@ -72,6 +76,12 @@ const createNotification = async (userId, type, titre, message, lien = null, met
     return null;
   }
 };
+
+function getTarificationLinkByRole(role) {
+  if (role === 'partenaire') return '/partenaire';
+  if (role === 'admin' || role === 'superadmin') return '/admin/dossiers/tarification';
+  return '/client/tarification';
+}
 
 // Helper function pour notifier toutes les parties lors d'une modification de dossier
 const notifyDossierModification = async (dossier, modifier, changes = {}) => {
@@ -660,7 +670,7 @@ router.get(
       .populate('user', 'firstName lastName email phone profilePhoto')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedTo', 'firstName lastName email role')
-      .sort({ createdAt: -1 });
+      .sort({ isPinned: -1, pinnedAt: -1, createdAt: -1 });
     
     res.json({
       success: true,
@@ -1982,6 +1992,27 @@ router.post(
         });
       }
 
+      const lastReminderNotif = await Notification.findOne({
+        type: 'tarification_payment_reminder',
+        'metadata.dossierId': dossierId.toString(),
+      })
+        .sort({ createdAt: -1 })
+        .select('createdAt');
+      if (lastReminderNotif?.createdAt) {
+        const elapsed = Date.now() - new Date(lastReminderNotif.createdAt).getTime();
+        if (elapsed < MIN_REMINDER_INTERVAL_MS) {
+          const remainingMs = MIN_REMINDER_INTERVAL_MS - elapsed;
+          const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+          const nextReminderAt = new Date(new Date(lastReminderNotif.createdAt).getTime() + MIN_REMINDER_INTERVAL_MS);
+          return res.status(429).json({
+            success: false,
+            message: `Relance déjà envoyée récemment. Prochaine relance possible dans environ ${remainingHours}h.`,
+            reminderCooldownHours: 48,
+            nextReminderAt,
+          });
+        }
+      }
+
       let clientUserId = null;
       if (dossier.user) {
         clientUserId = dossier.user.toString();
@@ -2016,7 +2047,11 @@ router.post(
         'Rappel : paiement tarification en attente',
         messageInApp,
         '/client/tarification',
-        { dossierId: dossierId.toString(), sentByAdmin: req.user.id?.toString?.() || String(req.user.id) }
+        {
+          dossierId: dossierId.toString(),
+          sentByAdmin: req.user.id?.toString?.() || String(req.user.id),
+          reminderCooldownHours: 48,
+        }
       );
 
       if (!notif) {
@@ -2076,6 +2111,522 @@ En cas de difficulté, notre équipe reste à votre disposition.`,
     }
   }
 );
+
+// @route   POST /api/user/dossiers/tarification-notify-user
+// @desc    Envoi d'une demande de tarification à un utilisateur, même sans dossier (in-app + push + email + SMS +33)
+// @access  Private (admin, superadmin)
+router.post(
+  '/tarification-notify-user',
+  protect,
+  authorize('admin', 'superadmin'),
+  [
+    body('userId').isMongoId().withMessage('Utilisateur invalide'),
+    body('motif')
+      .trim()
+      .isLength({ min: 3, max: 1000 })
+      .withMessage('Le motif est requis (3 à 1000 caractères)'),
+    body('amount')
+      .optional({ nullable: true })
+      .custom((value) => {
+        if (value === '' || value == null) return true;
+        const n = Number(typeof value === 'string' ? value.replace(',', '.').trim() : value);
+        return Number.isFinite(n) && n >= 0;
+      })
+      .withMessage('Le montant est invalide'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Erreurs de validation',
+          errors: errors.array(),
+        });
+      }
+
+      const userId = String(req.body.userId);
+      const motif = String(req.body.motif || '').trim().slice(0, 1000);
+      const amountRaw = req.body.amount;
+      const amount =
+        amountRaw === '' || amountRaw == null
+          ? null
+          : Number(typeof amountRaw === 'string' ? amountRaw.replace(',', '.').trim() : amountRaw);
+
+      const user = await User.findById(userId).select('firstName lastName email phone role');
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'Utilisateur introuvable' });
+      }
+
+      const existingPending = await StandaloneTarificationRequest.findOne({
+        user: user._id,
+        status: 'pending',
+      })
+        .sort({ createdAt: -1 })
+        .select('_id createdAt amount motif');
+      if (existingPending) {
+        return res.status(409).json({
+          success: false,
+          code: 'standalone_pending_exists',
+          message: 'Une demande sans dossier est déjà en attente pour cet utilisateur.',
+          existingRequest: {
+            id: existingPending._id,
+            createdAt: existingPending.createdAt,
+            amount: existingPending.amount ?? null,
+            motif: existingPending.motif,
+          },
+        });
+      }
+
+      const userDisplay =
+        `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || user.phone || 'Utilisateur';
+      const amountSentence =
+        amount != null && Number.isFinite(amount) && amount > 0
+          ? `Montant à régler : ${amount.toLocaleString('fr-FR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })} EUR.\n\n`
+          : '';
+
+      const requestDoc = await StandaloneTarificationRequest.create({
+        user: user._id,
+        adminSender: req.user.id,
+        motif,
+        ...(amount != null && Number.isFinite(amount) ? { amount } : {}),
+      });
+
+      const title = 'Paiement requis';
+      const message = `${amountSentence}Motif : ${motif}`;
+      const lien = getTarificationLinkByRole(user.role);
+
+      const notif = await createNotification(
+        user._id.toString(),
+        'tarification_choice_requested',
+        title,
+        message,
+        lien,
+        {
+          sentByAdmin: req.user.id?.toString?.() || String(req.user.id),
+          targetUserId: user._id.toString(),
+          requestId: requestDoc._id.toString(),
+          motif: motif.slice(0, 200),
+          ...(amount != null && Number.isFinite(amount) ? { amount } : {}),
+          standalone: true,
+        }
+      );
+      if (!notif) {
+        return res.status(500).json({
+          success: false,
+          message: 'Impossible de créer la notification in-app',
+        });
+      }
+
+      let emailSent = false;
+      let emailSkipped = null;
+      if (!user.email || !String(user.email).trim()) {
+        emailSkipped = 'no_email';
+      } else {
+        try {
+          emailSent = await sendTransactionalEmail({
+            to: user.email,
+            toName: user.firstName || '',
+            subject: `${title} — Ada Papers`,
+            htmlContent: `<p>Bonjour ${escapeHtml(user.firstName || userDisplay)},</p><p>${escapeHtml(message).replace(/\n/g, '<br/>')}</p>`,
+            textContent: `Bonjour ${user.firstName || userDisplay},\n\n${message}`,
+          });
+          if (!emailSent) emailSkipped = 'brevo_error';
+        } catch (mailErr) {
+          console.error('⚠️ Email tarification utilisateur:', mailErr);
+          emailSkipped = mailErr?.message || 'email_error';
+        }
+      }
+
+      let smsSent = false;
+      let smsSkipped = null;
+      const formattedPhone = formatPhoneNumber(user.phone || '');
+      if (!formattedPhone) {
+        smsSkipped = 'no_phone';
+      } else if (!formattedPhone.startsWith('+33')) {
+        smsSkipped = 'non_fr_phone';
+      } else {
+        try {
+          const smsText = `Ada Papers: ${title}. ${amount != null && amount > 0 ? `Montant ${amount.toFixed(2)} EUR. ` : ''}Motif: ${motif}. Consultez votre espace.`;
+          await sendSMS(formattedPhone, smsText);
+          smsSent = true;
+        } catch (smsErr) {
+          console.error('⚠️ SMS tarification utilisateur:', smsErr);
+          smsSkipped = smsErr?.message || 'sms_error';
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: `Notification envoyée à ${userDisplay}.`,
+        inAppSent: true,
+        pushSent: true,
+        emailSent,
+        emailSkipped: emailSent ? null : emailSkipped,
+        smsSent,
+        smsSkipped: smsSent ? null : smsSkipped,
+      });
+    } catch (error) {
+      console.error('Erreur tarification-notify-user:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// @route   POST /api/user/dossiers/tarification-standalone/:requestId/respond
+// @desc    Réponse client à une demande de tarification sans dossier (accept/refuse)
+// @access  Private (client propriétaire)
+router.post(
+  '/tarification-standalone/:requestId/respond',
+  protect,
+  [body('decision').isIn(['accepted', 'refused']).withMessage('Décision invalide (accepted/refused).')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Erreurs de validation',
+          errors: errors.array(),
+        });
+      }
+
+      const requestId = String(req.params.requestId || '');
+      if (!mongoose.Types.ObjectId.isValid(requestId)) {
+        return res.status(400).json({ success: false, message: 'Demande invalide.' });
+      }
+
+      const decision = String(req.body.decision);
+      const requestDoc = await StandaloneTarificationRequest.findById(requestId);
+      if (!requestDoc) {
+        return res.status(404).json({ success: false, message: 'Demande introuvable.' });
+      }
+
+      if (String(requestDoc.user) !== String(req.user.id)) {
+        return res.status(403).json({ success: false, message: 'Accès refusé.' });
+      }
+
+      if (requestDoc.status !== 'pending') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cette demande a déjà reçu une réponse.',
+        });
+      }
+
+      requestDoc.status = decision;
+      requestDoc.respondedAt = new Date();
+      requestDoc.respondedBy = req.user.id;
+      await requestDoc.save();
+      await Notification.updateMany(
+        { user: requestDoc.user, type: 'tarification_choice_requested', 'metadata.requestId': String(requestDoc._id) },
+        { $set: { 'metadata.decision': decision, 'metadata.respondedAt': requestDoc.respondedAt } }
+      );
+
+      const clientDisplay =
+        `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email || 'Le client';
+      const amountText =
+        requestDoc.amount != null && Number.isFinite(requestDoc.amount)
+          ? `${Number(requestDoc.amount).toLocaleString('fr-FR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })} EUR`
+          : null;
+
+      const adminTitle =
+        decision === 'accepted'
+          ? 'Tarification sans dossier acceptée'
+          : 'Tarification sans dossier refusée';
+      const adminMessage =
+        `${clientDisplay} a ${decision === 'accepted' ? 'accepté' : 'refusé'} la demande de tarification sans dossier.` +
+        (amountText ? ` Montant proposé : ${amountText}.` : '') +
+        ` Motif : ${String(requestDoc.motif || '').slice(0, 400)}.`;
+
+      await createNotification(
+        String(requestDoc.adminSender),
+        'tarification_choice_requested',
+        adminTitle,
+        adminMessage,
+        '/admin/dossiers/tarification',
+        {
+          standalone: true,
+          requestId: String(requestDoc._id),
+          decision,
+          targetUserId: String(requestDoc.user),
+        }
+      );
+
+      const adminUser = await User.findById(requestDoc.adminSender).select('email firstName lastName');
+      let emailSent = false;
+      let emailSkipped = null;
+      if (!adminUser?.email || !String(adminUser.email).trim()) {
+        emailSkipped = 'no_email';
+      } else {
+        try {
+          emailSent = await sendTransactionalEmail({
+            to: adminUser.email,
+            toName: `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim(),
+            subject: `${adminTitle} — Ada Papers`,
+            htmlContent: `<p>${escapeHtml(adminMessage)}</p>`,
+            textContent: adminMessage,
+          });
+          if (!emailSent) emailSkipped = 'brevo_error';
+        } catch (e) {
+          console.error('⚠️ Email notification admin (réponse tarification sans dossier):', e);
+          emailSkipped = e?.message || 'email_error';
+        }
+      }
+
+      return res.json({
+        success: true,
+        message:
+          decision === 'accepted'
+            ? 'Votre acceptation a été transmise au cabinet.'
+            : 'Votre refus a été transmis au cabinet.',
+        decision,
+        adminNotified: true,
+        emailSent,
+        emailSkipped: emailSent ? null : emailSkipped,
+      });
+    } catch (error) {
+      console.error('Erreur tarification-standalone respond:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+  }
+);
+
+// @route   GET /api/user/dossiers/tarification-standalone
+// @desc    Liste admin des demandes de tarification sans dossier (avec statut)
+// @access  Private (admin, superadmin)
+router.get('/tarification-standalone', protect, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(200, Math.floor(limitRaw)) : 100;
+
+    const requests = await StandaloneTarificationRequest.find({})
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate('user', 'firstName lastName email phone role')
+      .populate('adminSender', 'firstName lastName email role');
+
+    return res.json({
+      success: true,
+      requests,
+      total: requests.length,
+    });
+  } catch (error) {
+    console.error('Erreur tarification-standalone list:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+// @route   POST /api/user/dossiers/tarification-standalone/:requestId/remind
+// @desc    Relance d'une demande standalone (in-app + push + email, cooldown 48h)
+// @access  Private (admin, superadmin)
+router.post('/tarification-standalone/:requestId/remind', protect, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const requestId = String(req.params.requestId || '');
+    if (!mongoose.Types.ObjectId.isValid(requestId)) {
+      return res.status(400).json({ success: false, message: 'Demande invalide.' });
+    }
+
+    const requestDoc = await StandaloneTarificationRequest.findById(requestId)
+      .populate('user', 'firstName lastName email role')
+      .populate('adminSender', 'firstName lastName email');
+    if (!requestDoc) {
+      return res.status(404).json({ success: false, message: 'Demande introuvable.' });
+    }
+    if (requestDoc.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Seules les demandes en attente peuvent être relancées.',
+      });
+    }
+
+    const anchor = requestDoc.lastReminderAt || requestDoc.createdAt;
+    if (anchor) {
+      const elapsed = Date.now() - new Date(anchor).getTime();
+      if (elapsed < MIN_REMINDER_INTERVAL_MS) {
+        const remainingMs = MIN_REMINDER_INTERVAL_MS - elapsed;
+        const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+        return res.status(429).json({
+          success: false,
+          message: `Relance déjà envoyée récemment. Prochaine relance possible dans environ ${remainingHours}h.`,
+          reminderCooldownHours: 48,
+          nextReminderAt: new Date(new Date(anchor).getTime() + MIN_REMINDER_INTERVAL_MS),
+        });
+      }
+    }
+
+    const user = requestDoc.user;
+    const userDisplay =
+      `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || 'Client';
+    const amountSentence =
+      requestDoc.amount != null && Number.isFinite(Number(requestDoc.amount)) && Number(requestDoc.amount) > 0
+        ? `Montant à régler : ${Number(requestDoc.amount).toLocaleString('fr-FR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })} EUR.\n\n`
+        : '';
+    const message = `${amountSentence}Rappel : votre paiement est attendu.\n\nMotif : ${String(
+      requestDoc.motif || ''
+    ).slice(0, 1000)}`;
+
+    const notif = await createNotification(
+      String(requestDoc.user?._id || requestDoc.user),
+      'tarification_choice_requested',
+      'Rappel : paiement requis',
+      message,
+      getTarificationLinkByRole(user?.role),
+      {
+        standalone: true,
+        requestId: String(requestDoc._id),
+        sentByAdmin: req.user.id?.toString?.() || String(req.user.id),
+        reminder: true,
+        reminderCooldownHours: 48,
+      }
+    );
+    if (!notif) {
+      return res.status(500).json({ success: false, message: 'Impossible de créer la notification in-app.' });
+    }
+
+    let emailSent = false;
+    let emailSkipped = null;
+    if (!user?.email || !String(user.email).trim()) {
+      emailSkipped = 'no_email';
+    } else {
+      try {
+        emailSent = await sendTransactionalEmail({
+          to: user.email,
+          toName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          subject: 'Rappel : paiement requis — Ada Papers',
+          htmlContent: `<p>Bonjour ${escapeHtml(userDisplay)},</p><p>${escapeHtml(message).replace(/\n/g, '<br/>')}</p>`,
+          textContent: `Bonjour ${userDisplay},\n\n${message}`,
+        });
+        if (!emailSent) emailSkipped = 'brevo_error';
+      } catch (e) {
+        console.error('⚠️ Email relance standalone:', e);
+        emailSkipped = e?.message || 'email_error';
+      }
+    }
+
+    requestDoc.lastReminderAt = new Date();
+    requestDoc.reminderCount = Number(requestDoc.reminderCount || 0) + 1;
+    await requestDoc.save();
+
+    return res.json({
+      success: true,
+      message: `Relance envoyée à ${userDisplay}.`,
+      inAppSent: true,
+      pushSent: true,
+      emailSent,
+      emailSkipped: emailSent ? null : emailSkipped,
+      reminderCooldownHours: 48,
+      reminderCount: requestDoc.reminderCount,
+      nextReminderAt: new Date(requestDoc.lastReminderAt.getTime() + MIN_REMINDER_INTERVAL_MS),
+    });
+  } catch (error) {
+    console.error('Erreur tarification-standalone remind:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+// @route   POST /api/user/dossiers/tarification-standalone/:requestId/cancel
+// @desc    Annuler une demande standalone en attente
+// @access  Private (admin, superadmin)
+router.post('/tarification-standalone/:requestId/cancel', protect, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const requestId = String(req.params.requestId || '');
+    if (!mongoose.Types.ObjectId.isValid(requestId)) {
+      return res.status(400).json({ success: false, message: 'Demande invalide.' });
+    }
+
+    const requestDoc = await StandaloneTarificationRequest.findById(requestId).populate(
+      'user',
+      'firstName lastName email role'
+    );
+    if (!requestDoc) {
+      return res.status(404).json({ success: false, message: 'Demande introuvable.' });
+    }
+
+    if (requestDoc.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Seules les demandes en attente peuvent être annulées.',
+      });
+    }
+
+    requestDoc.status = 'cancelled';
+    requestDoc.cancelledAt = new Date();
+    requestDoc.cancelledBy = req.user.id;
+    await requestDoc.save();
+
+    await Notification.updateMany(
+      {
+        user: requestDoc.user?._id || requestDoc.user,
+        type: 'tarification_choice_requested',
+        'metadata.requestId': String(requestDoc._id),
+      },
+      {
+        $set: {
+          'metadata.decision': 'cancelled',
+          'metadata.cancelledAt': requestDoc.cancelledAt,
+          'metadata.cancelledBy': String(req.user.id),
+        },
+      }
+    );
+
+    const user = requestDoc.user;
+    const userDisplay =
+      `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || 'client';
+    await createNotification(
+      String(user?._id || requestDoc.user),
+      'tarification_choice_requested',
+      'Demande de paiement annulée',
+      `La demande de paiement sans dossier a été annulée par le cabinet. Motif initial: ${String(
+        requestDoc.motif || ''
+      ).slice(0, 300)}.`,
+      getTarificationLinkByRole(user?.role),
+      {
+        standalone: true,
+        requestId: String(requestDoc._id),
+        decision: 'cancelled',
+      }
+    );
+
+    return res.json({
+      success: true,
+      message: `Demande annulée pour ${userDisplay}.`,
+      status: requestDoc.status,
+      cancelledAt: requestDoc.cancelledAt,
+    });
+  } catch (error) {
+    console.error('Erreur tarification-standalone cancel:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
 
 // @route   PATCH /api/user/dossiers/:id/formule-tarifaire
 // @desc    Client (ou cabinet) enregistre la formule Standard / Premium
@@ -2392,13 +2943,15 @@ router.put(
         fraisExoneres,
         fraisExoneresMotif: bodyFraisExoneresMotif,
         montantTarificationFixe,
+        tarificationPrestations,
         paiementTarificationEffectue,
         notifyTarificationClient,
         retractTarificationChoiceRequest,
         tarificationClientMessage,
         isStandby,
         standbyReason,
-        standbyUntil
+        standbyUntil,
+        isPinned
       } = req.body;
 
       const shouldNotifyTarificationClientNow =
@@ -2434,6 +2987,7 @@ router.put(
 
       if (
         (montantTarificationFixe !== undefined ||
+          tarificationPrestations !== undefined ||
           shouldNotifyTarificationClientNow ||
           shouldRetractTarificationChoiceRequest) &&
         !isCabinetTarifRole
@@ -2465,10 +3019,12 @@ router.put(
         fraisExoneres: !!dossier.fraisExoneres,
         fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
         montantTarificationFixe: normalizeMontantTarificationFixe(dossier.montantTarificationFixe),
+        tarificationPrestationsJson: JSON.stringify(dossier.tarificationPrestations || []),
         paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
         isStandby: !!dossier.isStandby,
         standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
-        standbyUntilMs: dossier.standbyUntil ? new Date(dossier.standbyUntil).getTime() : null
+        standbyUntilMs: dossier.standbyUntil ? new Date(dossier.standbyUntil).getTime() : null,
+        isPinned: !!dossier.isPinned
       };
 
       // Appliquer directement les modifications
@@ -2498,6 +3054,19 @@ router.put(
       if (dateEcheance) dossier.dateEcheance = dateEcheance;
       if (notes !== undefined) dossier.notes = notes;
       if (motifRefus !== undefined) dossier.motifRefus = motifRefus;
+      if ((req.user.role === 'admin' || req.user.role === 'superadmin') && isPinned !== undefined && isPinned !== null) {
+        const truthy = isPinned === true || isPinned === 'true' || isPinned === 1 || isPinned === '1';
+        const falsy = isPinned === false || isPinned === 'false' || isPinned === 0 || isPinned === '0';
+        if (truthy) {
+          dossier.isPinned = true;
+          dossier.pinnedAt = new Date();
+          dossier.pinnedBy = req.user.id;
+        } else if (falsy) {
+          dossier.isPinned = false;
+          dossier.pinnedAt = undefined;
+          dossier.pinnedBy = undefined;
+        }
+      }
 
       // Stand-by (admin/superadmin uniquement) : suspend temporairement le traitement sans changer le statut métier
       if (req.user.role === 'admin' || req.user.role === 'superadmin') {
@@ -2634,6 +3203,39 @@ router.put(
         }
       }
 
+      // Tarifications multiples par prestations (admin / superadmin)
+      if (isCabinetTarifRole && tarificationPrestations !== undefined) {
+        if (!Array.isArray(tarificationPrestations)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Le format des prestations de tarification est invalide (tableau attendu).',
+          });
+        }
+        const normalizedPrestations = tarificationPrestations
+          .map((p) => ({
+            label: String(p?.label || '').trim(),
+            montant: Number(
+              typeof p?.montant === 'string'
+                ? String(p.montant).replace(',', '.').trim()
+                : p?.montant
+            ),
+            statut: p?.statut === 'reglee' ? 'reglee' : 'a_regler',
+          }))
+          .filter((p) => p.label && Number.isFinite(p.montant) && p.montant >= 0)
+          .slice(0, 50);
+
+        dossier.tarificationPrestations = normalizedPrestations.map((p) => ({
+          ...p,
+          createdAt: new Date(),
+          createdBy: req.user.id,
+        }));
+
+        // Dès qu'on fixe une liste de prestations, on neutralise le choix formule client.
+        dossier.formuleTarifaire = undefined;
+        dossier.formuleTarifaireChoisieAt = undefined;
+        dossier.formuleTarifaireReminderSent = true;
+      }
+
       // Statut de paiement tarification (admin / superadmin)
       if (
         (req.user.role === 'admin' || req.user.role === 'superadmin') &&
@@ -2717,10 +3319,12 @@ router.put(
         fraisExoneres: !!dossier.fraisExoneres,
         fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
         montantTarificationFixe: normalizeMontantTarificationFixe(dossier.montantTarificationFixe),
+        tarificationPrestationsJson: JSON.stringify(dossier.tarificationPrestations || []),
         paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
         isStandby: !!dossier.isStandby,
         standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
-        standbyUntilMs: dossier.standbyUntil ? new Date(dossier.standbyUntil).getTime() : null
+        standbyUntilMs: dossier.standbyUntil ? new Date(dossier.standbyUntil).getTime() : null,
+        isPinned: !!dossier.isPinned
       };
 
       const onlyTitreRenamed =
@@ -2769,10 +3373,27 @@ router.put(
         dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
         dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson;
 
+      const onlyPinnedChanged =
+        dossierSnapshotBeforeUpdate.isPinned !== dossierSnapshotAfterUpdate.isPinned &&
+        dossierSnapshotBeforeUpdate.titre === dossierSnapshotAfterUpdate.titre &&
+        dossierSnapshotBeforeUpdate.description === dossierSnapshotAfterUpdate.description &&
+        dossierSnapshotBeforeUpdate.categorie === dossierSnapshotAfterUpdate.categorie &&
+        dossierSnapshotBeforeUpdate.type === dossierSnapshotAfterUpdate.type &&
+        dossierSnapshotBeforeUpdate.statut === dossierSnapshotAfterUpdate.statut &&
+        dossierSnapshotBeforeUpdate.priorite === dossierSnapshotAfterUpdate.priorite &&
+        dossierSnapshotBeforeUpdate.notes === dossierSnapshotAfterUpdate.notes &&
+        dossierSnapshotBeforeUpdate.motifRefus === dossierSnapshotAfterUpdate.motifRefus &&
+        dossierSnapshotBeforeUpdate.assignedTo === dossierSnapshotAfterUpdate.assignedTo &&
+        dossierSnapshotBeforeUpdate.dateEcheanceMs === dossierSnapshotAfterUpdate.dateEcheanceMs &&
+        dossierSnapshotBeforeUpdate.etapesJson === dossierSnapshotAfterUpdate.etapesJson &&
+        !standbyFieldsChanged;
+
       const tarificationFieldsChanged =
         dossierSnapshotBeforeUpdate.fraisExoneres !== dossierSnapshotAfterUpdate.fraisExoneres ||
         dossierSnapshotBeforeUpdate.fraisExoneresMotif !== dossierSnapshotAfterUpdate.fraisExoneresMotif ||
         dossierSnapshotBeforeUpdate.montantTarificationFixe !== dossierSnapshotAfterUpdate.montantTarificationFixe ||
+        dossierSnapshotBeforeUpdate.tarificationPrestationsJson !==
+          dossierSnapshotAfterUpdate.tarificationPrestationsJson ||
         dossierSnapshotBeforeUpdate.paiementTarificationEffectue !== dossierSnapshotAfterUpdate.paiementTarificationEffectue ||
         shouldNotifyTarificationClientNow ||
         shouldRetractTarificationChoiceRequest;
@@ -2902,9 +3523,11 @@ router.put(
           onlyTitreRenamed ||
           onlyEtapesEdited ||
           onlyStandbySettingChanged ||
-          onlyTarificationSettingChanged,
+          onlyTarificationSettingChanged ||
+          onlyPinnedChanged,
         skipClientEtapesOnlyNotify: onlyEtapesEdited,
-        skipClientTarificationOnlyNotify: onlyTarificationSettingChanged || skipMontantSilentNotify,
+        skipClientTarificationOnlyNotify:
+          onlyTarificationSettingChanged || skipMontantSilentNotify || onlyPinnedChanged,
         skipAllPingAndSms: skipMontantSilentNotify,
       });
 
@@ -2978,7 +3601,13 @@ router.put(
           // (ni assignation ni retrait d'assignation)
           
           // Notification générale si d'autres modifications (pas si seules les étapes ont changé)
-          if (!onlyEtapesEdited && !onlyStandbySettingChanged && !onlyTarificationSettingChanged && (!statut || statut === oldStatut)) {
+          if (
+            !onlyEtapesEdited &&
+            !onlyStandbySettingChanged &&
+            !onlyTarificationSettingChanged &&
+            !onlyPinnedChanged &&
+            (!statut || statut === oldStatut)
+          ) {
             if (assignedTo === undefined || assignedTo === oldAssignedTo) {
               await createNotification(
                 userId,
@@ -3079,6 +3708,9 @@ Cette information est également consultable dans votre espace client, rubrique 
           if (clientUserId) {
             const dossierTitle = dossierForNotification.titre || dossierForNotification.numero || 'votre dossier';
             const montantFixe = normalizeMontantTarificationFixe(dossierForNotification.montantTarificationFixe);
+            const prestations = Array.isArray(dossierForNotification.tarificationPrestations)
+              ? dossierForNotification.tarificationPrestations
+              : [];
             let titreTarif = 'Choisissez votre formule tarifaire';
             let messageTarif = `Une information de tarification est disponible dans votre espace client, rubrique Tarification.`;
 
@@ -3097,6 +3729,26 @@ Cette information est également consultable dans votre espace client, rubrique 
               });
               titreTarif = 'Montant du paiement convenu avec Ada Papers.';
               messageTarif = `Pour le dossier « ${dossierTitle} », le montant à payer a été fixé à ${amountText} EUR.`;
+            } else if (prestations.length > 0) {
+              const lines = prestations
+                .slice(0, 20)
+                .map((p) => {
+                  const m = Number(p?.montant || 0);
+                  const amountText = m.toLocaleString('fr-FR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  });
+                  return `- ${String(p?.label || 'Prestation')} : ${amountText} EUR`;
+                });
+              const total = prestations.reduce((acc, p) => acc + Number(p?.montant || 0), 0);
+              const totalText = total.toLocaleString('fr-FR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              });
+              titreTarif = 'Tarification par prestations';
+              messageTarif = `Pour le dossier « ${dossierTitle} », plusieurs prestations de tarification ont été définies :\n${lines.join(
+                '\n'
+              )}\n\nTotal: ${totalText} EUR.`;
             } else if (dossierForNotification.formuleTarifaire) {
               const formuleLabel =
                 dossierForNotification.formuleTarifaire === 'premium'

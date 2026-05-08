@@ -193,6 +193,13 @@ try {
 }
 
 try {
+  app.use('/api/paw-search', require('./routes/paw-search'));
+  console.log('✅ Route /api/paw-search enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/paw-search:', e.message);
+}
+
+try {
   app.use('/api/sms-templates', require('./routes/sms-templates'));
 } catch (e) {}
 

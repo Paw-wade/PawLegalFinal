@@ -304,6 +304,7 @@ export default function AdminDossiersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingDossier, setEditingDossier] = useState<any>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [pinningDossierId, setPinningDossierId] = useState<string | null>(null);
   const [showRefuseModal, setShowRefuseModal] = useState<{ dossierId: string; dossierTitre: string } | null>(null);
   const [motifRefus, setMotifRefus] = useState('');
   const [showStatutModal, setShowStatutModal] = useState<{ dossierId: string; dossierTitre: string; currentStatut: string; newStatut: string } | null>(null);
@@ -316,6 +317,9 @@ export default function AdminDossiersPage() {
   const [tarifNotifyMessage, setTarifNotifyMessage] = useState('');
   const [tarifExonerer, setTarifExonerer] = useState(false);
   const [tarifExoMotif, setTarifExoMotif] = useState('');
+  const [tarifPrestations, setTarifPrestations] = useState<
+    Array<{ label: string; montant: string; statut: 'a_regler' | 'reglee' }>
+  >([]);
   const [tarifSavingMontant, setTarifSavingMontant] = useState(false);
   const [tarifSendingNotify, setTarifSendingNotify] = useState(false);
   const [tarifRetracting, setTarifRetracting] = useState(false);
@@ -1206,6 +1210,36 @@ export default function AdminDossiersPage() {
     }
   };
 
+  const handleTogglePinnedDossier = async (dossier: any) => {
+    const dossierId = String(dossier?._id || dossier?.id || '');
+    if (!dossierId) return;
+    setPinningDossierId(dossierId);
+    setError(null);
+    try {
+      const nextPinned = !Boolean(dossier?.isPinned);
+      const response = await dossiersAPI.updateDossier(dossierId, {
+        isPinned: nextPinned,
+        skipDossierModificationNotify: true,
+      });
+      if (response?.data?.success) {
+        setDossiers((prev) =>
+          prev.map((d: any) => {
+            const id = String(d?._id || d?.id || '');
+            if (id !== dossierId) return d;
+            return {
+              ...d,
+              isPinned: nextPinned,
+            };
+          })
+        );
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Impossible de modifier l’épingle du dossier.');
+    } finally {
+      setPinningDossierId(null);
+    }
+  };
+
   const handleDeleteDocument = async (documentId: string) => {
     const docId = String(documentId || '');
     if (!docId) return;
@@ -1396,6 +1430,15 @@ export default function AdminDossiersPage() {
     setTarifNotifyMessage('');
     setTarifExonerer(!!dossier?.fraisExoneres);
     setTarifExoMotif(dossier?.fraisExoneresMotif ? String(dossier.fraisExoneresMotif) : '');
+    setTarifPrestations(
+      Array.isArray(dossier?.tarificationPrestations) && dossier.tarificationPrestations.length > 0
+        ? dossier.tarificationPrestations.map((p: any) => ({
+            label: String(p?.label || ''),
+            montant: p?.montant != null ? String(p.montant) : '',
+            statut: p?.statut === 'reglee' ? 'reglee' : 'a_regler',
+          }))
+        : [{ label: '', montant: '', statut: 'a_regler' }]
+    );
   };
 
   const closeTarifModal = () => {
@@ -1404,6 +1447,7 @@ export default function AdminDossiersPage() {
     setTarifNotifyMessage('');
     setTarifExonerer(false);
     setTarifExoMotif('');
+    setTarifPrestations([]);
     setTarifRetracting(false);
   };
 
@@ -1454,6 +1498,14 @@ export default function AdminDossiersPage() {
     const dossierId = String(showTarifModal._id || showTarifModal.id || '');
     if (!dossierId) return;
     const trimmedMontant = String(tarifMontantInput ?? '').trim();
+    const prestationsPayload = tarifPrestations
+      .map((p) => ({
+        label: String(p.label || '').trim(),
+        montant: parseMontantSaisieFlexible(p.montant),
+        statut: p.statut === 'reglee' ? 'reglee' : 'a_regler',
+      }))
+      .filter((p) => p.label && p.montant !== null)
+      .map((p) => ({ label: p.label, montant: p.montant as number, statut: p.statut }));
     const parsed = parseMontantSaisieFlexible(tarifMontantInput);
     if (parsed === null) {
       setToast({
@@ -1470,6 +1522,7 @@ export default function AdminDossiersPage() {
     try {
       const { data } = await dossiersAPI.updateDossier(dossierId, {
         montantTarificationFixe: parsed,
+        tarificationPrestations: prestationsPayload,
         skipDossierModificationNotify: true,
       });
       if (!data?.success) {
@@ -1522,6 +1575,14 @@ export default function AdminDossiersPage() {
     const dossierId = String(showTarifModal._id || showTarifModal.id || '');
     if (!dossierId) return;
     const montantRaw = String(tarifMontantInput ?? '').trim();
+    const prestationsPayload = tarifPrestations
+      .map((p) => ({
+        label: String(p.label || '').trim(),
+        montant: parseMontantSaisieFlexible(p.montant),
+        statut: p.statut === 'reglee' ? 'reglee' : 'a_regler',
+      }))
+      .filter((p) => p.label && p.montant !== null)
+      .map((p) => ({ label: p.label, montant: p.montant as number, statut: p.statut }));
     if (montantRaw !== '') {
       const p = parseMontantSaisieFlexible(tarifMontantInput);
       if (p === null) {
@@ -1545,6 +1606,7 @@ export default function AdminDossiersPage() {
       }
       const msg = tarifNotifyMessage.trim();
       if (msg) payload.tarificationClientMessage = msg;
+      payload.tarificationPrestations = prestationsPayload;
       if (tarifExonerer) {
         payload.fraisExoneres = true;
         const m = tarifExoMotif.trim();
@@ -2447,7 +2509,15 @@ export default function AdminDossiersPage() {
                 const dossierIdStr = (d: any) => String(d._id || d.id || '');
                 const sortedDossiers =
                   dossierSortEtapes === 'default'
-                    ? filteredDossiers
+                    ? filteredDossiers.slice().sort((a: any, b: any) => {
+                        const pa = a?.isPinned ? 1 : 0;
+                        const pb = b?.isPinned ? 1 : 0;
+                        if (pb !== pa) return pb - pa;
+                        const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+                        const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+                        if (tb !== ta) return tb - ta;
+                        return dossierIdStr(a).localeCompare(dossierIdStr(b));
+                      })
                     : (() => {
                         const list = filteredDossiers.slice();
                         if (dossierSortEtapes === 'etape_date_asc') {
@@ -2510,7 +2580,25 @@ export default function AdminDossiersPage() {
                         : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
                     }`}
                   >
-                    <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                    <div className="relative bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void handleTogglePinnedDossier(dossier);
+                        }}
+                        disabled={pinningDossierId === String(dossier._id || dossier.id)}
+                        className={`absolute top-3 right-3 z-10 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md border transition-colors ${
+                          dossier?.isPinned
+                            ? 'bg-amber-100 border-amber-300 text-amber-700 hover:bg-amber-200'
+                            : 'bg-gray-100 border-gray-300 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        title={dossier?.isPinned ? 'Retirer l’épingle' : 'Épingler ce dossier'}
+                        aria-label={dossier?.isPinned ? 'Retirer l’épingle' : 'Épingler ce dossier'}
+                      >
+                        {pinningDossierId === String(dossier._id || dossier.id) ? '…' : '📌'}
+                      </button>
                       {/* En-tête de la carte : vue admin très compacte, infos essentielles sur toute la largeur */}
                       <div className="flex flex-col gap-2 mb-2">
                       <div className="flex-1 min-w-0">
@@ -2538,6 +2626,9 @@ export default function AdminDossiersPage() {
                             <h3 className="font-semibold text-base text-foreground line-clamp-1 leading-snug truncate">
                               {getDossierDisplayTitle(dossier)}
                             </h3>
+                            {dossier?.isPinned ? (
+                              <p className="text-[11px] font-semibold text-amber-700">Dossier épinglé</p>
+                            ) : null}
                             {(dossier.numero || dossier.numeroDossier) && (
                               <p className="text-xs text-primary font-mono font-semibold">
                                 Réf. {dossier.numero || dossier.numeroDossier}
@@ -2694,6 +2785,16 @@ export default function AdminDossiersPage() {
                               title={dossier.fraisExoneresMotif ? String(dossier.fraisExoneresMotif) : 'Aucune formule requise — frais exonérés'}
                             >
                               Frais exonérés
+                            </span>
+                          ) : Array.isArray(dossier.tarificationPrestations) && dossier.tarificationPrestations.length > 0 ? (
+                            <span
+                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-100 text-blue-900 border border-blue-200 max-w-[min(100%,20rem)] truncate"
+                              title={dossier.tarificationPrestations
+                                .slice(0, 10)
+                                .map((p: any) => `${p?.label || 'Prestation'}: ${formatTarifMontantFr(Number(p?.montant || 0))} EUR`)
+                                .join(' | ')}
+                            >
+                              Prestations : {dossier.tarificationPrestations.length}
                             </span>
                           ) : normalizeMontantTarifField(dossier.montantTarificationFixe) > 0 ? (
                             <span
@@ -4312,6 +4413,91 @@ export default function AdminDossiersPage() {
                   {String(showTarifModal.tarificationLastNotifySummary)}
                 </div>
               ) : null}
+              <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">
+                    Tarification par prestations (multi-lignes)
+                  </p>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold rounded border border-blue-300 bg-white px-2 py-1 text-blue-700 hover:bg-blue-50"
+                    onClick={() =>
+                      setTarifPrestations((prev) => [...prev, { label: '', montant: '', statut: 'a_regler' }])
+                    }
+                  >
+                    + Ajouter
+                  </button>
+                </div>
+                <p className="text-[11px] text-blue-900/90">
+                  Vous pouvez définir plusieurs prestations. Elles seront incluses dans la notification client.
+                </p>
+                {(() => {
+                  const total = tarifPrestations.reduce((acc, p) => {
+                    const n = parseMontantSaisieFlexible(p.montant);
+                    return acc + (n == null ? 0 : n);
+                  }, 0);
+                  const reglees = tarifPrestations.filter((p) => p.statut === 'reglee').length;
+                  return (
+                    <div className="rounded border border-blue-200 bg-white px-2 py-1.5 text-[11px] text-blue-900">
+                      Total prestations: <strong>{formatTarifMontantFr(total)} EUR</strong> · Réglées: {reglees}/
+                      {tarifPrestations.length}
+                    </div>
+                  );
+                })()}
+                <div className="space-y-2">
+                  {tarifPrestations.map((p, idx) => (
+                    <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                      <input
+                        className="col-span-7 rounded border border-blue-200 bg-white px-2 py-1.5 text-xs"
+                        placeholder="Prestation (ex: rédaction recours)"
+                        value={p.label}
+                        onChange={(e) =>
+                          setTarifPrestations((prev) =>
+                            prev.map((row, i) => (i === idx ? { ...row, label: e.target.value } : row))
+                          )
+                        }
+                      />
+                      <input
+                        className="col-span-3 rounded border border-blue-200 bg-white px-2 py-1.5 text-xs"
+                        placeholder="Montant"
+                        value={p.montant}
+                        onChange={(e) =>
+                          setTarifPrestations((prev) =>
+                            prev.map((row, i) => (i === idx ? { ...row, montant: e.target.value } : row))
+                          )
+                        }
+                      />
+                      <label className="col-span-1 inline-flex items-center justify-center rounded border border-blue-200 bg-white px-1 py-1.5 text-[10px] text-blue-900">
+                        <input
+                          type="checkbox"
+                          checked={p.statut === 'reglee'}
+                          onChange={(e) =>
+                            setTarifPrestations((prev) =>
+                              prev.map((row, i) =>
+                                i === idx ? { ...row, statut: e.target.checked ? 'reglee' : 'a_regler' } : row
+                              )
+                            )
+                          }
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="col-span-1 rounded border border-red-300 bg-white px-1 py-1 text-xs text-red-700 hover:bg-red-50"
+                        onClick={() =>
+                          setTarifPrestations((prev) =>
+                            prev.length <= 1
+                              ? [{ label: '', montant: '', statut: 'a_regler' }]
+                              : prev.filter((_, i) => i !== idx)
+                          )
+                        }
+                        title="Supprimer la ligne"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
               {canRetractTarificationChoiceRequest(showTarifModal) ? (
                 <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 space-y-2">
                   <p className="text-xs font-semibold text-amber-900">Rétracter la demande</p>

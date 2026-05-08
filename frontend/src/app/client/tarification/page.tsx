@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { dossiersAPI } from '@/lib/api';
+import { dossiersAPI, notificationsAPI } from '@/lib/api';
 import { normalizeMontantTarificationFixe } from '@/lib/montantTarification';
 import { tarificationFormules } from '@/data/tarificationConfig';
 import type { TarifFormuleId } from '@/data/tarificationConfig';
@@ -19,19 +19,38 @@ export default function ClientTarificationPage() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [standaloneTarifNotifications, setStandaloneTarifNotifications] = useState<any[]>([]);
+  const [standaloneActionLoading, setStandaloneActionLoading] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await dossiersAPI.getMyDossiers();
+      const [res, notifRes] = await Promise.all([
+        dossiersAPI.getMyDossiers(),
+        notificationsAPI.getNotifications({ type: 'tarification_choice_requested', limit: 100 }),
+      ]);
       const list = res.data?.dossiers || res.data?.data || [];
       setDossiers(Array.isArray(list) ? list : []);
+      const notifList = notifRes?.data?.notifications || [];
+      const standalone = Array.isArray(notifList)
+        ? notifList.filter((n: any) => {
+            const md = n?.metadata || n?.data || {};
+            const isStandalone = Boolean(md?.standalone) || !md?.dossierId;
+            if (!isStandalone) return false;
+            const amount = Number(md?.amount);
+            const msg = String(n?.message || '').toLowerCase();
+            // Afficher uniquement les demandes où un paiement est explicitement requis.
+            return (Number.isFinite(amount) && amount > 0) || msg.includes('montant à régler') || msg.includes('montant a regler');
+          })
+        : [];
+      setStandaloneTarifNotifications(standalone);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('tarificationUpdated'));
       }
     } catch (e) {
       console.error(e);
       setDossiers([]);
+      setStandaloneTarifNotifications([]);
     } finally {
       setLoading(false);
     }
@@ -111,6 +130,31 @@ export default function ClientTarificationPage() {
     }
   };
 
+  const handleStandaloneDecision = async (requestId: string, decision: 'accepted' | 'refused') => {
+    if (!requestId) {
+      showToast('Demande invalide.');
+      return;
+    }
+
+    setStandaloneActionLoading((prev) => ({ ...prev, [requestId]: true }));
+    try {
+      const res = await dossiersAPI.respondStandaloneTarificationRequest(requestId, decision);
+      if (res?.data?.success === false) {
+        throw new Error(res?.data?.message || 'Erreur');
+      }
+      showToast(
+        decision === 'accepted'
+          ? 'Votre acceptation a bien été transmise.'
+          : 'Votre refus a bien été transmis.'
+      );
+      await load();
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || err?.message || 'Impossible d’enregistrer votre choix.');
+    } finally {
+      setStandaloneActionLoading((prev) => ({ ...prev, [requestId]: false }));
+    }
+  };
+
   const current = tarificationFormules[selectedIndex] || tarificationFormules[0];
 
   if (status === 'loading' || loading) {
@@ -158,9 +202,65 @@ export default function ClientTarificationPage() {
           </p>
         </div>
 
+        {standaloneTarifNotifications.length > 0 && (
+          <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 sm:p-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700 mb-2">
+              Paiement requis (sans dossier)
+            </p>
+            <div className="space-y-2">
+              {standaloneTarifNotifications.slice(0, 5).map((notif: any) => {
+                const createdAt = notif?.createdAt ? new Date(notif.createdAt) : null;
+                const md = notif?.metadata || notif?.data || {};
+                const requestId = String(md?.requestId || '');
+                const hasDecision = Boolean(md?.decision);
+                const actionBusy = requestId ? !!standaloneActionLoading[requestId] : false;
+                return (
+                  <div key={notif?._id || `${notif?.titre}-${notif?.createdAt}`} className="rounded-lg border border-indigo-200 bg-white px-3 py-2.5">
+                    <p className="text-sm font-semibold text-indigo-900">{notif?.titre || 'Demande de tarification'}</p>
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap mt-1">
+                      {notif?.message || 'Veuillez consulter les détails de tarification.'}
+                    </p>
+                    {createdAt && (
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        Reçu le {createdAt.toLocaleString('fr-FR')}
+                      </p>
+                    )}
+                    {requestId && !hasDecision ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                          disabled={actionBusy}
+                          onClick={() => handleStandaloneDecision(requestId, 'accepted')}
+                        >
+                          {actionBusy ? 'Envoi…' : 'Accepter'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-rose-300 text-rose-700 hover:bg-rose-50"
+                          disabled={actionBusy}
+                          onClick={() => handleStandaloneDecision(requestId, 'refused')}
+                        >
+                          Refuser
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {dossiers.length === 0 ? (
           <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center">
-            <p className="text-gray-700 mb-4">Vous n’avez pas encore de dossier.</p>
+            <p className="text-gray-700 mb-4">
+              Vous n’avez pas encore de dossier.
+              {standaloneTarifNotifications.length > 0
+                ? ' Une demande de tarification sans dossier est visible ci-dessus.'
+                : ''}
+            </p>
             <Link href="/client/dossiers">
               <Button>Créer ou voir mes dossiers</Button>
             </Link>
