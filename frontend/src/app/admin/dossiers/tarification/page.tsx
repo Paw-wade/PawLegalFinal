@@ -293,12 +293,15 @@ export default function AdminDossiersTarificationPage() {
       return;
     }
     const hasAmountInput = manualAmount.trim().length > 0;
-    const parsedAmountValue = hasAmountInput ? Number(manualAmount.trim().replace(',', '.')) : null;
-    if (hasAmountInput && (!Number.isFinite(parsedAmountValue) || parsedAmountValue < 0)) {
-      setFeedback({ type: 'error', text: 'Montant invalide.' });
-      return;
+    let amountValue: number | null = null;
+    if (hasAmountInput) {
+      const parsedAmountValue = Number(manualAmount.trim().replace(',', '.'));
+      if (!Number.isFinite(parsedAmountValue) || parsedAmountValue < 0) {
+        setFeedback({ type: 'error', text: 'Montant invalide.' });
+        return;
+      }
+      amountValue = parsedAmountValue;
     }
-    const amountValue = parsedAmountValue;
 
     setManualSending(true);
     setFeedback(null);
