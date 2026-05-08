@@ -1,4 +1,5 @@
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsp = fs.promises;
 const path = require('path');
 
 const DEFAULT_DIR = path.join(__dirname, '../data/lexia');
@@ -50,7 +51,7 @@ async function collectMarkdownFiles(dir) {
   async function walk(d) {
     let entries;
     try {
-      entries = await fs.readdir(d, { withFileTypes: true });
+      entries = await fsp.readdir(d, { withFileTypes: true });
     } catch {
       return;
     }
@@ -59,7 +60,7 @@ async function collectMarkdownFiles(dir) {
       if (e.isDirectory()) {
         if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
         await walk(p);
-      } else if (/\.(md|txt)$/i.test(e.name)) {
+      } else if (/\.(md|txt|xml)$/i.test(e.name)) {
         out.push(p);
       }
     }
@@ -74,13 +75,24 @@ async function loadAllChunks(knowledgeDir) {
   for (const filePath of files) {
     let raw;
     try {
-      raw = await fs.readFile(filePath, 'utf8');
+      raw = await fsp.readFile(filePath, 'utf8');
     } catch {
       continue;
     }
     const rel = path.relative(knowledgeDir, filePath);
     const title = rel.replace(/\\/g, '/');
-    const sub = chunkText(raw, title);
+    const isXml = /\.xml$/i.test(filePath);
+    const normalized = isXml
+      ? raw
+          .replace(/<\?xml[\s\S]*?\?>/gi, ' ')
+          .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, ' $1 ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/gi, ' ')
+          .replace(/&amp;/gi, '&')
+          .replace(/&lt;/gi, '<')
+          .replace(/&gt;/gi, '>')
+      : raw;
+    const sub = chunkText(normalized, title);
     for (const c of sub) {
       all.push({
         file: title,
@@ -133,7 +145,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
     return {
       text:
         '## Base interne LEXIA\n\nAucun document indexé pour le moment.\n\n' +
-        `Ajoutez des fichiers **.md** ou **.txt** dans le dossier :\n\n\`${knowledgeDir}\`\n\n` +
+        `Ajoutez des fichiers **.md**, **.txt** ou **.xml** dans le dossier :\n\n\`${knowledgeDir}\`\n\n` +
         'Puis relancez une question : les extraits pertinents seront proposés ici (sans clé API).',
       sources: [],
     };
@@ -161,7 +173,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
   lines.push('## Recherche — base documentaire interne');
   lines.push('');
   lines.push(
-    '_Réponse produite **sans modèle cloud** : extraits classés par pertinence à partir de vos fichiers `.md` / `.txt`._'
+    '_Réponse produite **sans modèle cloud** : extraits classés par pertinence à partir de vos fichiers `.md` / `.txt` / `.xml`._'
   );
   lines.push('');
   lines.push('### Extraits');
@@ -187,14 +199,45 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
 }
 
 function getKnowledgeDir() {
-  return process.env.LEXIA_KNOWLEDGE_DIR
-    ? path.resolve(process.env.LEXIA_KNOWLEDGE_DIR)
-    : DEFAULT_DIR;
+  const raw = (process.env.LEXIA_KNOWLEDGE_DIR || '').trim();
+  if (!raw) return DEFAULT_DIR;
+
+  if (path.isAbsolute(raw)) return path.resolve(raw);
+
+  // Tolère les chemins relatifs lancés depuis des cwd différents (backend/, racine projet, etc.).
+  const candidates = [
+    path.resolve(raw),
+    path.resolve(process.cwd(), raw),
+    path.resolve(__dirname, '..', raw),
+    path.resolve(__dirname, '..', '..', raw),
+    path.resolve(path.sep, raw),
+  ];
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).isDirectory()) return p;
+    } catch {
+      // ignore et tente le candidat suivant
+    }
+  }
+
+  // Fallback explicite pour visibilité dans /config si le dossier n'existe pas encore.
+  return path.resolve(raw);
 }
 
 module.exports = {
   searchAndCompose,
   getKnowledgeDir,
+  getKnowledgeStats: async () => {
+    const knowledgeDir = getKnowledgeDir();
+    const files = await collectMarkdownFiles(knowledgeDir);
+    const byExt = { md: 0, txt: 0, xml: 0 };
+    for (const f of files) {
+      const ext = path.extname(f).toLowerCase().replace('.', '');
+      if (ext === 'md' || ext === 'txt' || ext === 'xml') byExt[ext] += 1;
+    }
+    return { knowledgeDir, total: files.length, byExt };
+  },
   invalidateCache: () => {
     chunkCache = { loadedAt: 0, chunks: [], fileMtimes: {} };
   },
