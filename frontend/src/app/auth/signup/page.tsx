@@ -86,6 +86,7 @@ export default function SignupPage() {
     email: '',
     phone: '',
   });
+  const [phoneCountryCode, setPhoneCountryCode] = useState('+33');
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -166,10 +167,19 @@ export default function SignupPage() {
         case 'phone':
           if (!value || value.trim().length === 0) {
             errors.phone = 'Le numéro de téléphone est requis';
-          } else if (!/^(\+33|0)[1-9](\d{2}){4}$/.test(value.replace(/\s/g, ''))) {
-            errors.phone = 'Numéro de téléphone invalide';
           } else {
-            delete errors.phone;
+            const digitsOnly = value.replace(/\D/g, '');
+            if (phoneCountryCode === '+33') {
+              if (!/^(0?[1-9]\d{8})$/.test(digitsOnly)) {
+                errors.phone = 'Numéro français invalide';
+              } else {
+                delete errors.phone;
+              }
+            } else if (!/^\d{6,15}$/.test(digitsOnly)) {
+              errors.phone = 'Numéro international invalide';
+            } else {
+              delete errors.phone;
+            }
           }
           break;
       }
@@ -184,6 +194,16 @@ export default function SignupPage() {
     validateField(name, value);
   };
 
+  const normalizePhoneForApi = (countryCode: string, rawPhone: string) => {
+    const digits = rawPhone.replace(/\D/g, '');
+    if (!digits) return '';
+    if (countryCode === '+33') {
+      const frLocal = digits.startsWith('0') ? digits.slice(1) : digits;
+      return `+33${frLocal}`;
+    }
+    return `${countryCode}${digits}`;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -192,7 +212,7 @@ export default function SignupPage() {
     const firstName = formData.firstName.trim();
     const lastName = formData.lastName.trim();
     const email = formData.email.trim().toLowerCase();
-    const cleanedPhone = formData.phone.replace(/\s/g, '');
+    const cleanedPhone = normalizePhoneForApi(phoneCountryCode, formData.phone);
 
     if (!firstName || !lastName || !email || !cleanedPhone) {
       setError('Veuillez remplir tous les champs obligatoires');
@@ -523,18 +543,42 @@ export default function SignupPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="phone">Numéro de téléphone *</Label>
-                    <Input
-                      id="phone"
-                      name="phone"
-                      type="tel"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      onBlur={(e) => validateField('phone', e.target.value)}
-                      placeholder="07 68 03 33 58"
-                      autoComplete="tel"
-                      disabled={!!success}
-                      className={fieldErrors.phone ? 'border-red-500 focus:border-red-500' : ''}
-                    />
+                    <div className="flex gap-2">
+                      <select
+                        aria-label="Indicatif téléphonique"
+                        value={phoneCountryCode}
+                        onChange={(e) => {
+                          const nextCode = e.target.value;
+                          setPhoneCountryCode(nextCode);
+                          validateField('phone', formData.phone);
+                        }}
+                        disabled={!!success}
+                        className="h-10 sm:h-11 w-28 rounded-md border-2 border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus:border-primary"
+                      >
+                        <option value="+33">+33 (FR)</option>
+                        <option value="+32">+32 (BE)</option>
+                        <option value="+41">+41 (CH)</option>
+                        <option value="+1">+1 (US/CA)</option>
+                        <option value="+212">+212 (MA)</option>
+                        <option value="+216">+216 (TN)</option>
+                        <option value="+221">+221 (SN)</option>
+                        <option value="+225">+225 (CI)</option>
+                        <option value="+228">+228 (TG)</option>
+                        <option value="+229">+229 (BJ)</option>
+                      </select>
+                      <Input
+                        id="phone"
+                        name="phone"
+                        type="tel"
+                        value={formData.phone}
+                        onChange={handleChange}
+                        onBlur={(e) => validateField('phone', e.target.value)}
+                        placeholder={phoneCountryCode === '+33' ? '07 68 03 33 58' : 'Numéro local'}
+                        autoComplete="tel-national"
+                        disabled={!!success}
+                        className={fieldErrors.phone ? 'border-red-500 focus:border-red-500' : ''}
+                      />
+                    </div>
                     {fieldErrors.phone && (
                       <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
                         <span>⚠️</span>
@@ -542,7 +586,7 @@ export default function SignupPage() {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Après validation, vous recevrez un email avec un lien pour définir votre mot de passe (aucun mot de passe en clair par SMS).
+                      Les numéros en <strong>+33</strong> peuvent recevoir des SMS. Pour les autres indicatifs, la validation se fait par email uniquement.
                     </p>
                   </div>
                 </div>

@@ -416,6 +416,11 @@ export const logsAPI = {
   getLoginLogs: (params?: { userId?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) => {
     return api.get('/logs', { params: { ...params, action: 'login' } });
   },
+
+  // SuperAdmin - Récupérer les statistiques des logs
+  getStats: (params?: { startDate?: string; endDate?: string }) => {
+    return api.get('/logs/stats', { params });
+  },
   
   // SuperAdmin - Télécharger le DLOG en PDF pour une date donnée
   downloadDlogPDF: async (date: string): Promise<void> => {

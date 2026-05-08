@@ -2,7 +2,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 
-const DEFAULT_DIR = path.join(__dirname, '../data/lexia');
+const DEFAULT_DIR = '/root/adapapers/backend/lexia/CAA';
 
 const STOPWORDS = new Set(
   `le la les un une des du de et ou en au aux à a pour par dans sur est son sa ses ce ces cet cette qui que dont pas plus très tout toute
@@ -46,27 +46,34 @@ function chunkText(fullText, sourceTitle) {
   return chunks;
 }
 
-async function collectMarkdownFiles(dir) {
-  const out = [];
-  async function walk(d) {
-    let entries;
+function collectMarkdownFiles(dir) {
+  const files = [];
+
+  function scan(d) {
+    let entries = [];
     try {
-      entries = await fsp.readdir(d, { withFileTypes: true });
+      entries = fs.readdirSync(d, { withFileTypes: true });
     } catch {
       return;
     }
-    for (const e of entries) {
-      const p = path.join(d, e.name);
-      if (e.isDirectory()) {
-        if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
-        await walk(p);
-      } else if (/\.(md|txt|xml)$/i.test(e.name)) {
-        out.push(p);
+
+    for (const item of entries) {
+      const full = path.join(d, item.name);
+
+      if (item.isDirectory()) {
+        scan(full);
+        continue;
+      }
+
+      const ext = path.extname(item.name).toLowerCase();
+      if (['.xml', '.md', '.txt'].includes(ext)) {
+        files.push(full);
       }
     }
   }
-  await walk(dir);
-  return out;
+
+  scan(dir);
+  return files;
 }
 
 async function loadAllChunks(knowledgeDir) {
