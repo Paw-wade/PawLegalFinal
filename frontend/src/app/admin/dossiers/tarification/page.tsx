@@ -292,13 +292,13 @@ export default function AdminDossiersTarificationPage() {
       setFeedback({ type: 'error', text: 'Veuillez saisir un motif (minimum 3 caractères).' });
       return;
     }
-    const amountValue = manualAmount.trim()
-      ? Number(manualAmount.trim().replace(',', '.'))
-      : null;
-    if (manualAmount.trim() && (!Number.isFinite(amountValue) || amountValue < 0)) {
+    const hasAmountInput = manualAmount.trim().length > 0;
+    const parsedAmountValue = hasAmountInput ? Number(manualAmount.trim().replace(',', '.')) : null;
+    if (hasAmountInput && (!Number.isFinite(parsedAmountValue) || parsedAmountValue < 0)) {
       setFeedback({ type: 'error', text: 'Montant invalide.' });
       return;
     }
+    const amountValue = parsedAmountValue;
 
     setManualSending(true);
     setFeedback(null);
