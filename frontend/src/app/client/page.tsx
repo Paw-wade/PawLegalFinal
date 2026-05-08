@@ -272,9 +272,11 @@ function ClientDashboardContent() {
 
   const loadUserProfileForUser = async (userId: string) => {
     try {
-      const response = await userAPI.getUserById(userId);
+      const role = (session?.user as any)?.role;
+      const isAdmin = role === 'admin' || role === 'superadmin';
+      const response = isAdmin ? await userAPI.getUserById(userId) : await userAPI.getProfile();
       if (response.data.success) {
-        setUserProfile(response.data.user);
+        setUserProfile(response.data.user || response.data.data);
       }
     } catch (error) {
       console.error('Erreur lors du chargement du profil:', error);

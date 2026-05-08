@@ -62,7 +62,8 @@ export function PushNotificationsBootstrap() {
 
     run().catch((error: any) => {
       const code = error?.response?.status;
-      if (code === 503) return;
+      const name = String(error?.name || '');
+      if (code === 503 || name === 'AbortError') return;
       console.error('Initialisation Web Push impossible:', error);
     });
 
@@ -91,7 +92,8 @@ export function PushNotificationsBootstrap() {
       // Si l'utilisateur ferme/refuse la demande, on attend le prochain cooldown.
       dismissPrePrompt();
     } catch (error: any) {
-      if (error?.response?.status !== 503) {
+      const name = String(error?.name || '');
+      if (error?.response?.status !== 503 && name !== 'AbortError') {
         console.error('Activation Web Push impossible:', error);
       }
       dismissPrePrompt();
