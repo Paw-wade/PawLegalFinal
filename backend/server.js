@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const morgan = require('morgan');
 const path = require('path');
 const { getFrontendOriginsList } = require('./utils/frontendOrigins');
+const { getKnowledgeDir, getKnowledgeStats } = require('./services/lexiaInternal');
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -257,6 +258,17 @@ const startServer = async () => {
     const server = app.listen(PORT, () => {
       console.log(`🚀 Serveur démarré sur le port ${PORT}`);
       console.log(`📡 API: /api`);
+      const lexiaKnowledgeDir = getKnowledgeDir();
+      console.log(`🧠 Paw AI (interne) — dossier indexé: ${lexiaKnowledgeDir}`);
+      getKnowledgeStats()
+        .then((s) => {
+          console.log(
+            `🧠 Paw AI (interne) — fichiers détectés: total=${s.total} (md=${s.byExt.md}, txt=${s.byExt.txt}, xml=${s.byExt.xml})`
+          );
+        })
+        .catch((e) => {
+          console.warn(`⚠️ Paw AI (interne) — impossible de compter les fichiers: ${e.message}`);
+        });
     });
 
     server.on('error', (err) => {

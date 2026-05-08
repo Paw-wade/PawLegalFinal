@@ -1,6 +1,6 @@
 # Corpus LEXIA (base interne)
 
-Placez ici des fichiers **`.md`** ou **`.txt`** (sous-dossiers autorisés). Ils sont indexés automatiquement pour le mode **interne** de LEXIA (recherche par mots-clés, sans API Anthropic).
+Placez ici des fichiers **`.md`**, **`.txt`** ou **`.xml`** (sous-dossiers autorisés). Ils sont indexés automatiquement pour le mode **interne** de LEXIA (recherche par mots-clés, sans API Anthropic).
 
 Variable optionnelle sur le serveur : **`LEXIA_KNOWLEDGE_DIR`** — chemin absolu vers un autre dossier de documents.
 
