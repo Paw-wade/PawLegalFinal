@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getApiBaseUrl, getAuthToken } from '@/lib/api';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { getApiBaseUrl, getAuthToken, pawSearchAPI } from '@/lib/api';
 
 type LexiaProviderMode = 'auto' | 'anthropic' | 'gemini' | 'internal';
 
@@ -35,6 +35,19 @@ type ChatThread = {
   title: string;
   messages: ChatMessage[];
   updatedAt: number;
+};
+
+type PawSearchHit = {
+  file: string;
+  score: number;
+  snippet: string;
+  metadata?: {
+    juridiction?: string;
+    contentType?: string;
+    dateIso?: string | null;
+    decisionNumber?: string | null;
+    ext?: string;
+  };
 };
 
 function makeThread(): ChatThread {
@@ -309,6 +322,23 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
     geminiConfigured: boolean;
     knowledgeDirRelative?: string;
   } | null>(null);
+  /** Assistant dialogue vs recherche fichier base interne (API /paw-search). */
+  const [lexiaSurface, setLexiaSurface] = useState<'assistant' | 'pawSearch'>('assistant');
+  const [pawSearchInput, setPawSearchInput] = useState('');
+  const [pawSearchPage, setPawSearchPage] = useState(1);
+  const [pawSearchTotalPages, setPawSearchTotalPages] = useState(1);
+  const [pawSearchHits, setPawSearchHits] = useState<PawSearchHit[]>([]);
+  const [pawSearchTotal, setPawSearchTotal] = useState(0);
+  const [pawSearchTookMs, setPawSearchTookMs] = useState<number | null>(null);
+  const [pawSearchKnowledgeDir, setPawSearchKnowledgeDir] = useState<string | null>(null);
+  const [pawSearchLoading, setPawSearchLoading] = useState(false);
+  const [pawSearchError, setPawSearchError] = useState<string | null>(null);
+  const [pawSearchFiltersOpen, setPawSearchFiltersOpen] = useState(false);
+  const [filterJuridiction, setFilterJuridiction] = useState('');
+  const [filterContentType, setFilterContentType] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const pawSearchLastQueryRef = useRef('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -334,9 +364,11 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
 
   const activeThread = threads.find((t) => t.id === activeThreadId);
   const messages = activeThread?.messages ?? [];
-  /** Scroll réservé à la liste des réponses une fois une analyse lancée. */
+  /** Scroll réservé aux réponses (chat) ou aux résultats Paw Search. */
   const conversationScrollable =
-    activeThreadId !== null && (messages.length > 0 || isLoading);
+    lexiaSurface === 'pawSearch'
+      ? pawSearchHits.length > 0 || pawSearchLoading || !!pawSearchError
+      : activeThreadId !== null && (messages.length > 0 || isLoading);
 
   useEffect(() => {
     try {
@@ -429,7 +461,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, lexiaSurface, pawSearchHits, pawSearchLoading]);
 
   useEffect(() => {
     if (activeThreadId !== null) {
@@ -474,6 +506,72 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await pawSearchAPI.getConfig();
+        if (cancelled || !data?.success) return;
+        if (typeof data.knowledgeDir === 'string') setPawSearchKnowledgeDir(data.knowledgeDir);
+      } catch {
+        /* silencieux */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const runPawSearch = useCallback(
+    async (queryText: string, pageNum: number) => {
+      const q = queryText.trim();
+      if (!q) return;
+
+      setPawSearchLoading(true);
+      setPawSearchError(null);
+      try {
+        const filters: {
+          juridiction?: string;
+          contentType?: string;
+          dateFrom?: string;
+          dateTo?: string;
+        } = {};
+        if (filterJuridiction.trim()) filters.juridiction = filterJuridiction.trim();
+        if (filterContentType.trim()) filters.contentType = filterContentType.trim();
+        if (filterDateFrom.trim()) filters.dateFrom = filterDateFrom.trim();
+        if (filterDateTo.trim()) filters.dateTo = filterDateTo.trim();
+
+        const { data } = await pawSearchAPI.search({
+          query: q,
+          page: pageNum,
+          limit: 12,
+          ...(Object.keys(filters).length ? { filters } : {}),
+        });
+
+        if (!data?.success) {
+          throw new Error(typeof data?.message === 'string' ? data.message : 'Recherche impossible');
+        }
+
+        pawSearchLastQueryRef.current = q;
+        setPawSearchPage(typeof data.page === 'number' && data.page >= 1 ? data.page : pageNum);
+        setPawSearchHits(Array.isArray(data.hits) ? (data.hits as PawSearchHit[]) : []);
+        setPawSearchTotal(typeof data.total === 'number' ? data.total : 0);
+        setPawSearchTotalPages(typeof data.totalPages === 'number' ? Math.max(1, data.totalPages) : 1);
+        setPawSearchTookMs(typeof data.tookMs === 'number' ? data.tookMs : null);
+        if (typeof data.knowledgeDir === 'string') setPawSearchKnowledgeDir(data.knowledgeDir);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Erreur réseau';
+        setPawSearchError(msg);
+        setPawSearchHits([]);
+        setPawSearchTotal(0);
+        setPawSearchTotalPages(1);
+      } finally {
+        setPawSearchLoading(false);
+      }
+    },
+    [filterJuridiction, filterContentType, filterDateFrom, filterDateTo]
+  );
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -1298,6 +1396,232 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
             font-size: 11px;
             margin-top: 4px;
           }
+        }
+
+        .lexia-header-tabs {
+          display: flex;
+          gap: 6px;
+          margin-top: 8px;
+          flex-wrap: wrap;
+        }
+        @media (min-width: 640px) {
+          .lexia-header-tabs {
+            margin-top: 10px;
+            gap: 8px;
+          }
+        }
+        .lexia-header-tab {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          border-radius: 9999px;
+          border: 1px solid hsl(var(--border));
+          background: hsl(var(--muted) / 0.35);
+          font-size: 11px;
+          font-weight: 600;
+          color: hsl(var(--muted-foreground));
+          cursor: pointer;
+          transition: border-color 0.15s, background 0.15s, color 0.15s;
+        }
+        @media (min-width: 640px) {
+          .lexia-header-tab {
+            font-size: 12px;
+            padding: 7px 14px;
+          }
+        }
+        .lexia-header-tab:hover {
+          border-color: hsl(var(--ring));
+          color: hsl(var(--foreground));
+          background: hsl(var(--muted) / 0.55);
+        }
+        .lexia-header-tab.active {
+          border-color: rgb(249 115 22 / 0.55);
+          color: #ea580c;
+          background: rgb(249 115 22 / 0.1);
+          box-shadow: 0 0 0 2px rgb(249 115 22 / 0.12);
+        }
+
+        .lexia-messages--paw-search {
+          flex: 1 1 0;
+          min-height: 0;
+          overflow-y: auto;
+          scrollbar-gutter: stable;
+        }
+
+        .lexia-paw-wrap {
+          padding: 6px 0 12px;
+          max-width: 52rem;
+          margin: 0 auto;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .lexia-paw-lead {
+          font-size: 13px;
+          color: hsl(var(--muted-foreground));
+          line-height: 1.55;
+          margin: 0;
+        }
+        .lexia-paw-meta {
+          font-size: 10px;
+          color: hsl(var(--muted-foreground));
+          letter-spacing: 0.04em;
+        }
+        .lexia-paw-filters {
+          border: 1px solid hsl(var(--border));
+          border-radius: var(--radius);
+          background: hsl(var(--muted) / 0.25);
+          padding: 10px 12px;
+        }
+        .lexia-paw-filters-summary {
+          width: 100%;
+          text-align: left;
+          border: none;
+          background: transparent;
+          font-size: 12px;
+          font-weight: 600;
+          color: hsl(var(--foreground));
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        .lexia-paw-filters-panel {
+          margin-top: 10px;
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+        @media (min-width: 520px) {
+          .lexia-paw-filters-panel {
+            grid-template-columns: 1fr 1fr;
+          }
+        }
+        .lexia-paw-field label {
+          display: block;
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: hsl(var(--muted-foreground));
+          margin-bottom: 4px;
+        }
+        .lexia-paw-field select,
+        .lexia-paw-field input {
+          width: 100%;
+          font-size: 12px;
+          padding: 6px 10px;
+          border-radius: calc(var(--radius) - 2px);
+          border: 1px solid hsl(var(--border));
+          background: hsl(var(--background));
+          color: hsl(var(--foreground));
+        }
+        .lexia-paw-empty {
+          text-align: center;
+          padding: 24px 12px;
+          color: hsl(var(--muted-foreground));
+          font-size: 13px;
+        }
+        .lexia-paw-hits {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .lexia-paw-hit {
+          border: 1px solid hsl(var(--border));
+          border-radius: var(--radius);
+          background: hsl(var(--background));
+          padding: 12px 14px;
+          text-align: left;
+        }
+        .lexia-paw-hit-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-bottom: 8px;
+        }
+        .lexia-paw-hit-file {
+          font-size: 12px;
+          font-weight: 600;
+          color: hsl(var(--primary));
+          word-break: break-word;
+          flex: 1;
+          min-width: 0;
+        }
+        .lexia-paw-hit-score {
+          font-size: 10px;
+          font-weight: 600;
+          color: hsl(var(--muted-foreground));
+          flex-shrink: 0;
+          padding: 2px 8px;
+          border-radius: calc(var(--radius) - 4px);
+          border: 1px solid hsl(var(--border));
+          background: hsl(var(--muted) / 0.35);
+        }
+        .lexia-paw-hit-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-bottom: 8px;
+        }
+        .lexia-paw-tag {
+          font-size: 10px;
+          padding: 2px 7px;
+          border-radius: 9999px;
+          background: hsl(var(--muted));
+          border: 1px solid hsl(var(--border));
+          color: hsl(var(--muted-foreground));
+        }
+        .lexia-paw-snippet {
+          font-size: 12px;
+          line-height: 1.55;
+          color: hsl(var(--foreground));
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .lexia-paw-err {
+          padding: 12px;
+          border-radius: var(--radius);
+          border: 1px solid hsl(0 72% 51%);
+          background: hsl(var(--muted));
+          color: hsl(0 63% 31%);
+          font-size: 13px;
+        }
+        .dark .lexia-paw-err {
+          color: hsl(0 86% 88%);
+          border-color: hsl(0 55% 42%);
+        }
+        .lexia-paw-pagination {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          padding: 12px 0 4px;
+          flex-wrap: wrap;
+        }
+        .lexia-paw-page-btn {
+          padding: 6px 12px;
+          border-radius: calc(var(--radius) - 2px);
+          border: 1px solid hsl(var(--border));
+          background: hsl(var(--background));
+          font-size: 11px;
+          font-weight: 600;
+          color: hsl(var(--foreground));
+          cursor: pointer;
+          transition: border-color 0.15s, background 0.15s;
+        }
+        .lexia-paw-page-btn:hover:not(:disabled) {
+          border-color: rgb(249 115 22 / 0.45);
+          background: rgb(249 115 22 / 0.08);
+        }
+        .lexia-paw-page-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
         }
 
         .lexia-dd { position: relative; width: 100%; }
@@ -2159,7 +2483,9 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         </aside>
 
         <div
-          className={`lexia-main-column${activeThreadId === null ? ' lexia-main-column--home' : ''}`}
+          className={`lexia-main-column${
+            activeThreadId === null && lexiaSurface === 'assistant' ? ' lexia-main-column--home' : ''
+          }`}
         >
           <div className="lexia-header">
             <div className="lexia-header-row">
@@ -2181,12 +2507,199 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                 </p>
               </div>
             </div>
+            <div className="lexia-header-tabs" role="tablist" aria-label="Mode Paw AI">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={lexiaSurface === 'assistant'}
+                className={`lexia-header-tab ${lexiaSurface === 'assistant' ? 'active' : ''}`}
+                onClick={() => setLexiaSurface('assistant')}
+              >
+                Assistant
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={lexiaSurface === 'pawSearch'}
+                className={`lexia-header-tab ${lexiaSurface === 'pawSearch' ? 'active' : ''}`}
+                onClick={() => setLexiaSurface('pawSearch')}
+              >
+                <Search aria-hidden width={13} height={13} strokeWidth={2.25} />
+                Paw Search
+              </button>
+            </div>
           </div>
 
           <div
-            className={`lexia-messages ${activeThreadId === null ? 'lexia-messages--accueil' : 'lexia-messages--chat'}${conversationScrollable ? ' lexia-messages--has-conversation' : ''}`}
+            className={`lexia-messages ${
+              activeThreadId === null && lexiaSurface === 'assistant' ? 'lexia-messages--accueil' : 'lexia-messages--chat'
+            }${conversationScrollable ? ' lexia-messages--has-conversation' : ''}${
+              lexiaSurface === 'pawSearch' ? ' lexia-messages--paw-search' : ''
+            }`}
           >
-            {activeThreadId === null ? (
+            {lexiaSurface === 'pawSearch' ? (
+              <div className="lexia-paw-wrap">
+                <div>
+                  <div className="lexia-welcome-badge" style={{ marginBottom: 10 }}>
+                    📚 Base documentaire interne
+                  </div>
+                  <p className="lexia-paw-lead">
+                    Recherche plein texte dans les fichiers <strong>.md</strong>, <strong>.txt</strong>,{' '}
+                    <strong>.xml</strong>, <strong>.pdf</strong>, <strong>.doc</strong> et <strong>.docx</strong>{' '}
+                    indexés sur le serveur (sans appel à un modèle cloud). Affinez avec les
+                    filtres optionnels ci-dessous.
+                  </p>
+                  <p className="lexia-paw-meta">
+                    Moteur paw-search-internal
+                    {pawSearchTookMs != null && pawSearchHits.length > 0
+                      ? ` · dernière requête ${pawSearchTookMs} ms`
+                      : ''}
+                    {pawSearchTotal > 0 ? ` · ${pawSearchTotal} résultat${pawSearchTotal > 1 ? 's' : ''}` : ''}
+                  </p>
+                  {showServerPaths && pawSearchKnowledgeDir ? (
+                    <p className="lexia-paw-meta" style={{ marginTop: 6, wordBreak: 'break-word' }}>
+                      Dossier corpus : {pawSearchKnowledgeDir}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="lexia-paw-filters">
+                  <button
+                    type="button"
+                    className="lexia-paw-filters-summary"
+                    onClick={() => setPawSearchFiltersOpen((o) => !o)}
+                    aria-expanded={pawSearchFiltersOpen}
+                  >
+                    Filtres optionnels
+                    <span style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>
+                      {pawSearchFiltersOpen ? '▾' : '▸'}
+                    </span>
+                  </button>
+                  {pawSearchFiltersOpen && (
+                    <div className="lexia-paw-filters-panel">
+                      <div className="lexia-paw-field">
+                        <label htmlFor="paw-filter-jur">Juridiction</label>
+                        <select
+                          id="paw-filter-jur"
+                          value={filterJuridiction}
+                          onChange={(e) => setFilterJuridiction(e.target.value)}
+                        >
+                          <option value="">Toutes</option>
+                          <option value="CE">CE</option>
+                          <option value="CAA">CAA</option>
+                          <option value="TA">TA</option>
+                          <option value="Cassation">Cassation</option>
+                          <option value="Autre">Autre</option>
+                        </select>
+                      </div>
+                      <div className="lexia-paw-field">
+                        <label htmlFor="paw-filter-type">Type de contenu</label>
+                        <select
+                          id="paw-filter-type"
+                          value={filterContentType}
+                          onChange={(e) => setFilterContentType(e.target.value)}
+                        >
+                          <option value="">Tous</option>
+                          <option value="xml">xml</option>
+                          <option value="md">md</option>
+                          <option value="txt">txt</option>
+                          <option value="jurisprudence">jurisprudence</option>
+                          <option value="document">document</option>
+                        </select>
+                      </div>
+                      <div className="lexia-paw-field">
+                        <label htmlFor="paw-filter-from">Date début (AAAA-MM-JJ)</label>
+                        <input
+                          id="paw-filter-from"
+                          type="date"
+                          value={filterDateFrom}
+                          onChange={(e) => setFilterDateFrom(e.target.value)}
+                        />
+                      </div>
+                      <div className="lexia-paw-field">
+                        <label htmlFor="paw-filter-to">Date fin (AAAA-MM-JJ)</label>
+                        <input
+                          id="paw-filter-to"
+                          type="date"
+                          value={filterDateTo}
+                          onChange={(e) => setFilterDateTo(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {pawSearchError ? <div className="lexia-paw-err">{pawSearchError}</div> : null}
+
+                {pawSearchLoading && pawSearchHits.length === 0 ? (
+                  <div className="lexia-paw-empty">Indexation et recherche en cours…</div>
+                ) : null}
+
+                {!pawSearchLoading && pawSearchHits.length === 0 && !pawSearchError ? (
+                  <div className="lexia-paw-empty">
+                    Saisissez des mots-clés en bas puis Entrée (ou l’icône de recherche) pour lancer Paw Search.
+                  </div>
+                ) : null}
+
+                <div className="lexia-paw-hits">
+                  {pawSearchHits.map((h, idx) => {
+                    const md = h.metadata || {};
+                    const tags = [
+                      md.juridiction,
+                      md.dateIso ? String(md.dateIso) : null,
+                      md.decisionNumber ? `n° ${md.decisionNumber}` : null,
+                      md.contentType,
+                    ].filter(Boolean);
+                    return (
+                      <article key={`${h.file}-${idx}-${h.score}`} className="lexia-paw-hit">
+                        <div className="lexia-paw-hit-head">
+                          <div className="lexia-paw-hit-file">{h.file}</div>
+                          <div className="lexia-paw-hit-score">score {h.score}</div>
+                        </div>
+                        {tags.length > 0 ? (
+                          <div className="lexia-paw-hit-tags">
+                            {tags.map((t) => (
+                              <span key={String(t)} className="lexia-paw-tag">
+                                {String(t)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="lexia-paw-snippet">{h.snippet || ''}</div>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                {pawSearchTotalPages > 1 && pawSearchHits.length > 0 ? (
+                  <div className="lexia-paw-pagination">
+                    <button
+                      type="button"
+                      className="lexia-paw-page-btn"
+                      disabled={pawSearchPage <= 1 || pawSearchLoading}
+                      onClick={() => void runPawSearch(pawSearchLastQueryRef.current, pawSearchPage - 1)}
+                    >
+                      Page précédente
+                    </button>
+                    <span className="lexia-paw-meta">
+                      Page {pawSearchPage} / {pawSearchTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="lexia-paw-page-btn"
+                      disabled={pawSearchPage >= pawSearchTotalPages || pawSearchLoading}
+                      onClick={() => void runPawSearch(pawSearchLastQueryRef.current, pawSearchPage + 1)}
+                    >
+                      Page suivante
+                    </button>
+                  </div>
+                ) : null}
+
+                {pawSearchLoading && pawSearchHits.length > 0 ? (
+                  <div className="lexia-paw-empty">Mise à jour des résultats…</div>
+                ) : null}
+              </div>
+            ) : activeThreadId === null ? (
               <div className="lexia-accueil">
                 <div className="lexia-accueil-badge">Paw AI · Assistant juridique</div>
                 <h2
@@ -2328,33 +2841,51 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
             <div className="lexia-input-wrap">
               <textarea
                 ref={inputRef}
-                value={input}
+                value={lexiaSurface === 'pawSearch' ? pawSearchInput : input}
                 onChange={(e) => {
-                  setInput(e.target.value);
+                  if (lexiaSurface === 'pawSearch') setPawSearchInput(e.target.value);
+                  else setInput(e.target.value);
                   e.target.style.height = 'auto';
                   e.target.style.height = `${Math.min(e.target.scrollHeight, 130)}px`;
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    void sendMessage(input.trim());
+                    if (lexiaSurface === 'pawSearch') void runPawSearch(pawSearchInput, 1);
+                    else void sendMessage(input.trim());
                   }
                 }}
-                placeholder="Recherchez des informations fiables relatives à votre situation..."
+                placeholder={
+                  lexiaSurface === 'pawSearch'
+                    ? 'Mots-clés, thème ou n° de décision dans la base documentaire…'
+                    : 'Recherchez des informations fiables relatives à votre situation...'
+                }
                 rows={1}
-                disabled={isLoading}
+                disabled={lexiaSurface === 'pawSearch' ? pawSearchLoading : isLoading}
               />
               <button
                 type="button"
                 className="lexia-send-btn"
-                onClick={() => void sendMessage(input.trim())}
-                disabled={!input.trim() || isLoading}
-                title="Envoyer"
+                onClick={() => {
+                  if (lexiaSurface === 'pawSearch') void runPawSearch(pawSearchInput, 1);
+                  else void sendMessage(input.trim());
+                }}
+                disabled={
+                  lexiaSurface === 'pawSearch'
+                    ? !pawSearchInput.trim() || pawSearchLoading
+                    : !input.trim() || isLoading
+                }
+                title={lexiaSurface === 'pawSearch' ? 'Lancer Paw Search' : 'Envoyer'}
+                aria-label={lexiaSurface === 'pawSearch' ? 'Lancer Paw Search' : 'Envoyer'}
               >
-                ⚖
+                {lexiaSurface === 'pawSearch' ? <Search aria-hidden width={18} height={18} strokeWidth={2.25} /> : '⚖'}
               </button>
             </div>
-            <div className="lexia-input-hint">Entrée pour envoyer · Shift+Entrée pour nouvelle ligne</div>
+            <div className="lexia-input-hint">
+              {lexiaSurface === 'pawSearch'
+                ? 'Entrée pour rechercher dans le corpus serveur · Shift+Entrée pour nouvelle ligne'
+                : 'Entrée pour envoyer · Shift+Entrée pour nouvelle ligne'}
+            </div>
           </div>
         </div>
       </div>

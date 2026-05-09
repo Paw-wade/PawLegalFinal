@@ -269,8 +269,16 @@ const startServer = async () => {
       console.log(`🧠 Paw AI (interne) — dossier indexé: ${lexiaKnowledgeDir}`);
       getKnowledgeStats()
         .then((s) => {
+          const breakdown = Object.entries(s.byExt || {})
+            .filter(([, v]) => v > 0)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(', ');
+          const capInfo =
+            s.indexTruncated != null && s.indexedFilesCap != null
+              ? ` | indexRAM≤${s.indexedFilesCap} fichier(s)${s.indexTruncated ? ' (tronqué)' : ''}`
+              : '';
           console.log(
-            `🧠 Paw AI (interne) — fichiers détectés: total=${s.total} (md=${s.byExt.md}, txt=${s.byExt.txt}, xml=${s.byExt.xml})`
+            `🧠 Paw AI (interne) — fichiers détectés sur disque: total=${s.total}${breakdown ? ` (${breakdown})` : ''}${capInfo}`
           );
         })
         .catch((e) => {

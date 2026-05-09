@@ -331,6 +331,11 @@ const dossierSchema = new mongoose.Schema({
       type: String,
       enum: ['pending', 'accepted', 'refused'],
       default: 'pending'
+    },
+    /** Si la transmission a envoyé une notification (in-app + email) au titulaire du dossier. */
+    clientWasNotified: {
+      type: Boolean,
+      default: true
     }
   }],
   createdAt: {

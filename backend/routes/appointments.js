@@ -27,6 +27,10 @@ function getMotifRdvLabel(motifKey) {
   return MOTIF_RDV_LABELS[k] || k || 'Non renseigné';
 }
 
+function normEmail(v) {
+  return String(v || '').trim().toLowerCase();
+}
+
 async function resolveRdvClientEmail(rendezVous) {
   if (rendezVous.email && String(rendezVous.email).trim()) return String(rendezVous.email).trim();
   const u = rendezVous.user;
@@ -59,7 +63,11 @@ router.post(
     body('forUserId')
       .optional({ values: 'falsy' })
       .isMongoId()
-      .withMessage('Identifiant utilisateur client invalide')
+      .withMessage('Identifiant utilisateur client invalide'),
+    body('dossierId')
+      .optional({ values: 'falsy' })
+      .isMongoId()
+      .withMessage('Identifiant de dossier invalide')
   ],
   async (req, res) => {
     try {
@@ -79,13 +87,26 @@ router.post(
         });
       }
 
-      const { nom, prenom, email, telephone, date, heure, motif, description, forUserId } = req.body;
+      const {
+        nom,
+        prenom,
+        email,
+        telephone,
+        date,
+        heure,
+        motif,
+        description,
+        forUserId,
+        dossierId: dossierBodyId,
+      } = req.body;
 
       const User = require('../models/User');
+      const mongooseLib = require('mongoose');
 
       // Lier le RDV au bon compte : client connecté, ou client ciblé par un admin (forUserId), jamais le compte admin seul.
       let userId = null;
       let bookingByAdmin = false;
+      let requestingAdmin = false;
       if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         try {
           const jwt = require('jsonwebtoken');
@@ -94,6 +115,7 @@ router.post(
           const authUser = await User.findById(decoded.id);
           if (authUser) {
             const isAdmin = authUser.role === 'admin' || authUser.role === 'superadmin';
+            requestingAdmin = isAdmin;
             if (isAdmin && forUserId) {
               bookingByAdmin = true;
               const target = await User.findById(String(forUserId).trim());
@@ -118,6 +140,52 @@ router.post(
         } catch (error) {
           // Si le token est invalide, on continue sans utilisateur (rendez-vous public)
         }
+      }
+
+      let linkedDossierId = null;
+      if (dossierBodyId) {
+        if (!requestingAdmin) {
+          return res.status(403).json({
+            success: false,
+            message: 'Seul un administrateur peut lier un rendez-vous à un dossier.',
+          });
+        }
+        const did = String(dossierBodyId).trim();
+        if (!mongooseLib.Types.ObjectId.isValid(did)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Identifiant de dossier invalide.',
+          });
+        }
+        const DossierModel = require('../models/Dossier');
+        const dossierDoc = await DossierModel.findById(did).select('user clientEmail').lean();
+        if (!dossierDoc) {
+          return res.status(404).json({
+            success: false,
+            message: 'Dossier introuvable.',
+          });
+        }
+        const ownerId = dossierDoc.user ? String(dossierDoc.user) : null;
+        if (ownerId) {
+          if (!userId || String(userId) !== ownerId) {
+            return res.status(400).json({
+              success: false,
+              message:
+                'Le rendez-vous doit être créé pour le titulaire du dossier lorsque dossierId est fourni.',
+            });
+          }
+        } else {
+          const de = normEmail(dossierDoc.clientEmail);
+          const reqEm = normEmail(email);
+          if (!de || de !== reqEm) {
+            return res.status(400).json({
+              success: false,
+              message:
+                'Pour un dossier sans compte utilisateur, l’e-mail du rendez-vous doit correspondre à l’e-mail client du dossier.',
+            });
+          }
+        }
+        linkedDossierId = did;
       }
 
       // Vérifier si le créneau est fermé
@@ -163,10 +231,23 @@ router.post(
         date: new Date(date),
         heure,
         motif,
-        description: description || ''
+        description: description || '',
+        ...(linkedDossierId ? { dossierId: linkedDossierId } : {}),
       });
 
       console.log('✅ Rendez-vous créé avec succès:', rendezVous._id);
+
+      if (linkedDossierId) {
+        try {
+          const DossierModel = require('../models/Dossier');
+          await DossierModel.updateOne(
+            { _id: linkedDossierId },
+            { $addToSet: { rendezVous: rendezVous._id } }
+          );
+        } catch (linkErr) {
+          console.error('⚠️ Association dossier → rendez-vous (non bloquant):', linkErr);
+        }
+      }
 
       // Notifier tous les administrateurs (superadmin + admins) d'une nouvelle demande de rendez-vous
       try {

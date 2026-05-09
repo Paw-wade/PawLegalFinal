@@ -1043,7 +1043,7 @@ export default function AdminDossierDetailPage() {
 
         {/* Coordonnées client complètes */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6 pb-4 border-b border-gray-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-4 border-b border-gray-100">
             {dossier.user ? (
               <div className="flex items-center gap-4 min-w-0">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border-2 border-primary/20">
@@ -1069,6 +1069,12 @@ export default function AdminDossierDetailPage() {
             ) : (
               <h2 className="text-xl font-bold">👤 Coordonnées Client</h2>
             )}
+            <Link
+              href={`/admin/rendez-vous?dossierId=${encodeURIComponent(dossierId)}&openBooking=1`}
+              className="inline-flex items-center justify-center shrink-0 px-4 py-2 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors w-full sm:w-auto"
+            >
+              📅 Prendre un rendez-vous
+            </Link>
           </div>
           {dossier.user ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -1581,6 +1587,7 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
   const [showTransmitModal, setShowTransmitModal] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [transmitNotes, setTransmitNotes] = useState('');
+  const [notifyTransmitClient, setNotifyTransmitClient] = useState(true);
   const [isTransmitting, setIsTransmitting] = useState(false);
 
   useEffect(() => {
@@ -1863,6 +1870,30 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
                   placeholder="Ajouter des notes sur cette transmission..."
                 />
               </div>
+              <label className="flex items-start gap-2.5 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-input"
+                  checked={notifyTransmitClient}
+                  onChange={(e) => setNotifyTransmitClient(e.target.checked)}
+                  disabled={!dossier.user}
+                />
+                <span className="text-muted-foreground leading-snug">
+                  <span className="font-semibold text-foreground">
+                    Informer le client de cette transmission
+                  </span>
+                  {!dossier.user ? (
+                    <span className="block text-xs mt-0.5">
+                      Indisponible : aucun titulaire associé au dossier.
+                    </span>
+                  ) : (
+                    <span className="block text-xs mt-0.5">
+                      Désactiver si la transmission au partenaire ne doit pas être communiquée au client
+                      (notification in-app et e-mail).
+                    </span>
+                  )}
+                </span>
+              </label>
             </div>
 
             <div className="flex justify-end gap-2">
@@ -1870,6 +1901,7 @@ function TransmissionSection({ dossier, onUpdate }: { dossier: any; onUpdate: ()
                 setShowTransmitModal(false);
                 setSelectedUserId('');
                 setTransmitNotes('');
+                setNotifyTransmitClient(true);
               }}>
                 Annuler
               </Button>
