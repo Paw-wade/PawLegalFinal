@@ -517,20 +517,21 @@ export default function AdminSmsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-primary/10 p-4 md:p-8">
-      <div className="w-full">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Gestion des SMS</h1>
-          <p className="text-muted-foreground">Gérez les templates de messages SMS et consultez l'historique</p>
+    <div className="min-h-screen min-w-0 max-w-[100vw] overflow-x-hidden bg-gradient-to-br from-primary/5 via-background to-primary/10 px-3 py-4 md:px-6 md:py-8">
+      <div className="mx-auto w-full min-w-0 max-w-7xl">
+        <div className="mb-4 sm:mb-6">
+          <h1 className="mb-2 text-2xl font-bold text-foreground sm:text-3xl">Gestion des SMS</h1>
+          <p className="text-sm text-muted-foreground sm:text-base">Gérez les templates de messages SMS et consultez l&apos;historique</p>
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-xl shadow-xl border border-border mb-6">
+        <div className="mb-6 min-w-0 overflow-hidden rounded-xl border border-border bg-white shadow-xl">
           <div className="border-b border-border">
-            <div className="flex">
+            <div className="-mb-px flex min-w-0 flex-wrap overflow-x-auto sm:flex-nowrap">
               <button
                 onClick={() => setActiveTab('templates')}
-                className={`px-6 py-4 font-semibold transition-colors ${
+                type="button"
+                className={`min-w-0 shrink-0 whitespace-nowrap px-4 py-3 text-sm font-semibold transition-colors sm:px-6 sm:py-4 sm:text-base ${
                   activeTab === 'templates'
                     ? 'border-b-2 border-primary text-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -540,7 +541,8 @@ export default function AdminSmsPage() {
               </button>
               <button
                 onClick={() => setActiveTab('history')}
-                className={`px-6 py-4 font-semibold transition-colors ${
+                type="button"
+                className={`min-w-0 shrink-0 whitespace-nowrap px-4 py-3 text-sm font-semibold transition-colors sm:px-6 sm:py-4 sm:text-base ${
                   activeTab === 'history'
                     ? 'border-b-2 border-primary text-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -550,7 +552,8 @@ export default function AdminSmsPage() {
               </button>
               <button
                 onClick={() => setActiveTab('send')}
-                className={`px-6 py-4 font-semibold transition-colors ${
+                type="button"
+                className={`min-w-0 shrink-0 whitespace-nowrap px-4 py-3 text-sm font-semibold transition-colors sm:px-6 sm:py-4 sm:text-base ${
                   activeTab === 'send'
                     ? 'border-b-2 border-primary text-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -561,17 +564,17 @@ export default function AdminSmsPage() {
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="min-w-0 p-3 sm:p-6">
             {activeTab === 'templates' ? (
               <div className="space-y-6">
-                <p className="text-sm text-muted-foreground rounded-lg border border-border bg-muted/30 px-3 py-2">
+                <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground break-words">
                   La liste inclut tous les codes utilisés par l&apos;application. À l&apos;ouverture de cet onglet, les modèles
                   système manquants sont ajoutés automatiquement (sans écraser vos textes déjà enregistrés). Utilisez le bouton
                   « Synchroniser » pour forcer une mise à jour après déploiement.
                 </p>
                 {/* Filters */}
-                <div className="flex flex-wrap gap-4 items-end">
-                  <div className="flex-1 min-w-[200px]">
+                <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+                  <div className="min-w-0 flex-1 sm:min-w-[200px]">
                     <Label>Rechercher</Label>
                     <Input
                       placeholder="Nom, code, description..."
@@ -579,7 +582,7 @@ export default function AdminSmsPage() {
                       onChange={(e) => setSearchTemplate(e.target.value)}
                     />
                   </div>
-                  <div className="min-w-[150px]">
+                  <div className="w-full min-w-0 sm:min-w-[150px] sm:w-auto">
                     <Label>Catégorie</Label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -595,7 +598,7 @@ export default function AdminSmsPage() {
                       <option value="other">Autre</option>
                     </select>
                   </div>
-                  <div className="min-w-[150px]">
+                  <div className="w-full min-w-0 sm:min-w-[150px] sm:w-auto">
                     <Label>Statut</Label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -607,9 +610,10 @@ export default function AdminSmsPage() {
                       <option value="false">Inactifs</option>
                     </select>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
                     <Button 
-                      variant="outline" 
+                      variant="outline"
+                      className="w-full shrink-0 whitespace-normal text-xs sm:w-auto sm:text-sm"
                       onClick={async () => {
                         try {
                           await smsTemplatesAPI.initDefaults();
@@ -622,7 +626,7 @@ export default function AdminSmsPage() {
                     >
                       🔄 Synchroniser les modèles système
                     </Button>
-                    <Button onClick={() => setShowCreateModal(true)}>+ Nouveau Template</Button>
+                    <Button className="w-full sm:w-auto" onClick={() => setShowCreateModal(true)}>+ Nouveau Template</Button>
                   </div>
                 </div>
 
@@ -634,12 +638,12 @@ export default function AdminSmsPage() {
                 ) : (
                   <div className="space-y-4">
                     {templates.map((template) => (
-                      <div key={template._id} className="border border-border rounded-lg p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h3 className="font-semibold text-lg">{template.name}</h3>
-                              <span className="px-2 py-1 rounded-full text-xs bg-primary/10 text-primary">
+                      <div key={template._id} className="rounded-lg border border-border p-3 transition-shadow hover:shadow-md sm:p-4">
+                        <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              <h3 className="min-w-0 break-words text-base font-semibold sm:text-lg">{template.name}</h3>
+                              <span className="max-w-full rounded-full bg-primary/10 px-2 py-1 text-xs text-primary break-all">
                                 {template.code}
                               </span>
                               {template.isSystem && (
@@ -661,9 +665,9 @@ export default function AdminSmsPage() {
                               </span>
                             </div>
                             {template.description && (
-                              <p className="text-sm text-muted-foreground mb-2">{template.description}</p>
+                              <p className="mb-2 text-sm text-muted-foreground break-words">{template.description}</p>
                             )}
-                            <p className="text-sm bg-gray-50 p-2 rounded border font-mono mb-2">
+                            <p className="mb-2 break-words rounded border bg-gray-50 p-2 font-mono text-sm [overflow-wrap:anywhere]">
                               {template.message}
                             </p>
                             {template.variables && template.variables.length > 0 && (
@@ -679,16 +683,16 @@ export default function AdminSmsPage() {
                               </div>
                             )}
                           </div>
-                          <div className="flex gap-2 ml-4">
-                            <Button variant="outline" className="text-xs px-3 py-1" onClick={() => startEdit(template)}>
+                          <div className="flex w-full shrink-0 flex-row flex-wrap gap-2 lg:ml-4 lg:w-auto lg:flex-col lg:flex-nowrap">
+                            <Button variant="outline" className="min-h-[40px] flex-1 text-xs sm:flex-none lg:w-full" onClick={() => startEdit(template)}>
                               ✏️ Modifier
                             </Button>
                             {!template.isSystem && (
-                              <Button variant="danger" className="text-xs px-3 py-1" onClick={() => handleDeleteTemplate(template._id)}>
+                              <Button variant="danger" className="min-h-[40px] flex-1 text-xs sm:flex-none lg:w-full" onClick={() => handleDeleteTemplate(template._id)}>
                                 🗑️ Supprimer
                               </Button>
                             )}
-                            <Button variant="outline" className="text-xs px-3 py-1" onClick={() => handleTestTemplate(template)}>
+                            <Button variant="outline" className="min-h-[40px] flex-1 text-xs sm:flex-none lg:w-full" onClick={() => handleTestTemplate(template)}>
                               🧪 Tester
                             </Button>
                           </div>
@@ -796,58 +800,61 @@ export default function AdminSmsPage() {
                   <div className="text-center py-8 text-muted-foreground">Aucun SMS trouvé</div>
                 ) : (
                   <>
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse">
+                    <div className="min-w-0 max-w-full overflow-x-auto rounded-lg border border-border">
+                      <table className="w-full min-w-[min(100%,720px)] border-collapse text-left sm:min-w-[860px]">
                         <thead>
                           <tr className="border-b border-border bg-gray-50">
-                            <th className="p-3 text-left text-sm font-semibold">Date</th>
-                            <th className="p-3 text-left text-sm font-semibold">Destinataire</th>
-                            <th className="p-3 text-left text-sm font-semibold">Template</th>
-                            <th className="p-3 text-left text-sm font-semibold">Contexte</th>
-                            <th className="p-3 text-left text-sm font-semibold">Statut</th>
-                            <th className="p-3 text-left text-sm font-semibold">Message</th>
+                            <th className="whitespace-nowrap p-2 text-xs font-semibold sm:p-3 sm:text-sm">Date</th>
+                            <th className="p-2 text-xs font-semibold sm:p-3 sm:text-sm">Destinataire</th>
+                            <th className="p-2 text-xs font-semibold sm:p-3 sm:text-sm">Template</th>
+                            <th className="p-2 text-xs font-semibold sm:p-3 sm:text-sm">Contexte</th>
+                            <th className="p-2 text-xs font-semibold sm:p-3 sm:text-sm">Statut</th>
+                            <th className="min-w-[12rem] max-w-xs p-2 text-xs font-semibold sm:min-w-[16rem] sm:max-w-md sm:p-3 sm:text-sm">Message</th>
                           </tr>
                         </thead>
                         <tbody>
                           {history.map((sms) => (
                             <tr key={sms._id} className="border-b border-border hover:bg-gray-50">
-                              <td className="p-3 text-sm">
+                              <td className="whitespace-normal p-2 align-top text-xs sm:p-3 sm:text-sm break-words">
                                 {new Date(sms.sentAt).toLocaleString('fr-FR')}
                               </td>
-                              <td className="p-3 text-sm">
-                                <div>
+                              <td className="min-w-0 p-2 align-top text-xs sm:p-3 sm:text-sm">
+                                <div className="min-w-0 max-w-[10rem] break-all sm:max-w-[11rem]">
                                   <div>{sms.to}</div>
                                   {sms.sentToUser && (
-                                    <div className="text-xs text-muted-foreground">
+                                    <div className="text-xs text-muted-foreground break-words">
                                       {sms.sentToUser.firstName} {sms.sentToUser.lastName}
                                     </div>
                                   )}
                                 </div>
                               </td>
-                              <td className="p-3 text-sm">
+                              <td className="min-w-0 max-w-[8rem] p-2 align-top text-xs break-words sm:max-w-[10rem] sm:p-3 sm:text-sm">
                                 {sms.templateName || '-'}
                               </td>
-                              <td className="p-3 text-sm">
-                                {getContextBadge(sms.context)}
+                              <td className="min-w-0 p-2 align-top text-xs sm:p-3 sm:text-sm">
+                                <div className="break-words">{getContextBadge(sms.context)}</div>
                               </td>
-                              <td className="p-3 text-sm">
-                                {getStatusBadge(sms.status)}
+                              <td className="min-w-0 p-2 align-top sm:p-3">
+                                <div className="flex flex-wrap gap-1">{getStatusBadge(sms.status)}</div>
                               </td>
-                              <td className="p-3 text-sm max-w-xs truncate" title={sms.message}>
-                                {sms.message}
+                              <td className="min-w-0 max-w-xs p-2 align-top text-xs sm:max-w-md sm:p-3 sm:text-sm">
+                                <p className="line-clamp-5 break-words [overflow-wrap:anywhere]" title={sms.message}>
+                                  {sms.message}
+                                </p>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                    <div className="flex items-center justify-between mt-4">
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-sm text-muted-foreground">
                         Page {historyPage} sur {Math.ceil(historyTotal / 50)}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex w-full gap-2 sm:w-auto">
                         <Button
                           variant="outline"
+                          className="min-h-[44px] flex-1 sm:flex-none"
                           disabled={historyPage === 1}
                           onClick={() => setHistoryPage(historyPage - 1)}
                         >
@@ -855,6 +862,7 @@ export default function AdminSmsPage() {
                         </Button>
                         <Button
                           variant="outline"
+                          className="min-h-[44px] flex-1 sm:flex-none"
                           disabled={historyPage >= Math.ceil(historyTotal / 50)}
                           onClick={() => setHistoryPage(historyPage + 1)}
                         >
@@ -871,21 +879,21 @@ export default function AdminSmsPage() {
                   <div className="text-center py-8">Chargement...</div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                      <div>
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                      <div className="min-w-0">
                         <Label>Mode d’envoi</Label>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             variant={sendMode === 'template' ? 'default' : 'outline'}
                             onClick={() => setSendMode('template')}
-                            className="text-xs"
+                            className="min-h-[44px] flex-1 text-xs sm:flex-none"
                           >
                             Avec template
                           </Button>
                           <Button
                             variant={sendMode === 'manual' ? 'default' : 'outline'}
                             onClick={() => setSendMode('manual')}
-                            className="text-xs"
+                            className="min-h-[44px] flex-1 text-xs sm:flex-none"
                           >
                             Sans template
                           </Button>
@@ -949,9 +957,9 @@ export default function AdminSmsPage() {
                       </div>
                     )}
 
-                    <div className="border border-border rounded-lg p-4">
+                    <div className="min-w-0 rounded-lg border border-border p-3 sm:p-4">
                       <Label>Aperçu du SMS</Label>
-                      <div className="bg-gray-50 rounded border p-3 text-sm whitespace-pre-wrap min-h-[70px]">
+                      <div className="min-h-[70px] rounded border bg-gray-50 p-3 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                         {previewMessage || 'Sélectionnez un template ou écrivez un message manuel.'}
                       </div>
                       <p className="text-xs text-muted-foreground mt-2">
@@ -1020,11 +1028,11 @@ export default function AdminSmsPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-sm text-muted-foreground">
                         {selectedUserIds.length} utilisateur(s) sélectionné(s)
                       </p>
-                      <Button onClick={handleSendSms} disabled={isSendingSms}>
+                      <Button className="w-full min-h-[44px] sm:w-auto shrink-0" onClick={handleSendSms} disabled={isSendingSms}>
                         {isSendingSms ? 'Envoi...' : '📨 Envoyer SMS'}
                       </Button>
                     </div>
@@ -1037,25 +1045,26 @@ export default function AdminSmsPage() {
 
         {/* Create/Edit Modal */}
         {(showCreateModal || editingTemplate) && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-                <h2 className="text-2xl font-bold">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4">
+            <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white shadow-2xl">
+              <div className="sticky top-0 flex items-start justify-between gap-3 border-b bg-white px-4 py-4 sm:items-center sm:px-6">
+                <h2 className="min-w-0 flex-1 break-words text-lg font-bold sm:text-2xl">
                   {editingTemplate ? 'Modifier le template' : 'Nouveau template'}
                 </h2>
                 <button
+                  type="button"
                   onClick={() => {
                     setShowCreateModal(false);
                     setEditingTemplate(null);
                     resetForm();
                   }}
-                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center text-2xl leading-none text-gray-400 hover:text-gray-600"
                 >
                   ×
                 </button>
               </div>
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4 p-4 sm:p-6">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="code">Code *</Label>
                     <Input
@@ -1115,9 +1124,9 @@ export default function AdminSmsPage() {
                   </p>
                 </div>
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label>Variables</Label>
-                    <Button variant="outline" className="text-xs px-3 py-1" onClick={addVariable}>
+                  <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <Label className="mb-0">Variables</Label>
+                    <Button variant="outline" className="w-full text-xs px-3 py-1 sm:w-auto" onClick={addVariable}>
                       + Ajouter
                     </Button>
                   </div>
@@ -1156,9 +1165,10 @@ export default function AdminSmsPage() {
                   />
                   <Label htmlFor="isActive" className="mb-0">Template actif</Label>
                 </div>
-                <div className="flex gap-2 justify-end">
+                <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
                   <Button
                     variant="outline"
+                    className="w-full sm:w-auto"
                     onClick={() => {
                       setShowCreateModal(false);
                       setEditingTemplate(null);
@@ -1168,6 +1178,7 @@ export default function AdminSmsPage() {
                     Annuler
                   </Button>
                   <Button
+                    className="w-full sm:w-auto"
                     onClick={editingTemplate ? handleUpdateTemplate : handleCreateTemplate}
                   >
                     {editingTemplate ? 'Enregistrer' : 'Créer'}
@@ -1180,23 +1191,26 @@ export default function AdminSmsPage() {
 
         {/* Test Modal */}
         {testingTemplate && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-                <h2 className="text-2xl font-bold">Test du template: {testingTemplate.name}</h2>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4">
+            <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl">
+              <div className="sticky top-0 flex items-start justify-between gap-3 border-b bg-white px-4 py-4 sm:items-center sm:px-6">
+                <h2 className="min-w-0 flex-1 break-words text-lg font-bold sm:text-2xl">
+                  Test du template: {testingTemplate.name}
+                </h2>
                 <button
+                  type="button"
                   onClick={() => {
                     setTestingTemplate(null);
                     setTestResult('');
                     setTestVariables({});
                     setTestPhone('');
                   }}
-                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center text-2xl leading-none text-gray-400 hover:text-gray-600"
                 >
                   ×
                 </button>
               </div>
-              <div className="p-6 space-y-4">
+              <div className="space-y-4 p-4 sm:p-6">
                 {/* Variables de test */}
                 {testingTemplate.variables && testingTemplate.variables.length > 0 && (
                   <div>
@@ -1233,7 +1247,7 @@ export default function AdminSmsPage() {
                 {testResult && (
                   <div>
                     <Label>Aperçu du message</Label>
-                    <div className="bg-gray-50 p-4 rounded border font-mono text-sm whitespace-pre-wrap">
+                    <div className="rounded border bg-gray-50 p-4 font-mono text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                       {testResult}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -1259,9 +1273,10 @@ export default function AdminSmsPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 justify-end pt-4 border-t">
+                <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end sm:gap-3">
                   <Button 
-                    variant="outline" 
+                    variant="outline"
+                    className="w-full sm:w-auto"
                     onClick={() => {
                       setTestingTemplate(null);
                       setTestResult('');
@@ -1273,6 +1288,7 @@ export default function AdminSmsPage() {
                   </Button>
                   <Button 
                     variant="default"
+                    className="w-full min-h-[44px] sm:w-auto"
                     onClick={handleSendTestSMS}
                     disabled={!testPhone.trim() || !testResult || isSendingTest}
                   >

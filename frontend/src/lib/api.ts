@@ -656,6 +656,10 @@ export const appointmentsAPI = {
     forUserId?: string;
     /** Admin / superadmin : rattacher au dossier et remplir côté serveur les contrôles de cohérence */
     dossierId?: string;
+    /** Admin connecté uniquement : e-mails / synthèses côté client */
+    informClient?: boolean;
+    /** Admin connecté uniquement : notifications in-app + e-mails équipe admin */
+    informTeam?: boolean;
   }) => api.post('/appointments', data),
   
   // Client - Récupérer ses rendez-vous

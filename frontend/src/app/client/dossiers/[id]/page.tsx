@@ -379,7 +379,7 @@ export default function DossierDetailPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 max-w-[100vw]">
-      <main className="w-full max-w-[100vw] px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
+      <div className="w-full max-w-[100vw] min-w-0 px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
         {/* En-tête — sur mobile: colonne, boutons en bas */}
         <div className="mb-4 sm:mb-6">
           <Link href="/client/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-3 sm:mb-4 transition-colors min-h-[44px] items-center">
@@ -401,7 +401,7 @@ export default function DossierDetailPage() {
                   )}
                 </div>
                 {dossier.description && (
-                  <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
+                  <p className="text-muted-foreground text-sm mb-3 break-words">{dossier.description}</p>
                 )}
                 
                 {/* Barre de progression basée uniquement sur les étapes choisies par l'équipe */}
@@ -413,8 +413,8 @@ export default function DossierDetailPage() {
                       (dossier.statut === s.id || dossier.statut === s.label)
                   );
                   return (
-                    <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
-                      <div className="flex items-center gap-2 min-w-max flex-nowrap">
+                    <div className="mb-4 pb-4 border-b border-gray-200">
+                      <ul className="sm:hidden space-y-2">
                         {rawSteps.map((step: any, index: number) => {
                           const isCurrent =
                             currentIndex === -1
@@ -423,45 +423,90 @@ export default function DossierDetailPage() {
                           const completed = currentIndex === -1 ? false : index <= currentIndex;
                           const dateLabel =
                             step.date
-                              ? (typeof step.date === 'string'
-                                  ? step.date
-                                  : new Date(step.date).toLocaleDateString('fr-FR'))
+                              ? typeof step.date === 'string'
+                                ? step.date
+                                : new Date(step.date).toLocaleDateString('fr-FR')
                               : undefined;
                           return (
-                            <div key={step._id || step.id || index} className="flex items-center gap-2 flex-shrink-0">
-                              <div className="flex flex-col items-center gap-1">
+                            <li
+                              key={step._id || step.id || index}
+                              className="flex gap-3 rounded-lg border border-gray-100 bg-gray-50/90 px-3 py-2.5 text-sm"
+                            >
+                              <span
+                                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                                  isCurrent
+                                    ? 'bg-blue-500 ring-2 ring-blue-300'
+                                    : completed
+                                    ? 'bg-green-500'
+                                    : 'bg-gray-300'
+                                }`}
+                              />
+                              <div className="min-w-0 flex-1">
                                 <span
-                                  className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                    isCurrent
-                                      ? 'bg-blue-500 ring-2 ring-blue-300'
-                                      : completed
-                                      ? 'bg-green-500'
-                                      : 'bg-gray-300'
-                                  }`}
-                                ></span>
-                                <span
-                                  className={`text-[10px] font-medium truncate max-w-[88px] ${
-                                    isCurrent
-                                      ? 'text-blue-700'
-                                      : completed
-                                      ? 'text-green-700'
-                                      : 'text-gray-400'
+                                  className={`font-medium leading-snug ${
+                                    isCurrent ? 'text-blue-800' : completed ? 'text-green-800' : 'text-gray-600'
                                   }`}
                                 >
                                   {step.label}
-                                  {dateLabel ? <span className="hidden sm:inline"> ({dateLabel})</span> : null}
                                 </span>
+                                {dateLabel ? (
+                                  <span className="mt-1 block text-[11px] text-gray-500">({dateLabel})</span>
+                                ) : null}
                               </div>
-                              {index < rawSteps.length - 1 && (
-                                <div
-                                  className={`h-0.5 w-4 sm:w-6 flex-shrink-0 ${
-                                    completed ? 'bg-green-500' : 'bg-gray-300'
-                                  }`}
-                                ></div>
-                              )}
-                            </div>
+                            </li>
                           );
                         })}
+                      </ul>
+                      <div className="hidden sm:block overflow-x-auto -mx-1 px-1">
+                        <div className="flex flex-nowrap items-center gap-2 min-w-max pb-1">
+                          {rawSteps.map((step: any, index: number) => {
+                            const isCurrent =
+                              currentIndex === -1
+                                ? index === rawSteps.length - 1
+                                : index === currentIndex;
+                            const completed = currentIndex === -1 ? false : index <= currentIndex;
+                            const dateLabel =
+                              step.date
+                                ? typeof step.date === 'string'
+                                  ? step.date
+                                  : new Date(step.date).toLocaleDateString('fr-FR')
+                                : undefined;
+                            return (
+                              <div key={step._id || step.id || index} className="flex shrink-0 items-center gap-2">
+                                <div className="flex max-w-[9rem] flex-col items-center gap-1">
+                                  <span
+                                    className={`h-3 w-3 shrink-0 rounded-full ${
+                                      isCurrent
+                                        ? 'bg-blue-500 ring-2 ring-blue-300'
+                                        : completed
+                                        ? 'bg-green-500'
+                                        : 'bg-gray-300'
+                                    }`}
+                                  ></span>
+                                  <span
+                                    className={`text-center text-[10px] font-medium leading-tight text-balance ${
+                                      isCurrent
+                                        ? 'text-blue-700'
+                                        : completed
+                                        ? 'text-green-700'
+                                        : 'text-gray-400'
+                                    }`}
+                                  >
+                                    {step.label}
+                                    {dateLabel ? <span className="hidden md:inline"> ({dateLabel})</span> : null}
+                                  </span>
+                                </div>
+                                {index < rawSteps.length - 1 && (
+                                  <div
+                                    className={`h-0.5 w-4 shrink-0 sm:w-6 ${
+                                      completed ? 'bg-green-500' : 'bg-gray-300'
+                                    }`}
+                                  ></div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   );
@@ -570,7 +615,7 @@ export default function DossierDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
                 <div>
                   <p className="text-sm text-muted-foreground font-semibold">Numéro de dossier</p>
-                  <p className="font-bold text-lg text-primary">{dossier.numero || dossier._id}</p>
+                  <p className="font-bold text-lg text-primary break-all sm:break-normal">{dossier.numero || dossier._id}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground font-semibold">Titre</p>
@@ -728,9 +773,9 @@ export default function DossierDetailPage() {
                     </div>
                   )}
                   {dossier.user.adressePostale && (
-                    <div className="col-span-2">
+                    <div className="col-span-1 sm:col-span-2 min-w-0">
                       <p className="text-sm text-muted-foreground font-semibold">Adresse postale</p>
-                      <p className="font-medium">{dossier.user.adressePostale}</p>
+                      <p className="font-medium break-words">{dossier.user.adressePostale}</p>
                     </div>
                   )}
                   {dossier.user.ville && (
@@ -1277,9 +1322,9 @@ export default function DossierDetailPage() {
                       key={msg._id || msg.id}
                       className="border border-gray-100 rounded-lg px-3 py-2 text-sm"
                     >
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <p className="font-semibold truncate">{msg.sujet}</p>
-                        <span className="text-[11px] text-muted-foreground flex-shrink-0">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2 mb-1">
+                        <p className="font-semibold break-words min-w-0">{msg.sujet}</p>
+                        <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap sm:whitespace-normal sm:text-right">
                           {new Date(msg.createdAt).toLocaleDateString('fr-FR', {
                             year: 'numeric',
                             month: 'short',
@@ -1302,7 +1347,7 @@ export default function DossierDetailPage() {
             </div>
           </div>
         </div>
-      </main>
+      </div>
 
       {/* Modal de demande de document */}
       <DocumentRequestNotificationModal

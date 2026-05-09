@@ -368,7 +368,7 @@ export default function PartenaireDossierDetailPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 max-w-[100vw]">
-      <main className="w-full max-w-[100vw] px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
+      <div className="w-full max-w-[100vw] min-w-0 px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
         {/* Bannière visible : accès document en préparation accordé */}
         {draftAccessNotifs.length > 0 && (
           <div className="mb-6 rounded-xl border-2 border-orange-400 bg-gradient-to-r from-orange-50 to-amber-50 shadow-lg p-4">
@@ -427,7 +427,7 @@ export default function PartenaireDossierDetailPage() {
           )}
         </div>
                 {dossier.description && (
-                  <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
+                  <p className="text-muted-foreground text-sm mb-3 break-words">{dossier.description}</p>
                 )}
         
                 {/* Barre de progression basée uniquement sur les étapes choisies pour ce dossier */}
@@ -439,8 +439,8 @@ export default function PartenaireDossierDetailPage() {
                       (dossier.statut === s.id || dossier.statut === s.label)
                   );
                   return (
-                    <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
-                      <div className="flex items-center gap-2 min-w-max">
+                    <div className="mb-4 pb-4 border-b border-gray-200">
+                      <ul className="sm:hidden space-y-2">
                         {rawSteps.map((step: any, index: number) => {
                           const isCurrent =
                             currentIndex === -1
@@ -454,40 +454,83 @@ export default function PartenaireDossierDetailPage() {
                                   : new Date(step.date).toLocaleDateString('fr-FR'))
                               : undefined;
                           return (
-                            <div key={step._id || step.id || index} className="flex items-center gap-2 flex-shrink-0">
-                              <div className="flex flex-col items-center gap-1">
+                            <li
+                              key={step._id || step.id || index}
+                              className="flex gap-3 rounded-lg border border-gray-100 bg-gray-50/90 px-3 py-2.5 text-sm"
+                            >
+                              <span
+                                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                                  isCurrent
+                                    ? 'bg-blue-500 ring-2 ring-blue-300'
+                                    : completed
+                                    ? 'bg-green-500'
+                                    : 'bg-gray-300'
+                                }`}
+                              />
+                              <div className="min-w-0 flex-1">
                                 <span
-                                  className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                    isCurrent
-                                      ? 'bg-blue-500 ring-2 ring-blue-300'
-                                      : completed
-                                      ? 'bg-green-500'
-                                      : 'bg-gray-300'
-                                  }`}
-                                ></span>
-                                <span
-                                  className={`text-[10px] font-medium whitespace-nowrap ${
-                                    isCurrent
-                                      ? 'text-blue-700'
-                                      : completed
-                                      ? 'text-green-700'
-                                      : 'text-gray-400'
+                                  className={`font-medium leading-snug ${
+                                    isCurrent ? 'text-blue-800' : completed ? 'text-green-800' : 'text-gray-600'
                                   }`}
                                 >
                                   {step.label}
-                                  {dateLabel ? ` (${dateLabel})` : ''}
                                 </span>
+                                {dateLabel ? (
+                                  <span className="mt-1 block text-[11px] text-gray-500">({dateLabel})</span>
+                                ) : null}
                               </div>
-                              {index < rawSteps.length - 1 && (
-                                <div
-                                  className={`h-0.5 w-6 flex-shrink-0 ${
-                                    completed ? 'bg-green-500' : 'bg-gray-300'
-                                  }`}
-                                ></div>
-                              )}
-                            </div>
+                            </li>
                           );
                         })}
+                      </ul>
+                      <div className="hidden sm:block overflow-x-auto -mx-1 px-1">
+                        <div className="flex items-center gap-2 min-w-max pb-1">
+                          {rawSteps.map((step: any, index: number) => {
+                            const isCurrent =
+                              currentIndex === -1
+                                ? index === rawSteps.length - 1
+                                : index === currentIndex;
+                            const completed = currentIndex === -1 ? false : index <= currentIndex;
+                            const dateLabel =
+                              step.date
+                                ? (typeof step.date === 'string'
+                                    ? step.date
+                                    : new Date(step.date).toLocaleDateString('fr-FR'))
+                                : undefined;
+                            return (
+                              <div key={step._id || step.id || index} className="flex items-center gap-2 shrink-0">
+                                <div className="flex max-w-[9rem] flex-col items-center gap-1">
+                                  <span
+                                    className={`h-3 w-3 shrink-0 rounded-full ${
+                                      isCurrent
+                                        ? 'bg-blue-500 ring-2 ring-blue-300'
+                                        : completed
+                                        ? 'bg-green-500'
+                                        : 'bg-gray-300'
+                                    }`}
+                                  ></span>
+                                  <span
+                                    className={`text-center text-[10px] font-medium leading-tight text-balance ${
+                                      isCurrent
+                                        ? 'text-blue-700'
+                                        : completed
+                                        ? 'text-green-700'
+                                        : 'text-gray-400'
+                                    }`}
+                                  >
+                                    {step.label}
+                                    {dateLabel ? <span className="block text-[9px] opacity-80">({dateLabel})</span> : null}
+                                  </span>
+                                </div>
+                                {index < rawSteps.length - 1 && (
+                                  <div
+                                    className={`h-0.5 w-4 sm:w-6 shrink-0 ${completed ? 'bg-green-500' : 'bg-gray-300'}`}
+                                  ></div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1070,7 +1113,7 @@ export default function PartenaireDossierDetailPage() {
           dossierId={dossier._id || (dossier as any).id}
           linkToDedicatedPageHref={`/partenaire/dossiers/${dossierId}/documents-en-preparation`}
         />
-      </main>
+      </div>
       
       {/* Modal d'accusé de réception */}
       {showAcknowledgeModal && (
