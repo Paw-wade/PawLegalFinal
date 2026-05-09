@@ -2,7 +2,21 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 
-const DEFAULT_DIR = '/root/adapapers/backend/lexia/CAA';
+/** VPS Linux — sans résolution win32 pour éviter `/root/…` → `C:\\root\\…`. */
+const DEFAULT_DIR_POSIX = '/root/adapapers/backend/lexia/CAA';
+
+/** Windows : corpus local du dépôt (pas le chemin du serveur). */
+const DEFAULT_DIR_WINDOWS = path.join(__dirname, '..', 'data', 'lexia');
+
+/** Extensions indexées récursivement (texte brut, XML aplati, PDF / Word extraits). */
+const KNOWLEDGE_FILE_EXTENSIONS = new Set([
+  '.md',
+  '.txt',
+  '.xml',
+  '.pdf',
+  '.doc',
+  '.docx',
+]);
 
 const STOPWORDS = new Set(
   `le la les un une des du de et ou en au aux à a pour par dans sur est son sa ses ce ces cet cette qui que dont pas plus très tout toute
@@ -13,6 +27,30 @@ let chunkCache = { loadedAt: 0, chunks: [], fileMtimes: {} };
 const CACHE_MS = 45_000;
 const DEFAULT_PAGE_SIZE = 12;
 const MAX_PAGE_SIZE = 50;
+
+/** Nombre max de fichiers chargés pour l’index mémoire (évite OOM sur corpus massif, ex. centaines de milliers de XML). */
+function getLexiaIndexMaxFiles() {
+  const n = Number(process.env.LEXIA_INDEX_MAX_FILES ?? '12000');
+  if (!Number.isFinite(n) || n < 50) return 12000;
+  return Math.min(Math.floor(n), 999999);
+}
+
+/** Plafond de blocs indexés en RAM pour une requête / invalidation du cache. */
+function getLexiaMaxTotalChunks() {
+  const n = Number(process.env.LEXIA_MAX_TOTAL_CHUNKS ?? '70000');
+  if (!Number.isFinite(n) || n < 2000) return 70000;
+  return Math.min(Math.floor(n), 2_000_000);
+}
+
+/** Tronque le texte extrait par fichier (PDF/XML énormes). */
+function getLexiaMaxExtractCharsPerFile() {
+  const n = Number(process.env.LEXIA_MAX_EXTRACT_CHARS ?? '380000');
+  if (!Number.isFinite(n) || n < 8000) return 380000;
+  return Math.min(Math.floor(n), 5_000_000);
+}
+
+let truncationFilesWarned = false;
+let truncationChunksWarned = false;
 
 function normalizeText(s) {
   return String(s || '')
@@ -56,6 +94,9 @@ function inferContentType(file, text) {
   if (ext === '.xml') return 'xml';
   if (ext === '.md') return 'md';
   if (ext === '.txt') return 'txt';
+  if (ext === '.pdf') return 'pdf';
+  if (ext === '.doc') return 'doc';
+  if (ext === '.docx') return 'docx';
   const t = normalizeText(text);
   if (t.includes('oqtf')) return 'jurisprudence';
   return 'document';
@@ -88,8 +129,25 @@ function chunkText(fullText, sourceTitle) {
   return chunks;
 }
 
-function collectMarkdownFiles(dir) {
-  const files = [];
+function stripXmlToText(xmlRaw) {
+  return String(xmlRaw || '')
+    .replace(/<\?xml[\s\S]*?\?>/gi, ' ')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, ' $1 ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\u0000/g, ' ')
+    .trim();
+}
+
+/**
+ * Compte tous les fichiers indexables sur disque sans allouer la liste des chemins (évite OOM sur très gros corpus).
+ */
+function walkCountKnowledgeFiles(dir) {
+  const byExt = { md: 0, txt: 0, xml: 0, pdf: 0, doc: 0, docx: 0, other: 0 };
+  let total = 0;
 
   function scan(d) {
     let entries = [];
@@ -98,6 +156,8 @@ function collectMarkdownFiles(dir) {
     } catch {
       return;
     }
+
+    entries.sort((a, b) => a.name.localeCompare(b.name, 'en'));
 
     for (const item of entries) {
       const full = path.join(d, item.name);
@@ -108,41 +168,127 @@ function collectMarkdownFiles(dir) {
       }
 
       const ext = path.extname(item.name).toLowerCase();
-      if (['.xml', '.md', '.txt'].includes(ext)) {
-        files.push(full);
-      }
+      if (!KNOWLEDGE_FILE_EXTENSIONS.has(ext)) continue;
+      total++;
+      const key = ext.slice(1) || 'other';
+      if (Object.prototype.hasOwnProperty.call(byExt, key)) byExt[key] += 1;
+      else byExt.other += 1;
     }
   }
 
   scan(dir);
-  return files;
+  return { total, byExt };
+}
+
+/**
+ * Liste jusqu’à LEXIA_INDEX_MAX_FILES chemins (parcours profondeur d’abord, noms triés par dossier).
+ * Ne matérialise jamais tout le corpus.
+ */
+function collectKnowledgeFilesForIndex(dir) {
+  const cap = getLexiaIndexMaxFiles();
+  const out = [];
+
+  function scan(d) {
+    if (out.length >= cap) return;
+
+    let entries = [];
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    entries.sort((a, b) => a.name.localeCompare(b.name, 'en'));
+
+    for (const item of entries) {
+      if (out.length >= cap) return;
+      const full = path.join(d, item.name);
+
+      if (item.isDirectory()) {
+        scan(full);
+        continue;
+      }
+
+      const ext = path.extname(item.name).toLowerCase();
+      if (KNOWLEDGE_FILE_EXTENSIONS.has(ext)) out.push(full);
+    }
+  }
+
+  scan(dir);
+
+  if (out.length >= cap && !truncationFilesWarned) {
+    truncationFilesWarned = true;
+    console.warn(
+      `[lexia] Index plafonné à LEXIA_INDEX_MAX_FILES=${cap}. ` +
+        `Le disque peut contenir davantage de fichiers ; seuls les ${cap} premiers (ordre de parcours) sont chargés en mémoire.`
+    );
+  }
+
+  return out;
+}
+
+/**
+ * Extrait le texte utile selon le type de fichier (UTF-8, XML aplati, PDF, Word).
+ */
+async function extractPlainTextFromKnowledgeFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  try {
+    switch (ext) {
+      case '.pdf': {
+        const pdfParse = require('pdf-parse');
+        const buf = await fsp.readFile(filePath);
+        const res = await pdfParse(buf);
+        return String(res.text || '')
+          .replace(/\u0000/g, ' ')
+          .trim();
+      }
+      case '.docx': {
+        const mammoth = require('mammoth');
+        const r = await mammoth.extractRawText({ path: filePath });
+        return String(r.value || '').trim();
+      }
+      case '.doc': {
+        const WordExtractor = require('word-extractor');
+        const extractor = new WordExtractor();
+        const doc = await extractor.extract(filePath);
+        return String(doc.getBody() || '').trim();
+      }
+      case '.xml': {
+        const raw = await fsp.readFile(filePath, 'utf8');
+        return stripXmlToText(raw);
+      }
+      case '.md':
+      case '.txt': {
+        const raw = await fsp.readFile(filePath, 'utf8');
+        return String(raw || '').trim();
+      }
+      default:
+        return '';
+    }
+  } catch (err) {
+    console.warn(`[lexia] Fichier ignoré (${path.basename(filePath)}): ${err.message}`);
+    return '';
+  }
 }
 
 async function loadAllChunks(knowledgeDir) {
-  const files = await collectMarkdownFiles(knowledgeDir);
+  const files = collectKnowledgeFilesForIndex(knowledgeDir);
+  const maxChunks = getLexiaMaxTotalChunks();
+  const maxChars = getLexiaMaxExtractCharsPerFile();
   const all = [];
+
   for (const filePath of files) {
-    let raw;
-    try {
-      raw = await fsp.readFile(filePath, 'utf8');
-    } catch {
-      continue;
-    }
+    if (all.length >= maxChunks) break;
+
+    let normalized = await extractPlainTextFromKnowledgeFile(filePath);
+    if (!normalized.trim()) continue;
+    if (normalized.length > maxChars) normalized = normalized.slice(0, maxChars);
+
     const rel = path.relative(knowledgeDir, filePath);
     const title = rel.replace(/\\/g, '/');
-    const isXml = /\.xml$/i.test(filePath);
-    const normalized = isXml
-      ? raw
-          .replace(/<\?xml[\s\S]*?\?>/gi, ' ')
-          .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, ' $1 ')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/&nbsp;/gi, ' ')
-          .replace(/&amp;/gi, '&')
-          .replace(/&lt;/gi, '<')
-          .replace(/&gt;/gi, '>')
-      : raw;
     const sub = chunkText(normalized, title);
     for (const c of sub) {
+      if (all.length >= maxChunks) break;
       const dateIso = extractDateFromText(c.text);
       all.push({
         file: title,
@@ -158,6 +304,14 @@ async function loadAllChunks(knowledgeDir) {
       });
     }
   }
+
+  if (all.length >= maxChunks && files.length && !truncationChunksWarned) {
+    truncationChunksWarned = true;
+    console.warn(
+      `[lexia] LEXIA_MAX_TOTAL_CHUNKS=${maxChunks} atteint ; des fichiers ou parties du corpus ne sont pas chargés dans cette passe.`
+    );
+  }
+
   return all;
 }
 
@@ -246,6 +400,25 @@ async function searchKnowledge({
   const dir = knowledgeDir || getKnowledgeDir();
   const effectiveQuery = queryText || buildQueryFromMessages(Array.isArray(messages) ? messages : []);
   const queryTokens = tokenize(effectiveQuery);
+
+  const filterJuridiction = String(filters.juridiction || '').trim();
+  const filterContentType = String(filters.contentType || '').trim().toLowerCase();
+  const filterDateFrom = String(filters.dateFrom || '').trim();
+  const filterDateTo = String(filters.dateTo || '').trim();
+  const hasFilters = Boolean(filterJuridiction || filterContentType || filterDateFrom || filterDateTo);
+
+  if (!queryTokens.length && !hasFilters) {
+    return {
+      query: effectiveQuery,
+      knowledgeDir: dir,
+      total: 0,
+      page: 1,
+      totalPages: 1,
+      tookMs: Date.now() - startedAt,
+      hits: [],
+    };
+  }
+
   const chunks = await getChunks(dir);
 
   if (!chunks.length) {
@@ -262,10 +435,6 @@ async function searchKnowledge({
 
   const normalizedLimit = Math.min(MAX_PAGE_SIZE, toIntOrDefault(limit, DEFAULT_PAGE_SIZE));
   const normalizedPage = toIntOrDefault(page, 1);
-  const filterJuridiction = String(filters.juridiction || '').trim();
-  const filterContentType = String(filters.contentType || '').trim().toLowerCase();
-  const filterDateFrom = String(filters.dateFrom || '').trim();
-  const filterDateTo = String(filters.dateTo || '').trim();
 
   const filtered = chunks.filter((chunk) => {
     const md = chunk.metadata || {};
@@ -320,14 +489,15 @@ async function searchKnowledge({
  * Recherche + réponse markdown sans appel LLM externe.
  */
 async function searchAndCompose(trimmedMessages, knowledgeDir) {
+  const dir = knowledgeDir || getKnowledgeDir();
   const queryText = buildQueryFromMessages(trimmedMessages);
-  const chunks = await getChunks(knowledgeDir);
 
-  if (!chunks.length) {
+  const indexedPaths = collectKnowledgeFilesForIndex(dir);
+  if (!indexedPaths.length) {
     return {
       text:
         '## Base interne LEXIA\n\nAucun document indexé pour le moment.\n\n' +
-        `Ajoutez des fichiers **.md**, **.txt** ou **.xml** dans le dossier :\n\n\`${knowledgeDir}\`\n\n` +
+        `Ajoutez des fichiers **.md**, **.txt**, **.xml**, **.pdf**, **.doc** ou **.docx** dans le dossier :\n\n\`${dir}\`\n\n` +
         'Puis relancez une question : les extraits pertinents seront proposés ici (sans clé API).',
       sources: [],
     };
@@ -335,7 +505,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
 
   const searchResult = await searchKnowledge({
     queryText,
-    knowledgeDir,
+    knowledgeDir: dir,
     page: 1,
     limit: 15,
   });
@@ -347,14 +517,20 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
   }));
 
   if (!scored.length) {
-    const preview = chunks.slice(0, 3).map((c) => `- **${c.file}** (extrait) : ${c.text.slice(0, 160)}…`);
+    const preview = indexedPaths.slice(0, 3).map((fp) => {
+      const rel = path.relative(dir, fp).replace(/\\/g, '/');
+      return `- **${rel}**`;
+    });
     return {
       text:
         '## Base interne LEXIA\n\nAucun extrait ne correspond clairement aux termes de votre question.\n\n' +
         '**Suggestions :** reformulez avec des mots présents dans vos documents, ou enrichissez la base.\n\n' +
-        '### Aperçu des premiers documents indexés\n' +
+        '### Fichiers pris en compte (aperçu)\n' +
         preview.join('\n'),
-      sources: chunks.slice(0, 5).map((c) => ({ file: c.file, score: 0 })),
+      sources: indexedPaths.slice(0, 5).map((fp) => ({
+        file: path.relative(dir, fp).replace(/\\/g, '/'),
+        score: 0,
+      })),
     };
   }
 
@@ -362,7 +538,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
   lines.push('## Recherche — base documentaire interne');
   lines.push('');
   lines.push(
-    '_Réponse produite **sans modèle cloud** : extraits classés par pertinence à partir de vos fichiers `.md` / `.txt` / `.xml`._'
+    '_Réponse produite **sans modèle cloud** : extraits classés par pertinence à partir de vos fichiers `.md` / `.txt` / `.xml` / `.pdf` / `.doc` / `.docx`._'
   );
   lines.push('');
   lines.push('### Extraits');
@@ -393,9 +569,33 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
   };
 }
 
+/** Chemin POSIX absolu (/…) sans lettre de lecteur Windows. */
+function isPosixStyleAbsolute(p) {
+  return typeof p === 'string' && p.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(p);
+}
+
+function defaultKnowledgeDirForPlatform() {
+  return process.platform === 'win32' ? DEFAULT_DIR_WINDOWS : DEFAULT_DIR_POSIX;
+}
+
+let posixOnWindowsWarned = false;
+
 function getKnowledgeDir() {
   const raw = (process.env.LEXIA_KNOWLEDGE_DIR || '').trim();
-  if (!raw) return DEFAULT_DIR;
+  if (!raw) return defaultKnowledgeDirForPlatform();
+
+  /* Sous Windows, LEXIA=/root/… (copié du VPS) deviendrait C:\\root\\… via path.resolve — on l’évite. */
+  if (process.platform === 'win32' && isPosixStyleAbsolute(raw)) {
+    if (!posixOnWindowsWarned) {
+      posixOnWindowsWarned = true;
+      console.warn(
+        `[lexia] LEXIA_KNOWLEDGE_DIR="${raw}" est un chemin Linux ; sous Windows il serait résolu sur le disque système ` +
+          `(ex. C:\\root\\…). Utilisation de : "${DEFAULT_DIR_WINDOWS}". ` +
+          `Définissez LEXIA_KNOWLEDGE_DIR sur un chemin Windows absolu pour un autre corpus.`
+      );
+    }
+    return DEFAULT_DIR_WINDOWS;
+  }
 
   if (path.isAbsolute(raw)) return path.resolve(raw);
 
@@ -426,15 +626,21 @@ module.exports = {
   getKnowledgeDir,
   getKnowledgeStats: async () => {
     const knowledgeDir = getKnowledgeDir();
-    const files = await collectMarkdownFiles(knowledgeDir);
-    const byExt = { md: 0, txt: 0, xml: 0 };
-    for (const f of files) {
-      const ext = path.extname(f).toLowerCase().replace('.', '');
-      if (ext === 'md' || ext === 'txt' || ext === 'xml') byExt[ext] += 1;
-    }
-    return { knowledgeDir, total: files.length, byExt };
+    const walk = walkCountKnowledgeFiles(knowledgeDir);
+    const indexedFilesCap = getLexiaIndexMaxFiles();
+    return {
+      knowledgeDir,
+      total: walk.total,
+      byExt: walk.byExt,
+      indexedFilesCap,
+      indexTruncated: walk.total > indexedFilesCap,
+      maxTotalChunks: getLexiaMaxTotalChunks(),
+      maxExtractCharsPerFile: getLexiaMaxExtractCharsPerFile(),
+    };
   },
   invalidateCache: () => {
     chunkCache = { loadedAt: 0, chunks: [], fileMtimes: {} };
+    truncationFilesWarned = false;
+    truncationChunksWarned = false;
   },
 };

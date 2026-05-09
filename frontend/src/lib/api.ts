@@ -551,7 +551,7 @@ export const pawSearchAPI = {
       dateFrom?: string;
       dateTo?: string;
     };
-  }) => api.post('/paw-search', data),
+  }) => api.post('/paw-search', data, { timeout: 120000 }),
   getConfig: () => api.get('/paw-search/config'),
 };
 
@@ -654,6 +654,8 @@ export const appointmentsAPI = {
     description?: string;
     /** Admin / superadmin : associer le RDV à ce client */
     forUserId?: string;
+    /** Admin / superadmin : rattacher au dossier et remplir côté serveur les contrôles de cohérence */
+    dossierId?: string;
   }) => api.post('/appointments', data),
   
   // Client - Récupérer ses rendez-vous
@@ -906,8 +908,10 @@ export const dossiersAPI = {
     api.delete(`/user/dossiers/${id}`),
   
   // Transmettre un dossier à un partenaire (Admin/Superadmin)
-  transmitDossier: (id: string, data: { partenaireId: string; notes?: string }) =>
-    api.post(`/user/dossiers/${id}/transmit`, data),
+  transmitDossier: (
+    id: string,
+    data: { partenaireId: string; notes?: string; notifyClient?: boolean }
+  ) => api.post(`/user/dossiers/${id}/transmit`, data),
   
   // Retirer la transmission d'un dossier (Admin/Secrétaire)
   removeTransmission: (id: string, userId: string) =>

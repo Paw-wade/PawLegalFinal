@@ -4262,7 +4262,13 @@ router.get('/:id/collaborators', protect, async (req, res) => {
 // @access  Private (Admin/Superadmin)
 router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    const { partenaireId, notes } = req.body;
+    const { partenaireId, notes, notifyClient } = req.body;
+
+    const nc = notifyClient;
+    const notifyClientEffective =
+      nc === undefined || nc === null || nc === ''
+        ? true
+        : !(nc === false || nc === 'false' || nc === 0 || nc === '0');
     
     // Validation des paramètres
     if (!partenaireId) {
@@ -4331,7 +4337,8 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
       partenaire: partenaireId,
       transmittedBy: req.user.id,
       notes: notes || '',
-      status: 'pending'
+      status: 'pending',
+      clientWasNotified: !!notifyClientEffective
     });
     
     await dossier.save();
@@ -4373,8 +4380,8 @@ Nous vous invitons à vous connecter à votre espace partenaire afin de consulte
       console.error('⚠️ Email transmission partenaire:', mailErr);
     }
     
-    // Notifier aussi le client si le dossier a un propriétaire
-    if (dossier.user) {
+    // Notifier le client si le dossier a un titulaire et que l'admin n'a pas désactivé la notification
+    if (dossier.user && notifyClientEffective) {
       // S'assurer que dossier.user est un ObjectId (peut être un objet ou un ObjectId)
       const userId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
       

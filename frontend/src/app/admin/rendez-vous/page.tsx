@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { appointmentsAPI, dossiersAPI, userAPI, creneauxAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
@@ -173,6 +173,7 @@ function getRdvSlaInfo(rdv: any) {
 export default function AdminRendezVousPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [rendezVous, setRendezVous] = useState<any[]>([]);
   const [filter, setFilter] = useState('all'); // all, today, week, month
   const [statusFilter, setStatusFilter] = useState<'all' | 'en_attente' | 'confirme' | 'annule' | 'termine' | 'archived'>('all');
@@ -214,6 +215,8 @@ export default function AdminRendezVousPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCreateDossierModal, setShowCreateDossierModal] = useState(false);
   const [appointmentForDossier, setAppointmentForDossier] = useState<any | null>(null);
+  /** Rattachement explicite du RDV en cours de création à un dossier (query ?dossierId=…) */
+  const [appointmentLinkedDossierId, setAppointmentLinkedDossierId] = useState<string | null>(null);
   const [isCreatingDossier, setIsCreatingDossier] = useState(false);
   const [dossierFormData, setDossierFormData] = useState({
     titre: '',
@@ -244,6 +247,112 @@ export default function AdminRendezVousPage() {
     }, 250);
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  /** Entrée depuis la fiche dossier : `/admin/rendez-vous?dossierId=…&openBooking=1` */
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    const ur = (session?.user as any)?.role;
+    if (ur !== 'admin' && ur !== 'superadmin') return;
+
+    const dIdRaw = searchParams.get('dossierId');
+    const openBk = searchParams.get('openBooking');
+    if (!dIdRaw || openBk !== '1') return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await dossiersAPI.getDossierById(dIdRaw);
+        const dossier = res.data?.dossier;
+        if (cancelled) return;
+        if (!res.data?.success || !dossier) {
+          router.replace('/admin/rendez-vous', { scroll: false });
+          return;
+        }
+
+        setAdminBookingError(null);
+        const dKey = String(dossier._id || dossier.id || dIdRaw);
+        setAppointmentLinkedDossierId(dKey);
+
+        const ref = dossier.numero || dossier.numeroDossier || '';
+        const titre = dossier.titre || '';
+        const descParts = [ref && `Réf. ${ref}`, titre && `« ${titre} »`].filter(Boolean);
+        const description =
+          descParts.length > 0
+            ? `RDV concernant le dossier ${descParts.join(' — ')}`
+            : `RDV concernant le dossier ${dKey}`;
+
+        if (dossier.user && typeof dossier.user === 'object') {
+          const u = dossier.user;
+          setAdminBookingForm({
+            forUserId: String(u._id || u.id || ''),
+            nom: u.lastName || '',
+            prenom: u.firstName || '',
+            email: u.email || '',
+            telephone: (u.phone || '').trim() || '—',
+            date: getTodayDate(),
+            heure: '',
+            motif: 'premiere_demande_titre',
+            description,
+          });
+        } else {
+          setAdminBookingForm({
+            forUserId: '',
+            nom: dossier.clientNom || '',
+            prenom: dossier.clientPrenom || '',
+            email: dossier.clientEmail || '',
+            telephone: (dossier.clientTelephone || '').trim() || '—',
+            date: getTodayDate(),
+            heure: '',
+            motif: 'premiere_demande_titre',
+            description,
+          });
+        }
+
+        setShowAdminBookingModal(true);
+        setLoadingClientUsers(true);
+        try {
+          const resUsers = await userAPI.getAllUsers();
+          if (cancelled) return;
+          const possibleUsers =
+            (resUsers.data && Array.isArray(resUsers.data.users) && resUsers.data.users) ||
+            (resUsers.data &&
+              resUsers.data.data &&
+              Array.isArray(resUsers.data.data.users) &&
+              resUsers.data.data.users) ||
+            (resUsers.data && Array.isArray(resUsers.data.data) && resUsers.data.data) ||
+            [];
+
+          const onlyActive = (u: any) => u && u.isActive !== false;
+
+          const roleStr = (u: any) => String(u?.role || '').trim().toLowerCase();
+          const clientsStrict = possibleUsers.filter((u: any) => onlyActive(u) && roleStr(u) === 'client');
+
+          const clientsFallback =
+            clientsStrict.length > 0
+              ? clientsStrict
+              : possibleUsers.filter((u: any) => onlyActive(u) && !['admin', 'superadmin'].includes(roleStr(u)));
+
+          if (!resUsers.data?.success && possibleUsers.length === 0) setClientUsers([]);
+          else setClientUsers(clientsFallback);
+        } catch {
+          if (!cancelled) {
+            setClientUsers([]);
+            setAdminBookingError('Impossible de charger la liste des clients.');
+          }
+        } finally {
+          if (!cancelled) setLoadingClientUsers(false);
+        }
+
+        router.replace('/admin/rendez-vous', { scroll: false });
+      } catch {
+        if (!cancelled) router.replace('/admin/rendez-vous', { scroll: false });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [status, session, router, searchParams]);
 
   const loadAppointments = async () => {
     setIsLoading(true);
@@ -304,7 +413,14 @@ export default function AdminRendezVousPage() {
     }
   };
 
+  const closeAdminBookingModal = () => {
+    if (adminBookingSubmitting) return;
+    setShowAdminBookingModal(false);
+    setAppointmentLinkedDossierId(null);
+  };
+
   const openAdminBookingModal = async () => {
+    setAppointmentLinkedDossierId(null);
     setAdminBookingError(null);
     setAdminBookingForm({
       forUserId: '',
@@ -439,9 +555,11 @@ export default function AdminRendezVousPage() {
         motif: adminBookingForm.motif,
         description: adminBookingForm.description.trim() || undefined,
         ...(adminBookingForm.forUserId ? { forUserId: adminBookingForm.forUserId } : {}),
+        ...(appointmentLinkedDossierId ? { dossierId: appointmentLinkedDossierId } : {}),
       });
       if (res.data.success) {
         setShowAdminBookingModal(false);
+        setAppointmentLinkedDossierId(null);
         setSuccess(res.data.message || 'Rendez-vous enregistré.');
         await loadAppointments();
       } else {
@@ -1147,7 +1265,7 @@ export default function AdminRendezVousPage() {
       {showAdminBookingModal && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-          onClick={() => !adminBookingSubmitting && setShowAdminBookingModal(false)}
+          onClick={() => !adminBookingSubmitting && closeAdminBookingModal()}
         >
           <div
             className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 relative"
@@ -1165,7 +1283,7 @@ export default function AdminRendezVousPage() {
                 type="button"
                 className="text-gray-400 hover:text-gray-700 text-xl leading-none p-1"
                 disabled={adminBookingSubmitting}
-                onClick={() => setShowAdminBookingModal(false)}
+                onClick={closeAdminBookingModal}
                 aria-label="Fermer"
               >
                 ×
@@ -1178,13 +1296,32 @@ export default function AdminRendezVousPage() {
               </div>
             )}
 
+            {appointmentLinkedDossierId && (
+              <div className="mb-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs sm:text-sm text-foreground leading-snug">
+                <span className="font-semibold">Lien dossier :</span> ce rendez-vous sera rattaché au dossier
+                après validation. Contrôlez bien l&apos;e‑mail avant d&apos;enregistrer.
+                <button
+                  type="button"
+                  className="block mt-1.5 underline text-primary font-medium"
+                  disabled={adminBookingSubmitting}
+                  onClick={() => setAppointmentLinkedDossierId(null)}
+                >
+                  Ne pas lier ce rendez-vous au dossier
+                </button>
+              </div>
+            )}
+
             <form onSubmit={handleAdminBookingSubmit} className="space-y-3">
               <div>
                 <Label htmlFor="admin-rdv-client">Client inscrit (optionnel)</Label>
                 <select
                   id="admin-rdv-client"
                   className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  disabled={loadingClientUsers || adminBookingSubmitting}
+                  disabled={
+                    loadingClientUsers ||
+                    adminBookingSubmitting ||
+                    (!!appointmentLinkedDossierId && !!adminBookingForm.forUserId)
+                  }
                   value={adminBookingForm.forUserId}
                   onChange={(e) => {
                     const id = e.target.value;
@@ -1354,7 +1491,7 @@ export default function AdminRendezVousPage() {
                   variant="outline"
                   className="w-full sm:w-auto"
                   disabled={adminBookingSubmitting}
-                  onClick={() => setShowAdminBookingModal(false)}
+                  onClick={closeAdminBookingModal}
                 >
                   Annuler
                 </Button>

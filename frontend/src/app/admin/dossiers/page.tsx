@@ -332,6 +332,8 @@ export default function AdminDossiersPage() {
   /** Tarification : admin ou superadmin uniquement. */
   const canManageTarifModal =
     (session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin';
+  const canManagePinnedDossiers =
+    (session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin';
 
   // Étapes de base pour garder un workflow cohérent même sans étapes personnalisées.
   const DEFAULT_ADMIN_ETAPES: any[] = [
@@ -1213,10 +1215,15 @@ export default function AdminDossiersPage() {
   const handleTogglePinnedDossier = async (dossier: any) => {
     const dossierId = String(dossier?._id || dossier?.id || '');
     if (!dossierId) return;
+    if (!canManagePinnedDossiers) {
+      setToast({ message: 'Vous n’avez pas les droits pour épingler un dossier.', type: 'error' });
+      return;
+    }
     setPinningDossierId(dossierId);
     setError(null);
     try {
       const nextPinned = !Boolean(dossier?.isPinned);
+      const nextPinnedAt = nextPinned ? new Date().toISOString() : null;
       const response = await dossiersAPI.updateDossier(dossierId, {
         isPinned: nextPinned,
         skipDossierModificationNotify: true,
@@ -1229,9 +1236,14 @@ export default function AdminDossiersPage() {
             return {
               ...d,
               isPinned: nextPinned,
+              pinnedAt: nextPinnedAt,
             };
           })
         );
+        setToast({
+          message: nextPinned ? 'Dossier épinglé.' : 'Épingle retirée.',
+          type: 'success',
+        });
       }
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Impossible de modifier l’épingle du dossier.');
@@ -2513,6 +2525,9 @@ export default function AdminDossiersPage() {
                         const pa = a?.isPinned ? 1 : 0;
                         const pb = b?.isPinned ? 1 : 0;
                         if (pb !== pa) return pb - pa;
+                        const pta = a?.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+                        const ptb = b?.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+                        if (ptb !== pta) return ptb - pta;
                         const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
                         const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
                         if (tb !== ta) return tb - ta;
@@ -2522,20 +2537,38 @@ export default function AdminDossiersPage() {
                         const list = filteredDossiers.slice();
                         if (dossierSortEtapes === 'etape_date_asc') {
                           list.sort((a, b) => {
+                            const pa = a?.isPinned ? 1 : 0;
+                            const pb = b?.isPinned ? 1 : 0;
+                            if (pb !== pa) return pb - pa;
+                            const pta = a?.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+                            const ptb = b?.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+                            if (ptb !== pta) return ptb - pta;
                             const ma = getDossierMinEtapeDateMs(a);
                             const mb = getDossierMinEtapeDateMs(b);
                             const va = ma == null ? Number.POSITIVE_INFINITY : ma;
                             const vb = mb == null ? Number.POSITIVE_INFINITY : mb;
                             if (va !== vb) return va - vb;
+                            const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+                            const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+                            if (tb !== ta) return tb - ta;
                             return dossierIdStr(a).localeCompare(dossierIdStr(b));
                           });
                         } else if (dossierSortEtapes === 'etape_date_desc') {
                           list.sort((a, b) => {
+                            const pa = a?.isPinned ? 1 : 0;
+                            const pb = b?.isPinned ? 1 : 0;
+                            if (pb !== pa) return pb - pa;
+                            const pta = a?.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+                            const ptb = b?.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+                            if (ptb !== pta) return ptb - pta;
                             const ma = getDossierMinEtapeDateMs(a);
                             const mb = getDossierMinEtapeDateMs(b);
                             const va = ma == null ? Number.NEGATIVE_INFINITY : ma;
                             const vb = mb == null ? Number.NEGATIVE_INFINITY : mb;
                             if (vb !== va) return vb - va;
+                            const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+                            const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+                            if (tb !== ta) return tb - ta;
                             return dossierIdStr(a).localeCompare(dossierIdStr(b));
                           });
                         }
@@ -2588,16 +2621,30 @@ export default function AdminDossiersPage() {
                           e.stopPropagation();
                           void handleTogglePinnedDossier(dossier);
                         }}
-                        disabled={pinningDossierId === String(dossier._id || dossier.id)}
-                        className={`absolute top-3 right-3 z-10 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md border transition-colors ${
+                        disabled={
+                          pinningDossierId === String(dossier._id || dossier.id) || !canManagePinnedDossiers
+                        }
+                        className={`absolute top-3 right-3 z-10 p-1.5 min-w-[36px] min-h-[36px] sm:p-2 sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center rounded-md border border-transparent bg-transparent transition-colors ${
                           dossier?.isPinned
-                            ? 'bg-amber-100 border-amber-300 text-amber-700 hover:bg-amber-200'
-                            : 'bg-gray-100 border-gray-300 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                            ? 'text-amber-700 hover:text-amber-800'
+                            : 'text-gray-500 hover:text-gray-700'
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        title={dossier?.isPinned ? 'Retirer l’épingle' : 'Épingler ce dossier'}
+                        title={
+                          !canManagePinnedDossiers
+                            ? 'Action réservée aux administrateurs'
+                            : dossier?.isPinned
+                            ? 'Retirer l’épingle'
+                            : 'Épingler ce dossier'
+                        }
                         aria-label={dossier?.isPinned ? 'Retirer l’épingle' : 'Épingler ce dossier'}
+                        aria-pressed={Boolean(dossier?.isPinned)}
+                        aria-busy={pinningDossierId === String(dossier._id || dossier.id)}
                       >
-                        {pinningDossierId === String(dossier._id || dossier.id) ? '…' : '📌'}
+                        {pinningDossierId === String(dossier._id || dossier.id) ? (
+                          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        ) : (
+                          <span className="text-sm sm:text-base leading-none">📌</span>
+                        )}
                       </button>
                       {/* En-tête de la carte : vue admin très compacte, infos essentielles sur toute la largeur */}
                       <div className="flex flex-col gap-2 mb-2">
@@ -2810,9 +2857,6 @@ export default function AdminDossiersPage() {
                             >
                               Montant :{' '}
                               {formatTarifMontantFr(normalizeMontantTarifField(dossier.montantTarificationFixe))} EUR
-                              {dossier.montantTarificationFixeAt
-                                ? ` · ${new Date(dossier.montantTarificationFixeAt).toLocaleDateString('fr-FR')}`
-                                : ''}
                             </span>
                           ) : dossier.formuleTarifaire ? (
                             <span
@@ -2892,7 +2936,7 @@ export default function AdminDossiersPage() {
                           onClick={(e) => e.stopPropagation()}
                           className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors"
                         >
-                          Voir les détails
+                          Détails
                         </Link>
                         <button
                           type="button"
