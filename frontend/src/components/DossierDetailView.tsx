@@ -90,7 +90,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
   const { mainDescription, specificFields } = parseDescription(dossier.description || '');
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       {/* Icône PDF avec actions — responsive: stack sur mobile */}
       <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border-2 border-dashed border-primary/30">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -133,13 +133,13 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
 
       {/* Formule tarifaire — visible uniquement côté admin (masquée pour client et partenaire) */}
       {variant === 'admin' && (
-        <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50/80 p-4 sm:p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide mb-2">
+        <div className="min-w-0 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50/80 p-4 sm:p-5 shadow-sm">
+          <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide mb-2 break-words">
             Tarification (interne)
           </h3>
           {dossier.formuleTarifaire ? (
-            <div className="space-y-1">
-              <p className="text-base font-semibold text-gray-900">
+            <div className="min-w-0 space-y-1">
+              <p className="text-base font-semibold text-gray-900 break-words">
                 Formule choisie par le client :{' '}
                 <span className="text-orange-700">
                   {dossier.formuleTarifaire === 'premium' ? 'Premium' : 'Standard'}
@@ -152,7 +152,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
               )}
             </div>
           ) : (
-            <p className="text-sm text-amber-900/90">
+            <p className="break-words text-sm text-amber-900/90">
               Aucune formule sélectionnée par le client pour l’instant. Une relance peut être envoyée lorsque le dossier passe en « En cours ».
             </p>
           )}

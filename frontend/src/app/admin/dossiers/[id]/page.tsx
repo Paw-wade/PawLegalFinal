@@ -505,17 +505,17 @@ export default function AdminDossierDetailPage() {
                     ]);
                     input.value = '';
                   }}
-                  className="flex gap-2"
+                  className="flex flex-col gap-2 sm:flex-row sm:items-center"
                 >
                   <input
                     type="text"
                     name="newStep"
                     placeholder="Ex : Préparation du recours CNDA"
-                    className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500/60 focus:border-orange-400"
+                    className="min-w-0 flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500/60 focus:border-orange-400"
                   />
                   <button
                     type="submit"
-                    className="px-3 py-1.5 text-xs font-medium rounded-md bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+                    className="w-full shrink-0 px-3 py-1.5 text-xs font-medium rounded-md bg-orange-500 text-white hover:bg-orange-600 transition-colors sm:w-auto"
                   >
                     Ajouter
                   </button>
@@ -617,7 +617,7 @@ export default function AdminDossierDetailPage() {
         </div>
       )}
 
-      <main className="w-full max-w-[100vw] px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
+      <div className="w-full max-w-[100vw] min-w-0 px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
         {/* Bannière visible : accès document en préparation accordé (pour cohérence affichage) */}
         {(() => {
           const draftAccessNotifs = (notifications || []).filter((n: any) => n.type === 'draft_access_granted' && !n.lu);
@@ -651,7 +651,7 @@ export default function AdminDossierDetailPage() {
 
         {/* En-tête amélioré */}
         <div className="mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between mb-4">
             <Link href={`/admin/dossiers?dossierId=${encodeURIComponent(dossier._id || dossier.id || '')}`} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -780,49 +780,79 @@ export default function AdminDossierDetailPage() {
                   )}
                 </div>
                 {dossier.description && (
-                  <p className="text-muted-foreground text-sm mb-3">{dossier.description}</p>
+                  <p className="text-muted-foreground text-sm mb-3 break-words">{dossier.description}</p>
                 )}
                 
                 {/* Barre de progression basée sur les étapes définies pour ce dossier */}
                 {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (
-                  <div className="mb-4 pb-4 border-b border-gray-200 overflow-x-auto">
+                  <div className="mb-4 pb-4 border-b border-gray-200">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs font-semibold text-muted-foreground">Étapes définies pour ce dossier</p>
                     </div>
-                    <div className="flex items-center gap-4 min-w-max">
+                    {/* Mobile : liste empilée (évite superposition et min-w-max) */}
+                    <ul className="sm:hidden space-y-2">
                       {dossier.etapesSupplementaires.map((step: any, index: number) => {
                         const isCurrent =
                           dossier.statut &&
                           (dossier.statut === step.id || dossier.statut === step.label);
                         return (
-                          <div key={step.id || index} className="flex items-center gap-2 flex-shrink-0">
-                            <div className="flex flex-col items-center gap-1">
-                              <span
-                                className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                  isCurrent
-                                    ? 'bg-blue-500 ring-2 ring-blue-300'
-                                    : 'bg-gray-300'
-                                }`}
-                              ></span>
-                              <span
-                                className={`text-[10px] font-medium whitespace-nowrap ${
-                                  isCurrent ? 'text-blue-700' : 'text-gray-500'
-                                }`}
-                              >
+                          <li
+                            key={step.id || index}
+                            className="flex gap-3 rounded-lg border border-gray-100 bg-gray-50/90 px-3 py-2.5 text-sm"
+                          >
+                            <span
+                              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                                isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' : 'bg-gray-300'
+                              }`}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <span className={`font-medium leading-snug ${isCurrent ? 'text-blue-800' : 'text-gray-700'}`}>
                                 {step.label}
                               </span>
                               {step.date && (
-                                <span className="text-[9px] text-gray-400 whitespace-nowrap">
+                                <span className="mt-1 block text-[11px] text-gray-500">
                                   ⏰ {new Date(step.date).toLocaleDateString('fr-FR')}
                                 </span>
                               )}
                             </div>
-                            {index < dossier.etapesSupplementaires.length - 1 && (
-                              <div className="h-0.5 w-6 flex-shrink-0 bg-gray-300"></div>
-                            )}
-                          </div>
+                          </li>
                         );
                       })}
+                    </ul>
+                    <div className="hidden sm:block overflow-x-auto -mx-1 px-1">
+                      <div className="flex items-center gap-4 min-w-max pb-1">
+                        {dossier.etapesSupplementaires.map((step: any, index: number) => {
+                          const isCurrent =
+                            dossier.statut &&
+                            (dossier.statut === step.id || dossier.statut === step.label);
+                          return (
+                            <div key={step.id || index} className="flex items-center gap-2 shrink-0">
+                              <div className="flex max-w-[9rem] flex-col items-center gap-1">
+                                <span
+                                  className={`h-3 w-3 shrink-0 rounded-full ${
+                                    isCurrent ? 'bg-blue-500 ring-2 ring-blue-300' : 'bg-gray-300'
+                                  }`}
+                                ></span>
+                                <span
+                                  className={`text-center text-[10px] font-medium leading-tight text-balance ${
+                                    isCurrent ? 'text-blue-700' : 'text-gray-500'
+                                  }`}
+                                >
+                                  {step.label}
+                                </span>
+                                {step.date && (
+                                  <span className="text-[9px] text-gray-400">
+                                    ⏰ {new Date(step.date).toLocaleDateString('fr-FR')}
+                                  </span>
+                                )}
+                              </div>
+                              {index < dossier.etapesSupplementaires.length - 1 && (
+                                <div className="h-0.5 w-6 shrink-0 bg-gray-300"></div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -844,7 +874,10 @@ export default function AdminDossierDetailPage() {
                         📤 Dossier transmis
                       </span>
                       {dossier.transmittedTo.map((trans: any, idx: number) => (
-                        <span key={idx} className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-purple-100 text-purple-800 border border-purple-300">
+                        <span
+                          key={idx}
+                          className="inline-block max-w-full break-words rounded-lg border border-purple-300 bg-purple-100 px-3 py-1.5 text-sm font-semibold text-purple-800"
+                        >
                           {trans.quality || 'Professionnel'}: {trans.user?.firstName} {trans.user?.lastName}
                           {trans.user?.organisationName && ` (${trans.user.organisationName})`}
                         </span>
@@ -869,8 +902,8 @@ export default function AdminDossierDetailPage() {
             {dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
               <div className="bg-purple-50 border-l-4 border-purple-500 p-4 rounded-r-lg mb-4">
                 <div className="flex items-start gap-3">
-                  <span className="text-purple-600 text-xl">📤</span>
-                  <div className="flex-1">
+                  <span className="text-purple-600 text-xl shrink-0">📤</span>
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-purple-900 mb-2">Dossier transmis</p>
                     <div className="space-y-2">
                       {dossier.transmittedTo.map((trans: any, idx: number) => (
@@ -942,12 +975,12 @@ export default function AdminDossierDetailPage() {
         )}
 
         {/* Informations complètes du dossier - Section visible */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4">📋 Informations Complètes du Dossier</h2>
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
+          <h2 className="text-xl font-bold mb-4 break-words">📋 Informations Complètes du Dossier</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
             <div>
               <p className="text-sm text-muted-foreground font-semibold">Numéro de dossier</p>
-              <p className="font-bold text-lg text-primary">{dossier.numero || dossier._id}</p>
+              <p className="font-bold text-lg text-primary break-all sm:break-normal">{dossier.numero || dossier._id}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground font-semibold">Titre</p>
@@ -1026,7 +1059,7 @@ export default function AdminDossierDetailPage() {
               </div>
             )}
             {dossier.teamMembers && dossier.teamMembers.length > 0 && (
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2 min-w-0">
                 <p className="text-sm text-muted-foreground font-semibold mb-2">Membres de l'équipe</p>
                 <div className="flex flex-wrap gap-2">
                   {dossier.teamMembers.map((member: any, idx: number) => (
@@ -1042,7 +1075,7 @@ export default function AdminDossierDetailPage() {
         </div>
 
         {/* Coordonnées client complètes */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-4 border-b border-gray-100">
             {dossier.user ? (
               <div className="flex items-center gap-4 min-w-0">
@@ -1058,8 +1091,8 @@ export default function AdminDossierDetailPage() {
                   />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="text-xl font-bold">👤 Coordonnées Client</h2>
-                  <p className="text-sm text-muted-foreground truncate">
+                  <h2 className="text-xl font-bold break-words">👤 Coordonnées Client</h2>
+                  <p className="text-sm text-muted-foreground break-words">
                     {strictPrivacyMode
                       ? 'Titulaire masqué'
                       : ([dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email)}
@@ -1169,9 +1202,9 @@ export default function AdminDossierDetailPage() {
                 </div>
               )}
               {dossier.user.adressePostale && (
-                <div className="col-span-2">
+                <div className="col-span-1 sm:col-span-2 min-w-0">
                   <p className="text-sm text-muted-foreground font-semibold">Adresse postale</p>
-                  <p className="font-medium">{dossier.user.adressePostale}</p>
+                  <p className="font-medium break-words">{dossier.user.adressePostale}</p>
                 </div>
               )}
               {dossier.user.ville && (
@@ -1211,8 +1244,8 @@ export default function AdminDossierDetailPage() {
                 <p className="text-sm text-muted-foreground font-semibold">Téléphone</p>
                 <p className="font-medium">{maskStrict(dossier.clientTelephone || '', 'N/A')}</p>
               </div>
-              <div className="col-span-2">
-                <p className="text-sm text-orange-600 font-semibold">⚠️ Client non inscrit</p>
+              <div className="col-span-1 sm:col-span-2 min-w-0">
+                <p className="text-sm text-orange-600 font-semibold break-words">⚠️ Client non inscrit</p>
                 <p className="text-sm text-muted-foreground">
                   Les informations complètes ne sont disponibles que pour les clients inscrits
                 </p>
@@ -1244,8 +1277,8 @@ export default function AdminDossierDetailPage() {
 
         {/* Rendez-vous associés */}
         {dossier.rendezVous && dossier.rendezVous.length > 0 && (
-          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
-            <h2 className="text-xl font-bold mb-4">📅 Rendez-vous Associés ({dossier.rendezVous.length})</h2>
+          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
+            <h2 className="text-xl font-bold mb-4 break-words">📅 Rendez-vous Associés ({dossier.rendezVous.length})</h2>
             <div className="space-y-3">
               {dossier.rendezVous.map((rdv: any, index: number) => (
                 <div key={index} className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
@@ -1267,9 +1300,9 @@ export default function AdminDossierDetailPage() {
                       </div>
                     )}
                     {rdv.motif && (
-                      <div className="col-span-2">
+                      <div className="col-span-1 sm:col-span-2 min-w-0">
                         <p className="text-sm text-muted-foreground font-semibold">Motif</p>
-                        <p className="font-medium">{rdv.motif}</p>
+                        <p className="font-medium break-words">{rdv.motif}</p>
                       </div>
                     )}
                     {rdv.statut && (
@@ -1287,8 +1320,8 @@ export default function AdminDossierDetailPage() {
 
         {/* Notes administratives */}
         {dossier.notes && (
-          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
-            <h2 className="text-xl font-bold mb-4">📝 Notes Administratives</h2>
+          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
+            <h2 className="text-xl font-bold mb-4 break-words">📝 Notes Administratives</h2>
             <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
               <p className="whitespace-pre-wrap text-foreground">{dossier.notes}</p>
             </div>
@@ -1297,8 +1330,8 @@ export default function AdminDossierDetailPage() {
 
         {/* Motif de refus */}
         {dossier.motifRefus && (
-          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
-            <h2 className="text-xl font-bold mb-4 text-red-600">❌ Motif de Refus</h2>
+          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
+            <h2 className="text-xl font-bold mb-4 break-words text-red-600">❌ Motif de Refus</h2>
             <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-lg">
               <p className="whitespace-pre-wrap text-foreground">{dossier.motifRefus}</p>
             </div>
@@ -1308,8 +1341,8 @@ export default function AdminDossierDetailPage() {
         {/* Sections supplémentaires */}
         <div className="grid md:grid-cols-2 gap-6 mb-6">
           {/* Documents demandés */}
-          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
-            <h2 className="text-xl font-bold mb-4">📄 Documents demandés</h2>
+          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 min-w-0">
+            <h2 className="text-xl font-bold mb-4 break-words">📄 Documents demandés</h2>
             {isLoadingRequests ? (
               <p className="text-sm text-muted-foreground">Chargement...</p>
             ) : documentRequests.length === 0 ? (
@@ -1325,11 +1358,11 @@ export default function AdminDossierDetailPage() {
                         : 'bg-blue-50 border-blue-500'
                     }`}
                   >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                    <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
                           <span className="text-lg">{request.isUrgent ? '🔴' : '📄'}</span>
-                          <h3 className="font-semibold text-base">
+                          <h3 className="font-semibold text-base break-words">
                             {request.documentTypeLabel}
                           </h3>
                           {request.isUrgent && (
@@ -1339,7 +1372,7 @@ export default function AdminDossierDetailPage() {
                           )}
                         </div>
                         {request.message && (
-                          <p className="text-sm text-muted-foreground mt-1">{request.message}</p>
+                          <p className="text-sm text-muted-foreground mt-1 break-words">{request.message}</p>
                         )}
                         <p className="text-xs text-muted-foreground mt-2">
                           Demandé le {new Date(request.createdAt).toLocaleDateString('fr-FR', {
@@ -1394,9 +1427,9 @@ export default function AdminDossierDetailPage() {
           </div>
 
           {/* Documents du dossier */}
-          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 min-w-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-              <h2 className="text-xl font-bold">📁 Documents du dossier</h2>
+              <h2 className="text-xl font-bold break-words">📁 Documents du dossier</h2>
               <Button
                 variant="outline"
                 className="text-xs h-8 w-full sm:w-auto"
@@ -1469,8 +1502,8 @@ export default function AdminDossierDetailPage() {
         <DossierDraftsPanel dossierId={dossier._id || (dossier as any).id} />
 
         {/* Messages du dossier */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
-          <h2 className="text-xl font-bold mb-4">💬 Messagerie du dossier</h2>
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
+          <h2 className="text-xl font-bold mb-4 break-words">💬 Messagerie du dossier</h2>
           {isLoadingMessages ? (
             <p className="text-sm text-muted-foreground">Chargement des messages...</p>
           ) : messagesError ? (
@@ -1486,9 +1519,9 @@ export default function AdminDossierDetailPage() {
                   key={msg._id || msg.id}
                   className="border border-gray-100 rounded-lg px-4 py-3"
                 >
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <p className="font-semibold text-sm">{msg.sujet}</p>
-                    <span className="text-[11px] text-muted-foreground flex-shrink-0">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2 mb-1">
+                    <p className="font-semibold text-sm break-words min-w-0">{msg.sujet}</p>
+                    <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap sm:whitespace-normal sm:text-right">
                       {new Date(msg.createdAt).toLocaleDateString('fr-FR', {
                         year: 'numeric',
                         month: 'short',
@@ -1511,8 +1544,8 @@ export default function AdminDossierDetailPage() {
         </div>
 
         {/* Notifications du dossier */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
-          <h2 className="text-xl font-bold mb-4">🔔 Notifications</h2>
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 min-w-0">
+          <h2 className="text-xl font-bold mb-4 break-words">🔔 Notifications</h2>
           {notifications.length === 0 ? (
             <p className="text-sm text-muted-foreground">Aucune notification pour ce dossier</p>
           ) : (
@@ -1522,9 +1555,9 @@ export default function AdminDossierDetailPage() {
                   key={notif._id || notif.id}
                   className="border border-gray-100 rounded-lg px-4 py-3"
                 >
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <p className="font-semibold text-sm">{notif.titre || notif.title}</p>
-                    <span className="text-[11px] text-muted-foreground flex-shrink-0">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2 mb-1">
+                    <p className="font-semibold text-sm break-words min-w-0">{notif.titre || notif.title}</p>
+                    <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap sm:whitespace-normal sm:text-right">
                       {new Date(notif.createdAt).toLocaleDateString('fr-FR', {
                         year: 'numeric',
                         month: 'short',
@@ -1532,7 +1565,7 @@ export default function AdminDossierDetailPage() {
                       })}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground break-words">
                     {notif.message || notif.content}
                   </p>
                 </div>
@@ -1545,7 +1578,7 @@ export default function AdminDossierDetailPage() {
             </div>
           )}
         </div>
-      </main>
+      </div>
 
       {/* Modal de demande de document */}
       <DocumentRequestNotificationModal

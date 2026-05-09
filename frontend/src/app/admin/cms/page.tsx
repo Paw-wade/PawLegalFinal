@@ -177,21 +177,19 @@ export default function AdminCmsPage() {
   ).sort();
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="w-full px-4 py-8">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              CMS de contenu
-            </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Gérez les textes affichés sur le site (par page, section et clé).
-            </p>
-          </div>
+    <div className="min-h-screen min-w-0 max-w-[100vw] overflow-x-hidden bg-background">
+      <main className="mx-auto min-w-0 max-w-7xl px-3 py-6 sm:px-4 sm:py-8">
+        <div className="mb-6 flex min-w-0 flex-col gap-1">
+          <h1 className="break-words text-xl font-bold text-gray-900 sm:text-2xl">
+            CMS de contenu
+          </h1>
+          <p className="break-words text-sm text-gray-500">
+            Gérez les textes affichés sur le site (par page, section et clé).
+          </p>
         </div>
 
         {error && (
-          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          <div className="mb-4 break-words rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:px-4">
             {error}
           </div>
         )}
@@ -256,12 +254,12 @@ export default function AdminCmsPage() {
               ))}
             </select>
           </div>
-          <div className="flex items-end justify-end">
+          <div className="flex items-end md:justify-end">
             <button
               type="button"
               onClick={loadEntries}
               disabled={loading}
-              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 disabled:opacity-50 md:min-h-0 md:w-auto"
             >
               {loading ? 'Chargement...' : 'Actualiser'}
             </button>
@@ -273,8 +271,10 @@ export default function AdminCmsPage() {
           <h2 className="mb-2 text-sm font-semibold text-gray-800">
             Ajouter un nouveau texte
           </h2>
-          <p className="mb-4 text-xs text-gray-500">
-            Utilisez des clés structurées (ex : <code>home.hero.title</code>).
+          <p className="mb-4 break-words text-xs text-gray-500">
+            Utilisez des clés structurées (ex :{' '}
+            <code className="break-all rounded bg-gray-100 px-1">home.hero.title</code>
+            ).
           </p>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <div className="md:col-span-2">
@@ -323,12 +323,12 @@ export default function AdminCmsPage() {
               />
             </div>
           </div>
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 flex justify-stretch sm:justify-end">
             <button
               type="button"
               onClick={createEntry}
               disabled={creating}
-              className="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+              className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50 sm:min-h-0 sm:w-auto"
             >
               {creating ? 'Enregistrement...' : 'Ajouter'}
             </button>
@@ -336,29 +336,29 @@ export default function AdminCmsPage() {
         </div>
 
         {/* Tableau des entrées */}
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
+        <div className="min-w-0 max-w-full overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+          <table className="w-full min-w-[720px] table-fixed divide-y divide-gray-200 sm:min-w-[920px]">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                <th className="w-[18%] px-2 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500 sm:px-4">
                   Clé
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                <th className="w-[28%] px-2 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500 sm:px-4">
                   Texte
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                <th className="w-[12%] px-2 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500 sm:px-4">
                   Page / Section
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                <th className="w-[9%] px-2 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500 sm:px-4">
                   Statut
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-                  Version
+                <th className="w-[6%] px-2 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500 sm:px-4">
+                  Ver.
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                <th className="w-[14%] px-2 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500 sm:px-4">
                   Modifié par
                 </th>
-                <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-gray-500">
+                <th className="w-[15%] px-2 py-2 text-right text-xs font-medium uppercase tracking-wide text-gray-500 sm:px-4">
                   Actions
                 </th>
               </tr>
@@ -381,33 +381,33 @@ export default function AdminCmsPage() {
                 const isEditing = editingEntry?._id === entry._id;
                 return (
                   <tr key={entry._id}>
-                    <td className="px-4 py-3 text-sm font-mono text-gray-900">
+                    <td className="min-w-0 max-w-0 px-2 py-3 align-top text-xs font-mono text-gray-900 break-all sm:px-4 sm:text-sm">
                       {entry.key}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-800">
+                    <td className="min-w-0 max-w-0 px-2 py-3 align-top text-sm text-gray-800 sm:px-4">
                       {isEditing ? (
                         <textarea
-                          className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+                          className="max-w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
                           rows={3}
                           value={editValue}
                           onChange={(e) => setEditValue(e.target.value)}
                         />
                       ) : (
-                        <div className="line-clamp-3 whitespace-pre-line">
+                        <div className="line-clamp-3 whitespace-pre-line break-words [overflow-wrap:anywhere]">
                           {entry.value}
                         </div>
                       )}
                       {isEditing && (
                         <>
                           <textarea
-                            className="mt-2 w-full rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+                            className="mt-2 max-w-full min-w-0 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
                             rows={2}
                             placeholder="Description interne (optionnelle)"
                             value={editDescription}
                             onChange={(e) => setEditDescription(e.target.value)}
                           />
                           <select
-                            className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+                            className="mt-2 max-w-full min-w-0 rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
                             value={editStatus}
                             onChange={(e) => setEditStatus(e.target.value as 'draft' | 'published' | 'archived')}
                           >
@@ -418,13 +418,13 @@ export default function AdminCmsPage() {
                         </>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600">
-                      <div>{entry.page || '-'}</div>
-                      <div className="text-[11px] text-gray-400">
+                    <td className="min-w-0 max-w-0 px-2 py-3 align-top text-xs text-gray-600 sm:px-4">
+                      <div className="break-words">{entry.page || '-'}</div>
+                      <div className="text-[11px] text-gray-400 break-words">
                         {entry.section || ''}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-xs">
+                    <td className="min-w-0 px-2 py-3 align-top text-xs sm:px-4">
                       {(() => {
                         const status = entry.status || 'draft';
                         const statusColors = {
@@ -438,20 +438,25 @@ export default function AdminCmsPage() {
                           archived: 'Archivé',
                         };
                         return (
-                          <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${statusColors[status]}`}>
+                          <span
+                            className={`inline-flex max-w-full rounded-full px-2 py-1 text-[10px] font-semibold leading-tight break-words sm:text-xs ${statusColors[status]}`}
+                          >
                             {statusLabels[status]}
                           </span>
                         );
                       })()}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600">
+                    <td className="min-w-0 px-2 py-3 align-top text-xs text-gray-600 sm:px-4">
                       v{entry.version}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600">
-                      {entry.updatedBy 
-                        ? `${entry.updatedBy.firstName || ''} ${entry.updatedBy.lastName || ''}`.trim() || entry.updatedBy.email
-                        : '-'}
-                      <div className="text-[10px] text-gray-400 mt-1">
+                    <td className="min-w-0 max-w-0 px-2 py-3 align-top text-xs text-gray-600 sm:px-4">
+                      <div className="break-words">
+                        {entry.updatedBy
+                          ? `${entry.updatedBy.firstName || ''} ${entry.updatedBy.lastName || ''}`.trim() ||
+                            entry.updatedBy.email
+                          : '-'}
+                      </div>
+                      <div className="mt-1 text-[10px] text-gray-400 break-words">
                         {new Date(entry.updatedAt).toLocaleDateString('fr-FR', {
                           day: '2-digit',
                           month: '2-digit',
@@ -461,39 +466,39 @@ export default function AdminCmsPage() {
                         })}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right text-xs">
+                    <td className="min-w-0 px-2 py-3 text-right align-top text-xs sm:px-4">
                       {isEditing ? (
-                        <div className="inline-flex gap-2">
+                        <div className="flex flex-col items-stretch gap-2 sm:inline-flex sm:flex-row sm:items-center sm:justify-end">
                           <button
                             type="button"
                             onClick={saveEdit}
                             disabled={isSaving}
-                            className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                            className="min-h-[40px] rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:min-h-0 sm:py-1"
                           >
                             {isSaving ? 'Enregistrement...' : 'Enregistrer'}
                           </button>
                           <button
                             type="button"
                             onClick={cancelEdit}
-                            className="rounded-md bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                            className="min-h-[40px] rounded-md bg-gray-100 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 sm:min-h-0 sm:py-1"
                           >
                             Annuler
                           </button>
                         </div>
                       ) : (
-                        <div className="flex flex-col gap-1 items-end">
-                          <div className="flex gap-1">
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="flex max-w-full flex-wrap justify-end gap-1">
                             <button
                               type="button"
                               onClick={() => startEdit(entry)}
-                              className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20"
+                              className="min-h-[36px] rounded-md bg-primary/10 px-2 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 sm:min-h-0 sm:py-1"
                             >
                               Modifier
                             </button>
                             <button
                               type="button"
                               onClick={() => setPreviewEntry(entry)}
-                              className="rounded-md bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-200"
+                              className="min-h-[36px] rounded-md bg-blue-100 px-2 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-200 sm:min-h-0 sm:py-1"
                             >
                               Prévisualiser
                             </button>
@@ -510,12 +515,12 @@ export default function AdminCmsPage() {
                                   setError('Erreur lors du chargement de l\'historique');
                                 }
                               }}
-                              className="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                              className="min-h-[36px] rounded-md bg-gray-100 px-2 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200 sm:min-h-0 sm:py-1"
                             >
                               Historique
                             </button>
                           </div>
-                          <div className="flex gap-1 mt-1">
+                          <div className="mt-1 flex max-w-full flex-wrap justify-end gap-1">
                             {entry.status === 'published' ? (
                               <button
                                 type="button"
@@ -528,7 +533,7 @@ export default function AdminCmsPage() {
                                     setError(e?.response?.data?.message || 'Erreur lors de la dépublication');
                                   }
                                 }}
-                                className="rounded-md bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-200"
+                                className="min-h-[36px] rounded-md bg-orange-100 px-2 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-200 sm:min-h-0 sm:py-1"
                               >
                                 Dépublier
                               </button>
@@ -544,7 +549,7 @@ export default function AdminCmsPage() {
                                     setError(e?.response?.data?.message || 'Erreur lors de la publication');
                                   }
                                 }}
-                                className="rounded-md bg-green-100 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-200"
+                                className="min-h-[36px] rounded-md bg-green-100 px-2 py-1.5 text-xs font-medium text-green-700 hover:bg-green-200 sm:min-h-0 sm:py-1"
                               >
                                 Publier
                               </button>
@@ -562,7 +567,7 @@ export default function AdminCmsPage() {
                                   }
                                 }
                               }}
-                              className="rounded-md bg-red-100 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-200"
+                              className="min-h-[36px] rounded-md bg-red-100 px-2 py-1.5 text-xs font-medium text-red-700 hover:bg-red-200 sm:min-h-0 sm:py-1"
                             >
                               Archiver
                             </button>
@@ -579,49 +584,66 @@ export default function AdminCmsPage() {
 
         {/* Modal de prévisualisation */}
         {previewEntry && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-                <h2 className="text-2xl font-bold">Prévisualisation du contenu</h2>
+          <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-3 sm:items-center sm:p-4">
+            <div className="mb-[max(env(safe-area-inset-bottom),0.75rem)] min-w-0 w-full max-w-3xl max-h-[min(92dvh,920px)] overflow-y-auto rounded-xl bg-white shadow-2xl sm:mb-0">
+              <div className="sticky top-0 z-10 flex items-start gap-3 border-b bg-white px-4 py-3 sm:items-center sm:px-6 sm:py-4">
+                <h2 className="min-w-0 flex-1 break-words pr-2 text-lg font-bold sm:text-2xl">
+                  Prévisualisation du contenu
+                </h2>
                 <button
+                  type="button"
                   onClick={() => setPreviewEntry(null)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                  className="shrink-0 text-2xl leading-none text-gray-400 hover:text-gray-600"
+                  aria-label="Fermer"
                 >
                   ×
                 </button>
               </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Clé</p>
-                  <p className="text-sm font-mono text-gray-900">{previewEntry.key}</p>
+              <div className="min-w-0 space-y-4 p-4 sm:p-6">
+                <div className="min-w-0">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Clé</p>
+                  <p className="break-all text-sm font-mono text-gray-900">{previewEntry.key}</p>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Page / Section</p>
-                  <p className="text-sm text-gray-900">
+                <div className="min-w-0">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Page / Section
+                  </p>
+                  <p className="break-words text-sm text-gray-900">
                     {previewEntry.page || '-'} / {previewEntry.section || '-'}
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Statut</p>
-                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                    previewEntry.status === 'published' ? 'bg-green-100 text-green-800' :
-                    previewEntry.status === 'draft' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {previewEntry.status === 'published' ? 'Publié' :
-                     previewEntry.status === 'draft' ? 'Brouillon' : 'Archivé'}
+                <div className="min-w-0">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Statut</p>
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                      previewEntry.status === 'published'
+                        ? 'bg-green-100 text-green-800'
+                        : previewEntry.status === 'draft'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    {previewEntry.status === 'published'
+                      ? 'Publié'
+                      : previewEntry.status === 'draft'
+                        ? 'Brouillon'
+                        : 'Archivé'}
                   </span>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Contenu</p>
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <p className="text-base text-gray-900 whitespace-pre-wrap">{previewEntry.value}</p>
+                <div className="min-w-0">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Contenu</p>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 sm:p-4">
+                    <p className="break-words text-base whitespace-pre-wrap text-gray-900 [overflow-wrap:anywhere]">
+                      {previewEntry.value}
+                    </p>
                   </div>
                 </div>
                 {previewEntry.description && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Description</p>
-                    <p className="text-sm text-gray-600">{previewEntry.description}</p>
+                  <div className="min-w-0">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Description
+                    </p>
+                    <p className="break-words text-sm text-gray-600">{previewEntry.description}</p>
                   </div>
                 )}
               </div>
@@ -631,20 +653,27 @@ export default function AdminCmsPage() {
 
         {/* Modal d'historique */}
         {historyEntry && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-                <h2 className="text-2xl font-bold">Historique des modifications</h2>
+          <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-3 sm:items-center sm:p-4">
+            <div className="mb-[max(env(safe-area-inset-bottom),0.75rem)] min-w-0 w-full max-w-4xl max-h-[min(92dvh,920px)] overflow-y-auto rounded-xl bg-white shadow-2xl sm:mb-0">
+              <div className="sticky top-0 z-10 flex items-start gap-3 border-b bg-white px-4 py-3 sm:items-center sm:px-6 sm:py-4">
+                <h2 className="min-w-0 flex-1 break-words pr-2 text-lg font-bold sm:text-2xl">
+                  Historique des modifications
+                </h2>
                 <button
+                  type="button"
                   onClick={() => setHistoryEntry(null)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                  className="shrink-0 text-2xl leading-none text-gray-400 hover:text-gray-600"
+                  aria-label="Fermer"
                 >
                   ×
                 </button>
               </div>
-              <div className="p-6">
-                <div className="mb-4">
-                  <p className="text-sm font-semibold text-gray-900 mb-1">Clé: <span className="font-mono">{historyEntry.key}</span></p>
+              <div className="min-w-0 p-4 sm:p-6">
+                <div className="mb-4 min-w-0">
+                  <p className="break-words text-sm font-semibold text-gray-900">
+                    Clé:{' '}
+                    <span className="break-all font-mono font-normal">{historyEntry.key}</span>
+                  </p>
                 </div>
                 {historyEntry.changeHistory && historyEntry.changeHistory.length > 0 ? (
                   <div className="space-y-4">
@@ -652,44 +681,56 @@ export default function AdminCmsPage() {
                       .slice()
                       .reverse()
                       .map((change, index) => (
-                        <div key={index} className="border-l-4 border-blue-500 pl-4 py-2 bg-gray-50 rounded-r-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
+                        <div
+                          key={index}
+                          className="min-w-0 rounded-r-lg border-l-4 border-blue-500 bg-gray-50 py-2 pl-3 sm:pl-4"
+                        >
+                          <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
                               <span className="text-xs font-semibold text-gray-500">
                                 Version {change.version}
                               </span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                change.changeType === 'created' ? 'bg-green-100 text-green-800' :
-                                change.changeType === 'published' ? 'bg-blue-100 text-blue-800' :
-                                change.changeType === 'archived' ? 'bg-red-100 text-red-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {change.changeType === 'created' ? 'Créé' :
-                                 change.changeType === 'published' ? 'Publié' :
-                                 change.changeType === 'archived' ? 'Archivé' :
-                                 'Modifié'}
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-xs ${
+                                  change.changeType === 'created'
+                                    ? 'bg-green-100 text-green-800'
+                                    : change.changeType === 'published'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : change.changeType === 'archived'
+                                        ? 'bg-red-100 text-red-800'
+                                        : 'bg-gray-100 text-gray-800'
+                                }`}
+                              >
+                                {change.changeType === 'created'
+                                  ? 'Créé'
+                                  : change.changeType === 'published'
+                                    ? 'Publié'
+                                    : change.changeType === 'archived'
+                                      ? 'Archivé'
+                                      : 'Modifié'}
                               </span>
                             </div>
-                            <span className="text-xs text-gray-500">
+                            <span className="shrink-0 whitespace-nowrap text-xs text-gray-500 sm:ml-auto sm:text-right">
                               {new Date(change.updatedAt).toLocaleString('fr-FR')}
                             </span>
                           </div>
                           {change.updatedBy && (
-                            <p className="text-xs text-gray-600 mb-2">
-                              Par: {change.updatedBy.firstName || ''} {change.updatedBy.lastName || ''} ({change.updatedBy.email || 'N/A'})
+                            <p className="mb-2 break-words text-xs text-gray-600">
+                              Par: {change.updatedBy.firstName || ''} {change.updatedBy.lastName || ''} (
+                              {change.updatedBy.email || 'N/A'})
                             </p>
                           )}
-                          <div className="text-sm text-gray-700 whitespace-pre-wrap bg-white p-2 rounded border border-gray-200">
+                          <div className="break-words rounded border border-gray-200 bg-white p-2 text-sm whitespace-pre-wrap text-gray-700 [overflow-wrap:anywhere]">
                             {change.value}
                           </div>
                           {change.description && (
-                            <p className="text-xs text-gray-500 mt-1 italic">{change.description}</p>
+                            <p className="mt-1 break-words text-xs italic text-gray-500">{change.description}</p>
                           )}
                         </div>
                       ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 text-center py-8">Aucun historique disponible</p>
+                  <p className="py-8 text-center text-sm text-gray-500">Aucun historique disponible</p>
                 )}
               </div>
             </div>

@@ -484,23 +484,23 @@ function MessagesContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
-      <main className="w-full px-4 py-8">
+      <div className="min-w-0 max-w-[100vw] overflow-x-hidden w-full px-3 py-6 sm:px-4 sm:py-8">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+        <div className="mb-6 sm:mb-8">
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="mb-2 text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent sm:text-4xl">
                 Messagerie
               </h1>
               <p className="text-muted-foreground">Communiquez avec l'équipe administrative</p>
             </div>
-            <div className="flex flex-col gap-2 items-end">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground font-medium">Filtrer par dossier :</span>
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:max-w-md sm:flex-row sm:items-center">
+                <span className="shrink-0 text-sm font-medium text-muted-foreground">Filtrer par dossier :</span>
                 <select
                   value={selectedDossierId}
                   onChange={(e) => setSelectedDossierId(e.target.value)}
-                  className="px-4 py-2 border border-input rounded-lg text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 max-w-xs"
+                  className="w-full min-w-0 rounded-lg border border-input bg-background px-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 sm:max-w-xs"
                 >
                   <option value="">Tous les messages</option>
                   {dossiers.map((dossier) => (
@@ -516,7 +516,7 @@ function MessagesContent() {
                   setComposeDossierId('');
                   setShowComposeModal(true);
                 }}
-                className="shadow-md"
+                className="w-full shrink-0 shadow-md sm:w-auto"
               >
                 <span className="mr-2">✉️</span>
                 Nouveau message
@@ -635,7 +635,7 @@ function MessagesContent() {
 
         {/* Actions batch */}
         {selectedMessages.size > 0 && (
-          <div className="mb-4 p-4 bg-primary/10 border border-primary/20 rounded-lg shadow-sm flex items-center justify-between flex-wrap gap-4">
+          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/10 p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-primary">
                 {selectedMessages.size} message(s) sélectionné(s)
@@ -665,7 +665,7 @@ function MessagesContent() {
             <p className="text-muted-foreground">Chargement des messages...</p>
           </div>
         ) : messages.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-lg p-16 text-center border border-border">
+          <div className="rounded-xl border border-border bg-white p-8 text-center shadow-lg sm:p-16">
             <div className="text-6xl mb-6">📭</div>
             <p className="text-muted-foreground mb-6 text-lg">
               Aucun message {filter !== 'all' ? `(${filter})` : ''}
@@ -678,13 +678,13 @@ function MessagesContent() {
               <div key={dossierGroup.dossierId} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                 {/* En-tête du dossier */}
                     <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-6 py-4 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/20">
                         <span className="text-primary text-xl">📁</span>
                       </div>
-                      <div>
-                        <h2 className="text-lg font-bold text-foreground">
+                      <div className="min-w-0">
+                        <h2 className="break-words text-lg font-bold text-foreground">
                           {dossierGroup.dossierTitre || 'Hors dossier'}
                         </h2>
                         <p className="text-sm text-muted-foreground">
@@ -693,8 +693,8 @@ function MessagesContent() {
                       </div>
                     </div>
                     {dossierGroup.dossierId !== 'sans-dossier' && (
-                      <Link href={`/client/dossiers/${dossierGroup.dossierId}`}>
-                        <Button variant="outline" size="sm">
+                      <Link href={`/client/dossiers/${dossierGroup.dossierId}`} className="shrink-0 sm:self-start">
+                        <Button variant="outline" size="sm" className="w-full whitespace-normal sm:w-auto">
                           Voir le dossier →
                         </Button>
                       </Link>
@@ -784,19 +784,20 @@ function MessagesContent() {
                       : 'border-gray-300/80 bg-white'
                   } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
                 >
-                  <div className="p-6">
-                            <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
+                  <div className="p-4 sm:p-6">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-4">
+                              <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
                       {/* Checkbox */}
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleMessageSelection(messageId)}
                         onClick={(e) => e.stopPropagation()}
-                        className="mt-1.5 w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
+                        className="mt-1.5 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-primary focus:ring-primary"
                       />
 
                       {/* Avatar/Initiale avec gradient */}
-                      <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md ${
+                      <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white shadow-md ${
                         (isReceived && !isRead) 
                           ? 'bg-gradient-to-br from-primary to-primary/80' 
                           : 'bg-gradient-to-br from-gray-400 to-gray-500'
@@ -824,10 +825,10 @@ function MessagesContent() {
                         }}
                       >
                         {/* En-tête avec sujet et badges */}
-                        <div className="flex items-start justify-between gap-4 mb-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2 flex-wrap">
-                              <h3 className={`font-bold text-lg ${
+                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              <h3 className={`min-w-0 break-words text-base font-bold sm:text-lg ${
                                 isRead ? 'text-gray-700' : 'text-gray-900'
                               }`}>
                                 {message.sujet}
@@ -856,11 +857,11 @@ function MessagesContent() {
                             {/* Métadonnées détaillées */}
                             <div className="space-y-2 text-xs">
                               {/* Expéditeur/Destinataire */}
-                              <div className="flex items-start gap-2">
-                                <span className="text-muted-foreground font-medium min-w-[56px] sm:min-w-[70px]">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
+                                <span className="shrink-0 font-medium text-muted-foreground">
                                   {isReceived ? '📤 De' : '📥 À'}:
                                 </span>
-                                <span className="text-foreground font-semibold">
+                                <span className="min-w-0 font-semibold break-words text-foreground">
                                   {isReceived 
                                     ? expediteurName
                                     : '👥 Tous les administrateurs'
@@ -870,9 +871,9 @@ function MessagesContent() {
                               
                               {/* Copie */}
                               {copieList.length > 0 && (
-                                <div className="flex items-start gap-2">
-                                  <span className="text-muted-foreground font-medium min-w-[56px] sm:min-w-[70px]">📋 Copie:</span>
-                                  <span className="text-foreground break-words">{copieList.join(', ')}</span>
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
+                                  <span className="shrink-0 font-medium text-muted-foreground">📋 Copie:</span>
+                                  <span className="min-w-0 break-words text-foreground">{copieList.join(', ')}</span>
                                 </div>
                               )}
                               
@@ -901,14 +902,15 @@ function MessagesContent() {
                           </div>
                         </div>
                       </div>
+                              </div>
 
                       {/* Actions */}
-                            <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex w-full shrink-0 flex-row flex-wrap gap-2 sm:w-auto sm:flex-col sm:flex-nowrap sm:items-stretch" onClick={(e) => e.stopPropagation()}>
                         {isReceived && (
                           <Button
                             variant="outline"
                             size="sm"
-                                  className="w-full sm:w-auto"
+                                  className="min-h-[40px] w-full flex-1 sm:flex-none sm:w-auto"
                             onClick={() => {
                               setReplyData({
                                 sujet: `Re: ${message.sujet}`,
@@ -924,7 +926,7 @@ function MessagesContent() {
                         <Button
                           variant="outline"
                           size="sm"
-                                className="w-full sm:w-auto"
+                                className="min-h-[40px] w-full flex-1 sm:flex-none sm:w-auto"
                           onClick={async (e) => {
                             e.stopPropagation();
                             try {
@@ -948,7 +950,7 @@ function MessagesContent() {
                         <Button
                           variant="destructive"
                           size="sm"
-                                className="w-full sm:w-auto"
+                                className="min-h-[40px] w-full flex-1 sm:flex-none sm:w-auto"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteMessage(messageId);
@@ -956,8 +958,8 @@ function MessagesContent() {
                         >
                           🗑️ Supprimer
                         </Button>
-                        <Link href={`/client/messages/${messageId}`}>
-                          <Button variant="outline" size="sm" className="w-full">
+                        <Link href={`/client/messages/${messageId}`} className="min-w-0 flex-1 sm:flex-none sm:w-full">
+                          <Button variant="outline" size="sm" className="min-h-[40px] w-full">
                             Détails
                           </Button>
                         </Link>
@@ -977,8 +979,8 @@ function MessagesContent() {
         {showComposeModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                <h2 className="text-2xl font-bold">Nouveau message</h2>
+              <div className="sticky top-0 flex items-start justify-between gap-3 rounded-t-2xl border-b bg-white px-4 py-4 sm:items-center sm:px-6">
+                <h2 className="min-w-0 flex-1 break-words text-lg font-bold sm:text-2xl">Nouveau message</h2>
                 <button
                   type="button"
                   onClick={() => {
@@ -986,12 +988,12 @@ function MessagesContent() {
                     setComposeDossierId('');
                     setComposeDestinataireId('');
                   }}
-                  className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-3xl leading-none text-muted-foreground hover:bg-gray-100 hover:text-foreground transition-colors"
                 >
                   ×
                 </button>
               </div>
-              <form onSubmit={handleSendMessage} className="p-6 space-y-5">
+              <form onSubmit={handleSendMessage} className="space-y-5 p-4 sm:p-6">
                 <div>
                   <Label htmlFor="compose-dest">Destinataire (optionnel)</Label>
                   <p className="text-xs text-muted-foreground mb-2">
@@ -1112,12 +1114,12 @@ function MessagesContent() {
         {selectedMessage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                <h2 className="text-2xl font-bold">{selectedMessage.sujet}</h2>
-                <button onClick={() => setSelectedMessage(null)} className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">×</button>
+              <div className="sticky top-0 flex items-start justify-between gap-3 rounded-t-2xl border-b bg-white px-4 py-4 sm:items-center sm:px-6">
+                <h2 className="min-w-0 flex-1 break-words text-lg font-bold sm:text-2xl">{selectedMessage.sujet}</h2>
+                <button onClick={() => setSelectedMessage(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-3xl leading-none text-muted-foreground hover:bg-gray-100 hover:text-foreground transition-colors">×</button>
               </div>
-              <div className="p-6 space-y-5">
-                <div className="flex items-center justify-between mb-4">
+              <div className="space-y-5 p-4 sm:p-6">
+                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1159,18 +1161,18 @@ function MessagesContent() {
                     </Button>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
+                <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                  <div className="min-w-0">
                     <p className="text-muted-foreground mb-1">De</p>
-                    <p className="font-semibold">
+                    <p className="font-semibold break-words">
                       {selectedMessage.expediteur?.firstName} {selectedMessage.expediteur?.lastName} ({selectedMessage.expediteur?.email})
                     </p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-muted-foreground mb-1">Date</p>
-                    <p className="font-semibold">{formatDate(selectedMessage.createdAt)}</p>
+                    <p className="font-semibold break-words">{formatDate(selectedMessage.createdAt)}</p>
                   </div>
-                  <div className="col-span-2">
+                  <div className="min-w-0 sm:col-span-2">
                     <p className="text-muted-foreground mb-1">À</p>
                     <p className="font-semibold">
                       {selectedMessage.destinataires?.map((d: any) => 
@@ -1188,14 +1190,15 @@ function MessagesContent() {
                     <p className="text-muted-foreground mb-2 font-medium">Pièces jointes</p>
                     <div className="space-y-2">
                       {selectedMessage.piecesJointes.map((pj: any, index: number) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-border">
-                          <div className="flex items-center gap-2">
-                            <span>📎</span>
-                            <span className="text-sm">{pj.originalName}</span>
+                        <div key={index} className="flex flex-col gap-3 rounded-lg border border-border bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="shrink-0">📎</span>
+                            <span className="break-all text-sm">{pj.originalName}</span>
                           </div>
                           <Button
                             variant="outline"
                             size="sm"
+                            className="w-full shrink-0 sm:w-auto"
                             onClick={() => handleDownloadAttachment(selectedMessage._id || selectedMessage.id, index, pj.originalName)}
                           >
                             Télécharger
@@ -1214,20 +1217,20 @@ function MessagesContent() {
         {showReplyModal && selectedMessage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                <h2 className="text-2xl font-bold">Répondre</h2>
+              <div className="sticky top-0 flex items-start justify-between gap-3 rounded-t-2xl border-b bg-white px-4 py-4 sm:items-center sm:px-6">
+                <h2 className="min-w-0 flex-1 break-words text-lg font-bold sm:text-2xl">Répondre</h2>
                 <button 
                   onClick={() => {
                     setShowReplyModal(false);
                     setReplyData({ sujet: '', contenu: '' });
                     setReplyAttachments([]);
                   }} 
-                  className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-3xl leading-none text-muted-foreground hover:bg-gray-100 hover:text-foreground transition-colors"
                 >
                   ×
                 </button>
               </div>
-              <form onSubmit={handleReply} className="p-6 space-y-5">
+              <form onSubmit={handleReply} className="space-y-5 p-4 sm:p-6">
                 {/* Info automatique aux admins */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
@@ -1317,7 +1320,7 @@ function MessagesContent() {
             </div>
           </div>
         )}
-      </main>
+      </div>
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}

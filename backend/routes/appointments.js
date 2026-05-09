@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const RendezVous = require('../models/RendezVous');
+const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
+const { sendSMS, formatPhoneNumber } = require('../sendSMS');
 
 /** Libellés des motifs (formulaire public) — pour les notifications admin. */
 const MOTIF_RDV_LABELS = {
@@ -29,6 +31,14 @@ function getMotifRdvLabel(motifKey) {
 
 function normEmail(v) {
   return String(v || '').trim().toLowerCase();
+}
+
+/** Préférences de notification : réservées aux créations par un admin connecté */
+function parseInformFlag(v, defaultTrue = true) {
+  if (v === undefined || v === null || v === '') return defaultTrue;
+  if (v === false || v === 'false' || v === 0 || v === '0') return false;
+  if (v === true || v === 'true' || v === 1 || v === '1') return true;
+  return defaultTrue;
 }
 
 async function resolveRdvClientEmail(rendezVous) {
@@ -67,7 +77,7 @@ router.post(
     body('dossierId')
       .optional({ values: 'falsy' })
       .isMongoId()
-      .withMessage('Identifiant de dossier invalide')
+      .withMessage('Identifiant de dossier invalide'),
   ],
   async (req, res) => {
     try {
@@ -140,6 +150,13 @@ router.post(
         } catch (error) {
           // Si le token est invalide, on continue sans utilisateur (rendez-vous public)
         }
+      }
+
+      let informClient = parseInformFlag(req.body.informClient, true);
+      let informTeam = parseInformFlag(req.body.informTeam, true);
+      if (!requestingAdmin) {
+        informClient = true;
+        informTeam = true;
       }
 
       let linkedDossierId = null;
@@ -250,52 +267,53 @@ router.post(
       }
 
       // Notifier tous les administrateurs (superadmin + admins) d'une nouvelle demande de rendez-vous
-      try {
-        const Notification = require('../models/Notification');
-        const User = require('../models/User');
+      if (informTeam) {
+        try {
+          const User = require('../models/User');
 
-        const admins = await User.find({
-          role: { $in: ['admin', 'superadmin'] },
-          isActive: { $ne: false }
-        });
-
-        const dateLabel = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-
-        const motifLabel = getMotifRdvLabel(rendezVous.motif);
-        const descTrim = String(rendezVous.description || '').trim();
-        let message = `${prenom || ''} ${nom} (${email}) a demandé un rendez-vous le ${dateLabel} à ${heure}. Motif : ${motifLabel}.`;
-        if (descTrim) {
-          message += ` Précisions : ${descTrim}`;
-        }
-
-        for (const admin of admins) {
-          await Notification.create({
-            user: admin._id,
-            type: 'appointment_created',
-            titre: 'Nouveau rendez-vous demandé',
-            message,
-            lien: '/admin?section=appointments',
-            metadata: {
-              appointmentId: rendezVous._id.toString(),
-              userId: userId ? userId.toString() : null,
-              email,
-              telephone,
-              date: rendezVous.date,
-              heure: rendezVous.heure,
-              motif: rendezVous.motif,
-              motifLabel,
-              description: descTrim || undefined
-            }
+          const admins = await User.find({
+            role: { $in: ['admin', 'superadmin'] },
+            isActive: { $ne: false }
           });
-        }
 
-        console.log(`✅ Notifications de rendez-vous envoyées à ${admins.length} administrateur(s)`);
-      } catch (notifError) {
-        console.error('⚠️ Erreur lors de la création des notifications de rendez-vous (non bloquant):', notifError);
+          const dateLabel = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+
+          const motifLabel = getMotifRdvLabel(rendezVous.motif);
+          const descTrim = String(rendezVous.description || '').trim();
+          let message = `${prenom || ''} ${nom} (${email}) a demandé un rendez-vous le ${dateLabel} à ${heure}. Motif : ${motifLabel}.`;
+          if (descTrim) {
+            message += ` Précisions : ${descTrim}`;
+          }
+
+          for (const admin of admins) {
+            await Notification.create({
+              user: admin._id,
+              type: 'appointment_created',
+              titre: 'Nouveau rendez-vous demandé',
+              message,
+              lien: '/admin?section=appointments',
+              metadata: {
+                appointmentId: rendezVous._id.toString(),
+                userId: userId ? userId.toString() : null,
+                email,
+                telephone,
+                date: rendezVous.date,
+                heure: rendezVous.heure,
+                motif: rendezVous.motif,
+                motifLabel,
+                description: descTrim || undefined
+              }
+            });
+          }
+
+          console.log(`✅ Notifications de rendez-vous envoyées à ${admins.length} administrateur(s)`);
+        } catch (notifError) {
+          console.error('⚠️ Erreur lors de la création des notifications de rendez-vous (non bloquant):', notifError);
+        }
       }
 
       // Emails : demandeur + équipe (priorité email, pas de SMS)
@@ -308,7 +326,7 @@ router.post(
         });
         const motifLabelMail = getMotifRdvLabel(rendezVous.motif);
         // Évite un doublon avec le mail « RDV planifié » lorsque c’est l’admin qui réserve pour un client.
-        if (!(bookingByAdmin && userId)) {
+        if (!(bookingByAdmin && userId) && informClient) {
           await sendTransactionalEmail({
             to: email,
             toName: `${prenom || ''} ${nom}`.trim() || 'Client',
@@ -325,21 +343,34 @@ Notre équipe va examiner votre demande et vous adressera une confirmation, ou u
 
 Accès à votre espace : ${getPrimaryFrontendUrl()}`,
           });
+          // Créneau administrateur pour un contact sans compte : SMS +33 uniquement (pas de push sans userId).
+          if (requestingAdmin && telephone && String(telephone).trim() && String(telephone).trim() !== '—') {
+            try {
+              const formattedPhone = formatPhoneNumber(telephone);
+              if (formattedPhone && formattedPhone.startsWith('+33')) {
+                const smsBody = `Ada Papers: demande de RDV enregistrée (${dateLabelReq} à ${heure}). Vous recevrez une confirmation par e-mail. ${getPrimaryFrontendUrl()}`;
+                await sendSMS(formattedPhone, smsBody.slice(0, 480));
+              }
+            } catch (smsManErr) {
+              console.error('⚠️ SMS RDV création admin (sans compte client) — non bloquant:', smsManErr?.message || smsManErr);
+            }
+          }
         }
-        const adminsMail = await User.find({
-          role: { $in: ['admin', 'superadmin'] },
-          isActive: { $ne: false },
-        })
-          .select('email firstName')
-          .lean();
-        for (const adm of adminsMail) {
-          if (!adm.email) continue;
-          await sendTransactionalEmail({
-            to: adm.email,
-            toName: adm.firstName || '',
-            subject: `Nouvelle demande de RDV — ${prenom || ''} ${nom || ''}`.trim(),
-            htmlContent: `<p>Une nouvelle demande de rendez-vous a été soumise.</p><p><strong>Demandeur :</strong> ${escapeHtml(prenom)} ${escapeHtml(nom)}<br/><strong>E-mail :</strong> ${escapeHtml(email)}${telephone ? `<br/><strong>Téléphone :</strong> ${escapeHtml(telephone)}` : ''}</p><p><strong>Date/heure demandées :</strong> ${escapeHtml(dateLabelReq)} à ${escapeHtml(heure)}.</p><p><strong>Motif :</strong> ${escapeHtml(motifLabelMail)}.</p><p>Merci de traiter cette demande depuis l’espace d’administration.</p>`,
-            textContent: `Une nouvelle demande de rendez-vous a été soumise.
+        if (informTeam) {
+          const adminsMail = await User.find({
+            role: { $in: ['admin', 'superadmin'] },
+            isActive: { $ne: false },
+          })
+            .select('email firstName')
+            .lean();
+          for (const adm of adminsMail) {
+            if (!adm.email) continue;
+            await sendTransactionalEmail({
+              to: adm.email,
+              toName: adm.firstName || '',
+              subject: `Nouvelle demande de RDV — ${prenom || ''} ${nom || ''}`.trim(),
+              htmlContent: `<p>Une nouvelle demande de rendez-vous a été soumise.</p><p><strong>Demandeur :</strong> ${escapeHtml(prenom)} ${escapeHtml(nom)}<br/><strong>E-mail :</strong> ${escapeHtml(email)}${telephone ? `<br/><strong>Téléphone :</strong> ${escapeHtml(telephone)}` : ''}</p><p><strong>Date/heure demandées :</strong> ${escapeHtml(dateLabelReq)} à ${escapeHtml(heure)}.</p><p><strong>Motif :</strong> ${escapeHtml(motifLabelMail)}.</p><p>Merci de traiter cette demande depuis l’espace d’administration.</p>`,
+              textContent: `Une nouvelle demande de rendez-vous a été soumise.
 
 Demandeur : ${prenom} ${nom}
 E-mail : ${email}${telephone ? `\nTéléphone : ${telephone}` : ''}
@@ -347,27 +378,44 @@ Date/heure demandées : ${dateLabelReq} à ${heure}
 Motif : ${motifLabelMail}
 
 Merci de traiter cette demande depuis l’espace d’administration.`,
-          });
+            });
+          }
         }
       } catch (mailErr) {
         console.error('⚠️ Emails RDV (création) non bloquant:', mailErr);
       }
 
-      // Si un admin a créé un rendez-vous pour un client : notification par email uniquement
-      if (bookingByAdmin && userId) {
+      // Si un admin a créé un rendez-vous pour un client connecté : e-mail + notification in-app (→ push Web) + SMS +33 si numéro français
+      if (bookingByAdmin && userId && informClient) {
         try {
-          const client = await User.findById(userId).select('firstName lastName email');
+          const client = await User.findById(userId).select('firstName lastName email phone');
+          const name =
+            `${client?.firstName || ''} ${client?.lastName || ''}`.trim() ||
+            `${prenom || ''} ${nom || ''}`.trim() ||
+            'Client';
+          const dateLabelSms = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          });
+          const inAppMsg = `Un rendez-vous a été planifié le ${dateLabelSms} à ${rendezVous.heure}. En attente de validation par le cabinet.`;
+
+          await Notification.create({
+            user: userId,
+            type: 'appointment_created',
+            titre: 'Rendez-vous enregistré',
+            message: inAppMsg,
+            lien: '/client/notifications',
+            metadata: {
+              appointmentId: rendezVous._id.toString(),
+              date: rendezVous.date,
+              heure: rendezVous.heure,
+              bookedByAdmin: true,
+            },
+          });
+
           const clientMail = client?.email && String(client.email).trim();
           if (clientMail) {
-            const name =
-              `${client?.firstName || ''} ${client?.lastName || ''}`.trim() ||
-              `${prenom || ''} ${nom || ''}`.trim() ||
-              'Client';
-            const dateLabelSms = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            });
             await sendTransactionalEmail({
               to: clientMail,
               toName: name,
@@ -382,8 +430,18 @@ Heure : ${rendezVous.heure}
 Ce rendez-vous est actuellement en attente de validation finale. Vous recevrez une confirmation par e-mail dès sa prise en charge.`,
             });
           }
-        } catch (mailErr) {
-          console.error('⚠️ Email création RDV (admin) non bloquant:', mailErr);
+
+          try {
+            const formattedPhone = formatPhoneNumber(client?.phone || telephone || '');
+            if (formattedPhone && formattedPhone.startsWith('+33')) {
+              const smsBody = `Ada Papers: RDV planifié le ${dateLabelSms} à ${rendezVous.heure}. En attente validation. Détail dans votre espace.`;
+              await sendSMS(formattedPhone, smsBody.slice(0, 480));
+            }
+          } catch (smsErr) {
+            console.error('⚠️ SMS création RDV (admin pour client) — non bloquant:', smsErr?.message || smsErr);
+          }
+        } catch (clientNotifErr) {
+          console.error('⚠️ Notification / e-mail client RDV admin — non bloquant:', clientNotifErr);
         }
       }
 

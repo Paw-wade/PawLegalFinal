@@ -7,7 +7,8 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        PORT: 3005
+        PORT: 3005,
+        LEXIA_KNOWLEDGE_DIR: '/root/adapapers/backend/lexia/CAA'
       },
       error_file: './logs/err.log',
       out_file: './logs/out.log',

@@ -418,23 +418,23 @@ export default function PartenaireMessagesPage() {
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
-      <main className="w-full px-4 py-8">
+      <div className="min-w-0 max-w-[100vw] overflow-x-hidden w-full px-3 py-6 sm:px-4 sm:py-8">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
-            <div>
-              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+        <div className="mb-6 sm:mb-8">
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="mb-2 text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent sm:text-4xl">
                 Messagerie
               </h1>
               <p className="text-muted-foreground">Communiquez avec les administrateurs</p>
             </div>
-            <div className="flex flex-col gap-2 items-end">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground font-medium">Filtrer par dossier :</span>
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:max-w-md sm:flex-row sm:items-center">
+                <span className="shrink-0 text-sm font-medium text-muted-foreground">Filtrer par dossier :</span>
                 <select
                   value={selectedDossierId}
                   onChange={(e) => setSelectedDossierId(e.target.value)}
-                  className="px-4 py-2 border border-input rounded-lg text-sm bg-background shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 max-w-xs"
+                  className="w-full min-w-0 rounded-lg border border-input bg-background px-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 sm:max-w-xs"
                 >
                   <option value="">Tous les messages</option>
                   {dossiers.map((dossier) => (
@@ -449,7 +449,7 @@ export default function PartenaireMessagesPage() {
                   setComposeDossierId('');
                   setShowComposeModal(true);
                 }}
-                className="shadow-md"
+                className="w-full shrink-0 shadow-md sm:w-auto"
               >
                 <span className="mr-2">✉️</span>
                 Nouveau message
@@ -506,7 +506,7 @@ export default function PartenaireMessagesPage() {
 
         {/* Actions batch */}
         {selectedMessages.size > 0 && (
-          <div className="mb-4 p-4 bg-primary/10 border border-primary/20 rounded-lg shadow-sm flex items-center justify-between flex-wrap gap-4">
+          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/10 p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-primary">
                 {selectedMessages.size} message(s) sélectionné(s)
@@ -530,7 +530,7 @@ export default function PartenaireMessagesPage() {
             <p className="text-muted-foreground">Chargement des messages...</p>
           </div>
         ) : messages.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-lg p-16 text-center border border-border">
+          <div className="rounded-xl border border-border bg-white p-8 text-center shadow-lg sm:p-16">
             <div className="text-6xl mb-6">📭</div>
             <p className="text-muted-foreground mb-6 text-lg">
               Aucun message {filter !== 'all' ? `(${filter})` : ''}
@@ -543,22 +543,22 @@ export default function PartenaireMessagesPage() {
           <div className="space-y-6">
             {dossiersList.map((dossierGroup: any) => (
               <div key={dossierGroup.dossierId} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-4 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
+                <div className="border-b border-gray-200 bg-gradient-to-r from-primary/10 to-primary/5 px-4 py-4 sm:px-6">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/20">
                         <span className="text-primary text-xl">📁</span>
                       </div>
-                      <div>
-                        <h2 className="text-lg font-bold text-foreground">{dossierGroup.dossierTitre}</h2>
+                      <div className="min-w-0">
+                        <h2 className="break-words text-lg font-bold text-foreground">{dossierGroup.dossierTitre}</h2>
                         <p className="text-sm text-muted-foreground">
                           {dossierGroup.messages.length} message{dossierGroup.messages.length > 1 ? 's' : ''}
                         </p>
                       </div>
                     </div>
                     {dossierGroup.dossierId !== 'sans-dossier' && (
-                      <Link href={`/partenaire/dossiers/${dossierGroup.dossierId}`}>
-                        <Button variant="outline" size="sm">
+                      <Link href={`/partenaire/dossiers/${dossierGroup.dossierId}`} className="shrink-0 sm:self-start">
+                        <Button variant="outline" size="sm" className="w-full whitespace-normal sm:w-auto">
                           Voir le dossier →
                         </Button>
                       </Link>
@@ -600,22 +600,23 @@ export default function PartenaireMessagesPage() {
                     return (
                       <div
                         key={messageId}
-                        className={`p-6 transition-all duration-300 hover:bg-gray-50 border rounded-xl ${
+                        className={`p-4 transition-all duration-300 hover:bg-gray-50 border rounded-xl sm:p-6 ${
                           (isReceived && !isRead)
                             ? 'bg-gradient-to-r from-primary/5 via-primary/2 to-white border-primary/70 hover:shadow-[0_12px_30px_-18px_rgba(249,115,22,0.45)]' 
                             : 'border-gray-200/80'
                         } ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
                       >
-                        <div className="flex items-start gap-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-4">
+                          <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleMessageSelection(messageId)}
                             onClick={(e) => e.stopPropagation()}
-                            className="mt-1.5 w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
+                            className="mt-1.5 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-primary focus:ring-primary"
                           />
 
-                          <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shadow-md ${
+                          <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white shadow-md sm:h-14 sm:w-14 sm:text-base ${
                             (isReceived && !isRead) 
                               ? 'bg-gradient-to-br from-primary to-primary/80' 
                               : 'bg-gradient-to-br from-gray-400 to-gray-500'
@@ -640,10 +641,10 @@ export default function PartenaireMessagesPage() {
                               }
                             }}
                           >
-                            <div className="flex items-start justify-between gap-4 mb-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                  <h3 className={`font-bold text-lg ${
+                            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="mb-2 flex flex-wrap items-center gap-2">
+                                  <h3 className={`min-w-0 break-words text-base font-bold sm:text-lg ${
                                     isRead ? 'text-gray-700' : 'text-gray-900'
                                   }`}>
                                     {message.sujet}
@@ -661,22 +662,24 @@ export default function PartenaireMessagesPage() {
                                   {message.contenu}
                                 </p>
                                 
-                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                  <span>{isReceived ? '📤 De' : '📥 À'}: {isReceived ? expediteurName : '👥 Tous les administrateurs'}</span>
-                                  <span>🕐 {dateDisplay}</span>
+                                <div className="flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+                                  <span className="min-w-0 break-words">{isReceived ? '📤 De' : '📥 À'}: {isReceived ? expediteurName : '👥 Tous les administrateurs'}</span>
+                                  <span className="shrink-0">🕐 {dateDisplay}</span>
                                   {message.piecesJointes && message.piecesJointes.length > 0 && (
-                                    <span>📎 {message.piecesJointes.length} pièce{message.piecesJointes.length > 1 ? 's' : ''} jointe{message.piecesJointes.length > 1 ? 's' : ''}</span>
+                                    <span className="shrink-0">📎 {message.piecesJointes.length} pièce{message.piecesJointes.length > 1 ? 's' : ''} jointe{message.piecesJointes.length > 1 ? 's' : ''}</span>
                                   )}
                                 </div>
                               </div>
                             </div>
                           </div>
+                          </div>
 
-                          <div className="flex flex-col gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex w-full shrink-0 flex-row flex-wrap gap-2 sm:w-auto sm:flex-col sm:flex-nowrap sm:items-stretch" onClick={(e) => e.stopPropagation()}>
                             {isReceived && (
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="min-h-[40px] flex-1 sm:flex-none"
                                 onClick={() => {
                                   setReplyData({
                                     sujet: `Re: ${message.sujet}`,
@@ -692,6 +695,7 @@ export default function PartenaireMessagesPage() {
                             <Button
                               variant="destructive"
                               size="sm"
+                              className="min-h-[40px] flex-1 sm:flex-none"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDeleteMessage(messageId);
@@ -714,20 +718,20 @@ export default function PartenaireMessagesPage() {
         {showComposeModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                <h2 className="text-2xl font-bold">Nouveau message</h2>
+              <div className="sticky top-0 flex items-start justify-between gap-3 rounded-t-2xl border-b bg-white px-4 py-4 sm:items-center sm:px-6">
+                <h2 className="min-w-0 flex-1 break-words text-lg font-bold sm:text-2xl">Nouveau message</h2>
                 <button
                   type="button"
                   onClick={() => {
                     setShowComposeModal(false);
                     setComposeDossierId('');
                   }}
-                  className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-3xl leading-none text-muted-foreground hover:bg-gray-100 hover:text-foreground transition-colors"
                 >
                   ×
                 </button>
               </div>
-              <form onSubmit={handleSendMessage} className="p-6 space-y-5">
+              <form onSubmit={handleSendMessage} className="space-y-5 p-4 sm:p-6">
                 <div>
                   <Label htmlFor="compose-dossier-p">Lier à un dossier (optionnel)</Label>
                   <p className="text-xs text-muted-foreground mb-2">
@@ -789,12 +793,12 @@ export default function PartenaireMessagesPage() {
                   {attachments.length > 0 && (
                     <div className="mt-2 space-y-1">
                       {attachments.map((file, index) => (
-                        <div key={index} className="text-xs text-muted-foreground flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span>📎 {file.name}</span>
+                        <div key={index} className="flex items-start justify-between gap-2 rounded bg-gray-50 p-2 text-xs text-muted-foreground">
+                          <span className="min-w-0 break-all">📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setAttachments(attachments.filter((_, i) => i !== index))}
-                            className="text-red-500 hover:text-red-700 font-bold"
+                            className="shrink-0 font-bold text-red-500 hover:text-red-700"
                           >
                             ×
                           </button>
@@ -803,10 +807,11 @@ export default function PartenaireMessagesPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex justify-end gap-3 pt-4 border-t">
+                <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end sm:gap-3">
                   <Button
                     type="button"
                     variant="outline"
+                    className="w-full sm:w-auto"
                     onClick={() => {
                       setShowComposeModal(false);
                       setComposeDossierId('');
@@ -815,7 +820,7 @@ export default function PartenaireMessagesPage() {
                   >
                     Annuler
                   </Button>
-                  <Button type="submit" disabled={isSubmitting}>
+                  <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting}>
                     {isSubmitting ? 'Envoi...' : 'Envoyer'}
                   </Button>
                 </div>
@@ -828,12 +833,12 @@ export default function PartenaireMessagesPage() {
         {selectedMessage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                <h2 className="text-2xl font-bold">{selectedMessage.sujet}</h2>
-                <button onClick={() => setSelectedMessage(null)} className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">×</button>
+              <div className="sticky top-0 flex items-start justify-between gap-3 rounded-t-2xl border-b bg-white px-4 py-4 sm:items-center sm:px-6">
+                <h2 className="min-w-0 flex-1 break-words text-lg font-bold sm:text-2xl">{selectedMessage.sujet}</h2>
+                <button onClick={() => setSelectedMessage(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-3xl leading-none text-muted-foreground hover:bg-gray-100 hover:text-foreground transition-colors">×</button>
               </div>
-              <div className="p-6 space-y-5">
-                <div className="flex items-center justify-between mb-4">
+              <div className="space-y-5 p-4 sm:p-6">
+                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                   {selectedMessage.destinataires?.some((d: any) => 
                     d._id?.toString() === (session?.user as any)?.id?.toString() || 
                     d.toString() === (session?.user as any)?.id?.toString()
@@ -851,18 +856,18 @@ export default function PartenaireMessagesPage() {
                     </Button>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
+                <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                  <div className="min-w-0">
                     <p className="text-muted-foreground mb-1">De</p>
-                    <p className="font-semibold">
+                    <p className="font-semibold break-words">
                       {selectedMessage.expediteur?.firstName} {selectedMessage.expediteur?.lastName} ({selectedMessage.expediteur?.email})
                     </p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-muted-foreground mb-1">Date</p>
-                    <p className="font-semibold">{formatDate(selectedMessage.createdAt)}</p>
+                    <p className="font-semibold break-words">{formatDate(selectedMessage.createdAt)}</p>
                   </div>
-                  <div className="col-span-2">
+                  <div className="min-w-0 sm:col-span-2">
                     <p className="text-muted-foreground mb-1">À</p>
                     <p className="font-semibold">
                       {selectedMessage.destinataires?.map((d: any) => 
@@ -880,14 +885,15 @@ export default function PartenaireMessagesPage() {
                     <p className="text-muted-foreground mb-2 font-medium">Pièces jointes</p>
                     <div className="space-y-2">
                       {selectedMessage.piecesJointes.map((pj: any, index: number) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-border">
-                          <div className="flex items-center gap-2">
-                            <span>📎</span>
-                            <span className="text-sm">{pj.originalName}</span>
+                        <div key={index} className="flex flex-col gap-3 rounded-lg border border-border bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="shrink-0">📎</span>
+                            <span className="break-all text-sm">{pj.originalName}</span>
                           </div>
                           <Button
                             variant="outline"
                             size="sm"
+                            className="w-full shrink-0 sm:w-auto"
                             onClick={() => handleDownloadAttachment(selectedMessage._id || selectedMessage.id, index, pj.originalName)}
                           >
                             Télécharger
@@ -906,20 +912,20 @@ export default function PartenaireMessagesPage() {
         {showReplyModal && selectedMessage && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                <h2 className="text-2xl font-bold">Répondre</h2>
+              <div className="sticky top-0 flex items-start justify-between gap-3 rounded-t-2xl border-b bg-white px-4 py-4 sm:items-center sm:px-6">
+                <h2 className="min-w-0 flex-1 break-words text-lg font-bold sm:text-2xl">Répondre</h2>
                 <button 
                   onClick={() => {
                     setShowReplyModal(false);
                     setReplyData({ sujet: '', contenu: '' });
                     setReplyAttachments([]);
                   }} 
-                  className="text-muted-foreground hover:text-foreground text-3xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-3xl leading-none text-muted-foreground hover:bg-gray-100 hover:text-foreground transition-colors"
                 >
                   ×
                 </button>
               </div>
-              <form onSubmit={handleReply} className="p-6 space-y-5">
+              <form onSubmit={handleReply} className="space-y-5 p-4 sm:p-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <span className="text-2xl">ℹ️</span>
@@ -973,12 +979,12 @@ export default function PartenaireMessagesPage() {
                   {replyAttachments.length > 0 && (
                     <div className="mt-2 space-y-1">
                       {replyAttachments.map((file, index) => (
-                        <div key={index} className="text-xs text-muted-foreground flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span>📎 {file.name}</span>
+                        <div key={index} className="flex items-start justify-between gap-2 rounded bg-gray-50 p-2 text-xs text-muted-foreground">
+                          <span className="min-w-0 break-all">📎 {file.name}</span>
                           <button
                             type="button"
                             onClick={() => setReplyAttachments(replyAttachments.filter((_, i) => i !== index))}
-                            className="text-red-500 hover:text-red-700 font-bold"
+                            className="shrink-0 font-bold text-red-500 hover:text-red-700"
                           >
                             ×
                           </button>
@@ -987,10 +993,11 @@ export default function PartenaireMessagesPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex justify-end gap-3 pt-4 border-t">
+                <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end sm:gap-3">
                   <Button 
                     type="button" 
-                    variant="outline" 
+                    variant="outline"
+                    className="w-full sm:w-auto"
                     onClick={() => {
                       setShowReplyModal(false);
                       setReplyData({ sujet: '', contenu: '' });
@@ -1000,7 +1007,7 @@ export default function PartenaireMessagesPage() {
                   >
                     Annuler
                   </Button>
-                  <Button type="submit" disabled={isReplying}>
+                  <Button type="submit" className="w-full sm:w-auto" disabled={isReplying}>
                     {isReplying ? 'Envoi...' : 'Envoyer la réponse'}
                   </Button>
                 </div>
@@ -1008,7 +1015,7 @@ export default function PartenaireMessagesPage() {
             </div>
         </div>
       )}
-      </main>
+      </div>
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}

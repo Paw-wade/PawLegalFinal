@@ -189,6 +189,9 @@ export default function AdminRendezVousPage() {
   const [loadingAdminSlots, setLoadingAdminSlots] = useState(false);
   const [adminBookingSubmitting, setAdminBookingSubmitting] = useState(false);
   const [adminBookingError, setAdminBookingError] = useState<string | null>(null);
+  /** Création par admin : désactivables côté API (voir POST /appointments) */
+  const [adminBookingInformClient, setAdminBookingInformClient] = useState(true);
+  const [adminBookingInformTeam, setAdminBookingInformTeam] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   // Fonction pour obtenir la date du jour au format YYYY-MM-DD
   const getTodayDate = () => new Date().toISOString().split('T')[0];
@@ -270,6 +273,8 @@ export default function AdminRendezVousPage() {
         }
 
         setAdminBookingError(null);
+        setAdminBookingInformClient(true);
+        setAdminBookingInformTeam(true);
         const dKey = String(dossier._id || dossier.id || dIdRaw);
         setAppointmentLinkedDossierId(dKey);
 
@@ -309,39 +314,9 @@ export default function AdminRendezVousPage() {
         }
 
         setShowAdminBookingModal(true);
-        setLoadingClientUsers(true);
-        try {
-          const resUsers = await userAPI.getAllUsers();
-          if (cancelled) return;
-          const possibleUsers =
-            (resUsers.data && Array.isArray(resUsers.data.users) && resUsers.data.users) ||
-            (resUsers.data &&
-              resUsers.data.data &&
-              Array.isArray(resUsers.data.data.users) &&
-              resUsers.data.data.users) ||
-            (resUsers.data && Array.isArray(resUsers.data.data) && resUsers.data.data) ||
-            [];
-
-          const onlyActive = (u: any) => u && u.isActive !== false;
-
-          const roleStr = (u: any) => String(u?.role || '').trim().toLowerCase();
-          const clientsStrict = possibleUsers.filter((u: any) => onlyActive(u) && roleStr(u) === 'client');
-
-          const clientsFallback =
-            clientsStrict.length > 0
-              ? clientsStrict
-              : possibleUsers.filter((u: any) => onlyActive(u) && !['admin', 'superadmin'].includes(roleStr(u)));
-
-          if (!resUsers.data?.success && possibleUsers.length === 0) setClientUsers([]);
-          else setClientUsers(clientsFallback);
-        } catch {
-          if (!cancelled) {
-            setClientUsers([]);
-            setAdminBookingError('Impossible de charger la liste des clients.');
-          }
-        } finally {
-          if (!cancelled) setLoadingClientUsers(false);
-        }
+        // Identité déjà fournie par le dossier : inutile de charger toute la liste des clients.
+        setClientUsers([]);
+        setLoadingClientUsers(false);
 
         router.replace('/admin/rendez-vous', { scroll: false });
       } catch {
@@ -417,11 +392,15 @@ export default function AdminRendezVousPage() {
     if (adminBookingSubmitting) return;
     setShowAdminBookingModal(false);
     setAppointmentLinkedDossierId(null);
+    setAdminBookingInformClient(true);
+    setAdminBookingInformTeam(true);
   };
 
   const openAdminBookingModal = async () => {
     setAppointmentLinkedDossierId(null);
     setAdminBookingError(null);
+    setAdminBookingInformClient(true);
+    setAdminBookingInformTeam(true);
     setAdminBookingForm({
       forUserId: '',
       nom: '',
@@ -556,6 +535,8 @@ export default function AdminRendezVousPage() {
         description: adminBookingForm.description.trim() || undefined,
         ...(adminBookingForm.forUserId ? { forUserId: adminBookingForm.forUserId } : {}),
         ...(appointmentLinkedDossierId ? { dossierId: appointmentLinkedDossierId } : {}),
+        informClient: adminBookingInformClient,
+        informTeam: adminBookingInformTeam,
       });
       if (res.data.success) {
         setShowAdminBookingModal(false);
@@ -674,6 +655,9 @@ export default function AdminRendezVousPage() {
   if (!session || ((session.user as any)?.role !== 'admin' && (session.user as any)?.role !== 'superadmin')) {
     return null;
   }
+
+  /** Ouvert depuis une fiche dossier : pas de nouveau choix d’identité, seulement créneau + motif (+ notifications). */
+  const compactDossierBooking = !!appointmentLinkedDossierId;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
@@ -1275,8 +1259,9 @@ export default function AdminRendezVousPage() {
               <div>
                 <h3 className="text-lg font-bold">Nouveau rendez-vous</h3>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Le rendez-vous est enregistré comme une demande (statut en attente). Choisissez un client
-                  inscrit pour lier le RDV à son espace, ou saisissez les coordonnées manuellement.
+                  {compactDossierBooking
+                    ? 'Le client est déjà identifié via le dossier. Indiquez la date, l’heure et le motif. Le rendez-vous est enregistré en attente de validation.'
+                    : 'Le rendez-vous est enregistré comme une demande (statut en attente). Choisissez un client inscrit pour lier le RDV à son espace, ou saisissez les coordonnées manuellement.'}
                 </p>
               </div>
               <button
@@ -1299,7 +1284,7 @@ export default function AdminRendezVousPage() {
             {appointmentLinkedDossierId && (
               <div className="mb-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs sm:text-sm text-foreground leading-snug">
                 <span className="font-semibold">Lien dossier :</span> ce rendez-vous sera rattaché au dossier
-                après validation. Contrôlez bien l&apos;e‑mail avant d&apos;enregistrer.
+                après validation.
                 <button
                   type="button"
                   className="block mt-1.5 underline text-primary font-medium"
@@ -1312,107 +1297,125 @@ export default function AdminRendezVousPage() {
             )}
 
             <form onSubmit={handleAdminBookingSubmit} className="space-y-3">
-              <div>
-                <Label htmlFor="admin-rdv-client">Client inscrit (optionnel)</Label>
-                <select
-                  id="admin-rdv-client"
-                  className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  disabled={
-                    loadingClientUsers ||
-                    adminBookingSubmitting ||
-                    (!!appointmentLinkedDossierId && !!adminBookingForm.forUserId)
-                  }
-                  value={adminBookingForm.forUserId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    if (!id) {
-                      setAdminBookingForm((f) => ({
-                        ...f,
-                        forUserId: '',
-                        nom: '',
-                        prenom: '',
-                        email: '',
-                        telephone: '',
-                      }));
-                      return;
-                    }
-                    const u = clientUsers.find((x) => String(x._id || x.id) === id);
-                    if (!u) return;
-                    const nomValue = u.lastName || u.nom || u.last_name || '';
-                    const prenomValue = u.firstName || u.prenom || u.first_name || '';
-                    const emailValue = u.email || u.clientEmail || u.mail || '';
-                    const telValue = u.phone || u.telephone || u.tel || '';
-                    setAdminBookingForm((f) => ({
-                      ...f,
-                      forUserId: id,
-                      nom: nomValue,
-                      prenom: prenomValue,
-                      email: emailValue,
-                      telephone: telValue,
-                    }));
-                  }}
-                >
-                  <option value="">— Saisie manuelle (sans compte) —</option>
-                  {clientUsers.map((u) => (
-                    <option key={String(u._id || u.id)} value={String(u._id || u.id)}>
-                      {`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email} · {u.email}
-                    </option>
-                  ))}
-                </select>
-                {loadingClientUsers && (
-                  <p className="text-[11px] text-muted-foreground mt-1">Chargement des clients…</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="admin-rdv-nom">Nom *</Label>
-                  <Input
-                    id="admin-rdv-nom"
-                    value={adminBookingForm.nom}
-                    onChange={(e) => setAdminBookingForm({ ...adminBookingForm, nom: e.target.value })}
-                    disabled={adminBookingSubmitting}
-                    required
-                    className="mt-1"
-                  />
+              {compactDossierBooking ? (
+                <div className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                    Client
+                  </p>
+                  <p className="font-medium text-foreground">
+                    {[adminBookingForm.prenom, adminBookingForm.nom].filter(Boolean).join(' ') || '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 break-all">{adminBookingForm.email || '—'}</p>
+                  {adminBookingForm.telephone && adminBookingForm.telephone !== '—' && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{adminBookingForm.telephone}</p>
+                  )}
+                  {adminBookingForm.forUserId ? (
+                    <p className="text-[11px] text-muted-foreground mt-1.5">Compte client lié (espace connecté).</p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground mt-1.5">Dossier sans compte — coordonnées issues de la fiche.</p>
+                  )}
                 </div>
-                <div>
-                  <Label htmlFor="admin-rdv-prenom">Prénom</Label>
-                  <Input
-                    id="admin-rdv-prenom"
-                    value={adminBookingForm.prenom}
-                    onChange={(e) => setAdminBookingForm({ ...adminBookingForm, prenom: e.target.value })}
-                    disabled={adminBookingSubmitting}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div>
+                    <Label htmlFor="admin-rdv-client">Client inscrit (optionnel)</Label>
+                    <select
+                      id="admin-rdv-client"
+                      className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      disabled={loadingClientUsers || adminBookingSubmitting}
+                      value={adminBookingForm.forUserId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        if (!id) {
+                          setAdminBookingForm((f) => ({
+                            ...f,
+                            forUserId: '',
+                            nom: '',
+                            prenom: '',
+                            email: '',
+                            telephone: '',
+                          }));
+                          return;
+                        }
+                        const u = clientUsers.find((x) => String(x._id || x.id) === id);
+                        if (!u) return;
+                        const nomValue = u.lastName || u.nom || u.last_name || '';
+                        const prenomValue = u.firstName || u.prenom || u.first_name || '';
+                        const emailValue = u.email || u.clientEmail || u.mail || '';
+                        const telValue = u.phone || u.telephone || u.tel || '';
+                        setAdminBookingForm((f) => ({
+                          ...f,
+                          forUserId: id,
+                          nom: nomValue,
+                          prenom: prenomValue,
+                          email: emailValue,
+                          telephone: telValue,
+                        }));
+                      }}
+                    >
+                      <option value="">— Saisie manuelle (sans compte) —</option>
+                      {clientUsers.map((u) => (
+                        <option key={String(u._id || u.id)} value={String(u._id || u.id)}>
+                          {`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email} · {u.email}
+                        </option>
+                      ))}
+                    </select>
+                    {loadingClientUsers && (
+                      <p className="text-[11px] text-muted-foreground mt-1">Chargement des clients…</p>
+                    )}
+                  </div>
 
-              <div>
-                <Label htmlFor="admin-rdv-email">Email *</Label>
-                <Input
-                  id="admin-rdv-email"
-                  type="email"
-                  value={adminBookingForm.email}
-                  onChange={(e) => setAdminBookingForm({ ...adminBookingForm, email: e.target.value })}
-                  disabled={adminBookingSubmitting}
-                  required
-                  className="mt-1"
-                />
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="admin-rdv-nom">Nom *</Label>
+                      <Input
+                        id="admin-rdv-nom"
+                        value={adminBookingForm.nom}
+                        onChange={(e) => setAdminBookingForm({ ...adminBookingForm, nom: e.target.value })}
+                        disabled={adminBookingSubmitting}
+                        required
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="admin-rdv-prenom">Prénom</Label>
+                      <Input
+                        id="admin-rdv-prenom"
+                        value={adminBookingForm.prenom}
+                        onChange={(e) => setAdminBookingForm({ ...adminBookingForm, prenom: e.target.value })}
+                        disabled={adminBookingSubmitting}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
 
-              <div>
-                <Label htmlFor="admin-rdv-tel">Téléphone</Label>
-                <Input
-                  id="admin-rdv-tel"
-                  type="tel"
-                  value={adminBookingForm.telephone}
-                  onChange={(e) => setAdminBookingForm({ ...adminBookingForm, telephone: e.target.value })}
-                  disabled={adminBookingSubmitting}
-                  className="mt-1"
-                  placeholder="Facultatif (— si vide)"
-                />
-              </div>
+                  <div>
+                    <Label htmlFor="admin-rdv-email">Email *</Label>
+                    <Input
+                      id="admin-rdv-email"
+                      type="email"
+                      value={adminBookingForm.email}
+                      onChange={(e) => setAdminBookingForm({ ...adminBookingForm, email: e.target.value })}
+                      disabled={adminBookingSubmitting}
+                      required
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="admin-rdv-tel">Téléphone</Label>
+                    <Input
+                      id="admin-rdv-tel"
+                      type="tel"
+                      value={adminBookingForm.telephone}
+                      onChange={(e) => setAdminBookingForm({ ...adminBookingForm, telephone: e.target.value })}
+                      disabled={adminBookingSubmitting}
+                      className="mt-1"
+                      placeholder="Facultatif (— si vide)"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -1484,6 +1487,42 @@ export default function AdminRendezVousPage() {
                   maxLength={500}
                 />
               </div>
+
+              <fieldset className="rounded-lg border border-border px-3 py-2.5 space-y-2">
+                <legend className="text-xs font-semibold text-foreground px-1">Notifications</legend>
+                <label className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 rounded border-input"
+                    checked={adminBookingInformTeam}
+                    onChange={(e) => setAdminBookingInformTeam(e.target.checked)}
+                    disabled={adminBookingSubmitting}
+                  />
+                  <span>
+                    <span className="font-medium">Informer l&apos;équipe</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Notifications dans l&apos;application et e-mails aux administrateurs.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 rounded border-input"
+                    checked={adminBookingInformClient}
+                    onChange={(e) => setAdminBookingInformClient(e.target.checked)}
+                    disabled={adminBookingSubmitting}
+                  />
+                  <span>
+                    <span className="font-medium">Informer le client</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {adminBookingForm.forUserId
+                        ? 'E-mail « Rendez-vous enregistré », notification in-app, push navigateur (si configuré), et SMS pour un numéro français (+33) issu du profil.'
+                        : 'E-mail accusé réception pour la demande ; notification par SMS réservée aux numéros français (+33) saisis lorsque création par un administrateur.'}
+                    </span>
+                  </span>
+                </label>
+              </fieldset>
 
               <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-2 border-t">
                 <Button
