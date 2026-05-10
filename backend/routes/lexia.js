@@ -87,4 +87,23 @@ router.post('/invalidate-cache', (req, res) => {
   }
 });
 
+/**
+ * GET /api/lexia/config
+ * Configuration du provider Lexia
+ */
+router.get('/config', async (req, res) => {
+  try {
+    const knowledgeDir = getKnowledgeDir();
+    res.json({
+      success: true,
+      envProvider: process.env.LEXIA_PROVIDER || 'internal',
+      anthropicConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+      knowledgeDirRelative: knowledgeDir,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
