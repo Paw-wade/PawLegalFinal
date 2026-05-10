@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -342,6 +342,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   const [filterDateTo, setFilterDateTo] = useState('');
   const pawSearchLastQueryRef = useRef('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  /** Après une réponse API, faire défiler vers le début de ce message assistant (pas la fin). */
+  const scrollNewAssistantToTopRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
@@ -462,6 +464,37 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   }, [session, status, router, audience]);
 
   useEffect(() => {
+    scrollNewAssistantToTopRef.current = null;
+  }, [activeThreadId]);
+
+  useLayoutEffect(() => {
+    if (lexiaSurface === 'pawSearch') {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    if (isLoading) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    const targetId = scrollNewAssistantToTopRef.current;
+    const last = messages[messages.length - 1];
+    if (targetId != null && last?.role === 'assistant' && last.id === targetId) {
+      const el = document.querySelector<HTMLElement>(`[data-lexia-msg-id="${targetId}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      queueMicrotask(() => {
+        scrollNewAssistantToTopRef.current = null;
+      });
+      return;
+    }
+
+    if (targetId != null && (last?.id !== targetId || last?.role !== 'assistant')) {
+      queueMicrotask(() => {
+        scrollNewAssistantToTopRef.current = null;
+      });
+    }
+
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading, lexiaSurface, pawSearchHits, pawSearchLoading]);
 
@@ -584,21 +617,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
       setInput('');
       setIsLoading(true);
       setOpenMenu(null);
-      const mode = lexiaProvider;
-      const isAll = mode === 'all';
-      const isCloud =
-        mode === 'anthropic' ||
-        mode === 'gemini' ||
-        (mode === 'auto' &&
-          (Boolean(lexiaConfig?.anthropicConfigured) || Boolean(lexiaConfig?.geminiConfigured)));
-      setAgentStatus(isCloud || isAll ? 'searching' : 'analyzing');
-      setSearchStep(
-        isAll
-          ? 'Interne + Anthropic + Gemini, puis synthèse…'
-          : isCloud
-            ? 'Modèle cloud (API)…'
-            : 'Analyse base documentaire interne…'
-      );
+      setAgentStatus('analyzing');
+      setSearchStep('Analyse de la requête…');
 
       const userMsg: ChatMessage = { role: 'user', content: text, id: Date.now() };
 
@@ -708,6 +728,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           sourcesFound,
           totalToolUses,
         };
+        scrollNewAssistantToTopRef.current = assistantMsg.id;
         setThreads((prev) =>
           prev.map((th) =>
             th.id !== tid
@@ -738,6 +759,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           id: Date.now() + 2,
           isError: true,
         };
+        scrollNewAssistantToTopRef.current = errMsg.id;
         setThreads((prev) =>
           prev.map((th) =>
             th.id !== tid ? th : { ...th, messages: [...th.messages, errMsg], updatedAt: Date.now() }
@@ -2027,8 +2049,37 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         }
 
         .lexia-msg { display: flex; gap: 13px; animation: lexia-rise 0.3s ease both; }
-        .lexia-msg.user { flex-direction: row-reverse; }
+        .lexia-msg.user {
+          flex-direction: row;
+          justify-content: flex-end;
+          width: 100%;
+        }
+        .lexia-msg-user-cluster {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 6px;
+          max-width: 78%;
+          min-width: 0;
+        }
+        .lexia-msg-user-cluster .lexia-bubble-user {
+          max-width: 100%;
+        }
+        .lexia-msg-user-cluster .lexia-avatar-user {
+          margin-top: 0;
+        }
+        .lexia-msg-body {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 6px;
+          min-width: 0;
+          flex: 1 1 0%;
+        }
         @media (max-width: 639px) {
+          .lexia-msg-user-cluster {
+            max-width: min(92%, 100%);
+          }
           .lexia-msg { gap: 8px; }
         }
 
@@ -2055,6 +2106,21 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         .lexia-avatar-user {
           background: hsl(var(--muted));
           border: 1px solid hsl(var(--border));
+          width: auto;
+          min-width: 34px;
+          max-width: 7.5rem;
+          min-height: 34px;
+          height: auto;
+          padding: 4px 7px;
+          font-size: 10px;
+          font-weight: 600;
+          line-height: 1.2;
+          text-align: center;
+          word-break: break-word;
+          overflow: hidden;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
         }
 
         .lexia-bubble {
@@ -2535,9 +2601,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
               </button>
               <div className="lexia-header-titles">
                 <h1>Paw AI - Votre assistant juridique</h1>
-                <p>
-                  Droit des étrangers · Contentieux administratif · {SOURCES_LIST.length} bases de données
-                </p>
+                <p>Droit des étrangers · Contentieux administratif</p>
               </div>
             </div>
             <div className="lexia-header-tabs" role="tablist" aria-label="Mode Paw AI">
@@ -2775,19 +2839,15 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
               <>
                 {messages.length === 0 && (
                   <div className="lexia-welcome">
-                    <div className="lexia-welcome-badge">⚖️ Recherche multi-sources</div>
+                    <div className="lexia-welcome-badge">⚖️ Paw AI</div>
                     <h2>
                       Bienvenue, {lexiaWelcomeName}.
                       <br />
                       <em>Comment puis-je vous assister ?</em>
                     </h2>
                     <p>
-                      Je recherche et analyse la jurisprudence en droit des étrangers sur {SOURCES_LIST.length} bases —
-                      Légifrance, Conseil d&apos;État, CAA, tribunaux administratifs, Cour de cassation, Pappers Justice,
-                      EUR-Lex, CEDH, GISTI, data.gouv.fr et accords bilatéraux — pour alimenter vos mémoires contentieux.
-                      Selon le réglage <strong>Moteur</strong> (menu latéral) : le mode <strong>interne</strong> interroge
-                      vos fichiers sur le serveur ; le mode <strong>Anthropic</strong> s&apos;appuie sur le modèle
-                      (vérifiez toujours sources et droit positif).
+                      Posez votre question : Paw AI analyse la requête et vous propose une réponse structurée. Vérifiez
+                      toujours les sources et le droit positif avant toute décision ou acte juridique.
                     </p>
                     <div className="lexia-qgrid">
                       {[
@@ -2804,45 +2864,36 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                   </div>
                 )}
 
-                {messages.map((m) => (
-              <div key={m.id} className={`lexia-msg ${m.role}`}>
-                <div className={`lexia-avatar ${m.role === 'assistant' ? 'lexia-avatar-ai' : 'lexia-avatar-user'}`}>
-                  {m.role === 'assistant' ? '⚖️' : '👤'}
-                </div>
-                <div>
-                  {m.role === 'assistant' && m.lexiaProvider === 'internal' && (
-                    <div className="lexia-internal-tag">📚 Base documentaire interne</div>
-                  )}
-                  {m.role === 'assistant' && m.lexiaProvider === 'gemini' && (
-                    <div className="lexia-cloud-tag">✨ Gemini (API Google)</div>
-                  )}
-                  {m.role === 'assistant' && m.lexiaProvider === 'all' && (
-                    <div className="lexia-cloud-tag">🔀 Combiné interne + Anthropic + Gemini</div>
-                  )}
-                  {m.role === 'assistant' && m.lexiaProvider === 'anthropic' && m.searched && (
-                    <div className="lexia-search-tag">
-                      🔎 {m.totalToolUses && m.totalToolUses > 0 ? m.totalToolUses : 1} recherche
-                      {(m.totalToolUses ?? 0) > 1 ? 's' : ''} —{' '}
-                      {m.sourcesFound && m.sourcesFound.length > 0
-                        ? `${m.sourcesFound.length} base${m.sourcesFound.length > 1 ? 's' : ''} identifiée${m.sourcesFound.length > 1 ? 's' : ''}`
-                        : 'recherche web'}
+                {messages.map((m) =>
+                  m.role === 'user' ? (
+                    <div key={m.id} className="lexia-msg user" data-lexia-msg-id={m.id}>
+                      <div className="lexia-msg-user-cluster">
+                        <div
+                          className="lexia-avatar lexia-avatar-user"
+                          title={lexiaWelcomeName}
+                          aria-label={lexiaWelcomeName}
+                        >
+                          {lexiaWelcomeName}
+                        </div>
+                        <div
+                          className="lexia-bubble lexia-bubble-user"
+                          dangerouslySetInnerHTML={{ __html: formatMessage(m.content) }}
+                        />
+                      </div>
                     </div>
-                  )}
-                  {m.role === 'assistant' && m.lexiaProvider === 'anthropic' && !m.searched && (
-                    <div className="lexia-cloud-tag">☁️ Anthropic (API)</div>
-                  )}
-                  {m.role === 'assistant' && !m.lexiaProvider && m.searched && (
-                    <div className="lexia-search-tag">🔎 Recherche web (outil modèle)</div>
-                  )}
-                  <div
-                    className={`lexia-bubble ${m.role === 'assistant' ? 'lexia-bubble-ai' : 'lexia-bubble-user'} ${
-                      m.isError ? 'lexia-bubble-error' : ''
-                    }`}
-                    dangerouslySetInnerHTML={{ __html: formatMessage(m.content) }}
-                  />
-                </div>
-              </div>
-                ))}
+                  ) : (
+                    <div key={m.id} className="lexia-msg assistant" data-lexia-msg-id={m.id}>
+                      <div className="lexia-avatar lexia-avatar-ai">⚖️</div>
+                      <div className="lexia-msg-body">
+                        {!m.isError && <div className="lexia-internal-tag">Analyse de la requête</div>}
+                        <div
+                          className={`lexia-bubble lexia-bubble-ai ${m.isError ? 'lexia-bubble-error' : ''}`}
+                          dangerouslySetInnerHTML={{ __html: formatMessage(m.content) }}
+                        />
+                      </div>
+                    </div>
+                  )
+                )}
 
                 {isLoading && (
                   <div className="lexia-typing">
@@ -2854,20 +2905,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                         <span />
                       </div>
                       <div className="lexia-typing-label">
-                        {searchStep ||
-                          (agentStatus === 'searching'
-                            ? '🔎 Recherche jurisprudentielle…'
-                            : '📋 Analyse juridique en cours…')}
+                        {searchStep || 'Analyse de la requête…'}
                       </div>
-                      {agentStatus === 'searching' && (
-                        <div className="lexia-sp-row">
-                          {SOURCES_LIST.map((s) => (
-                            <span key={s.key} className="lexia-sp-tag">
-                              {s.label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
