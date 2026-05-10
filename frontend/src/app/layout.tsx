@@ -23,6 +23,10 @@ export const metadata: Metadata = {
     title: 'Ada Papers',
   },
   icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/ada-papers-logo.png', type: 'image/png' },
+    ],
     apple: '/ada-papers-logo.png',
   },
 };
