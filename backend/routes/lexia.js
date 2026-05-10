@@ -8,7 +8,6 @@ const {
   invalidateCache,
 } = require('../services/lexiaInternal');
 
-console.log('✅ Route /api/lexia enregistrée');
 
 /**
  * GET /api/lexia/stats
