@@ -5,6 +5,7 @@
 
 const axios = require('axios');
 const { searchAndCompose, getKnowledgeDir } = require('./lexiaInternal');
+const { getPawAiLegalSystemPrompt } = require('./lexiaLegalCharter');
 
 const VALID = new Set(['auto', 'internal', 'anthropic', 'gemini', 'all']);
 
@@ -64,12 +65,14 @@ async function callAnthropic(messages) {
   }
 
   const maxTokens = Math.min(Math.max(Number(process.env.ANTHROPIC_MAX_TOKENS) || 4096, 256), 8192);
+  const system = getPawAiLegalSystemPrompt();
 
   const res = await axios.post(
     'https://api.anthropic.com/v1/messages',
     {
       model,
       max_tokens: maxTokens,
+      system,
       messages: msgs,
     },
     {
@@ -130,6 +133,7 @@ async function callGemini(messages) {
   }
 
   const maxOut = Math.min(Math.max(Number(process.env.GEMINI_MAX_TOKENS) || 8192, 256), 8192);
+  const systemInstruction = { parts: [{ text: getPawAiLegalSystemPrompt() }] };
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
   )}:generateContent?key=${encodeURIComponent(key)}`;
@@ -137,6 +141,7 @@ async function callGemini(messages) {
   const res = await axios.post(
     url,
     {
+      systemInstruction,
       contents,
       generationConfig: {
         maxOutputTokens: maxOut,
@@ -234,10 +239,10 @@ async function runAllAndMerge(messages) {
   const synthUserMessage = {
     role: 'user',
     content:
-      `Tu es un assistant pour Ada Papers (accompagnement administratif et juridique). ` +
       `L'utilisateur a posé une question ; la dernière formulation utile est :\n` +
       `"""${lastUserSnippet}"""\n\n` +
       `Tu reçois trois briques produites en parallèle. Rédige **une seule** réponse en français, claire et structurée (titres markdown ## / ### si utile). ` +
+      `Respecte impérativement ton instruction système (charte Paw AI : sources, syllogisme, balises span lexia-verified / lexia-hypothesis / lexia-caution, section Recommandations). ` +
       `Indique explicitement l'origine des éléments avec les étiquettes **[Interne]**, **[Anthropic]**, **[Gemini]** lorsque tu t'appuies sur chaque brique. ` +
       `Si une brique indique une erreur ou « non configuré », le mentionner brièvement sans inventer de contenu.\n\n` +
       `---\n### Brique base interne (recherche documentaire indexée)\n\n${internalText.slice(0, 16000)}\n\n` +

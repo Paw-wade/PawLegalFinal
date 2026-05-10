@@ -5,12 +5,12 @@
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node --max-old-space-size=6144 server.js",
-    "dev": "nodemon --exec \"node --max-old-space-size=6144 server.js\"",
+    "start": "node --max-old-space-size=8192 server.js",
+    "dev": "nodemon --exec \"node --max-old-space-size=8192 server.js\"",
     "seed": "node scripts/seed.js",
     "create-admin": "node scripts/createAdmin.js",
     "kill-port": "node scripts/kill-port.js",
-    "start:clean": "node scripts/kill-port.js 3005 && node --max-old-space-size=6144 server.js",
+    "start:clean": "node scripts/kill-port.js 3005 && node --max-old-space-size=8192 server.js",
     "init-cms": "node scripts/initCmsContent.js"
   },
   "keywords": [],

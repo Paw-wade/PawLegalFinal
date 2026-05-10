@@ -1,6 +1,7 @@
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
+const { getInternalModeLegalFooter } = require('./lexiaLegalCharter');
 
 /** VPS Linux — sans résolution win32 pour éviter `/root/…` → `C:\\root\\…`. */
 const DEFAULT_DIR_POSIX = '/root/adapapers/backend/lexia/CAA';
@@ -581,7 +582,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
         `**Actions possibles :**\n` +
         `- Baisser **LEXIA_INDEX_MAX_FILES** (ex. 8000–15000 en dev).\n` +
         `- Augmenter **LEXIA_ENFORCE_SOFT_CAP** ou le retirer seulement si la machine a assez de RAM.\n` +
-        `- Augmenter **--max-old-space-size** au démarrage du backend.\n`,
+        `- Augmenter **--max-old-space-size** au démarrage du backend.\n` + getInternalModeLegalFooter(),
       sources: [],
     };
   }
@@ -597,7 +598,8 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
       text:
         '## Base interne LEXIA\n\nAucun document indexé pour le moment.\n\n' +
         `Ajoutez des fichiers **.md**, **.txt**, **.xml**, **.pdf**, **.doc** ou **.docx** dans le dossier :\n\n\`${dir}\`\n\n` +
-        'Puis relancez une question : les extraits pertinents seront proposés ici (sans clé API).',
+        'Puis relancez une question : les extraits pertinents seront proposés ici (sans clé API).' +
+        getInternalModeLegalFooter(),
       sources: [],
     };
   }
@@ -625,7 +627,8 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
         '## Base interne LEXIA\n\nAucun extrait ne correspond clairement aux termes de votre question.\n\n' +
         '**Suggestions :** reformulez avec des mots présents dans vos documents, ou enrichissez la base.\n\n' +
         '### Fichiers pris en compte (aperçu)\n' +
-        preview.join('\n'),
+        preview.join('\n') +
+        getInternalModeLegalFooter(),
       sources: indexedPaths.slice(0, 5).map((fp) => ({
         file: path.relative(dir, fp).replace(/\\/g, '/'),
         score: 0,
@@ -659,6 +662,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
   lines.push(
     'Vérifiez les sources sur le serveur. Pour une synthèse rédigée par un grand modèle (avec citations web), configurez **ANTHROPIC_API_KEY** et le mode **auto** ou **anthropic**.'
   );
+  lines.push(getInternalModeLegalFooter());
 
   return {
     text: lines.join('\n'),
@@ -674,7 +678,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
       text:
         '## Erreur Lexia\n\nUne erreur technique est survenue pendant la recherche dans la base documentaire.\n\n' +
         `**Détail :** ${String(err.message || err)}\n\n` +
-        'Consultez la console du serveur backend pour la pile complète.',
+        'Consultez la console du serveur backend pour la pile complète.' + getInternalModeLegalFooter(),
       sources: [],
     };
   }
