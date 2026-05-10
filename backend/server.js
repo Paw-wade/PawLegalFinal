@@ -80,13 +80,20 @@ const connectDB = async () => {
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: 'API Cabinet Juridique est en ligne',
+    message: 'API Ada Papers est en ligne',
     version: '1.0.0'
   });
 });
 
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/auth', require('./routes/auth'));
+// Termine tout /api/auth non géré ci-dessus (NextAuth vit côté Next en dev avec proxy granulaire).
+// Sans cela, Express continue la chaîne jusqu’aux routers montés sur /api/* qui font `protect` → 401 sur /session, /providers…
+app.use('/api/auth', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route API Express /api/auth inexistante: ${req.originalUrl}`,
+  });
+});
 
 // ✅ Légifrance — ajoute ces lignes
 try {
@@ -274,9 +281,9 @@ const startServer = async () => {
             .map(([k, v]) => `${k}=${v}`)
             .join(', ');
           const capInfo =
-            s.indexTruncated != null && s.indexedFilesCap != null
+            s.indexedFilesCap != null
               ? ` | indexRAM≤${s.indexedFilesCap} fichier(s)${s.indexTruncated ? ' (tronqué)' : ''}`
-              : '';
+              : ' | indexRAM: tous les fichiers (LEXIA_INDEX_MAX_FILES sans plafond)';
           console.log(
             `🧠 Paw AI (interne) — fichiers détectés sur disque: total=${s.total}${breakdown ? ` (${breakdown})` : ''}${capInfo}`
           );

@@ -89,7 +89,7 @@ export default function ClientTarificationPage() {
   const fraisExoneresPourDossier = !!selectedDossier?.fraisExoneres;
   const montantTarificationFixe = normalizeMontantTarificationFixe(selectedDossier?.montantTarificationFixe);
   const hasMontantFixe = montantTarificationFixe > 0;
-  /** Dès qu’un montant fixe cabinet ou une exonération s’applique, plus de choix de formule en ligne. */
+  /** Dès qu’un montant fixe Ada Papers ou une exonération s’applique, plus de choix de formule en ligne. */
   const lockFormuleChoice = fraisExoneresPourDossier || hasMontantFixe;
   const paiementTarifEffectue = !!selectedDossier?.paiementTarificationEffectue;
 
@@ -184,12 +184,12 @@ export default function ClientTarificationPage() {
           <p className="text-gray-600 max-w-2xl leading-relaxed">
             {fraisExoneresPourDossier ? (
               <>
-                Les frais de tarification cabinet ont été exonérés pour ce dossier : aucune formule ni paiement tarifaire
-                cabinet n’est attendu.
+                Les frais de tarification Ada Papers ont été exonérés pour ce dossier : aucune formule ni paiement
+                tarifaire n’est attendu.
               </>
             ) : hasMontantFixe ? (
               <>
-                Le cabinet a fixé un <strong>montant de tarification</strong> pour votre dossier : le choix de formule
+                Ada Papers a fixé un <strong>montant de tarification</strong> pour votre dossier : le choix de formule
                 (Standard / Tawfekh) n’est plus disponible en ligne. Les modalités de paiement figurent ci-dessous ; le
                 règlement peut être effectué <strong>en plusieurs fois</strong> (sur demande).
               </>
@@ -295,7 +295,7 @@ export default function ClientTarificationPage() {
                 </div>
               ) : hasMontantFixe ? (
                 <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-900">
-                  <p className="font-semibold">Montant fixé par le cabinet (notification envoyée)</p>
+                  <p className="font-semibold">Montant fixé par Ada Papers (notification envoyée)</p>
                   <p className="text-blue-800/90 mt-1">
                     <strong>Paiement demandé :</strong>{' '}
                     {montantTarificationFixe.toLocaleString('fr-FR', {
@@ -307,7 +307,7 @@ export default function ClientTarificationPage() {
                   </p>
                   {paiementTarifEffectue ? (
                     <p className="mt-2 text-xs font-semibold text-emerald-800">
-                      Paiement tarification enregistré comme effectué par le cabinet.
+                      Paiement tarification enregistré comme effectué par Ada Papers.
                     </p>
                   ) : null}
                 </div>
@@ -340,7 +340,7 @@ export default function ClientTarificationPage() {
                     <h2 className="text-base sm:text-lg font-bold text-gray-900">
                       {hasMontantFixe ? 'Paiement demandé pour ce dossier' : 'Modalités de paiement'}
                       <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-orange-600 align-middle">
-                        {hasMontantFixe ? 'Montant cabinet' : 'Tarification ouverte'}
+                        {hasMontantFixe ? 'Montant Ada Papers' : 'Tarification ouverte'}
                       </span>
                     </h2>
                   </div>

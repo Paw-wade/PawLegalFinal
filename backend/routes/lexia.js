@@ -7,6 +7,7 @@ const {
   getKnowledgeStats,
   invalidateCache,
 } = require('../services/lexiaInternal');
+const { runLexiaWithProvider, toSourcesFound } = require('../services/lexiaProviders');
 
 
 /**
@@ -99,6 +100,8 @@ router.get('/config', async (req, res) => {
       anthropicConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
       geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
       knowledgeDirRelative: knowledgeDir,
+      anthropicModel: (process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022').trim(),
+      geminiModel: (process.env.GEMINI_MODEL || 'gemini-2.0-flash').trim(),
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -110,24 +113,58 @@ router.get('/config', async (req, res) => {
  * Point d'entrée principal — reçoit les messages et retourne une réponse
  */
 router.post('/', async (req, res) => {
+  const t0 = Date.now();
+  let finished = false;
+  const onClose = () => {
+    if (!finished && !res.headersSent) {
+      console.warn(`[lexia] POST / client fermé la connexion après ${Date.now() - t0} ms (souvent timeout navigateur ou OOM)`);
+    }
+  };
+  req.on('close', onClose);
+
   try {
     const { messages = [], provider } = req.body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
+      finished = true;
       return res.status(400).json({ success: false, error: 'messages[] requis' });
     }
 
-    const result = await searchAndCompose(messages, getKnowledgeDir());
+    console.log(`[lexia] POST / démarrage (${messages.length} message(s)) provider=${String(provider || 'auto')}`);
+    const result = await runLexiaWithProvider(messages, provider);
+    const sourcesArr = Array.isArray(result.sources) ? result.sources : [];
+    const sourcesFound = toSourcesFound(sourcesArr);
     res.json({
       success: true,
-      text: result.text,
-      sources: result.sources,
-      searched: true,
-      sourcesFound: (result.sources || []).map((s) => s.file),
+      text: typeof result.text === 'string' ? result.text : String(result.text ?? ''),
+      sources: sourcesArr,
+      searched: Boolean(result.searched),
+      sourcesFound,
+      provider: result.provider,
+      resolvedProvider: result.resolvedProvider,
     });
+    finished = true;
+    console.log(`[lexia] POST / terminé en ${Date.now() - t0} ms`);
   } catch (err) {
-    console.error('[lexia] POST / error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    finished = true;
+    console.error('[lexia] POST / error:', err.stack || err.message);
+    const code = err.code;
+    const axiosMsg =
+      err.response?.data?.error?.message ||
+      (typeof err.response?.data === 'string' ? err.response.data : null);
+    const msg = axiosMsg || err.message || 'Erreur interne Lexia';
+    const status =
+      code === 'MISSING_KEY' || code === 'EMPTY_MESSAGES'
+        ? 400
+        : err.response?.status >= 400 && err.response?.status < 500
+          ? 400
+          : 500;
+    res.status(status).json({
+      success: false,
+      error: msg,
+      code: code || undefined,
+    });
+    console.log(`[lexia] POST / échec après ${Date.now() - t0} ms`);
   }
 });
 

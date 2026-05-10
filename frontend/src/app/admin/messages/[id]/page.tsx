@@ -951,7 +951,7 @@ export default function AdminMessageDetailPage() {
                   const response = await contactAPI.createDossierFromMessage(message._id || message.id, dossierData);
                   if (response.data.success) {
                     alert(
-                      'Dossier créé avec succès. Le cabinet est notifié dans l’application ; un SMS de confirmation part uniquement vers le numéro du contact, s’il en a laissé un.'
+                      'Dossier créé avec succès. Ada Papers est notifié dans l’application ; un SMS de confirmation part uniquement vers le numéro du contact, s’il en a laissé un.'
                     );
                     setShowCreateDossierModal(false);
                     router.push(`/admin/dossiers/${response.data.dossier._id || response.data.dossier.id}`);

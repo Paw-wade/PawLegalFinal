@@ -667,7 +667,7 @@ export default function AdminRendezVousPage() {
             <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
               Gestion des Rendez-vous
             </h1>
-            <p className="text-muted-foreground text-lg">Gérez tous les rendez-vous de votre cabinet</p>
+            <p className="text-muted-foreground text-lg">Gérez tous les rendez-vous Ada Papers</p>
           </div>
           <Button type="button" className="w-full sm:w-auto shrink-0" onClick={openAdminBookingModal}>
             Nouveau rendez-vous
@@ -923,6 +923,8 @@ export default function AdminRendezVousPage() {
                   isPast = appointmentDateEnd < new Date();
                 }
                 const statut = rdv.statut || 'en_attente';
+                const attenteReponseClient = Boolean(rdv.attenteReponseClient) && statut === 'en_attente';
+                const refusParClient = Boolean(rdv.declinedByClient) && (statut === 'annule' || statut === 'annulé');
                 
                 const terminated = isRdvTerminated(rdv);
                 
@@ -930,13 +932,15 @@ export default function AdminRendezVousPage() {
                   if (done || statut === 'termine' || statut === 'terminé') return 'bg-gray-100 text-gray-800';
                   if (statut === 'confirme' || statut === 'confirmé') return 'bg-green-100 text-green-800';
                   if (statut === 'annule' || statut === 'annulé') return 'bg-red-100 text-red-800';
+                  if (attenteReponseClient) return 'bg-amber-100 text-amber-900';
                   return 'bg-yellow-100 text-yellow-800';
                 };
 
                 const getStatutLabel = (statut: string, done: boolean) => {
                   if (done || statut === 'termine' || statut === 'terminé') return 'Terminé';
                   if (statut === 'confirme' || statut === 'confirmé') return 'Confirmé';
-                  if (statut === 'annule' || statut === 'annulé') return 'Annulé';
+                  if (statut === 'annule' || statut === 'annulé') return refusParClient ? 'Annulé (refus client)' : 'Annulé';
+                  if (attenteReponseClient) return 'Attente réponse client';
                   return 'En attente';
                 };
                 
@@ -1058,6 +1062,14 @@ export default function AdminRendezVousPage() {
                         </p>
                       </div>
                     )}
+
+                    {refusParClient && rdv.motifRefusClient ? (
+                      <div className="mb-3 pt-2 border-t border-amber-100 bg-amber-50/50 rounded-md px-2 py-1.5">
+                        <p className="text-xs text-amber-950">
+                          <span className="font-semibold">Motif du refus (client) :</span> {rdv.motifRefusClient}
+                        </p>
+                      </div>
+                    ) : null}
 
                     {/* Actions */}
                     <div className="pt-3 border-t border-gray-200">

@@ -349,8 +349,8 @@ export default function AdminDocumentsPreparationPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Documents en préparation</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Tous les brouillons utilisent l&apos;éditeur riche. Export Word (.docx) disponible pour les documents du
-            cabinet.
+            Tous les brouillons utilisent l&apos;éditeur riche. Export Word (.docx) disponible pour les documents
+            Ada Papers.
           </p>
         </div>
         <Button variant="outline" onClick={() => setCreateOpen((v) => !v)} className="gap-2 shrink-0">
@@ -572,7 +572,7 @@ export default function AdminDocumentsPreparationPage() {
                                 role="menuitem"
                                 className={menuItemClass}
                                 disabled
-                                title="Export .docx réservé aux documents du cabinet"
+                                title="Export .docx réservé aux documents Ada Papers"
                               >
                                 Télécharger (.docx)
                               </button>

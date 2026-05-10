@@ -311,7 +311,7 @@ export default function AdminDossiersPage() {
   const [notificationMessage, setNotificationMessage] = useState('');
   const [exonererFraisTarification, setExonererFraisTarification] = useState(false);
   const [fraisExoneresMotifInput, setFraisExoneresMotifInput] = useState('');
-  /** Modal cabinet : montant fixe + notification (flux simplifié). */
+  /** Modal Ada Papers : montant fixe + notification (flux simplifié). */
   const [showTarifModal, setShowTarifModal] = useState<any>(null);
   const [tarifMontantInput, setTarifMontantInput] = useState('');
   const [tarifNotifyMessage, setTarifNotifyMessage] = useState('');
@@ -2847,7 +2847,7 @@ export default function AdminDossiersPage() {
                             <span
                               className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-100 text-blue-900 border border-blue-200 max-w-[min(100%,18rem)] truncate"
                               title={[
-                                "Montant fixé par le cabinet — le client n'a pas à choisir Standard / Premium.",
+                                "Montant fixé par Ada Papers — le client n'a pas à choisir Standard / Premium.",
                                 dossier.montantTarificationFixeAt
                                   ? `Dernière fixation / modification : ${new Date(dossier.montantTarificationFixeAt).toLocaleString('fr-FR')}.`
                                   : '',
@@ -2956,7 +2956,7 @@ export default function AdminDossiersPage() {
                               type="button"
                               onClick={(e) => openTarifModal(dossier, e)}
                               className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md text-xs font-semibold transition-colors border bg-white border-blue-300 text-blue-700 hover:bg-blue-50"
-                              title="Montant fixe cabinet (prioritaire sur les formules) : enregistrer + notifier le client, ou enregistrer sans notifier."
+                              title="Montant fixe Ada Papers (prioritaire sur les formules) : enregistrer + notifier le client, ou enregistrer sans notifier."
                             >
                               Tarif
                             </button>
@@ -3109,7 +3109,7 @@ export default function AdminDossiersPage() {
                       return null;
                     })()}
 
-                    {/* Documents en préparation — brouillons collaboratifs + brouillons cabinet (éditeur riche, export .docx) */}
+                    {/* Documents en préparation — brouillons collaboratifs + brouillons Ada Papers (éditeur riche, export .docx) */}
                     {(dossierDrafts[dossier._id || dossier.id]?.length || 0) > 0 && (
                       <div className="mb-3">
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -4396,19 +4396,19 @@ export default function AdminDossiersPage() {
         </div>
       )}
 
-      {/* Modal cabinet : tarification — montant fixe (prioritaire sur le choix de formule client) + notification */}
+      {/* Modal Ada Papers : tarification — montant fixe (prioritaire sur le choix de formule client) + notification */}
       {showTarifModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Tarification — {showTarifModal.titre || showTarifModal.numero || 'Dossier'}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Un <strong>montant fixe</strong> enregistré par le cabinet <strong>remplace</strong> le choix entre les deux formules côté client. Vous pouvez l’enregistrer avec notification au client en <strong>un seul clic</strong>, ou sans notification.
+                Un <strong>montant fixe</strong> enregistré par Ada Papers <strong>remplace</strong> le choix entre les deux formules côté client. Vous pouvez l’enregistrer avec notification au client en <strong>un seul clic</strong>, ou sans notification.
               </p>
             </div>
 
             <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Montant fixe cabinet (EUR)</p>
+              <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Montant fixe Ada Papers (EUR)</p>
               <p className="text-[11px] text-muted-foreground">
                 <strong>Champ rempli</strong> : ce montant est envoyé au serveur (notification ou enregistrement silencieux).{' '}
                 <strong>Champ vide</strong> : le montant en base n’est pas modifié lors de la notification. Saisissez{' '}

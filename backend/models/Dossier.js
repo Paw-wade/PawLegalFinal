@@ -219,7 +219,7 @@ const dossierSchema = new mongoose.Schema({
     ref: 'User',
     required: false
   },
-  // Tarifications multiples (prestations différentes) fixées par le cabinet
+  // Tarifications multiples (prestations différentes) fixées par Ada Papers
   tarificationPrestations: [
     {
       label: { type: String, trim: true, required: true, maxlength: 160 },

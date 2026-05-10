@@ -1,7 +1,32 @@
 import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
-import { publicApiPath } from '@/lib/publicApiUrl';
+import type { Account } from 'next-auth/core/types';
+import { authApiPath } from '@/lib/publicApiUrl';
+
+/** Corps pour POST `/api/auth/google-login` — selon la version NextAuth, les clés peuvent varier. */
+function bodyForGoogleLogin(account: Account | null) {
+  const a = account as Record<string, unknown> | null;
+  const idTok =
+    typeof a?.id_token === 'string'
+      ? a.id_token.trim()
+      : typeof a?.idToken === 'string'
+        ? String(a.idToken).trim()
+        : '';
+  if (idTok) return { idToken: idTok } as const;
+  const accTok =
+    typeof a?.access_token === 'string'
+      ? a.access_token.trim()
+      : typeof a?.accessToken === 'string'
+        ? String(a.accessToken).trim()
+        : '';
+  if (accTok) return { accessToken: accTok } as const;
+  return null;
+}
+
+function signInErr(message: string) {
+  return `/auth/signin?error=google&message=${encodeURIComponent(message)}`;
+}
 
 // Configuration NextAuth
 const providers: NextAuthOptions['providers'] = [
@@ -16,46 +41,51 @@ const providers: NextAuthOptions['providers'] = [
         return null;
       }
 
+      let response: Response;
       try {
-        const response = await fetch(publicApiPath('/auth/login'), {
+        response = await fetch(authApiPath('/auth/login'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             email: credentials.email,
-            password: credentials.password
-          })
+            password: credentials.password,
+          }),
         });
-
-        const data = await response.json();
-
-        if (data.success && data.token) {
-          // Le token sera stocké côté client après la connexion
-          // On le retourne dans l'objet user pour qu'il soit disponible dans les callbacks
-          return {
-            id: data.user.id,
-            email: data.user.email,
-            name: `${data.user.firstName} ${data.user.lastName}`,
-            role: data.user.role || 'client',
-            profilComplete: data.user.profilComplete || false,
-            needsPasswordSetup: !!data.user.needsPasswordSetup,
-            daysRemaining: typeof data.user.daysRemaining === 'number' ? data.user.daysRemaining : null,
-            token: data.token
-          };
-        }
-
-        // Si la réponse contient un message d'erreur, le propager
-        if (data.message) {
-          throw new Error(data.message);
-        }
-
+      } catch (error) {
+        console.error('[NextAuth] Backend login injoignable (vérifiez AUTH_BACKEND_ORIGIN ou le serveur API):', error);
         return null;
-      } catch (error: any) {
-        console.error('Erreur de connexion:', error);
-        // Propager l'erreur pour qu'elle soit gérée par NextAuth
-        throw error;
       }
+
+      let data: Record<string, unknown>;
+      try {
+        data = (await response.json()) as Record<string, unknown>;
+      } catch {
+        console.warn('[NextAuth] Réponse login non-JSON, status=', response.status);
+        return null;
+      }
+
+      const user = data.user as Record<string, unknown> | undefined;
+      const token = data.token;
+
+      if (response.ok && data.success === true && typeof token === 'string' && user && user.id != null) {
+        const displayName =
+          `${String(user.firstName ?? '').trim()} ${String(user.lastName ?? '').trim()}`.trim();
+        const emailStr = String(user.email ?? credentials.email);
+        return {
+          id: String(user.id),
+          email: emailStr,
+          name: displayName || emailStr,
+          role: String(user.role || 'client'),
+          profilComplete: Boolean(user.profilComplete),
+          needsPasswordSetup: Boolean(user.needsPasswordSetup),
+          daysRemaining: typeof user.daysRemaining === 'number' ? user.daysRemaining : null,
+          token,
+        };
+      }
+
+      return null;
     }
   })
 ];
@@ -78,52 +108,95 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 const authOptions: NextAuthOptions = {
   providers,
   callbacks: {
-    async signIn({ account }) {
+    async signIn({ account, profile }) {
       if (account?.provider !== 'google' && account?.provider !== 'google-signup') {
         return true;
       }
-      if (!account.id_token) {
-        return false;
+      const googlePayload = bodyForGoogleLogin(account ?? null);
+      const profileEmail =
+        typeof (profile as { email?: unknown } | undefined)?.email === 'string'
+          ? String((profile as { email: string }).email).trim()
+          : '';
+      const hasOAuthCreds =
+        Boolean(googlePayload) ||
+        Boolean(
+          (account as Record<string, unknown> | undefined)?.id_token ||
+            (account as Record<string, unknown> | undefined)?.access_token ||
+            (account as Record<string, unknown> | undefined)?.idToken ||
+            (account as Record<string, unknown> | undefined)?.accessToken
+        ) ||
+        Boolean(profileEmail);
+      if (!hasOAuthCreds) {
+        return signInErr(
+          'Connexion Google interrompue (profil incomplet). Réessayez ou connectez-vous avec email et mot de passe.'
+        );
       }
-      // Parcours "inscription Google" : on autorise la session NextAuth
-      // même si le compte backend n'existe pas encore, pour préremplir le formulaire.
-      if (account.provider === 'google-signup') {
+
+      // Inscription Google : laisser passer ; l’échange backend se fait dans `jwt`.
+      if (account?.provider === 'google-signup') {
         return true;
       }
+
+      if (!googlePayload) {
+        return signInErr(
+          'Jeton Google absent (id_token / access_token). Mettez à jour NextAuth ou réessayez ; sinon utilisez email/mot de passe.'
+        );
+      }
       try {
-        const response = await fetch(publicApiPath('/auth/google-login'), {
+        const response = await fetch(authApiPath('/auth/google-login'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            idToken: account.id_token,
-          }),
+          body: JSON.stringify(googlePayload),
         });
-        const data = await response.json();
-        // Si l'email Google n'est pas encore connu côté backend,
-        // rediriger vers l'inscription pour éviter un AccessDenied opaque.
+        const data = (await response.json().catch(() => ({}))) as {
+          success?: boolean;
+          token?: string;
+          user?: unknown;
+          message?: string;
+        };
         if (response.status === 404) {
           return '/auth/signup';
         }
-        if (!response.ok) return false;
-        return Boolean(data?.success && data?.token && data?.user);
+        if (response.status === 401) {
+          const msg =
+            typeof data?.message === 'string' ? data.message : 'Connexion Google refusée';
+          return signInErr(msg);
+        }
+        if (!response.ok) {
+          const msg =
+            typeof data?.message === 'string'
+              ? data.message
+              : `Erreur serveur (${response.status}). Vérifiez que le backend utilise le même GOOGLE_CLIENT_ID que cette app.`;
+          return signInErr(msg);
+        }
+        const ok = Boolean(data?.success && data?.token && data?.user);
+        if (!ok) {
+          return signInErr('Réponse API invalide après Google — vérifiez les logs backend.');
+        }
+        return true;
       } catch (error) {
         console.error('Erreur validation Google signIn callback:', error);
-        return false;
+        return signInErr(
+          'API injoignable pour la connexion Google. En local : lancez le backend (port 3005) et définissez AUTH_BACKEND_ORIGIN=http://127.0.0.1:3005 si besoin.'
+        );
       }
     },
     async jwt({ token, user, account, profile }) {
-      if ((account?.provider === 'google' || account?.provider === 'google-signup') && account.id_token) {
+      const googlePayload =
+        account && (account.provider === 'google' || account.provider === 'google-signup')
+          ? bodyForGoogleLogin(account)
+          : null;
+
+      if ((account?.provider === 'google' || account?.provider === 'google-signup') && googlePayload) {
         try {
-          const response = await fetch(publicApiPath('/auth/google-login'), {
+          const response = await fetch(authApiPath('/auth/google-login'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              idToken: account.id_token,
-            }),
+            body: JSON.stringify(googlePayload),
           });
           const data = await response.json();
           if (!response.ok || !data?.success || !data?.token || !data?.user) {
@@ -199,7 +272,9 @@ const authOptions: NextAuthOptions = {
     }
   },
   pages: {
-    signIn: '/auth/signin'
+    signIn: '/auth/signin',
+    /** Sans ceci, GET /api/auth/error?error=AccessDenied sert la page HTML NextAuth avec statut 403 (bruit console). */
+    error: '/auth/signin',
   },
   session: {
     strategy: 'jwt',

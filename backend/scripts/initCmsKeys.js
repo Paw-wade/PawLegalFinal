@@ -55,7 +55,7 @@ const defaultCmsKeys = [
   },
   {
     key: 'admin.dashboard.subtitle',
-    value: "Vue d'ensemble de votre cabinet juridique",
+    value: "Vue d'ensemble Ada Papers",
     locale: 'fr-FR',
     page: 'admin',
     section: 'dashboard',

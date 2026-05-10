@@ -734,7 +734,7 @@ router.post('/', (req, res, next) => {
   }
 });
 
-// Rôles cabinet avec accès lecture à tous les documents
+// Rôles équipe Ada Papers avec accès lecture à tous les documents
 const isCabinetStaff = (role) =>
   role === 'admin' || role === 'superadmin' || role === 'secretaire';
 

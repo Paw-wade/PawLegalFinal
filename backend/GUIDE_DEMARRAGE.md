@@ -1,4 +1,4 @@
-# 🚀 Guide de Démarrage - Cabinet Juridique
+# 🚀 Guide de démarrage — Ada Papers
 
 Ce guide vous explique comment lancer le site (frontend et backend) à chaque fois que vous rallumez votre machine.
 
@@ -109,7 +109,7 @@ Vous devriez voir :
 ```json
 {
   "success": true,
-  "message": "API Cabinet Juridique est en ligne",
+  "message": "API Ada Papers est en ligne",
   "version": "1.0.0"
 }
 ```

@@ -1,5 +1,5 @@
 /**
- * Montant fixe cabinet tel que renvoyé par l’API / Mongo (number, chaîne, Decimal128, etc.).
+ * Montant fixe Ada Papers tel que renvoyé par l’API / Mongo (number, chaîne, Decimal128, etc.).
  */
 export function normalizeMontantTarificationFixe(value: unknown): number {
   if (value == null || value === '') return 0;

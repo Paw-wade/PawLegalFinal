@@ -1,13 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
+import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
-import { getApiBaseUrl, getAuthToken, pawSearchAPI } from '@/lib/api';
+import { ArrowUp, ChevronLeft, ChevronRight, MessageSquare, Search } from 'lucide-react';
+import { FORUM_THEMES, type ForumThemeValue } from '@/app/forum/forum-utils';
+import { forumAPI, getApiBaseUrl, getAuthToken, pawSearchAPI } from '@/lib/api';
+import { LexiaMarkdown } from '@/components/lexia/LexiaMarkdown';
 
-type LexiaProviderMode = 'auto' | 'anthropic' | 'gemini' | 'internal';
+type LexiaProviderMode = 'auto' | 'anthropic' | 'gemini' | 'internal' | 'all';
 
 type ChatMessage = {
   id: number;
@@ -15,8 +18,8 @@ type ChatMessage = {
   content: string;
   searched?: boolean;
   isError?: boolean;
-  /** Réponse base interne vs modèle cloud */
-  lexiaProvider?: 'anthropic' | 'internal';
+  /** Réponse base interne vs modèle cloud vs combinaison */
+  lexiaProvider?: 'anthropic' | 'internal' | 'gemini' | 'all';
   /** Clés sources déduites des requêtes web_search (mode Anthropic). */
   sourcesFound?: string[];
   totalToolUses?: number;
@@ -30,11 +33,14 @@ const MAX_STORED_THREADS = 40;
 /** Texte affiché lettre par lettre sur l’accueil Paw AI. */
 const LEXIA_ACCUEIL_HELLO = 'Hello';
 
+
 type ChatThread = {
   id: string;
   title: string;
   messages: ChatMessage[];
   updatedAt: number;
+  /** Si la conversation a été publiée sur le forum (id Mongo). */
+  forumThreadId?: string;
 };
 
 type PawSearchHit = {
@@ -67,6 +73,50 @@ function clipTitle(s: string, n = 52) {
   return t.length <= n ? t : `${t.slice(0, n)}…`;
 }
 
+/** Texte forum : le fil affiche le corps en brut (pas de HTML). */
+function stripHtmlToPlainText(s: string): string {
+  if (!s) return '';
+  return s
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|h[1-6]|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#039;/g, "'")
+    .replace(/&quot;/g, '"')
+    .trim();
+}
+
+function buildForumBodyFromLexia(messages: ChatMessage[], scope: 'full' | 'last'): string {
+  const header = `Discussion importée depuis Paw AI le ${new Date().toLocaleString('fr-FR')}\n\n`;
+  let slice = messages;
+  if (scope === 'last' && messages.length > 0) {
+    let lastUser = -1;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === 'user') {
+        lastUser = i;
+        break;
+      }
+    }
+    if (lastUser >= 0) slice = messages.slice(lastUser);
+  }
+  const parts: string[] = [];
+  for (const m of slice) {
+    const label = m.role === 'user' ? 'Question' : m.isError ? 'Paw AI — erreur' : 'Paw AI';
+    parts.push(`${label}\n\n${stripHtmlToPlainText(m.content)}`);
+  }
+  return header + parts.join('\n\n---\n\n');
+}
+
+function ensureForumTitle(raw: string): string {
+  const t = raw.replace(/\s+/g, ' ').trim() || 'Discussion Paw AI';
+  if (t.length >= 5) return t.slice(0, 200);
+  return `${t} · forum`.slice(0, 200);
+}
+
 function formatThreadWhen(ts: number) {
   try {
     return new Intl.DateTimeFormat('fr-FR', {
@@ -87,54 +137,6 @@ type Category = {
   color: string;
   prompts: string[];
 };
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function formatMessage(raw: string) {
-  const text = escapeHtml(raw);
-  const rowEmoji =
-    /^(🧾|⚖️|⚖|📋|🎯|📌|✅|🔗|🔄|📊|🛡️|🛡|⏱️|⏱|🌍|⚠️|⚠|❌|📐|📎|⚔️|🏛️|🗄️|💡)/u;
-  return text
-    .split('\n')
-    .map((line) => {
-      const st = line.trimStart();
-      if (/^──\s*SECTION\s+\d+\s*──/i.test(st)) {
-        const title = st
-          .replace(/^──\s*SECTION\s+\d+\s*──\s*/i, '')
-          .replace(/\s*─+$/, '')
-          .trim();
-        return `<div class="lexia-section-title">${title || st}</div>`;
-      }
-      if (/^─{10,}$/.test(st) || /^━{10,}$/.test(st)) return '<div class="lexia-divider"></div>';
-      if (st.startsWith('## ') || st.startsWith('### ')) {
-        return `<div class="lexia-section-title">${st.replace(/^#{2,3} /, '')}</div>`;
-      }
-      if (rowEmoji.test(st)) {
-        return `<div class="lexia-legal-row">${line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`;
-      }
-      if (line.startsWith('- ') || line.startsWith('• ')) {
-        return `<div class="lexia-bullet">${line
-          .replace(/^[-•] /, '')
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`;
-      }
-      if (/^\d+\./.test(line)) {
-        return `<div class="lexia-numbered">${line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`;
-      }
-      if (line === '---') return '<div class="lexia-divider"></div>';
-      if (line === '') return '<div class="lexia-spacer"></div>';
-      return `<span class="lexia-text-line">${line
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')}</span>`;
-    })
-    .join('');
-}
 
 const SOURCES_LIST = [
   { key: 'legifrance', label: 'Légifrance', color: '#2563eb', url: 'legifrance.gouv.fr' },
@@ -321,6 +323,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
     anthropicConfigured: boolean;
     geminiConfigured: boolean;
     knowledgeDirRelative?: string;
+    anthropicModel?: string;
+    geminiModel?: string;
   } | null>(null);
   /** Assistant dialogue vs recherche fichier base interne (API /paw-search). */
   const [lexiaSurface, setLexiaSurface] = useState<'assistant' | 'pawSearch'>('assistant');
@@ -338,8 +342,17 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   const [filterContentType, setFilterContentType] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const [forumModalOpen, setForumModalOpen] = useState(false);
+  const [forumBusy, setForumBusy] = useState(false);
+  const [forumErr, setForumErr] = useState<string | null>(null);
+  const [forumDraftTitle, setForumDraftTitle] = useState('');
+  const [forumDraftTheme, setForumDraftTheme] = useState<ForumThemeValue>('autres');
+  const [forumScope, setForumScope] = useState<'full' | 'last'>('full');
+  const [forumPublishedId, setForumPublishedId] = useState<string | null>(null);
   const pawSearchLastQueryRef = useRef('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  /** Après une réponse API, faire défiler vers le début de ce message assistant (pas la fin). */
+  const scrollNewAssistantToTopRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
@@ -360,6 +373,14 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
       (u.email ? u.email.split('@')[0] : '') ||
       'Maître'
     );
+  }, [session]);
+
+  /** Lien « contactez Ada Papers » : messagerie selon le rôle (demande cible /client/messages pour les clients). */
+  const lexiaAdaPapersMessagesHref = useMemo(() => {
+    const r = String((session?.user as { role?: string } | undefined)?.role || 'client').toLowerCase();
+    if (r === 'partenaire') return '/partenaire/messages';
+    if (r === 'admin' || r === 'superadmin') return '/admin/messages';
+    return '/client/messages';
   }, [session]);
 
   const activeThread = threads.find((t) => t.id === activeThreadId);
@@ -460,6 +481,37 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   }, [session, status, router, audience]);
 
   useEffect(() => {
+    scrollNewAssistantToTopRef.current = null;
+  }, [activeThreadId]);
+
+  useLayoutEffect(() => {
+    if (lexiaSurface === 'pawSearch') {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    if (isLoading) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    const targetId = scrollNewAssistantToTopRef.current;
+    const last = messages[messages.length - 1];
+    if (targetId != null && last?.role === 'assistant' && last.id === targetId) {
+      const el = document.querySelector<HTMLElement>(`[data-lexia-msg-id="${targetId}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      queueMicrotask(() => {
+        scrollNewAssistantToTopRef.current = null;
+      });
+      return;
+    }
+
+    if (targetId != null && (last?.id !== targetId || last?.role !== 'assistant')) {
+      queueMicrotask(() => {
+        scrollNewAssistantToTopRef.current = null;
+      });
+    }
+
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading, lexiaSurface, pawSearchHits, pawSearchLoading]);
 
@@ -497,6 +549,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           geminiConfigured: Boolean(data?.geminiConfigured),
           knowledgeDirRelative:
             typeof data?.knowledgeDirRelative === 'string' ? data.knowledgeDirRelative : undefined,
+          anthropicModel: typeof data?.anthropicModel === 'string' ? data.anthropicModel : undefined,
+          geminiModel: typeof data?.geminiModel === 'string' ? data.geminiModel : undefined,
         });
       } catch {
         /* silencieux : l’UI reste utilisable */
@@ -580,11 +634,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
       setInput('');
       setIsLoading(true);
       setOpenMenu(null);
-      const likelyAnthropic =
-        lexiaProvider === 'anthropic' ||
-        (lexiaProvider === 'auto' && Boolean(lexiaConfig?.anthropicConfigured));
-      setAgentStatus(likelyAnthropic ? 'searching' : 'analyzing');
-      setSearchStep(likelyAnthropic ? 'Recherche web multi-sources…' : 'Analyse de la requête…');
+      setAgentStatus('analyzing');
+      setSearchStep('Analyse de la requête…');
 
       const userMsg: ChatMessage = { role: 'user', content: text, id: Date.now() };
 
@@ -674,12 +725,17 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           typeof data?.totalToolUses === 'number' && Number.isFinite(data.totalToolUses)
             ? data.totalToolUses
             : 0;
-        const resolved =
-          data?.resolvedProvider === 'internal' || data?.provider === 'internal'
+        const rp = data?.resolvedProvider ?? data?.provider;
+        const resolved: ChatMessage['lexiaProvider'] | undefined =
+          rp === 'internal'
             ? 'internal'
-            : data?.resolvedProvider === 'anthropic' || data?.provider === 'anthropic'
+            : rp === 'anthropic'
               ? 'anthropic'
-              : undefined;
+              : rp === 'gemini'
+                ? 'gemini'
+                : rp === 'all'
+                  ? 'all'
+                  : undefined;
         const assistantMsg: ChatMessage = {
           role: 'assistant',
           content: finalText,
@@ -689,6 +745,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           sourcesFound,
           totalToolUses,
         };
+        scrollNewAssistantToTopRef.current = assistantMsg.id;
         setThreads((prev) =>
           prev.map((th) =>
             th.id !== tid
@@ -701,13 +758,25 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           )
         );
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Erreur inconnue';
+        let msg = e instanceof Error ? e.message : 'Erreur inconnue';
+        const low = msg.toLowerCase();
+        const looksLikeNetworkFailure =
+          low.includes('failed to fetch') ||
+          low.includes('networkerror') ||
+          low.includes('connection reset') ||
+          low.includes('load failed') ||
+          (e instanceof TypeError && low.includes('fetch'));
+        if (looksLikeNetworkFailure) {
+          msg =
+            'Impossible de joindre l’API (réseau). En local : démarrez le backend (`npm run dev` dans `backend/`, port 3005) et rechargez la page.';
+        }
         const errMsg: ChatMessage = {
           role: 'assistant',
           content: `❌ ${msg}`,
           id: Date.now() + 2,
           isError: true,
         };
+        scrollNewAssistantToTopRef.current = errMsg.id;
         setThreads((prev) =>
           prev.map((th) =>
             th.id !== tid ? th : { ...th, messages: [...th.messages, errMsg], updatedAt: Date.now() }
@@ -746,6 +815,76 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
       const next = prev.filter((t) => t.id !== id);
       return next.length === 0 ? [makeThread()] : next;
     });
+  }, []);
+
+  const openForumPublishModal = useCallback(() => {
+    if (!activeThreadId) return;
+    const th = threads.find((t) => t.id === activeThreadId);
+    if (!th || th.messages.length === 0) return;
+    setForumPublishedId(null);
+    setForumDraftTitle(th.title);
+    setForumDraftTheme('autres');
+    setForumScope('full');
+    setForumErr(null);
+    setForumModalOpen(true);
+  }, [activeThreadId, threads]);
+
+  const publishConversationToForum = useCallback(async () => {
+    if (!activeThreadId) return;
+    const th = threads.find((t) => t.id === activeThreadId);
+    if (!th) return;
+    const body = buildForumBodyFromLexia(th.messages, forumScope);
+    if (body.replace(/\s/g, '').length < 10) {
+      setForumErr('Contenu trop court pour le forum (minimum 10 caractères).');
+      return;
+    }
+    const title = ensureForumTitle(forumDraftTitle || th.title);
+    setForumBusy(true);
+    setForumErr(null);
+    try {
+      const res = await forumAPI.createThread({
+        title,
+        body,
+        theme: forumDraftTheme,
+      });
+      type CreateRes = { success?: boolean; data?: { _id?: string }; message?: string };
+      const payload = res.data as CreateRes;
+      if (!payload?.success || !payload.data?._id) {
+        throw new Error(
+          typeof payload?.message === 'string' ? payload.message : 'Publication impossible'
+        );
+      }
+      const fid = String(payload.data._id);
+      setThreads((prev) =>
+        prev.map((t) => (t.id === activeThreadId ? { ...t, forumThreadId: fid } : t))
+      );
+      setForumPublishedId(fid);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('forumUnreadUpdated'));
+      }
+    } catch (e: unknown) {
+      if (e && typeof e === 'object' && 'response' in e) {
+        const ax = e as {
+          response?: { data?: { message?: string; errors?: { msg?: string }[] } };
+        };
+        const msg =
+          ax.response?.data?.errors?.[0]?.msg ||
+          (typeof ax.response?.data?.message === 'string' ? ax.response.data.message : null);
+        if (msg) {
+          setForumErr(msg);
+          return;
+        }
+      }
+      setForumErr(e instanceof Error ? e.message : 'Erreur réseau');
+    } finally {
+      setForumBusy(false);
+    }
+  }, [activeThreadId, threads, forumDraftTitle, forumDraftTheme, forumScope]);
+
+  const closeForumModal = useCallback(() => {
+    setForumModalOpen(false);
+    setForumErr(null);
+    setForumPublishedId(null);
   }, []);
 
   const sortedThreads = useMemo(
@@ -1163,6 +1302,141 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           background: hsl(var(--muted));
           color: hsl(var(--foreground));
         }
+        .lexia-hist-forum {
+          flex-shrink: 0;
+          width: 26px;
+          height: 26px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          align-self: center;
+          border-radius: calc(var(--radius) - 4px);
+          color: hsl(var(--primary));
+          font-size: 12px;
+          font-weight: 700;
+          text-decoration: none;
+          opacity: 0.8;
+        }
+        .lexia-hist-forum:hover {
+          opacity: 1;
+          background: hsl(var(--muted));
+        }
+        .lexia-forum-modal-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 10050;
+          background: hsl(0 0% 0% / 0.45);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 16px;
+        }
+        .lexia-forum-modal-panel {
+          width: 100%;
+          max-width: 420px;
+          max-height: min(90vh, 560px);
+          overflow: auto;
+          border-radius: var(--radius);
+          border: 1px solid hsl(var(--border));
+          background: hsl(var(--background));
+          box-shadow: 0 12px 40px hsl(0 0% 0% / 0.18);
+          padding: 18px 18px 16px;
+        }
+        .lexia-forum-modal-panel h2 {
+          font-size: 16px;
+          font-weight: 600;
+          margin: 0 0 12px;
+          line-height: 1.3;
+        }
+        .lexia-forum-field {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          margin-bottom: 12px;
+          font-size: 12px;
+          color: hsl(var(--muted-foreground));
+        }
+        .lexia-forum-field input,
+        .lexia-forum-field select {
+          font-size: 14px;
+          padding: 8px 10px;
+          border-radius: calc(var(--radius) - 2px);
+          border: 1px solid hsl(var(--border));
+          background: hsl(var(--background));
+          color: hsl(var(--foreground));
+        }
+        .lexia-forum-field input:disabled,
+        .lexia-forum-field select:disabled {
+          opacity: 0.65;
+        }
+        .lexia-forum-scope {
+          border: none;
+          margin: 0 0 12px;
+          padding: 0;
+          font-size: 13px;
+        }
+        .lexia-forum-scope legend {
+          font-size: 12px;
+          color: hsl(var(--muted-foreground));
+          margin-bottom: 8px;
+          padding: 0;
+        }
+        .lexia-forum-scope label {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+          cursor: pointer;
+          color: hsl(var(--foreground));
+        }
+        .lexia-forum-scope input[type='radio'] {
+          accent-color: hsl(var(--primary));
+        }
+        .lexia-forum-err {
+          font-size: 13px;
+          color: hsl(var(--destructive));
+          margin: 0 0 12px;
+        }
+        .lexia-forum-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          margin-top: 4px;
+        }
+        .lexia-forum-btn-primary,
+        .lexia-forum-btn-secondary {
+          font-size: 13px;
+          font-weight: 600;
+          padding: 8px 14px;
+          border-radius: calc(var(--radius) - 2px);
+          cursor: pointer;
+          border: 1px solid transparent;
+        }
+        .lexia-forum-btn-primary {
+          background: hsl(var(--primary));
+          color: hsl(var(--primary-foreground));
+        }
+        .lexia-forum-btn-primary:hover:not(:disabled) {
+          filter: brightness(1.05);
+        }
+        .lexia-forum-btn-secondary {
+          background: hsl(var(--muted));
+          color: hsl(var(--foreground));
+          border-color: hsl(var(--border));
+        }
+        .lexia-forum-btn-primary:disabled,
+        .lexia-forum-btn-secondary:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+        .lexia-forum-success-link {
+          display: inline-block;
+          font-size: 14px;
+          font-weight: 600;
+          color: hsl(var(--primary));
+          text-decoration: underline;
+          margin-bottom: 14px;
+        }
         .lexia-sidebar-cat {
           border: 1px solid hsl(var(--border));
           border-radius: calc(var(--radius) - 2px);
@@ -1288,6 +1562,38 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         .lexia-header-row { display: flex; align-items: center; gap: 10px; margin-bottom: 0; }
         @media (min-width: 640px) {
           .lexia-header-row { gap: 12px; margin-bottom: 10px; }
+          .lexia-header-forum { margin-left: auto; }
+        }
+        .lexia-header-forum {
+          flex-shrink: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          height: 36px;
+          padding: 0 10px;
+          border-radius: calc(var(--radius) - 2px);
+          border: 1px solid hsl(var(--border));
+          background: hsl(var(--background));
+          color: hsl(var(--foreground));
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background 0.15s, border-color 0.15s;
+        }
+        .lexia-header-forum:hover {
+          background: hsl(var(--accent));
+          border-color: hsl(var(--primary) / 0.35);
+        }
+        .lexia-header-forum:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+        .lexia-header-forum-label {
+          display: none;
+        }
+        @media (min-width: 640px) {
+          .lexia-header-forum-label { display: inline; }
         }
         @media (max-width: 639px) {
           .lexia-header {
@@ -1306,6 +1612,15 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
             top: 50%;
             transform: translateY(-50%);
             z-index: 1;
+          }
+          .lexia-header-row .lexia-header-forum {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 1;
+            height: 34px;
+            padding: 0 8px;
           }
           .lexia-header-titles {
             flex: none;
@@ -1997,8 +2312,37 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         }
 
         .lexia-msg { display: flex; gap: 13px; animation: lexia-rise 0.3s ease both; }
-        .lexia-msg.user { flex-direction: row-reverse; }
+        .lexia-msg.user {
+          flex-direction: row;
+          justify-content: flex-end;
+          width: 100%;
+        }
+        .lexia-msg-user-cluster {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 6px;
+          max-width: 78%;
+          min-width: 0;
+        }
+        .lexia-msg-user-cluster .lexia-bubble-user {
+          max-width: 100%;
+        }
+        .lexia-msg-user-cluster .lexia-avatar-user {
+          margin-top: 0;
+        }
+        .lexia-msg-body {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 6px;
+          min-width: 0;
+          flex: 1 1 0%;
+        }
         @media (max-width: 639px) {
+          .lexia-msg-user-cluster {
+            max-width: min(92%, 100%);
+          }
           .lexia-msg { gap: 8px; }
         }
 
@@ -2025,6 +2369,21 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         .lexia-avatar-user {
           background: hsl(var(--muted));
           border: 1px solid hsl(var(--border));
+          width: auto;
+          min-width: 34px;
+          max-width: 7.5rem;
+          min-height: 34px;
+          height: auto;
+          padding: 4px 7px;
+          font-size: 10px;
+          font-weight: 600;
+          line-height: 1.2;
+          text-align: center;
+          word-break: break-word;
+          overflow: hidden;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
         }
 
         .lexia-bubble {
@@ -2064,6 +2423,27 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         .dark .lexia-bubble-error {
           color: hsl(0 86% 88%);
           border-color: hsl(0 55% 42%);
+        }
+
+        .lexia-ai-disclaimer {
+          margin: 12px 0 0;
+          padding-top: 10px;
+          border-top: 1px solid hsl(var(--border));
+          font-size: 11px;
+          line-height: 1.45;
+          color: hsl(var(--muted-foreground));
+        }
+        .lexia-bubble-error .lexia-ai-disclaimer {
+          border-top-color: hsl(0 50% 50% / 0.28);
+        }
+        .lexia-ai-disclaimer-link {
+          color: hsl(var(--primary));
+          text-decoration: underline;
+          text-underline-offset: 2px;
+          font-weight: 600;
+        }
+        .lexia-ai-disclaimer-link:hover {
+          text-decoration-thickness: 2px;
         }
 
         .lexia-provider-row {
@@ -2143,47 +2523,206 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           margin-bottom: 10px;
         }
 
-        .lexia-section-title {
-          font-size: 15px;
+        .lexia-md {
+          font-size: 13.5px;
+          line-height: 1.7;
+          color: hsl(var(--foreground));
+          min-width: 0;
+        }
+        .lexia-md > :first-child { margin-top: 0; }
+        .lexia-md > :last-child { margin-bottom: 0; }
+        .lexia-md-h {
           font-weight: 700;
           color: hsl(var(--primary));
-          margin: 14px 0 6px;
-          padding-bottom: 5px;
+          line-height: 1.35;
+          margin: 1rem 0 0.45rem;
+          padding-bottom: 0.35rem;
           border-bottom: 1px solid hsl(var(--border));
         }
-        .lexia-section-title:first-child { margin-top: 0; }
-        .lexia-text-line {
-          display: block;
+        .lexia-md-h:first-child { margin-top: 0; }
+        .lexia-md-h1 { font-size: 1.05rem; }
+        .lexia-md-h2 { font-size: 1rem; }
+        .lexia-md-h3 { font-size: 0.95rem; border-bottom: none; padding-bottom: 0; opacity: 0.95; }
+        .lexia-md-h4, .lexia-md-h5, .lexia-md-h6 { font-size: 0.9rem; border-bottom: none; padding-bottom: 0; }
+        .lexia-md-p {
+          margin: 0.45rem 0;
           color: hsl(var(--muted-foreground));
-          font-size: 13.5px;
         }
-        .lexia-legal-row {
-          padding: 5px 0 5px 10px;
-          border-left: 2px solid hsl(var(--primary) / 0.45);
-          margin: 4px 0;
-          font-size: 13px;
+        .lexia-md-ul, .lexia-md-ol {
+          margin: 0.4rem 0 0.6rem;
+          padding-left: 1.35rem;
+          color: hsl(var(--muted-foreground));
+        }
+        .lexia-md-li { margin: 0.25rem 0; }
+        .lexia-md-li > .lexia-md-p { margin: 0.2rem 0; }
+        .lexia-md-blockquote {
+          margin: 0.6rem 0;
+          padding: 0.5rem 0.75rem;
+          border-left: 3px solid hsl(var(--primary) / 0.45);
+          background: hsl(var(--muted) / 0.35);
+          border-radius: 0 calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0;
           color: hsl(var(--foreground));
         }
-        .lexia-bullet {
-          padding: 3px 0 3px 16px;
-          position: relative;
-          color: hsl(var(--muted-foreground));
-          font-size: 13px;
+        .lexia-md-blockquote .lexia-md-p { color: inherit; }
+        .lexia-md-hr {
+          border: none;
+          height: 1px;
+          background: hsl(var(--border));
+          margin: 0.85rem 0;
         }
-        .lexia-bullet::before {
-          content: '›';
-          position: absolute;
-          left: 4px;
+        .lexia-md-a {
           color: hsl(var(--primary));
+          font-weight: 500;
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        .lexia-md-a:hover { opacity: 0.9; }
+        .lexia-md-table-wrap {
+          margin: 0.6rem 0;
+          overflow-x: auto;
+          max-width: 100%;
+          border-radius: calc(var(--radius) - 2px);
+          border: 1px solid hsl(var(--border));
+        }
+        .lexia-md-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 12.5px;
+        }
+        .lexia-md-th, .lexia-md-td {
+          border: 1px solid hsl(var(--border));
+          padding: 0.45rem 0.6rem;
+          text-align: left;
+          vertical-align: top;
+        }
+        .lexia-md-th {
+          background: hsl(var(--muted) / 0.5);
+          font-weight: 600;
+          color: hsl(var(--foreground));
+        }
+        .lexia-md-pre {
+          margin: 0.55rem 0;
+          padding: 0.65rem 0.85rem;
+          overflow-x: auto;
+          border-radius: calc(var(--radius) - 2px);
+          background: hsl(var(--muted));
+          border: 1px solid hsl(var(--border));
+          font-size: 12px;
+          line-height: 1.5;
+        }
+        .lexia-md-code-block {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          white-space: pre;
+          display: block;
+          background: transparent;
+          border: none;
+          padding: 0;
+          font-size: inherit;
+        }
+        .lexia-md-code-inline {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 0.88em;
+          padding: 0.1em 0.35em;
+          border-radius: 4px;
+          background: hsl(var(--muted));
+          border: 1px solid hsl(var(--border));
+          color: hsl(var(--foreground));
+        }
+        .lexia-md span.lexia-verified {
+          display: inline;
+          box-decoration-break: clone;
+          -webkit-box-decoration-break: clone;
+          padding: 0.15em 0.4em;
+          margin: 0 0.05em;
+          border-radius: 4px;
+          font-weight: 600;
+          color: hsl(160 55% 18%);
+          background: hsl(142 62% 92%);
+          border-bottom: 2px solid hsl(152 55% 38%);
+          line-height: 1.55;
+        }
+        .lexia-md span.lexia-hypothesis {
+          display: inline;
+          box-decoration-break: clone;
+          -webkit-box-decoration-break: clone;
+          padding: 0.15em 0.4em;
+          margin: 0 0.05em;
+          border-radius: 4px;
+          font-weight: 500;
+          color: hsl(32 55% 22%);
+          background: hsl(38 92% 90%);
+          border-bottom: 2px solid hsl(32 85% 44%);
+          line-height: 1.55;
+        }
+        .lexia-md span.lexia-caution {
+          display: inline;
+          box-decoration-break: clone;
+          -webkit-box-decoration-break: clone;
+          padding: 0.15em 0.4em;
+          margin: 0 0.05em;
+          border-radius: 4px;
+          font-weight: 600;
+          color: hsl(0 50% 26%);
+          background: hsl(0 86% 94%);
+          border-bottom: 2px solid hsl(0 72% 48%);
+          line-height: 1.55;
+        }
+        .lexia-md span.lexia-emphasis {
+          display: inline;
+          box-decoration-break: clone;
+          -webkit-box-decoration-break: clone;
+          padding: 0.12em 0.38em;
+          margin: 0 0.05em;
+          border-radius: 4px;
           font-weight: 700;
+          color: hsl(var(--primary));
+          background: hsl(var(--primary) / 0.12);
+          border: 1px solid hsl(var(--primary) / 0.35);
+          line-height: 1.55;
         }
-        .lexia-numbered {
-          padding: 3px 0 3px 4px;
-          color: hsl(var(--muted-foreground));
-          font-size: 13px;
+        .lexia-md-u.lexia-md-u,
+        .lexia-md .lexia-md-u {
+          text-decoration: underline;
+          text-underline-offset: 3px;
+          text-decoration-thickness: 2px;
+          text-decoration-color: hsl(152 55% 36%);
         }
-        .lexia-divider { height: 1px; background: hsl(var(--border)); margin: 10px 0; }
-        .lexia-spacer { height: 4px; }
+        .lexia-md-mark.lexia-md-mark,
+        .lexia-md .lexia-md-mark {
+          background: hsl(48 96% 77%);
+          color: hsl(var(--foreground));
+          padding: 0.08em 0.25em;
+          border-radius: 3px;
+        }
+        .dark .lexia-md span.lexia-verified {
+          color: hsl(142 50% 88%);
+          background: hsl(160 40% 16%);
+          border-bottom-color: hsl(152 45% 42%);
+        }
+        .dark .lexia-md span.lexia-hypothesis {
+          color: hsl(38 80% 88%);
+          background: hsl(32 45% 18%);
+          border-bottom-color: hsl(38 70% 48%);
+        }
+        .dark .lexia-md span.lexia-caution {
+          color: hsl(0 70% 90%);
+          background: hsl(0 35% 18%);
+          border-bottom-color: hsl(0 55% 50%);
+        }
+        .dark .lexia-md span.lexia-emphasis {
+          background: hsl(var(--primary) / 0.22);
+          border-color: hsl(var(--primary) / 0.45);
+          color: hsl(var(--primary));
+        }
+        .dark .lexia-md .lexia-md-u {
+          text-decoration-color: hsl(152 50% 55%);
+        }
+        .dark .lexia-md .lexia-md-mark {
+          background: hsl(45 35% 28%);
+          color: hsl(48 90% 92%);
+        }
+        .lexia-bubble-error .lexia-md-p,
+        .lexia-bubble-error .lexia-md-li { color: inherit; }
         .lexia-bubble strong { font-weight: 600; color: hsl(var(--foreground)); }
         .lexia-bubble em { font-style: italic; color: hsl(var(--primary)); }
 
@@ -2332,6 +2871,22 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           box-shadow: 0 2px 10px hsl(var(--primary) / 0.35);
         }
         .lexia-send-btn:not(:disabled):hover { filter: brightness(0.95); }
+        .lexia-send-btn:not(:disabled) .lexia-send-arrow-assistant {
+          color: #f97316 !important;
+        }
+        .lexia-send-btn:not(:disabled) .lexia-send-arrow-assistant circle,
+        .lexia-send-btn:not(:disabled) .lexia-send-arrow-assistant line,
+        .lexia-send-btn:not(:disabled) .lexia-send-arrow-assistant path,
+        .lexia-send-btn:not(:disabled) .lexia-send-arrow-assistant polyline {
+          stroke: #f97316 !important;
+        }
+        .lexia-send-btn:disabled .lexia-send-arrow-assistant,
+        .lexia-send-btn:disabled .lexia-send-arrow-assistant path,
+        .lexia-send-btn:disabled .lexia-send-arrow-assistant line,
+        .lexia-send-btn:disabled .lexia-send-arrow-assistant polyline {
+          color: hsl(var(--muted-foreground)) !important;
+          stroke: hsl(var(--muted-foreground)) !important;
+        }
         .lexia-send-btn:disabled {
           background: hsl(var(--muted));
           cursor: not-allowed;
@@ -2411,6 +2966,17 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                         <span className="lexia-hist-when">{formatThreadWhen(t.updatedAt)}</span>
                       </span>
                     </button>
+                    {t.forumThreadId ? (
+                      <Link
+                        href={`/forum/${t.forumThreadId}`}
+                        className="lexia-hist-forum"
+                        title="Voir sur le forum"
+                        aria-label="Voir sur le forum"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        ↗
+                      </Link>
+                    ) : null}
                     <button
                       type="button"
                       className="lexia-hist-del"
@@ -2464,16 +3030,19 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
               aria-label="Mode Paw AI"
               disabled={isLoading}
             >
-              <option value="auto">Auto (serveur : Anthropic, sinon Gemini, sinon interne)</option>
+              <option value="auto">Auto (Anthropic → Gemini → interne)</option>
               <option value="internal">Base documentaire interne uniquement</option>
-              <option value="anthropic">Anthropic (clé API requise)</option>
-              <option value="gemini">Gemini (clé API requise)</option>
+              <option value="anthropic">Anthropic uniquement (clé API)</option>
+              <option value="gemini">Gemini uniquement (clé API)</option>
+              <option value="all">Tout combiner (interne + Anthropic + Gemini + synthèse)</option>
             </select>
             {lexiaConfig && (
               <div className="lexia-provider-hint">
                 Serveur : <strong>{lexiaConfig.envProvider}</strong>
                 {lexiaConfig.anthropicConfigured ? ' · Anthropic OK' : ' · Anthropic KO'}
                 {lexiaConfig.geminiConfigured ? ' · Gemini OK' : ' · Gemini KO'}
+                {lexiaConfig.anthropicModel ? ` · ${lexiaConfig.anthropicModel}` : ''}
+                {lexiaConfig.geminiModel ? ` · ${lexiaConfig.geminiModel}` : ''}
                 {showServerPaths && lexiaConfig.knowledgeDirRelative
                   ? ` · Corpus : ${lexiaConfig.knowledgeDirRelative}`
                   : null}
@@ -2502,10 +3071,20 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
               </button>
               <div className="lexia-header-titles">
                 <h1>Paw AI - Votre assistant juridique</h1>
-                <p>
-                  Droit des étrangers · Contentieux administratif · {SOURCES_LIST.length} bases de données
-                </p>
+                <p>Droit des étrangers · Contentieux administratif</p>
               </div>
+              {lexiaSurface === 'assistant' && activeThreadId !== null && messages.length > 0 ? (
+                <button
+                  type="button"
+                  className="lexia-header-forum"
+                  onClick={openForumPublishModal}
+                  title="Publier cette conversation sur le forum"
+                  aria-label="Publier la conversation sur le forum"
+                >
+                  <MessageSquare aria-hidden width={16} height={16} strokeWidth={2.25} />
+                  <span className="lexia-header-forum-label">Forum</span>
+                </button>
+              ) : null}
             </div>
             <div className="lexia-header-tabs" role="tablist" aria-label="Mode Paw AI">
               <button
@@ -2742,19 +3321,15 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
               <>
                 {messages.length === 0 && (
                   <div className="lexia-welcome">
-                    <div className="lexia-welcome-badge">⚖️ Recherche multi-sources</div>
+                    <div className="lexia-welcome-badge">⚖️ Paw AI</div>
                     <h2>
                       Bienvenue, {lexiaWelcomeName}.
                       <br />
                       <em>Comment puis-je vous assister ?</em>
                     </h2>
                     <p>
-                      Je recherche et analyse la jurisprudence en droit des étrangers sur {SOURCES_LIST.length} bases —
-                      Légifrance, Conseil d&apos;État, CAA, tribunaux administratifs, Cour de cassation, Pappers Justice,
-                      EUR-Lex, CEDH, GISTI, data.gouv.fr et accords bilatéraux — pour alimenter vos mémoires contentieux.
-                      Selon le réglage <strong>Moteur</strong> (menu latéral) : le mode <strong>interne</strong> interroge
-                      vos fichiers sur le serveur ; le mode <strong>Anthropic</strong> s&apos;appuie sur le modèle
-                      (vérifiez toujours sources et droit positif).
+                      Posez votre question : Paw AI analyse la requête et vous propose une réponse structurée. Vérifiez
+                      toujours les sources et le droit positif avant toute décision ou acte juridique.
                     </p>
                     <div className="lexia-qgrid">
                       {[
@@ -2771,39 +3346,43 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                   </div>
                 )}
 
-                {messages.map((m) => (
-              <div key={m.id} className={`lexia-msg ${m.role}`}>
-                <div className={`lexia-avatar ${m.role === 'assistant' ? 'lexia-avatar-ai' : 'lexia-avatar-user'}`}>
-                  {m.role === 'assistant' ? '⚖️' : '👤'}
-                </div>
-                <div>
-                  {m.role === 'assistant' && m.lexiaProvider === 'internal' && (
-                    <div className="lexia-internal-tag">📚 Base documentaire interne</div>
-                  )}
-                  {m.role === 'assistant' && m.lexiaProvider === 'anthropic' && m.searched && (
-                    <div className="lexia-search-tag">
-                      🔎 {m.totalToolUses && m.totalToolUses > 0 ? m.totalToolUses : 1} recherche
-                      {(m.totalToolUses ?? 0) > 1 ? 's' : ''} —{' '}
-                      {m.sourcesFound && m.sourcesFound.length > 0
-                        ? `${m.sourcesFound.length} base${m.sourcesFound.length > 1 ? 's' : ''} identifiée${m.sourcesFound.length > 1 ? 's' : ''}`
-                        : 'recherche web'}
+                {messages.map((m) =>
+                  m.role === 'user' ? (
+                    <div key={m.id} className="lexia-msg user" data-lexia-msg-id={m.id}>
+                      <div className="lexia-msg-user-cluster">
+                        <div
+                          className="lexia-avatar lexia-avatar-user"
+                          title={lexiaWelcomeName}
+                          aria-label={lexiaWelcomeName}
+                        >
+                          {lexiaWelcomeName}
+                        </div>
+                        <div className="lexia-bubble lexia-bubble-user">
+                          <LexiaMarkdown content={m.content} />
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  {m.role === 'assistant' && m.lexiaProvider === 'anthropic' && !m.searched && (
-                    <div className="lexia-cloud-tag">☁️ Synthèse (modèle cloud)</div>
-                  )}
-                  {m.role === 'assistant' && !m.lexiaProvider && m.searched && (
-                    <div className="lexia-search-tag">🔎 Recherche web (outil modèle)</div>
-                  )}
-                  <div
-                    className={`lexia-bubble ${m.role === 'assistant' ? 'lexia-bubble-ai' : 'lexia-bubble-user'} ${
-                      m.isError ? 'lexia-bubble-error' : ''
-                    }`}
-                    dangerouslySetInnerHTML={{ __html: formatMessage(m.content) }}
-                  />
-                </div>
-              </div>
-                ))}
+                  ) : (
+                    <div key={m.id} className="lexia-msg assistant" data-lexia-msg-id={m.id}>
+                      <div className="lexia-avatar lexia-avatar-ai">⚖️</div>
+                      <div className="lexia-msg-body">
+                        {!m.isError && <div className="lexia-internal-tag">Analyse de la requête</div>}
+                        <div className={`lexia-bubble lexia-bubble-ai ${m.isError ? 'lexia-bubble-error' : ''}`}>
+                          <LexiaMarkdown content={m.content} />
+                          <p className="lexia-ai-disclaimer" role="note">
+                            Les réponses de Paw AI sont données à titre informatif uniquement et ne remplacent pas un
+                            avis professionnel. Paw AI peut se tromper ou omettre des éléments importants. Pour une
+                            prise en charge personnalisée,{' '}
+                            <Link href={lexiaAdaPapersMessagesHref} className="lexia-ai-disclaimer-link">
+                              contactez Ada Papers
+                            </Link>
+                            .
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
 
                 {isLoading && (
                   <div className="lexia-typing">
@@ -2815,20 +3394,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                         <span />
                       </div>
                       <div className="lexia-typing-label">
-                        {searchStep ||
-                          (agentStatus === 'searching'
-                            ? '🔎 Recherche jurisprudentielle…'
-                            : '📋 Analyse juridique en cours…')}
+                        {searchStep || 'Analyse de la requête…'}
                       </div>
-                      {agentStatus === 'searching' && (
-                        <div className="lexia-sp-row">
-                          {SOURCES_LIST.map((s) => (
-                            <span key={s.key} className="lexia-sp-tag">
-                              {s.label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
@@ -2878,7 +3445,18 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                 title={lexiaSurface === 'pawSearch' ? 'Lancer Paw Search' : 'Envoyer'}
                 aria-label={lexiaSurface === 'pawSearch' ? 'Lancer Paw Search' : 'Envoyer'}
               >
-                {lexiaSurface === 'pawSearch' ? <Search aria-hidden width={18} height={18} strokeWidth={2.25} /> : '⚖'}
+                {lexiaSurface === 'pawSearch' ? (
+                  <Search aria-hidden width={18} height={18} strokeWidth={2.25} />
+                ) : (
+                  <ArrowUp
+                    className="lexia-send-arrow-assistant"
+                    aria-hidden
+                    width={18}
+                    height={18}
+                    strokeWidth={2.5}
+                    color="#f97316"
+                  />
+                )}
               </button>
             </div>
             <div className="lexia-input-hint">
@@ -2889,6 +3467,109 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           </div>
         </div>
       </div>
+
+      {forumModalOpen ? (
+        <div
+          className="lexia-forum-modal-overlay"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !forumBusy && !forumPublishedId) closeForumModal();
+          }}
+        >
+          <div
+            className="lexia-forum-modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lexia-forum-modal-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2 id="lexia-forum-modal-title">Publier sur le forum</h2>
+            {forumPublishedId ? (
+              <>
+                <p style={{ fontSize: 13, margin: '0 0 10px', lineHeight: 1.45 }}>
+                  La discussion a été publiée.
+                </p>
+                <Link href={`/forum/${forumPublishedId}`} className="lexia-forum-success-link">
+                  Ouvrir le fil sur le forum
+                </Link>
+                <div className="lexia-forum-actions" style={{ marginTop: 8 }}>
+                  <button type="button" className="lexia-forum-btn-primary" onClick={closeForumModal}>
+                    Fermer
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="lexia-forum-field">
+                  <span>Titre</span>
+                  <input
+                    type="text"
+                    value={forumDraftTitle}
+                    onChange={(e) => setForumDraftTitle(e.target.value)}
+                    maxLength={200}
+                    disabled={forumBusy}
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="lexia-forum-field">
+                  <span>Thème</span>
+                  <select
+                    value={forumDraftTheme}
+                    onChange={(e) => setForumDraftTheme(e.target.value as ForumThemeValue)}
+                    disabled={forumBusy}
+                  >
+                    {FORUM_THEMES.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <fieldset className="lexia-forum-scope" disabled={forumBusy}>
+                  <legend>Contenu à publier</legend>
+                  <label>
+                    <input
+                      type="radio"
+                      name="forum-scope"
+                      checked={forumScope === 'full'}
+                      onChange={() => setForumScope('full')}
+                    />
+                    Toute la conversation
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="forum-scope"
+                      checked={forumScope === 'last'}
+                      onChange={() => setForumScope('last')}
+                    />
+                    Depuis la dernière question
+                  </label>
+                </fieldset>
+                {forumErr ? <p className="lexia-forum-err">{forumErr}</p> : null}
+                <div className="lexia-forum-actions">
+                  <button
+                    type="button"
+                    className="lexia-forum-btn-secondary"
+                    onClick={closeForumModal}
+                    disabled={forumBusy}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    className="lexia-forum-btn-primary"
+                    onClick={() => void publishConversationToForum()}
+                    disabled={forumBusy}
+                  >
+                    {forumBusy ? 'Publication…' : 'Publier'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

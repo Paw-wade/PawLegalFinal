@@ -13,7 +13,6 @@ export const ROUTE_PERMISSION_MAP: Record<string, string> = {
   '/admin/sms': 'sms',
   '/admin/cms': 'cms',
   '/admin/lexia': 'cms',
-  '/admin/logs': 'logs',
   '/admin/corbeille': 'corbeille',
   '/admin/compte': 'tableau_de_bord', // Toujours accessible
 };
@@ -78,7 +77,6 @@ export function getAccessDeniedMessage(route: string): string {
     '/admin/sms': 'SMS',
     '/admin/cms': 'CMS',
     '/admin/lexia': 'Paw AI',
-    '/admin/logs': 'Logs',
     '/admin/corbeille': 'Corbeille',
   };
 

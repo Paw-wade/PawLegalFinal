@@ -1,13 +1,12 @@
 import type { Metadata } from 'next';
-import LexiaUserGate from './LexiaUserGate';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Paw AI | Assistant juridique',
+  title: 'Logs | Admin',
   robots: { index: false, follow: false },
 };
 
-export default function LexiaUserPage() {
-  return <LexiaUserGate />;
+export default function AdminLogsLayout({ children }: { children: React.ReactNode }) {
+  return children;
 }

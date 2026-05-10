@@ -22,7 +22,7 @@ export default function PawAiComingSoon() {
         </div>
         <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           <Sparkles className="h-3.5 w-3.5" aria-hidden />
-          En conception
+          En cours de conception
         </div>
         <h1 className="text-xl font-bold text-foreground sm:text-2xl">Paw AI</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">

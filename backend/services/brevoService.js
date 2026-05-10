@@ -1,5 +1,22 @@
-const BrevoModule = require('@getbrevo/brevo');
-const Brevo = BrevoModule?.default || BrevoModule;
+let brevoSdk = null;
+
+function getBrevo() {
+  if (brevoSdk !== null) return brevoSdk;
+  try {
+    const mod = require('@getbrevo/brevo');
+    brevoSdk = mod?.default || mod;
+    return brevoSdk;
+  } catch (err) {
+    if (err?.code === 'MODULE_NOT_FOUND') {
+      const hint = new Error(
+        '@getbrevo/brevo absent : dans le dossier backend, exécutez `npm install` puis redémarrez le process (ex. pm2).'
+      );
+      hint.code = 'BREVO_SDK_MISSING';
+      throw hint;
+    }
+    throw err;
+  }
+}
 
 let legacyApiInstance = null;
 let modernClient = null;
@@ -12,6 +29,8 @@ function getTransactionalApi() {
   if (!apiKey) {
     throw new Error('BREVO_API_KEY manquante');
   }
+
+  const Brevo = getBrevo();
 
   if (legacyApiInstance) return legacyApiInstance;
   if (modernClient) return modernClient.transactionalEmails;
@@ -31,6 +50,7 @@ function getTransactionalApi() {
 }
 
 async function sendEmail({ to, toName = '', subject, htmlContent, textContent = '' }) {
+  const Brevo = getBrevo();
   const api = getTransactionalApi();
 
   if (Brevo?.SendSmtpEmail) {

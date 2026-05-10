@@ -557,17 +557,17 @@ router.post(
 // @route   POST /api/auth/google-login
 // @desc    Connecter un utilisateur via Google (échange idToken -> token API)
 // @access  Public
-router.post(
-  '/google-login',
-  [body('idToken').notEmpty().withMessage('Le token Google est requis')],
-  async (req, res) => {
+router.post('/google-login', async (req, res) => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
+      const idTokenRaw = req.body?.idToken;
+      const accessTokenRaw = req.body?.accessToken;
+      const idToken = typeof idTokenRaw === 'string' ? idTokenRaw.trim() : '';
+      const accessToken = typeof accessTokenRaw === 'string' ? accessTokenRaw.trim() : '';
+
+      if ((!idToken && !accessToken) || (idToken && accessToken)) {
         return res.status(400).json({
           success: false,
-          message: 'Erreurs de validation',
-          errors: errors.array(),
+          message: 'Envoyez soit idToken (JWT OpenID Google) soit accessToken OAuth, uniquement.',
         });
       }
 
@@ -579,21 +579,48 @@ router.post(
         });
       }
 
-      const { idToken } = req.body;
-      const ticket = await googleClient.verifyIdToken({
-        idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
+      let email;
 
-      if (!payload?.email) {
+      if (idToken) {
+        const ticket = await googleClient.verifyIdToken({
+          idToken,
+          audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+        if (!payload?.email) {
+          return res.status(401).json({
+            success: false,
+            message: 'Impossible de récupérer un email depuis Google.',
+          });
+        }
+        email = String(payload.email).trim().toLowerCase();
+      } else {
+        const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const userinfo = await userinfoRes.json().catch(() => ({}));
+        if (!userinfoRes.ok || !userinfo.email) {
+          return res.status(401).json({
+            success: false,
+            message: 'Token Google OAuth invalide ou email inaccessible.',
+          });
+        }
+        if (userinfo.email_verified === false) {
+          return res.status(401).json({
+            success: false,
+            message: 'Email Google non vérifié.',
+          });
+        }
+        email = String(userinfo.email).trim().toLowerCase();
+      }
+
+      if (!email) {
         return res.status(401).json({
           success: false,
           message: 'Impossible de récupérer un email depuis Google.',
         });
       }
 
-      const email = String(payload.email).trim().toLowerCase();
       const user = await User.findOne({ email });
 
       if (!user) {

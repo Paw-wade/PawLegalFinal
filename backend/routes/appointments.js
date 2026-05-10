@@ -250,6 +250,12 @@ router.post(
         motif,
         description: description || '',
         ...(linkedDossierId ? { dossierId: linkedDossierId } : {}),
+        ...(bookingByAdmin && userId
+          ? {
+              proposeParAdmin: true,
+              attenteReponseClient: true,
+            }
+          : {}),
       });
 
       console.log('✅ Rendez-vous créé avec succès:', rendezVous._id);
@@ -284,7 +290,9 @@ router.post(
 
           const motifLabel = getMotifRdvLabel(rendezVous.motif);
           const descTrim = String(rendezVous.description || '').trim();
-          let message = `${prenom || ''} ${nom} (${email}) a demandé un rendez-vous le ${dateLabel} à ${heure}. Motif : ${motifLabel}.`;
+          let message = bookingByAdmin && userId
+            ? `Proposition de rendez-vous pour ${prenom || ''} ${nom} (${email}) le ${dateLabel} à ${heure}. En attente de réponse du client. Motif : ${motifLabel}.`
+            : `${prenom || ''} ${nom} (${email}) a demandé un rendez-vous le ${dateLabel} à ${heure}. Motif : ${motifLabel}.`;
           if (descTrim) {
             message += ` Précisions : ${descTrim}`;
           }
@@ -293,9 +301,9 @@ router.post(
             await Notification.create({
               user: admin._id,
               type: 'appointment_created',
-              titre: 'Nouveau rendez-vous demandé',
+              titre: bookingByAdmin && userId ? 'Proposition de rendez-vous (attente client)' : 'Nouveau rendez-vous demandé',
               message,
-              lien: '/admin?section=appointments',
+              lien: '/admin/rendez-vous',
               metadata: {
                 appointmentId: rendezVous._id.toString(),
                 userId: userId ? userId.toString() : null,
@@ -398,19 +406,20 @@ Merci de traiter cette demande depuis l’espace d’administration.`,
             month: 'long',
             year: 'numeric',
           });
-          const inAppMsg = `Un rendez-vous a été planifié le ${dateLabelSms} à ${rendezVous.heure}. En attente de validation par le cabinet.`;
+          const inAppMsg = `Vous avez reçu une proposition de rendez-vous pour le ${dateLabelSms} à ${rendezVous.heure}. Acceptez ou refusez depuis Mes rendez-vous.`;
 
           await Notification.create({
             user: userId,
             type: 'appointment_created',
-            titre: 'Rendez-vous enregistré',
+            titre: 'Proposition de rendez-vous',
             message: inAppMsg,
-            lien: '/client/notifications',
+            lien: '/client/rendez-vous',
             metadata: {
               appointmentId: rendezVous._id.toString(),
               date: rendezVous.date,
               heure: rendezVous.heure,
               bookedByAdmin: true,
+              attenteReponseClient: true,
             },
           });
 
@@ -419,22 +428,24 @@ Merci de traiter cette demande depuis l’espace d’administration.`,
             await sendTransactionalEmail({
               to: clientMail,
               toName: name,
-              subject: 'Rendez-vous enregistré — Ada Papers',
-              htmlContent: `<p>Bonjour ${escapeHtml(name)},</p><p>Un rendez-vous a été planifié à votre nom.</p><p><strong>Date :</strong> ${escapeHtml(dateLabelSms)}<br/><strong>Heure :</strong> ${escapeHtml(rendezVous.heure)}</p><p>Ce rendez-vous est actuellement en attente de validation finale. Vous recevrez une confirmation par e-mail dès sa prise en charge.</p>`,
+              subject: 'Proposition de rendez-vous — Ada Papers',
+              htmlContent: `<p>Bonjour ${escapeHtml(name)},</p><p>Vous avez reçu une proposition de rendez-vous.</p><p><strong>Date :</strong> ${escapeHtml(dateLabelSms)}<br/><strong>Heure :</strong> ${escapeHtml(rendezVous.heure)}</p><p>Merci de <strong>accepter ou refuser</strong> depuis votre espace <a href="${escapeHtml(`${getPrimaryFrontendUrl()}/client/rendez-vous`)}">Mes rendez-vous</a>. L’équipe Ada Papers sera notifiée de votre choix.</p>`,
               textContent: `Bonjour ${name},
 
-Un rendez-vous a été planifié à votre nom.
+Ada Papers vous propose un rendez-vous.
 Date : ${dateLabelSms}
 Heure : ${rendezVous.heure}
 
-Ce rendez-vous est actuellement en attente de validation finale. Vous recevrez une confirmation par e-mail dès sa prise en charge.`,
+Acceptez ou refusez depuis votre espace Mes rendez-vous : ${getPrimaryFrontendUrl()}/client/rendez-vous
+
+L’équipe Ada Papers sera notifiée de votre choix.`,
             });
           }
 
           try {
             const formattedPhone = formatPhoneNumber(client?.phone || telephone || '');
             if (formattedPhone && formattedPhone.startsWith('+33')) {
-              const smsBody = `Ada Papers: RDV planifié le ${dateLabelSms} à ${rendezVous.heure}. En attente validation. Détail dans votre espace.`;
+                const smsBody = `Ada Papers: proposition de RDV le ${dateLabelSms} à ${rendezVous.heure}. Acceptez ou refusez dans votre espace client.`;
               await sendSMS(formattedPhone, smsBody.slice(0, 480));
             }
           } catch (smsErr) {
@@ -836,6 +847,13 @@ router.patch(
         });
       }
 
+      if (rendezVous.attenteReponseClient) {
+        return res.status(400).json({
+          success: false,
+          message: 'Répondez d’abord à la proposition de RDV depuis cette page.'
+        });
+      }
+
       if (rendezVous.statut === 'termine') {
         return res.status(400).json({
           success: false,
@@ -960,6 +978,190 @@ Si vous souhaitez reprendre rendez-vous, vous pouvez soumettre une nouvelle dema
   }
 );
 
+// @route   PATCH /api/appointments/:id/reponse-client
+// @desc    Accepter ou refuser une proposition de RDV faite par l’admin (client propriétaire)
+// @access  Private
+router.patch(
+  '/:id/reponse-client',
+  protect,
+  [
+    body('decision').isIn(['accept', 'decline']).withMessage('decision doit être accept ou decline'),
+    body('motifRefus').optional().trim().isLength({ max: 500 }).withMessage('Le motif ne peut pas dépasser 500 caractères'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Erreurs de validation',
+          errors: errors.array(),
+        });
+      }
+
+      const { decision, motifRefus } = req.body;
+      const rendezVous = await RendezVous.findById(req.params.id);
+
+      if (!rendezVous) {
+        return res.status(404).json({
+          success: false,
+          message: 'Rendez-vous non trouvé',
+        });
+      }
+
+      if (rendezVous.user && rendezVous.user.toString() !== req.user.id) {
+        return res.status(403).json({
+          success: false,
+          message: 'Vous n\'avez pas l\'autorisation de répondre pour ce rendez-vous',
+        });
+      }
+
+      if (!rendezVous.user && rendezVous.email !== req.user.email) {
+        return res.status(403).json({
+          success: false,
+          message: 'Vous n\'avez pas l\'autorisation de répondre pour ce rendez-vous',
+        });
+      }
+
+      if (!rendezVous.attenteReponseClient) {
+        if (decision === 'accept' && rendezVous.statut === 'confirme') {
+          await rendezVous.populate('user', 'firstName lastName email phone');
+          return res.json({
+            success: true,
+            message: 'Ce rendez-vous est déjà confirmé.',
+            data: rendezVous,
+          });
+        }
+        if (decision === 'decline' && rendezVous.statut === 'annule' && rendezVous.declinedByClient) {
+          await rendezVous.populate('user', 'firstName lastName email phone');
+          return res.json({
+            success: true,
+            message: 'Votre refus a déjà été enregistré.',
+            data: rendezVous,
+          });
+        }
+        return res.status(400).json({
+          success: false,
+          message: 'Ce rendez-vous ne nécessite plus de réponse de votre part.',
+        });
+      }
+
+      if (rendezVous.statut !== 'en_attente') {
+        return res.status(400).json({
+          success: false,
+          message: 'Réponse impossible pour ce rendez-vous dans son état actuel.',
+        });
+      }
+
+      const now = new Date();
+      if (decision === 'accept') {
+        rendezVous.statut = 'confirme';
+        rendezVous.attenteReponseClient = false;
+        rendezVous.clientReponduAt = now;
+        rendezVous.declinedByClient = false;
+        rendezVous.motifRefusClient = null;
+      } else {
+        rendezVous.statut = 'annule';
+        rendezVous.attenteReponseClient = false;
+        rendezVous.clientReponduAt = now;
+        rendezVous.declinedByClient = true;
+        rendezVous.motifRefusClient = motifRefus ? String(motifRefus).trim() : '';
+      }
+
+      await rendezVous.save();
+      await rendezVous.populate('user', 'firstName lastName email phone');
+
+      const User = require('../models/User');
+      const admins = await User.find({
+        role: { $in: ['admin', 'superadmin'] },
+        isActive: { $ne: false },
+      }).select('_id');
+
+      const clientName = rendezVous.user
+        ? `${rendezVous.user.firstName || ''} ${rendezVous.user.lastName || ''}`.trim() || rendezVous.user.email
+        : `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim() || rendezVous.email || 'Client';
+
+      const dateFormatted = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
+      if (decision === 'accept') {
+        const adminNotifications = admins.map((admin) => ({
+          user: admin._id,
+          type: 'appointment_client_accepted',
+          titre: `✅ RDV accepté — ${clientName}`,
+          message: `${clientName} a accepté le rendez-vous du ${dateFormatted} à ${rendezVous.heure || '—'}.`,
+          lien: '/admin/rendez-vous',
+          metadata: {
+            appointmentId: rendezVous._id.toString(),
+            clientName,
+            date: rendezVous.date,
+            heure: rendezVous.heure,
+          },
+        }));
+        if (adminNotifications.length > 0) {
+          await Notification.insertManyWithPush(adminNotifications);
+        }
+      } else {
+        const refus = rendezVous.motifRefusClient ? `\nMotif : ${rendezVous.motifRefusClient}` : '';
+        const adminNotifications = admins.map((admin) => ({
+          user: admin._id,
+          type: 'appointment_client_declined',
+          titre: `❌ RDV refusé — ${clientName}`,
+          message: `${clientName} a refusé le rendez-vous du ${dateFormatted} à ${rendezVous.heure || '—'}.${refus}`,
+          lien: '/admin/rendez-vous',
+          metadata: {
+            appointmentId: rendezVous._id.toString(),
+            clientName,
+            date: rendezVous.date,
+            heure: rendezVous.heure,
+            motifRefus: rendezVous.motifRefusClient || undefined,
+          },
+        }));
+        if (adminNotifications.length > 0) {
+          await Notification.insertManyWithPush(adminNotifications);
+        }
+      }
+
+      if (rendezVous.user) {
+        try {
+          await Notification.create({
+            user: rendezVous.user._id || rendezVous.user,
+            type: decision === 'accept' ? 'appointment_created' : 'appointment_cancelled',
+            titre: decision === 'accept' ? 'Rendez-vous confirmé' : 'Proposition refusée',
+            message:
+              decision === 'accept'
+                ? `Votre rendez-vous du ${dateFormatted} à ${rendezVous.heure} est confirmé.`
+                : `Vous avez refusé la proposition de rendez-vous du ${dateFormatted} à ${rendezVous.heure}.`,
+            lien: '/client/rendez-vous',
+            metadata: {
+              appointmentId: rendezVous._id.toString(),
+              decision,
+            },
+          });
+        } catch (e) {
+          console.error('⚠️ Notification client après réponse RDV:', e);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: decision === 'accept' ? 'Rendez-vous confirmé.' : 'Proposition refusée. Ada Papers en a été informé.',
+        data: rendezVous,
+      });
+    } catch (error) {
+      console.error('Erreur reponse-client RDV:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+      });
+    }
+  }
+);
+
 // @route   PUT /api/appointments/:id
 // @desc    Mettre à jour un rendez-vous (client propriétaire) - peut modifier date, heure, motif, description
 // @access  Private
@@ -1010,6 +1212,13 @@ router.put(
         return res.status(403).json({
           success: false,
           message: 'Vous n\'avez pas l\'autorisation de modifier ce rendez-vous'
+        });
+      }
+
+      if (rendezVous.attenteReponseClient) {
+        return res.status(400).json({
+          success: false,
+          message: 'Acceptez ou refusez d’abord la proposition avant de modifier ce rendez-vous.'
         });
       }
 

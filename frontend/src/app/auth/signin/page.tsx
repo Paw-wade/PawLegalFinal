@@ -71,9 +71,22 @@ export default function SignInPage() {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const authError = params.get('error');
-    if (!authError) return;
+    const serverMsg = params.get('message');
+    const decodedMsg = serverMsg ? (() => { try { return decodeURIComponent(serverMsg); } catch { return serverMsg; } })() : '';
+    if (!authError && !decodedMsg) return;
+    if (authError === 'google' && decodedMsg) {
+      setError(decodedMsg);
+      return;
+    }
     if (authError === 'AccessDenied') {
-      setError('Connexion Google refusée. Vérifiez que votre email est déjà associé à un compte Ada Papers.');
+      setError(
+        decodedMsg ||
+          'Connexion Google refusée par NextAuth. Causes fréquentes : le compte Google n’a pas encore d’utilisateur Ada Papers (créez un compte), ou les URI de redirection Google Console ne correspondent pas à NEXTAUTH_URL (ex. http://localhost:3004).'
+      );
+      return;
+    }
+    if (decodedMsg) {
+      setError(decodedMsg);
       return;
     }
     setError('La connexion externe a échoué. Veuillez réessayer.');
