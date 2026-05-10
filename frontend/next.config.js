@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  /** Les navigateurs demandent souvent /favicon.ico ; on sert le logo PNG (accepté comme favicon). */
+  async rewrites() {
+    return [{ source: '/favicon.ico', destination: '/ada-papers-logo.png' }];
+  },
   turbopack: {
     root: __dirname,
   },
