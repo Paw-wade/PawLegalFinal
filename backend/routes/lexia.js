@@ -100,6 +100,8 @@ router.get('/config', async (req, res) => {
       anthropicConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
       geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
       knowledgeDirRelative: knowledgeDir,
+      anthropicModel: (process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022').trim(),
+      geminiModel: (process.env.GEMINI_MODEL || 'gemini-2.0-flash').trim(),
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -128,26 +130,42 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'messages[] requis' });
     }
 
-    console.log(`[lexia] POST / démarrage (${messages.length} message(s))`);
-    const result = await searchAndCompose(messages, getKnowledgeDir());
+    console.log(`[lexia] POST / démarrage (${messages.length} message(s)) provider=${String(provider || 'auto')}`);
+    const result = await runLexiaWithProvider(messages, provider);
     const sourcesArr = Array.isArray(result.sources) ? result.sources : [];
-    const sourcesFound = sourcesArr
-      .map((s) => (s && s.file != null ? String(s.file) : null))
-      .filter(Boolean);
+    const sourcesFound = toSourcesFound(sourcesArr);
     res.json({
       success: true,
       text: typeof result.text === 'string' ? result.text : String(result.text ?? ''),
       sources: sourcesArr,
-      searched: true,
+      searched: Boolean(result.searched),
       sourcesFound,
+      provider: result.provider,
+      resolvedProvider: result.resolvedProvider,
     });
     finished = true;
     console.log(`[lexia] POST / terminé en ${Date.now() - t0} ms`);
   } catch (err) {
     finished = true;
     console.error('[lexia] POST / error:', err.stack || err.message);
-    res.status(500).json({
+    const code = err.code;
+    const axiosMsg =
+      err.response?.data?.error?.message ||
+      (typeof err.response?.data === 'string' ? err.response.data : null);
+    const msg = axiosMsg || err.message || 'Erreur interne Lexia';
+    const status =
+      code === 'MISSING_KEY' || code === 'EMPTY_MESSAGES'
+        ? 400
+        : err.response?.status >= 400 && err.response?.status < 500
+          ? 400
+          : 500;
+    res.status(status).json({
       success: false,
-      error: err.message || 'Erreur interne Lexia',
+      error: msg,
+      code: code || undefined,
     });
-    console.log(`[l
+    console.log(`[lexia] POST / échec après ${Date.now() - t0} ms`);
+  }
+});
+
+module.exports = router;

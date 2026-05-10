@@ -65,7 +65,7 @@ async function callAnthropic(messages) {
 
   const maxTokens = Math.min(Math.max(Number(process.env.ANTHROPIC_MAX_TOKENS) || 4096, 256), 8192);
 
-  const { data } = await axios.post(
+  const res = await axios.post(
     'https://api.anthropic.com/v1/messages',
     {
       model,
@@ -82,6 +82,18 @@ async function callAnthropic(messages) {
       validateStatus: () => true,
     }
   );
+
+  const data = res.data;
+  if (res.status >= 400) {
+    const msg =
+      data?.error?.message ||
+      (typeof data === 'string' ? data : null) ||
+      `Anthropic HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.code = 'ANTHROPIC_API';
+    err.status = res.status;
+    throw err;
+  }
 
   if (data.error) {
     const err = new Error(data.error.message || 'Erreur API Anthropic');
@@ -122,7 +134,7 @@ async function callGemini(messages) {
     model
   )}:generateContent?key=${encodeURIComponent(key)}`;
 
-  const { data } = await axios.post(
+  const res = await axios.post(
     url,
     {
       contents,
@@ -137,6 +149,18 @@ async function callGemini(messages) {
       validateStatus: () => true,
     }
   );
+
+  const data = res.data;
+  if (res.status >= 400) {
+    const msg =
+      data?.error?.message ||
+      (typeof data === 'string' ? data : null) ||
+      `Gemini HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.code = 'GEMINI_API';
+    err.status = res.status;
+    throw err;
+  }
 
   if (data.error) {
     const err = new Error(data.error.message || 'Erreur API Gemini');
@@ -305,7 +329,7 @@ async function runLexiaWithProvider(messages, providerRequested) {
     return {
       text: out.text,
       sources,
-      searched: true,
+      searched: false,
       provider: 'anthropic',
       resolvedProvider: 'anthropic',
     };
@@ -317,7 +341,7 @@ async function runLexiaWithProvider(messages, providerRequested) {
     return {
       text: out.text,
       sources,
-      searched: true,
+      searched: false,
       provider: 'gemini',
       resolvedProvider: 'gemini',
     };

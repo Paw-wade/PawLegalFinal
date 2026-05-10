@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { getApiBaseUrl, getAuthToken, pawSearchAPI } from '@/lib/api';
 
-type LexiaProviderMode = 'auto' | 'anthropic' | 'gemini' | 'internal';
+type LexiaProviderMode = 'auto' | 'anthropic' | 'gemini' | 'internal' | 'all';
 
 type ChatMessage = {
   id: number;
@@ -15,8 +15,8 @@ type ChatMessage = {
   content: string;
   searched?: boolean;
   isError?: boolean;
-  /** Réponse base interne vs modèle cloud */
-  lexiaProvider?: 'anthropic' | 'internal';
+  /** Réponse base interne vs modèle cloud vs combinaison */
+  lexiaProvider?: 'anthropic' | 'internal' | 'gemini' | 'all';
   /** Clés sources déduites des requêtes web_search (mode Anthropic). */
   sourcesFound?: string[];
   totalToolUses?: number;
@@ -321,6 +321,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
     anthropicConfigured: boolean;
     geminiConfigured: boolean;
     knowledgeDirRelative?: string;
+    anthropicModel?: string;
+    geminiModel?: string;
   } | null>(null);
   /** Assistant dialogue vs recherche fichier base interne (API /paw-search). */
   const [lexiaSurface, setLexiaSurface] = useState<'assistant' | 'pawSearch'>('assistant');
@@ -497,6 +499,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           geminiConfigured: Boolean(data?.geminiConfigured),
           knowledgeDirRelative:
             typeof data?.knowledgeDirRelative === 'string' ? data.knowledgeDirRelative : undefined,
+          anthropicModel: typeof data?.anthropicModel === 'string' ? data.anthropicModel : undefined,
+          geminiModel: typeof data?.geminiModel === 'string' ? data.geminiModel : undefined,
         });
       } catch {
         /* silencieux : l’UI reste utilisable */
@@ -580,11 +584,21 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
       setInput('');
       setIsLoading(true);
       setOpenMenu(null);
-      const likelyAnthropic =
-        lexiaProvider === 'anthropic' ||
-        (lexiaProvider === 'auto' && Boolean(lexiaConfig?.anthropicConfigured));
-      setAgentStatus(likelyAnthropic ? 'searching' : 'analyzing');
-      setSearchStep(likelyAnthropic ? 'Recherche web multi-sources…' : 'Analyse de la requête…');
+      const mode = lexiaProvider;
+      const isAll = mode === 'all';
+      const isCloud =
+        mode === 'anthropic' ||
+        mode === 'gemini' ||
+        (mode === 'auto' &&
+          (Boolean(lexiaConfig?.anthropicConfigured) || Boolean(lexiaConfig?.geminiConfigured)));
+      setAgentStatus(isCloud || isAll ? 'searching' : 'analyzing');
+      setSearchStep(
+        isAll
+          ? 'Interne + Anthropic + Gemini, puis synthèse…'
+          : isCloud
+            ? 'Modèle cloud (API)…'
+            : 'Analyse base documentaire interne…'
+      );
 
       const userMsg: ChatMessage = { role: 'user', content: text, id: Date.now() };
 
@@ -674,12 +688,17 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           typeof data?.totalToolUses === 'number' && Number.isFinite(data.totalToolUses)
             ? data.totalToolUses
             : 0;
-        const resolved =
-          data?.resolvedProvider === 'internal' || data?.provider === 'internal'
+        const rp = data?.resolvedProvider ?? data?.provider;
+        const resolved: ChatMessage['lexiaProvider'] | undefined =
+          rp === 'internal'
             ? 'internal'
-            : data?.resolvedProvider === 'anthropic' || data?.provider === 'anthropic'
+            : rp === 'anthropic'
               ? 'anthropic'
-              : undefined;
+              : rp === 'gemini'
+                ? 'gemini'
+                : rp === 'all'
+                  ? 'all'
+                  : undefined;
         const assistantMsg: ChatMessage = {
           role: 'assistant',
           content: finalText,
@@ -2475,16 +2494,19 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
               aria-label="Mode Paw AI"
               disabled={isLoading}
             >
-              <option value="auto">Auto (serveur : Anthropic, sinon Gemini, sinon interne)</option>
+              <option value="auto">Auto (Anthropic → Gemini → interne)</option>
               <option value="internal">Base documentaire interne uniquement</option>
-              <option value="anthropic">Anthropic (clé API requise)</option>
-              <option value="gemini">Gemini (clé API requise)</option>
+              <option value="anthropic">Anthropic uniquement (clé API)</option>
+              <option value="gemini">Gemini uniquement (clé API)</option>
+              <option value="all">Tout combiner (interne + Anthropic + Gemini + synthèse)</option>
             </select>
             {lexiaConfig && (
               <div className="lexia-provider-hint">
                 Serveur : <strong>{lexiaConfig.envProvider}</strong>
                 {lexiaConfig.anthropicConfigured ? ' · Anthropic OK' : ' · Anthropic KO'}
                 {lexiaConfig.geminiConfigured ? ' · Gemini OK' : ' · Gemini KO'}
+                {lexiaConfig.anthropicModel ? ` · ${lexiaConfig.anthropicModel}` : ''}
+                {lexiaConfig.geminiModel ? ` · ${lexiaConfig.geminiModel}` : ''}
                 {showServerPaths && lexiaConfig.knowledgeDirRelative
                   ? ` · Corpus : ${lexiaConfig.knowledgeDirRelative}`
                   : null}
@@ -2791,6 +2813,12 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                   {m.role === 'assistant' && m.lexiaProvider === 'internal' && (
                     <div className="lexia-internal-tag">📚 Base documentaire interne</div>
                   )}
+                  {m.role === 'assistant' && m.lexiaProvider === 'gemini' && (
+                    <div className="lexia-cloud-tag">✨ Gemini (API Google)</div>
+                  )}
+                  {m.role === 'assistant' && m.lexiaProvider === 'all' && (
+                    <div className="lexia-cloud-tag">🔀 Combiné interne + Anthropic + Gemini</div>
+                  )}
                   {m.role === 'assistant' && m.lexiaProvider === 'anthropic' && m.searched && (
                     <div className="lexia-search-tag">
                       🔎 {m.totalToolUses && m.totalToolUses > 0 ? m.totalToolUses : 1} recherche
@@ -2801,7 +2829,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                     </div>
                   )}
                   {m.role === 'assistant' && m.lexiaProvider === 'anthropic' && !m.searched && (
-                    <div className="lexia-cloud-tag">☁️ Synthèse (modèle cloud)</div>
+                    <div className="lexia-cloud-tag">☁️ Anthropic (API)</div>
                   )}
                   {m.role === 'assistant' && !m.lexiaProvider && m.searched && (
                     <div className="lexia-search-tag">🔎 Recherche web (outil modèle)</div>
