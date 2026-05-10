@@ -106,4 +106,30 @@ router.get('/config', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/lexia
+ * Point d'entrée principal — reçoit les messages et retourne une réponse
+ */
+router.post('/', async (req, res) => {
+  try {
+    const { messages = [], provider } = req.body;
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ success: false, error: 'messages[] requis' });
+    }
+
+    const result = await searchAndCompose(messages, getKnowledgeDir());
+    res.json({
+      success: true,
+      text: result.text,
+      sources: result.sources,
+      searched: true,
+      sourcesFound: (result.sources || []).map((s) => s.file),
+    });
+  } catch (err) {
+    console.error('[lexia] POST / error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
