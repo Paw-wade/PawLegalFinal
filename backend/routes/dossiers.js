@@ -12,7 +12,7 @@ const { sendSMS, formatPhoneNumber } = require('../sendSMS');
 const router = express.Router();
 const MIN_REMINDER_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48h
 
-/** Montant fixe cabinet (number, chaîne, Decimal128, etc.) — même logique que le front. */
+/** Montant fixe Ada Papers (number, chaîne, Decimal128, etc.) — même logique que le front. */
 function normalizeMontantTarificationFixe(v) {
   if (v == null || v === '') return 0;
   if (typeof v === 'number' && Number.isFinite(v)) return Math.max(0, v);
@@ -629,7 +629,7 @@ router.get('/', async (req, res) => {
 });
 
 // @route   GET /api/user/dossiers/admin
-// @desc    Récupérer tous les dossiers (équipe cabinet)
+// @desc    Récupérer tous les dossiers (équipe Ada Papers)
 // @access  Private — rôles admin / équipe
 router.get(
   '/admin',
@@ -2387,8 +2387,8 @@ router.post(
         success: true,
         message:
           decision === 'accepted'
-            ? 'Votre acceptation a été transmise au cabinet.'
-            : 'Votre refus a été transmis au cabinet.',
+            ? 'Votre acceptation a été transmise à Ada Papers.'
+            : 'Votre refus a été transmis à Ada Papers.',
         decision,
         adminNotified: true,
         emailSent,
@@ -2601,7 +2601,7 @@ router.post('/tarification-standalone/:requestId/cancel', protect, authorize('ad
       String(user?._id || requestDoc.user),
       'tarification_choice_requested',
       'Demande de paiement annulée',
-      `La demande de paiement sans dossier a été annulée par le cabinet. Motif initial: ${String(
+      `La demande de paiement sans dossier a été annulée par Ada Papers. Motif initial: ${String(
         requestDoc.motif || ''
       ).slice(0, 300)}.`,
       getTarificationLinkByRole(user?.role),
@@ -2629,7 +2629,7 @@ router.post('/tarification-standalone/:requestId/cancel', protect, authorize('ad
 });
 
 // @route   PATCH /api/user/dossiers/:id/formule-tarifaire
-// @desc    Client (ou cabinet) enregistre la formule Standard / Premium
+// @desc    Client (ou équipe Ada Papers) enregistre la formule Standard / Premium
 // @access  Private — client propriétaire / email dossier, ou admin / superadmin
 router.patch(
   '/:id/formule-tarifaire',
@@ -2978,7 +2978,7 @@ router.put(
 
       const isCabinetTarifRole = req.user.role === 'admin' || req.user.role === 'superadmin';
 
-      /** Cabinet : enregistrer uniquement le montant fixe sans aucune notif/SMS « dossier modifié ». */
+      /** Équipe Ada Papers : enregistrer uniquement le montant fixe sans aucune notif/SMS « dossier modifié ». */
       const skipMontantSilentNotify =
         (req.body.skipDossierModificationNotify === true || req.body.skipDossierModificationNotify === 'true') &&
         isCabinetTarifRole &&
@@ -3493,7 +3493,7 @@ router.put(
             retractClientUserId,
             'tarification_choice_retracted',
             'Demande tarification retirée',
-            `Le cabinet a retiré la dernière demande d’action tarification envoyée pour le dossier « ${dTitle} ». Vous pouvez ignorer le message précédent ; une nouvelle demande pourra vous être adressée ultérieurement.`,
+            `Ada Papers a retiré la dernière demande d’action tarification envoyée pour le dossier « ${dTitle} ». Vous pouvez ignorer le message précédent ; une nouvelle demande pourra vous être adressée ultérieurement.`,
             '/client/tarification',
             {
               dossierId: dossier._id.toString(),
@@ -3690,7 +3690,7 @@ Cette information est également consultable dans votre espace client, rubrique 
         }
       }
 
-      // Notification tarification envoyée à la demande du cabinet (admin / superadmin)
+      // Notification tarification envoyée à la demande de l’équipe Ada Papers (admin / superadmin)
       if (shouldNotifyTarificationClientNow && isCabinetTarifRole) {
         try {
           let clientUserId = null;

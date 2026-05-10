@@ -7,6 +7,7 @@ const {
   getKnowledgeStats,
   invalidateCache,
 } = require('../services/lexiaInternal');
+const { runLexiaWithProvider, toSourcesFound } = require('../services/lexiaProviders');
 
 
 /**
@@ -110,25 +111,43 @@ router.get('/config', async (req, res) => {
  * Point d'entrée principal — reçoit les messages et retourne une réponse
  */
 router.post('/', async (req, res) => {
+  const t0 = Date.now();
+  let finished = false;
+  const onClose = () => {
+    if (!finished && !res.headersSent) {
+      console.warn(`[lexia] POST / client fermé la connexion après ${Date.now() - t0} ms (souvent timeout navigateur ou OOM)`);
+    }
+  };
+  req.on('close', onClose);
+
   try {
     const { messages = [], provider } = req.body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
+      finished = true;
       return res.status(400).json({ success: false, error: 'messages[] requis' });
     }
 
+    console.log(`[lexia] POST / démarrage (${messages.length} message(s))`);
     const result = await searchAndCompose(messages, getKnowledgeDir());
+    const sourcesArr = Array.isArray(result.sources) ? result.sources : [];
+    const sourcesFound = sourcesArr
+      .map((s) => (s && s.file != null ? String(s.file) : null))
+      .filter(Boolean);
     res.json({
       success: true,
-      text: result.text,
-      sources: result.sources,
+      text: typeof result.text === 'string' ? result.text : String(result.text ?? ''),
+      sources: sourcesArr,
       searched: true,
-      sourcesFound: (result.sources || []).map((s) => s.file),
+      sourcesFound,
     });
+    finished = true;
+    console.log(`[lexia] POST / terminé en ${Date.now() - t0} ms`);
   } catch (err) {
-    console.error('[lexia] POST / error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-module.exports = router;
+    finished = true;
+    console.error('[lexia] POST / error:', err.stack || err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Erreur interne Lexia',
+    });
+    console.log(`[l

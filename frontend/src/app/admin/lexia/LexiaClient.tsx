@@ -701,7 +701,18 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           )
         );
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Erreur inconnue';
+        let msg = e instanceof Error ? e.message : 'Erreur inconnue';
+        const low = msg.toLowerCase();
+        const looksLikeNetworkFailure =
+          low.includes('failed to fetch') ||
+          low.includes('networkerror') ||
+          low.includes('connection reset') ||
+          low.includes('load failed') ||
+          (e instanceof TypeError && low.includes('fetch'));
+        if (looksLikeNetworkFailure) {
+          msg =
+            'Impossible de joindre l’API (réseau). En local : démarrez le backend (`npm run dev` dans `backend/`, port 3005) et rechargez la page.';
+        }
         const errMsg: ChatMessage = {
           role: 'assistant',
           content: `❌ ${msg}`,

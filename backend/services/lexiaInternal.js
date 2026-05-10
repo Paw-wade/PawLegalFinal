@@ -28,11 +28,31 @@ const CACHE_MS = 45_000;
 const DEFAULT_PAGE_SIZE = 12;
 const MAX_PAGE_SIZE = 50;
 
-/** Nombre max de fichiers chargés pour l’index mémoire (évite OOM sur corpus massif, ex. centaines de milliers de XML). */
+/**
+ * Nombre max de fichiers chargés pour l’index mémoire (évite OOM sur corpus massif).
+ * Variable vide ou `unlimited|max|-1|0` = pas de plafond effectif (`Infinity` en interne).
+ * À partir d’un nombre : plafond explicite (min 50 si une petite valeur est donnée pour éviter les typos).
+ */
 function getLexiaIndexMaxFiles() {
-  const n = Number(process.env.LEXIA_INDEX_MAX_FILES ?? '12000');
-  if (!Number.isFinite(n) || n < 50) return 12000;
-  return Math.min(Math.floor(n), 999999);
+  const raw = process.env.LEXIA_INDEX_MAX_FILES;
+  if (raw === undefined) return 12000;
+  const trimmed = String(raw).trim();
+  if (trimmed === '') return Number.POSITIVE_INFINITY;
+  const lower = trimmed.toLowerCase();
+  if (
+    lower === 'unlimited' ||
+    lower === 'max' ||
+    lower === 'all' ||
+    lower === 'infinity' ||
+    trimmed === '-1'
+  ) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return Number.POSITIVE_INFINITY;
+  if (n === 0) return Number.POSITIVE_INFINITY;
+  if (n < 50) return 12000;
+  return Math.min(Math.floor(n), Number.MAX_SAFE_INTEGER);
 }
 
 /** Plafond de blocs indexés en RAM pour une requête / invalidation du cache. */
@@ -47,6 +67,24 @@ function getLexiaMaxExtractCharsPerFile() {
   const n = Number(process.env.LEXIA_MAX_EXTRACT_CHARS ?? '380000');
   if (!Number.isFinite(n) || n < 8000) return 380000;
   return Math.min(Math.floor(n), 5_000_000);
+}
+
+/** Fichiers source plus gros ne sont pas lus en entier (évite OOM / 500). défaut 15 Mo. */
+function getLexiaMaxRawBytesPerFile() {
+  const n = Number(process.env.LEXIA_MAX_RAW_FILE_BYTES ?? String(15 * 1024 * 1024));
+  if (!Number.isFinite(n) || n < 256 * 1024) return 15 * 1024 * 1024;
+  return Math.min(Math.floor(n), 80 * 1024 * 1024);
+}
+
+/**
+ * Si > 0 et que la liste indexée dépasse ce nombre, on renvoie une réponse texte au lieu de charger
+ * tout en RAM (évite crash / `POST /api/lexia - -` dans Morgan). Désactivé par défaut.
+ * Ex. : LEXIA_ENFORCE_SOFT_CAP=12000
+ */
+function getLexiaEnforceSoftCap() {
+  const n = Number(process.env.LEXIA_ENFORCE_SOFT_CAP);
+  if (!Number.isFinite(n) || n < 500) return 0;
+  return Math.min(Math.floor(n), 500_000);
 }
 
 let truncationFilesWarned = false;
@@ -181,15 +219,16 @@ function walkCountKnowledgeFiles(dir) {
 }
 
 /**
- * Liste jusqu’à LEXIA_INDEX_MAX_FILES chemins (parcours profondeur d’abord, noms triés par dossier).
- * Ne matérialise jamais tout le corpus.
+ * Liste les chemins (parcours profondeur d’abord, noms triés par dossier), jusqu’au plafond
+ * LEXIA_INDEX_MAX_FILES s’il est défini ou numérique.
+ * Ne matérialise jamais tout l’arborescence en mémoire par effet du parcours.
  */
 function collectKnowledgeFilesForIndex(dir) {
   const cap = getLexiaIndexMaxFiles();
   const out = [];
 
   function scan(d) {
-    if (out.length >= cap) return;
+    if (Number.isFinite(cap) && out.length >= cap) return;
 
     let entries = [];
     try {
@@ -201,7 +240,7 @@ function collectKnowledgeFilesForIndex(dir) {
     entries.sort((a, b) => a.name.localeCompare(b.name, 'en'));
 
     for (const item of entries) {
-      if (out.length >= cap) return;
+      if (Number.isFinite(cap) && out.length >= cap) return;
       const full = path.join(d, item.name);
 
       if (item.isDirectory()) {
@@ -216,7 +255,7 @@ function collectKnowledgeFilesForIndex(dir) {
 
   scan(dir);
 
-  if (out.length >= cap && !truncationFilesWarned) {
+  if (Number.isFinite(cap) && out.length >= cap && !truncationFilesWarned) {
     truncationFilesWarned = true;
     console.warn(
       `[lexia] Index plafonné à LEXIA_INDEX_MAX_FILES=${cap}. ` +
@@ -232,6 +271,17 @@ function collectKnowledgeFilesForIndex(dir) {
  */
 async function extractPlainTextFromKnowledgeFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
+  let statSize = 0;
+  try {
+    statSize = (await fsp.stat(filePath)).size;
+  } catch {
+    return '';
+  }
+  const maxRaw = getLexiaMaxRawBytesPerFile();
+  if (statSize > maxRaw) {
+    console.warn(`[lexia] Fichier ignoré (>${maxRaw} octets): ${path.basename(filePath)}`);
+    return '';
+  }
   try {
     switch (ext) {
       case '.pdf': {
@@ -272,47 +322,56 @@ async function extractPlainTextFromKnowledgeFile(filePath) {
 }
 
 async function loadAllChunks(knowledgeDir) {
-  const files = collectKnowledgeFilesForIndex(knowledgeDir);
-  const maxChunks = getLexiaMaxTotalChunks();
-  const maxChars = getLexiaMaxExtractCharsPerFile();
-  const all = [];
+  try {
+    const files = collectKnowledgeFilesForIndex(knowledgeDir);
+    const maxChunks = getLexiaMaxTotalChunks();
+    const maxChars = getLexiaMaxExtractCharsPerFile();
+    const all = [];
 
-  for (const filePath of files) {
-    if (all.length >= maxChunks) break;
-
-    let normalized = await extractPlainTextFromKnowledgeFile(filePath);
-    if (!normalized.trim()) continue;
-    if (normalized.length > maxChars) normalized = normalized.slice(0, maxChars);
-
-    const rel = path.relative(knowledgeDir, filePath);
-    const title = rel.replace(/\\/g, '/');
-    const sub = chunkText(normalized, title);
-    for (const c of sub) {
+    for (const filePath of files) {
       if (all.length >= maxChunks) break;
-      const dateIso = extractDateFromText(c.text);
-      all.push({
-        file: title,
-        text: c.text,
-        tokens: tokenize(c.text),
-        metadata: {
-          juridiction: inferJuridiction(title, c.text),
-          decisionNumber: extractDecisionNumber(c.text),
-          dateIso,
-          contentType: inferContentType(title, c.text),
-          ext: path.extname(title).replace('.', '').toLowerCase() || 'txt',
-        },
-      });
+
+      try {
+        let normalized = await extractPlainTextFromKnowledgeFile(filePath);
+        if (!normalized.trim()) continue;
+        if (normalized.length > maxChars) normalized = normalized.slice(0, maxChars);
+
+        const rel = path.relative(knowledgeDir, filePath);
+        const title = rel.replace(/\\/g, '/');
+        const sub = chunkText(normalized, title);
+        for (const c of sub) {
+          if (all.length >= maxChunks) break;
+          const dateIso = extractDateFromText(c.text);
+          all.push({
+            file: title,
+            text: c.text,
+            tokens: tokenize(c.text),
+            metadata: {
+              juridiction: inferJuridiction(title, c.text),
+              decisionNumber: extractDecisionNumber(c.text),
+              dateIso,
+              contentType: inferContentType(title, c.text),
+              ext: path.extname(title).replace('.', '').toLowerCase() || 'txt',
+            },
+          });
+        }
+      } catch (perFileErr) {
+        console.warn(`[lexia] Index ignoré pour ${path.basename(filePath)}: ${perFileErr.message}`);
+      }
     }
-  }
 
-  if (all.length >= maxChunks && files.length && !truncationChunksWarned) {
-    truncationChunksWarned = true;
-    console.warn(
-      `[lexia] LEXIA_MAX_TOTAL_CHUNKS=${maxChunks} atteint ; des fichiers ou parties du corpus ne sont pas chargés dans cette passe.`
-    );
-  }
+    if (all.length >= maxChunks && files.length && !truncationChunksWarned) {
+      truncationChunksWarned = true;
+      console.warn(
+        `[lexia] LEXIA_MAX_TOTAL_CHUNKS=${maxChunks} atteint ; des fichiers ou parties du corpus ne sont pas chargés dans cette passe.`
+      );
+    }
 
-  return all;
+    return all;
+  } catch (err) {
+    console.error('[lexia] loadAllChunks:', err.stack || err.message);
+    return [];
+  }
 }
 
 async function getChunks(knowledgeDir) {
@@ -330,12 +389,13 @@ async function getChunks(knowledgeDir) {
  */
 function scoreChunk(queryTokens, chunk) {
   if (!queryTokens.length) return 0;
-  const set = new Set(chunk.tokens);
+  const ct = Array.isArray(chunk?.tokens) ? chunk.tokens : tokenize(String(chunk?.text || ''));
+  const set = new Set(ct);
   let s = 0;
   for (const t of queryTokens) {
     if (set.has(t)) s += 1;
   }
-  const density = s / Math.sqrt(chunk.tokens.length + 1);
+  const density = s / Math.sqrt(ct.length + 1);
   return s * 2 + density;
 }
 
@@ -353,8 +413,16 @@ function legalBoost(queryText, chunk) {
 }
 
 function buildQueryFromMessages(trimmedMessages) {
+  if (!Array.isArray(trimmedMessages)) return '';
   const tail = trimmedMessages.slice(-8);
-  return tail.map((m) => m.content).join('\n').slice(0, 12000);
+  return tail
+    .map((m) => {
+      if (m == null || typeof m !== 'object') return '';
+      const c = m.content;
+      return typeof c === 'string' ? c : c == null ? '' : String(c);
+    })
+    .join('\n')
+    .slice(0, 12000);
 }
 
 function buildSnippet(text, queryTokens) {
@@ -465,14 +533,19 @@ async function searchKnowledge({
   const safePage = Math.min(Math.max(1, normalizedPage), totalPages);
   const offset = (safePage - 1) * normalizedLimit;
 
-  const hits = scored.slice(offset, offset + normalizedLimit).map((item) => ({
-    file: item.file,
-    score: Number(item.score.toFixed(3)),
-    lexicalScore: Number(item.lexicalScore.toFixed(3)),
-    legalBoost: Number(item.legalBoost.toFixed(3)),
-    snippet: buildSnippet(item.text, queryTokens),
-    metadata: item.metadata,
-  }));
+  const hits = scored.slice(offset, offset + normalizedLimit).map((item) => {
+    const sc = Number(item.score);
+    const lx = Number(item.lexicalScore);
+    const lb = Number(item.legalBoost);
+    return {
+      file: item.file,
+      score: Number((Number.isFinite(sc) ? sc : 0).toFixed(3)),
+      lexicalScore: Number((Number.isFinite(lx) ? lx : 0).toFixed(3)),
+      legalBoost: Number((Number.isFinite(lb) ? lb : 0).toFixed(3)),
+      snippet: buildSnippet(item.text, queryTokens),
+      metadata: item.metadata,
+    };
+  });
 
   return {
     query: effectiveQuery,
@@ -489,10 +562,36 @@ async function searchKnowledge({
  * Recherche + réponse markdown sans appel LLM externe.
  */
 async function searchAndCompose(trimmedMessages, knowledgeDir) {
+  try {
   const dir = knowledgeDir || getKnowledgeDir();
   const queryText = buildQueryFromMessages(trimmedMessages);
 
   const indexedPaths = collectKnowledgeFilesForIndex(dir);
+  const softCap = getLexiaEnforceSoftCap();
+  if (softCap > 0 && indexedPaths.length > softCap) {
+    const cap = getLexiaIndexMaxFiles();
+    const capLabel = Number.isFinite(cap) ? String(cap) : 'illimité';
+    return {
+      text:
+        `## Index Lexia trop lourd pour cette requête\n\n` +
+        `**${indexedPaths.length}** fichiers sont pris en compte (plafond d’index : **${capLabel}**), ` +
+        `ce qui dépasse la limite de sécurité **LEXIA_ENFORCE_SOFT_CAP=${softCap}**.\n\n` +
+        `Sans cette limite, le premier chargement peut faire **planter le process Node** (mémoire) ou couper la connexion — ` +
+        `d’où une ligne de log du type \`POST /api/lexia - - ms - -\`.\n\n` +
+        `**Actions possibles :**\n` +
+        `- Baisser **LEXIA_INDEX_MAX_FILES** (ex. 8000–15000 en dev).\n` +
+        `- Augmenter **LEXIA_ENFORCE_SOFT_CAP** ou le retirer seulement si la machine a assez de RAM.\n` +
+        `- Augmenter **--max-old-space-size** au démarrage du backend.\n`,
+      sources: [],
+    };
+  }
+  if (indexedPaths.length > 12_000) {
+    console.warn(
+      `[lexia] ${indexedPaths.length} fichiers listés pour l’index — charge RAM/CPU très élevée au premier POST. ` +
+        `En cas de crash ou de requête interrompue, baissez LEXIA_INDEX_MAX_FILES ou définissez LEXIA_ENFORCE_SOFT_CAP=12000.`
+    );
+  }
+
   if (!indexedPaths.length) {
     return {
       text:
@@ -546,9 +645,11 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
   scored.forEach((c, i) => {
     const md = c.metadata || {};
     const tags = [md.juridiction, md.dateIso, md.decisionNumber ? `n° ${md.decisionNumber}` : null].filter(Boolean);
-    lines.push(`**${i + 1}. ${c.file}** _(score ${Number(c.score || 0).toFixed(1)})${tags.length ? ` · ${tags.join(' · ')}` : ''}_`);
+    const fname = c.file != null ? String(c.file) : '(sans nom)';
+    lines.push(`**${i + 1}. ${fname}** _(score ${Number(c.score || 0).toFixed(1)})${tags.length ? ` · ${tags.join(' · ')}` : ''}_`);
     lines.push('');
-    lines.push(c.text.length > 1200 ? `${c.text.slice(0, 1200)}…` : c.text);
+    const excerpt = String(c.text ?? '');
+    lines.push(excerpt.length > 1200 ? `${excerpt.slice(0, 1200)}…` : excerpt);
     lines.push('');
     lines.push('---');
     lines.push('');
@@ -567,6 +668,16 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
       metadata: c.metadata || {},
     })),
   };
+  } catch (err) {
+    console.error('[lexia] searchAndCompose:', err.stack || err.message);
+    return {
+      text:
+        '## Erreur Lexia\n\nUne erreur technique est survenue pendant la recherche dans la base documentaire.\n\n' +
+        `**Détail :** ${String(err.message || err)}\n\n` +
+        'Consultez la console du serveur backend pour la pile complète.',
+      sources: [],
+    };
+  }
 }
 
 /** Chemin POSIX absolu (/…) sans lettre de lecteur Windows. */
@@ -628,12 +739,14 @@ module.exports = {
     const knowledgeDir = getKnowledgeDir();
     const walk = walkCountKnowledgeFiles(knowledgeDir);
     const indexedFilesCap = getLexiaIndexMaxFiles();
+    const indexTruncated =
+      Number.isFinite(indexedFilesCap) && walk.total > indexedFilesCap;
     return {
       knowledgeDir,
       total: walk.total,
       byExt: walk.byExt,
-      indexedFilesCap,
-      indexTruncated: walk.total > indexedFilesCap,
+      indexedFilesCap: Number.isFinite(indexedFilesCap) ? indexedFilesCap : null,
+      indexTruncated,
       maxTotalChunks: getLexiaMaxTotalChunks(),
       maxExtractCharsPerFile: getLexiaMaxExtractCharsPerFile(),
     };

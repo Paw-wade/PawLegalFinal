@@ -547,6 +547,11 @@ function ClientDashboardContent() {
               };
             })
             .sort((a: any, b: any) => {
+              const prop = (x: any) =>
+                Boolean(x.attenteReponseClient) && (x.statut === 'en_attente' || !x.statut);
+              const pa = prop(a) ? 1 : 0;
+              const pb = prop(b) ? 1 : 0;
+              if (pb !== pa) return pb - pa;
               const dateA = new Date(a.date).getTime();
               const dateB = new Date(b.date).getTime();
               return dateA - dateB;
@@ -778,7 +783,19 @@ function ClientDashboardContent() {
 
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Rendez-vous et accès</p>
         <div id="rendez-vous-section" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 scroll-mt-20">
-          <div className="group min-w-0">
+          <div
+            className="group min-w-0 min-h-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+            role="link"
+            tabIndex={0}
+            aria-label="Rendez-vous : ouvrir la page Mes rendez-vous"
+            onClick={() => router.push('/client/rendez-vous')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                router.push('/client/rendez-vous');
+              }
+            }}
+          >
             <div
               className={`rounded-xl p-[1px] bg-gradient-to-r from-blue-200/70 via-indigo-200/70 to-blue-200/70 shadow-sm group-hover:shadow-md group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 transition-all duration-300 ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
             >
@@ -801,23 +818,47 @@ function ClientDashboardContent() {
               ) : recentAppointments.length > 0 && (
                 <div className="mb-4 space-y-2 max-h-32 overflow-y-auto">
                   {recentAppointments.map((apt: any) => {
+                    const needsPropositionResponse =
+                      Boolean(apt.attenteReponseClient) && (apt.statut === 'en_attente' || !apt.statut);
                     const aptDate = apt.date ? new Date(apt.date) : null;
                     const formattedDate = aptDate ? aptDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '';
-                    const alertClass = apt.alertLevel === 'urgent' ? 'border-red-300 bg-red-50' :
-                                      apt.alertLevel === 'soon' ? 'border-orange-300 bg-orange-50' :
-                                      apt.alertLevel === 'past' ? 'border-gray-300 bg-gray-50' :
-                                      'border-blue-200 bg-white';
-                    const alertText = apt.alertLevel === 'urgent' ? '⚠️ Dans moins d\'1h' :
-                                     apt.alertLevel === 'soon' ? '⏰ Dans moins de 24h' :
-                                     apt.alertLevel === 'past' ? '✅ Passé' :
-                                     '';
+                    const alertClass = needsPropositionResponse
+                      ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-200/80'
+                      : apt.alertLevel === 'urgent'
+                        ? 'border-red-300 bg-red-50'
+                        : apt.alertLevel === 'soon'
+                          ? 'border-orange-300 bg-orange-50'
+                          : apt.alertLevel === 'past'
+                            ? 'border-gray-300 bg-gray-50'
+                            : 'border-blue-200 bg-white';
+                    const alertText = needsPropositionResponse
+                      ? '👆 À confirmer'
+                      : apt.alertLevel === 'urgent'
+                        ? '⚠️ Dans moins d\'1h'
+                        : apt.alertLevel === 'soon'
+                          ? '⏰ Dans moins de 24h'
+                          : apt.alertLevel === 'past'
+                            ? '✅ Passé'
+                            : '';
                     
                     return (
                       <div
                         key={apt._id || apt.id}
-                        onClick={() => {
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           setSelectedAppointment(apt);
                           setShowAppointmentModal(true);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSelectedAppointment(apt);
+                            setShowAppointmentModal(true);
+                          }
                         }}
                         className={`p-2 rounded-lg border ${alertClass} hover:shadow-md cursor-pointer transition-all`}
                       >
@@ -827,9 +868,13 @@ function ClientDashboardContent() {
                             <p className="font-semibold text-xs text-foreground">{formattedDate}</p>
                               {alertText && (
                                 <span className={`text-[10px] font-bold ${
-                                  apt.alertLevel === 'urgent' ? 'text-red-600' :
-                                  apt.alertLevel === 'soon' ? 'text-orange-600' :
-                                  'text-gray-600'
+                                  needsPropositionResponse
+                                    ? 'text-amber-800'
+                                    : apt.alertLevel === 'urgent'
+                                      ? 'text-red-600'
+                                      : apt.alertLevel === 'soon'
+                                        ? 'text-orange-600'
+                                        : 'text-gray-600'
                                 }`}>
                                   {alertText}
                                 </span>
@@ -838,11 +883,21 @@ function ClientDashboardContent() {
                             <p className="text-xs text-gray-600">⏰ {apt.heure?.substring(0, 5) || '-'}</p>
                           </div>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                            apt.statut === 'confirme' ? 'bg-blue-100 text-blue-800' :
-                            apt.statut === 'termine' ? 'bg-green-100 text-green-800' :
-                            'bg-yellow-100 text-yellow-800'
+                            needsPropositionResponse
+                              ? 'bg-amber-100 text-amber-900'
+                              : apt.statut === 'confirme'
+                                ? 'bg-blue-100 text-blue-800'
+                                : apt.statut === 'termine'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-yellow-100 text-yellow-800'
                           }`}>
-                            {apt.statut === 'confirme' ? 'Confirmé' : apt.statut === 'termine' ? 'Terminé' : 'En attente'}
+                            {needsPropositionResponse
+                              ? 'À confirmer'
+                              : apt.statut === 'confirme'
+                                ? 'Confirmé'
+                                : apt.statut === 'termine'
+                                  ? 'Terminé'
+                                  : 'En attente'}
                           </span>
                         </div>
                       </div>
@@ -854,16 +909,19 @@ function ClientDashboardContent() {
               <div className="flex gap-2 pt-4 border-t border-gray-100">
                 <Button 
                   variant="outline" 
+                  type="button"
                   className="flex-1 text-xs border-blue-300 text-blue-600 hover:bg-blue-50"
-                  onClick={() => setIsWidgetOpen(true)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsWidgetOpen(true);
+                  }}
                 >
                   Prendre RDV
                 </Button>
-                <Link href="/client/rendez-vous" className="flex-1">
-                  <Button variant="outline" className="w-full text-xs border-blue-300 text-blue-600 hover:bg-blue-50">
-                    Voir mes RDV →
-                  </Button>
-                </Link>
+                <div className="flex-1 flex items-center justify-center rounded-md border border-blue-300/60 bg-blue-50/50 text-xs font-medium text-blue-600">
+                  Voir mes RDV →
+                </div>
               </div>
               </div>
             </div>

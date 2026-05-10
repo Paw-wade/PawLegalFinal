@@ -33,6 +33,9 @@ export function AppointmentBadgeModal({
     description: ''
   });
   const [isCreatingDossier, setIsCreatingDossier] = useState(false);
+  const [declineMotif, setDeclineMotif] = useState('');
+  const [showDeclineSection, setShowDeclineSection] = useState(false);
+  const [respondingProposition, setRespondingProposition] = useState(false);
 
   // État pour la modification du statut (admin uniquement)
   const [newStatus, setNewStatus] = useState<string>('');
@@ -40,6 +43,9 @@ export function AppointmentBadgeModal({
   useEffect(() => {
     if (appointment) {
       setNewStatus(appointment.statut || 'en_attente');
+      setDeclineMotif('');
+      setShowDeclineSection(false);
+      setRespondingProposition(false);
     }
   }, [appointment]);
 
@@ -76,7 +82,12 @@ export function AppointmentBadgeModal({
     }
   };
 
+  const needsPropositionResponse =
+    Boolean(appointment?.attenteReponseClient) &&
+    (appointment?.statut === 'en_attente' || !appointment?.statut);
+
   const getStatutLabel = (statut: string) => {
+    if (!isAdmin && needsPropositionResponse) return 'À confirmer';
     const labels: { [key: string]: string } = {
       'en_attente': 'En attente',
       'confirme': 'Confirmé',
@@ -84,6 +95,62 @@ export function AppointmentBadgeModal({
       'annule': 'Annulé'
     };
     return labels[statut] || statut;
+  };
+
+  const getStatutColorClient = (statut: string) => {
+    if (!isAdmin && needsPropositionResponse) return 'bg-amber-100 text-amber-900';
+    return getStatutColor(statut);
+  };
+
+  const handlePropositionAccept = async () => {
+    const id = appointment._id || appointment.id;
+    if (!id) return;
+    setRespondingProposition(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await appointmentsAPI.respondToProposedAppointment(id, { decision: 'accept' });
+      if (response.data.success) {
+        setSuccess('Rendez-vous confirmé.');
+        setTimeout(() => {
+          onUpdate?.();
+          onClose();
+        }, 800);
+      } else {
+        setError(response.data.message || 'Erreur');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur lors de la confirmation');
+    } finally {
+      setRespondingProposition(false);
+    }
+  };
+
+  const handlePropositionDecline = async () => {
+    const id = appointment._id || appointment.id;
+    if (!id) return;
+    setRespondingProposition(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await appointmentsAPI.respondToProposedAppointment(id, {
+        decision: 'decline',
+        ...(declineMotif.trim() ? { motifRefus: declineMotif.trim() } : {}),
+      });
+      if (response.data.success) {
+        setSuccess('Réponse enregistrée. Ada Papers en a été informé.');
+        setTimeout(() => {
+          onUpdate?.();
+          onClose();
+        }, 800);
+      } else {
+        setError(response.data.message || 'Erreur');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur lors du refus');
+    } finally {
+      setRespondingProposition(false);
+    }
   };
 
   const handleCancel = async () => {
@@ -199,7 +266,10 @@ export function AppointmentBadgeModal({
     }
   };
 
-  const canCancel = appointment.statut !== 'annule' && appointment.statut !== 'termine';
+  const canCancel =
+    appointment.statut !== 'annule' &&
+    appointment.statut !== 'termine' &&
+    !(needsPropositionResponse && !isAdmin);
   const appointmentDate = appointment.date ? new Date(appointment.date) : null;
   const isPast = appointmentDate ? appointmentDate < new Date() : false;
 
@@ -273,11 +343,33 @@ export function AppointmentBadgeModal({
                     )}
                   </div>
                 ) : (
-                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatutColor(appointment.statut)}`}>
+                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatutColorClient(appointment.statut)}`}>
                     {getStatutLabel(appointment.statut)}
                   </span>
                 )}
               </div>
+
+              {!isAdmin && needsPropositionResponse && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950 space-y-2">
+                  <p className="font-semibold">Ada Papers vous propose ce créneau</p>
+                  <p className="text-amber-900/90 text-xs">
+                    Utilisez <strong>Accepter</strong> ou <strong>Refuser</strong> dans la barre en bas de la fenêtre.
+                  </p>
+                  {showDeclineSection && (
+                    <div className="space-y-2 pt-1 border-t border-amber-200/80">
+                      <label className="block text-xs font-medium text-amber-950">Motif du refus (facultatif)</label>
+                      <textarea
+                        value={declineMotif}
+                        onChange={(e) => setDeclineMotif(e.target.value)}
+                        maxLength={500}
+                        rows={3}
+                        className="w-full rounded-md border border-amber-200 px-2 py-1.5 text-sm bg-white"
+                        placeholder="Expliquez brièvement si vous le souhaitez…"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Date et heure */}
               <div className="grid grid-cols-2 gap-4">
@@ -351,16 +443,64 @@ export function AppointmentBadgeModal({
           </div>
 
           {/* Actions */}
-          <div className="p-6 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
+          <div className="p-6 border-t border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
             <button
+              type="button"
               onClick={onClose}
               className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors text-sm font-semibold"
             >
               Fermer
             </button>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2 sm:gap-3 justify-end">
+              {!isAdmin && needsPropositionResponse && !showDeclineSection && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePropositionAccept}
+                    disabled={respondingProposition || isLoading}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-semibold disabled:opacity-50"
+                  >
+                    {respondingProposition ? '…' : 'Accepter'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDeclineSection(true);
+                      setError(null);
+                    }}
+                    disabled={respondingProposition || isLoading}
+                    className="px-4 py-2 border border-amber-700 text-amber-950 bg-amber-50 rounded-md hover:bg-amber-100 transition-colors text-sm font-semibold disabled:opacity-50"
+                  >
+                    Refuser
+                  </button>
+                </>
+              )}
+              {!isAdmin && needsPropositionResponse && showDeclineSection && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDeclineSection(false);
+                      setDeclineMotif('');
+                    }}
+                    disabled={respondingProposition}
+                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors text-sm font-semibold disabled:opacity-50"
+                  >
+                    Retour
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePropositionDecline}
+                    disabled={respondingProposition}
+                    className="px-4 py-2 bg-amber-800 text-white rounded-md hover:bg-amber-900 transition-colors text-sm font-semibold disabled:opacity-50"
+                  >
+                    {respondingProposition ? 'Envoi…' : 'Confirmer le refus'}
+                  </button>
+                </>
+              )}
               {canCancel && (
                 <button
+                  type="button"
                   onClick={handleCancel}
                   disabled={isLoading}
                   className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-sm font-semibold disabled:opacity-50"
@@ -370,6 +510,7 @@ export function AppointmentBadgeModal({
               )}
               {isAdmin && appointment.statut === 'termine' && !appointment.dossierId && (
                 <button
+                  type="button"
                   onClick={() => setShowCreateDossierModal(true)}
                   className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-sm font-semibold"
                 >

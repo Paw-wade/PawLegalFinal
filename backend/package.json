@@ -1,7 +1,7 @@
 {
   "name": "cabinet-juridique-backend",
   "version": "1.0.0",
-  "description": "Backend API for Cabinet Juridique",
+  "description": "Backend API Ada Papers",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

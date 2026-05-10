@@ -341,7 +341,7 @@ const DEFAULT_TEMPLATES = [
       'Bonjour,\n\nVous avez reçu un nouveau message de {{senderName}} dans votre espace Ada Papers.\nNous vous invitons à vous connecter afin de consulter son contenu et y répondre si nécessaire.\n\nCordialement,\nL’équipe Ada Papers',
     category: 'message',
     isSystem: true,
-    variables: [{ name: 'senderName', description: 'Expéditeur', example: 'Cabinet Ada Papers' }],
+    variables: [{ name: 'senderName', description: 'Expéditeur', example: 'Ada Papers' }],
   },
   {
     code: 'account_email_changed',

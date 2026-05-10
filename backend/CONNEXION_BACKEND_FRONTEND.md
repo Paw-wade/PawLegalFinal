@@ -147,7 +147,7 @@ Réponse attendue :
 ```json
 {
   "success": true,
-  "message": "API Cabinet Juridique est en ligne",
+  "message": "API Ada Papers est en ligne",
   "version": "1.0.0"
 }
 ```

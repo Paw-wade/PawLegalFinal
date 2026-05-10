@@ -77,6 +77,29 @@ const rendezVousSchema = new mongoose.Schema({
     ref: 'Dossier',
     required: false
   },
+  /** RDV créé par un admin pour un client connecté — le client doit accepter ou refuser. */
+  proposeParAdmin: {
+    type: Boolean,
+    default: false
+  },
+  attenteReponseClient: {
+    type: Boolean,
+    default: false
+  },
+  /** Saisi si le client refuse la proposition (via reponse-client). */
+  motifRefusClient: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Le motif de refus ne peut pas dépasser 500 caractères']
+  },
+  clientReponduAt: {
+    type: Date
+  },
+  /** True si le statut annule provient du refus explicite du client (pas d’une annulation libre). */
+  declinedByClient: {
+    type: Boolean,
+    default: false
+  },
   createdAt: {
     type: Date,
     default: Date.now

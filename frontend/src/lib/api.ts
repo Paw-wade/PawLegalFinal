@@ -673,6 +673,12 @@ export const appointmentsAPI = {
   // Client - Annuler un rendez-vous
   cancelAppointment: (id: string) =>
     api.patch(`/appointments/${id}/cancel`),
+
+  /** Client : accepter ou refuser une proposition faite par l’admin */
+  respondToProposedAppointment: (
+    id: string,
+    body: { decision: 'accept' | 'decline'; motifRefus?: string }
+  ) => api.patch(`/appointments/${id}/reponse-client`, body),
   
   // Client - Mettre à jour un rendez-vous
   updateMyAppointment: (id: string, data: {

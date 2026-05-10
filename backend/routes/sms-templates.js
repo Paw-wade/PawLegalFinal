@@ -209,7 +209,7 @@ router.post('/init-defaults', async (req, res) => {
         description: 'Message envoyé lorsqu\'un utilisateur reçoit un nouveau message',
         message: 'Vous avez reçu un nouveau message de {{senderName}}. Connectez-vous pour le consulter. Ada Papers.',
         variables: [
-          { name: 'senderName', description: 'Nom de l\'expéditeur', example: 'Cabinet Ada Papers' },
+          { name: 'senderName', description: 'Nom de l\'expéditeur', example: 'Ada Papers' },
           { name: 'subject', description: 'Optionnel — ex. formulaire contact', example: 'Question sur mon dossier' }
         ],
         category: 'message',
@@ -298,7 +298,7 @@ router.post('/init-defaults', async (req, res) => {
       {
         code: 'tarification_choice_reminder',
         name: 'Tarification — rappel choix / espace client',
-        description: 'SMS client lorsque le cabinet demande un choix de formule ou une action tarification (si aucun modèle actif en base, le serveur applique un libellé court par défaut)',
+        description: 'SMS client lorsque Ada Papers demande un choix de formule ou une action tarification (si aucun modèle actif en base, le serveur applique un libellé court par défaut)',
         message: 'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.',
         variables: [{ name: 'dossierTitle', description: 'Titre du dossier (contexte)', example: 'Demande de titre de séjour' }],
         category: 'dossier',

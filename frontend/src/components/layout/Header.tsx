@@ -257,7 +257,6 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
       { href: '/admin/creneaux', label: 'Créneaux', requiresAuth: true, requiresRole: ['admin', 'superadmin'] },
       { href: '/admin/documents', label: 'Documents', requiresAuth: true, requiresRole: ['admin', 'superadmin'] },
       { href: '/admin/temoignages', label: 'Témoignages', requiresAuth: true, requiresRole: ['admin', 'superadmin'] },
-      { href: '/admin/logs', label: 'Logs', requiresAuth: true, requiresRole: ['superadmin'] },
       { href: '/calculateur', label: 'Calculateur', highlight: true },
     ],
   };
@@ -398,14 +397,6 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
             >
               Calculateur
             </Link>
-            {isAuthenticated && userRole === 'superadmin' && (
-              <Link
-                href="/admin/logs"
-                className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-              >
-                Logs
-              </Link>
-            )}
             {/* Afficher le bouton Dashboard si l'utilisateur est connecté et n'est pas déjà sur son dashboard */}
             {isAuthenticated && (
               (userRole === 'admin' || userRole === 'superadmin') && pathname !== '/admin' ? (
@@ -472,14 +463,6 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   </Link>
                 );
               })}
-              {isAuthenticated && userRole === 'superadmin' && (
-                <Link
-                  href="/admin/logs"
-                  className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors"
-                >
-                  Logs
-                </Link>
-              )}
               {/* Afficher le bouton Dashboard si l'utilisateur est connecté et n'est pas déjà sur son dashboard */}
               {isAuthenticated && (
                 (userRole === 'admin' || userRole === 'superadmin') && pathname !== '/admin' ? (
@@ -611,15 +594,6 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                   >
                     Déconnexion
                   </button>
-                  {userRole === 'superadmin' && (
-                    <Link
-                      href="/admin/logs"
-                      onClick={() => setMobileNavOpen(false)}
-                      className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
-                    >
-                      Logs
-                    </Link>
-                  )}
                 </>
               )}
             </nav>

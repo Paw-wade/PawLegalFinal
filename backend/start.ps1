@@ -1,7 +1,7 @@
 # Script PowerShell pour démarrer le backend et le frontend
 # Usage: .\start.ps1
 
-Write-Host "🚀 Démarrage du Cabinet Juridique..." -ForegroundColor Cyan
+Write-Host "🚀 Démarrage Ada Papers..." -ForegroundColor Cyan
 Write-Host ""
 
 # Vérifier que Node.js est installé

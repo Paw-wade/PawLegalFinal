@@ -4,7 +4,7 @@ REM Usage: start.bat
 
 echo.
 echo ========================================
-echo   Cabinet Juridique - Demarrage
+echo   Ada Papers - Demarrage
 echo ========================================
 echo.
 

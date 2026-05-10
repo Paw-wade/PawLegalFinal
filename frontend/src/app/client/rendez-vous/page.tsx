@@ -55,6 +55,9 @@ function RendezVousPageContent() {
     priorite: 'normale'
   });
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [respondingPropositionId, setRespondingPropositionId] = useState<string | null>(null);
+  const [showDeclinePropositionId, setShowDeclinePropositionId] = useState<string | null>(null);
+  const [declineMotif, setDeclineMotif] = useState('');
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -153,6 +156,32 @@ function RendezVousPageContent() {
 
   const getUserEmail = () => {
     return session?.user?.email || '';
+  };
+
+  const handlePropositionResponse = async (appointmentId: string, decision: 'accept' | 'decline', motifRefus?: string) => {
+    setRespondingPropositionId(appointmentId);
+    setError(null);
+    try {
+      const response = await appointmentsAPI.respondToProposedAppointment(appointmentId, {
+        decision,
+        ...(decision === 'decline' && motifRefus !== undefined ? { motifRefus } : {}),
+      });
+      if (response.data.success) {
+        setShowDeclinePropositionId(null);
+        setDeclineMotif('');
+        setToast({
+          message: decision === 'accept' ? 'Rendez-vous confirmé.' : 'Réponse enregistrée. Ada Papers en a été informé.',
+          type: 'success',
+        });
+        await loadRendezVous();
+      } else {
+        setError(response.data.message || 'Erreur');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur lors de l’envoi de votre réponse');
+    } finally {
+      setRespondingPropositionId(null);
+    }
   };
 
   const handleCancelAppointment = async (appointmentId: string) => {
@@ -380,7 +409,11 @@ function RendezVousPageContent() {
                   }
                 };
 
+                const needsPropositionResponse =
+                  Boolean(rdv.attenteReponseClient) && (rdv.statut === 'en_attente' || !rdv.statut);
+
                 const getStatutLabel = (statut: string) => {
+                  if (needsPropositionResponse) return 'À confirmer';
                   switch (statut) {
                     case 'confirme':
                       return 'Confirmé';
@@ -426,12 +459,16 @@ function RendezVousPageContent() {
                   isPast = appointmentDateEnd < new Date();
                 }
 
-                const canCancel = rdv.statut !== 'annule' && rdv.statut !== 'termine' && !isPast;
-                const canMarkAsDone = rdv.statut !== 'annule' && !rdv.effectue;
+                const canCancel =
+                  rdv.statut !== 'annule' && rdv.statut !== 'termine' && !isPast && !needsPropositionResponse;
+                const canMarkAsDone = rdv.statut !== 'annule' && !rdv.effectue && !needsPropositionResponse;
                 const appointmentId = rdv._id || rdv.id;
 
                 // Déterminer le style de la carte (bordure gauche colorée comme les dossiers)
                 const getCardBorderStyle = () => {
+                  if (needsPropositionResponse) {
+                    return 'border border-amber-300/80 hover:border-amber-500/80 hover:shadow-[0_12px_30px_-18px_rgba(245,158,11,0.45)]';
+                  }
                   if (rdv.statut === 'annule') {
                     return 'border border-red-300/70 hover:border-red-500/80 hover:shadow-[0_12px_30px_-18px_rgba(239,68,68,0.55)]';
                   }
@@ -465,7 +502,11 @@ function RendezVousPageContent() {
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${getStatutColor(rdv.statut || 'en_attente')}`}>
+                        <span
+                          className={`px-2.5 py-1 rounded-md text-xs font-semibold ${
+                            needsPropositionResponse ? 'bg-amber-100 text-amber-900' : getStatutColor(rdv.statut || 'en_attente')
+                          }`}
+                        >
                           {getStatutLabel(rdv.statut || 'en_attente')}
                         </span>
                         {isPast && !rdv.effectue && rdv.statut !== 'annule' && (
@@ -536,10 +577,42 @@ function RendezVousPageContent() {
                       </div>
                     )}
 
+                    {needsPropositionResponse && (
+                      <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        <p className="font-semibold mb-1">Ada Papers vous propose ce créneau</p>
+                        <p className="text-amber-800/90">Merci d’indiquer si vous l’acceptez ou si vous le refusez.</p>
+                      </div>
+                    )}
+
                     {/* Actions */}
                     <div className="pt-3 border-t border-gray-200">
                       <div className="flex items-center justify-end">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
+                          {needsPropositionResponse && (
+                            <>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="text-xs h-8 bg-green-600 hover:bg-green-700"
+                                onClick={() => handlePropositionResponse(appointmentId, 'accept')}
+                                disabled={respondingPropositionId === appointmentId}
+                              >
+                                {respondingPropositionId === appointmentId ? '…' : 'Accepter'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-8 border-amber-400 text-amber-900 hover:bg-amber-50"
+                                onClick={() => {
+                                  setDeclineMotif('');
+                                  setShowDeclinePropositionId(appointmentId);
+                                }}
+                                disabled={respondingPropositionId === appointmentId}
+                              >
+                                Refuser
+                              </Button>
+                            </>
+                          )}
                           {canMarkAsDone && (
                             <Button
                               variant="outline"
@@ -738,6 +811,45 @@ function RendezVousPageContent() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showDeclinePropositionId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-2">Refuser la proposition</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Vous pouvez indiquer un motif (facultatif). L’équipe Ada Papers sera notifiée.
+            </p>
+            <textarea
+              className="w-full min-h-[88px] rounded-md border border-input px-3 py-2 text-sm mb-4"
+              placeholder="Motif du refus (facultatif)"
+              value={declineMotif}
+              onChange={(e) => setDeclineMotif(e.target.value)}
+              maxLength={500}
+            />
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeclinePropositionId(null);
+                  setDeclineMotif('');
+                }}
+                disabled={respondingPropositionId === showDeclinePropositionId}
+              >
+                Retour
+              </Button>
+              <Button
+                className="bg-amber-700 hover:bg-amber-800 text-white"
+                onClick={() =>
+                  handlePropositionResponse(showDeclinePropositionId, 'decline', declineMotif.trim() || undefined)
+                }
+                disabled={respondingPropositionId === showDeclinePropositionId}
+              >
+                {respondingPropositionId === showDeclinePropositionId ? 'Envoi…' : 'Confirmer le refus'}
+              </Button>
+            </div>
           </div>
         </div>
       )}
