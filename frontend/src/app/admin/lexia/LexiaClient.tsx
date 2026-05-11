@@ -108,13 +108,16 @@ const LEXIA_CHAT_FETCH_MS = 180_000;
 /** Anthropic en SSE : pas d’abandon à 30–60 s tant que des tokens arrivent. */
 const LEXIA_STREAM_MS = 600_000;
 
+/** Aligné sur POST /api/lexia JSON (`buildLexiaChatSuccessPayload`) + discriminant SSE `type`. */
 type LexiaSseCompletePayload = {
+  success: true;
   text: string;
   sources: unknown[];
   sourcesFound: string[];
   searched: boolean;
   provider?: string;
   resolvedProvider?: string;
+  totalToolUses: number;
 };
 
 function parseLexiaSseChunks(buffer: string): { events: Record<string, unknown>[]; rest: string } {
@@ -152,7 +155,9 @@ function applyLexiaSseEvents(
       throw new Error(typeof ev.error === 'string' ? ev.error : 'Erreur Paw AI (stream)');
     }
     if (ev.type === 'complete' && ev.success === true && typeof ev.text === 'string') {
+      const tu = ev.totalToolUses;
       complete = {
+        success: true,
         text: ev.text,
         sources: Array.isArray(ev.sources) ? ev.sources : [],
         sourcesFound: Array.isArray(ev.sourcesFound)
@@ -161,6 +166,8 @@ function applyLexiaSseEvents(
         searched: Boolean(ev.searched),
         provider: typeof ev.provider === 'string' ? ev.provider : undefined,
         resolvedProvider: typeof ev.resolvedProvider === 'string' ? ev.resolvedProvider : undefined,
+        totalToolUses:
+          typeof tu === 'number' && Number.isFinite(tu) ? tu : 0,
       };
     }
   }
@@ -1025,6 +1032,10 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                     ? 'all'
                     : undefined;
           const lexiaKnowledgeSources = filterOpenableKnowledgeSources(streamResult.sources);
+          const streamToolUses =
+            typeof streamResult.totalToolUses === 'number' && Number.isFinite(streamResult.totalToolUses)
+              ? streamResult.totalToolUses
+              : 0;
 
           setThreads((prev) =>
             prev.map((th) =>
@@ -1041,7 +1052,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                             searched: Boolean(streamResult.searched),
                             lexiaProvider: resolved,
                             sourcesFound,
-                            totalToolUses: 0,
+                            totalToolUses: streamToolUses,
                             lexiaKnowledgeSources: lexiaKnowledgeSources.length ? lexiaKnowledgeSources : undefined,
                             streaming: false,
                           }
