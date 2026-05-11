@@ -10,7 +10,7 @@ const {
 } = require('../services/lexiaInternal');
 const {
   runLexiaWithProvider,
-  toSourcesFound,
+  buildLexiaChatSuccessPayload,
   isGeminiDisabled,
   getAnthropicModelEffective,
   resolveLexiaProvider,
@@ -225,17 +225,7 @@ router.post('/', async (req, res) => {
 
     console.log(`[lexia] POST / démarrage (${messages.length} message(s)) provider=${String(provider || 'auto')}`);
     const result = await runLexiaWithProvider(messages, provider);
-    const sourcesArr = Array.isArray(result.sources) ? result.sources : [];
-    const sourcesFound = toSourcesFound(sourcesArr);
-    res.json({
-      success: true,
-      text: typeof result.text === 'string' ? result.text : String(result.text ?? ''),
-      sources: sourcesArr,
-      searched: Boolean(result.searched),
-      sourcesFound,
-      provider: result.provider,
-      resolvedProvider: result.resolvedProvider,
-    });
+    res.json(buildLexiaChatSuccessPayload(result));
     finished = true;
     console.log(`[lexia] POST / terminé en ${Date.now() - t0} ms`);
   } catch (err) {

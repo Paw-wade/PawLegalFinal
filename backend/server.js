@@ -37,6 +37,7 @@ app.use(
       'X-Requested-With',
       'Accept',
       'Origin',
+      'Cache-Control',
       'x-forum-visitor-id',
     ],
     maxAge: 86400,

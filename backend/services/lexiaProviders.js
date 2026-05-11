@@ -218,13 +218,13 @@ async function streamAnthropicLexia(res, req, messages) {
     upstreamSettled = true;
     writeSse({
       type: 'complete',
-      success: true,
-      text: finalText,
-      sources: [{ file: 'api:anthropic', score: 1, metadata: { model }, source: 'anthropic' }],
-      sourcesFound: [],
-      searched: false,
-      provider: 'anthropic',
-      resolvedProvider: 'anthropic',
+      ...buildLexiaChatSuccessPayload({
+        text: finalText,
+        sources: [{ file: 'api:anthropic', score: 1, metadata: { model }, source: 'anthropic' }],
+        searched: false,
+        provider: 'anthropic',
+        resolvedProvider: 'anthropic',
+      }),
     });
   } catch (e) {
     upstreamSettled = true;
@@ -408,6 +408,28 @@ function toSourcesFound(sources) {
   return (Array.isArray(sources) ? sources : [])
     .map((s) => (s && s.file != null ? String(s.file) : null))
     .filter(Boolean);
+}
+
+/**
+ * Corps JSON pour POST /api/lexia en succès — même objet pour réponse HTTP et événement SSE `complete`
+ * (Anthropic stream), sauf le discriminant `type` sur le flux.
+ */
+function buildLexiaChatSuccessPayload(result) {
+  const sourcesArr = Array.isArray(result.sources) ? result.sources : [];
+  const sourcesFound = toSourcesFound(sourcesArr);
+  const tu = result.totalToolUses;
+  const totalToolUses =
+    typeof tu === 'number' && Number.isFinite(tu) ? tu : 0;
+  return {
+    success: true,
+    text: typeof result.text === 'string' ? result.text : String(result.text ?? ''),
+    sources: sourcesArr,
+    searched: Boolean(result.searched),
+    sourcesFound,
+    provider: result.provider,
+    resolvedProvider: result.resolvedProvider,
+    totalToolUses,
+  };
 }
 
 /**
@@ -627,6 +649,7 @@ module.exports = {
   callAnthropic,
   callGemini,
   toSourcesFound,
+  buildLexiaChatSuccessPayload,
   isGeminiDisabled,
   getAnthropicModelEffective,
   streamAnthropicLexia,
