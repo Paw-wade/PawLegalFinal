@@ -7,10 +7,36 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { ArrowUp, ChevronLeft, ChevronRight, MessageSquare, Search } from 'lucide-react';
 import { FORUM_THEMES, type ForumThemeValue } from '@/app/forum/forum-utils';
-import { forumAPI, getApiBaseUrl, getAuthToken, pawSearchAPI } from '@/lib/api';
+import { forumAPI, getApiBaseUrl, getAuthToken, lexiaAPI, pawSearchAPI } from '@/lib/api';
 import { LexiaMarkdown } from '@/components/lexia/LexiaMarkdown';
 
 type LexiaProviderMode = 'auto' | 'anthropic' | 'gemini' | 'internal' | 'all';
+
+type LexiaKnowledgeSourceRow = {
+  file: string;
+  score?: number;
+};
+
+function filterOpenableKnowledgeSources(raw: unknown): LexiaKnowledgeSourceRow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LexiaKnowledgeSourceRow[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const file = (item as { file?: unknown }).file;
+    if (typeof file !== 'string') continue;
+    const t = file.trim();
+    if (!t || t.startsWith('api:')) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    const score = (item as { score?: unknown }).score;
+    out.push({
+      file: t,
+      score: typeof score === 'number' && Number.isFinite(score) ? score : undefined,
+    });
+  }
+  return out;
+}
 
 type ChatMessage = {
   id: number;
@@ -23,6 +49,8 @@ type ChatMessage = {
   /** Clés sources déduites des requêtes web_search (mode Anthropic). */
   sourcesFound?: string[];
   totalToolUses?: number;
+  /** Fichiers corpus (base interne) renvoyés par l’API — ouverture lecture intégrale. */
+  lexiaKnowledgeSources?: LexiaKnowledgeSourceRow[];
 };
 
 const PAW_AI_THREADS_KEY = 'pawlegal-paw-ai-threads-v1';
@@ -73,6 +101,41 @@ function clipTitle(s: string, n = 52) {
   return t.length <= n ? t : `${t.slice(0, n)}…`;
 }
 
+/** Délai max pour POST /api/lexia (mode « all » ou recherches longues côté serveur). */
+const LEXIA_CHAT_FETCH_MS = 180_000;
+
+async function fetchLexiaChat(url: string, init: RequestInit, timeoutMs = LEXIA_CHAT_FETCH_MS): Promise<Response> {
+  const ctrl = new AbortController();
+  const id = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    window.clearTimeout(id);
+  }
+}
+
+function formatLexiaApiError(status: number, errStr: string): string {
+  const low = (errStr || '').toLowerCase();
+  if (
+    low.includes('quota') ||
+    low.includes('rate limit') ||
+    low.includes('resource exhausted') ||
+    low.includes('exceeded your current quota') ||
+    low.includes('free_tier') ||
+    low.includes('generativelanguage.googleapis.com')
+  ) {
+    return (
+      'Quota ou limite de débit atteinte côté modèle cloud (souvent Gemini sur l’offre gratuite). ' +
+      'Attendez une minute, choisissez un autre fournisseur Paw AI (Anthropic ou interne), ou vérifiez la facturation / les quotas sur Google AI.'
+    );
+  }
+  if (status === 502 || status === 503) {
+    return 'Le fournisseur IA a renvoyé une erreur temporaire. Réessayez dans un instant.';
+  }
+  const trimmed = (errStr || '').trim();
+  return trimmed || `Erreur HTTP ${status}`;
+}
+
 /** Texte forum : le fil affiche le corps en brut (pas de HTML). */
 function stripHtmlToPlainText(s: string): string {
   if (!s) return '';
@@ -90,8 +153,8 @@ function stripHtmlToPlainText(s: string): string {
     .trim();
 }
 
-function buildForumBodyFromLexia(messages: ChatMessage[], scope: 'full' | 'last'): string {
-  const header = `Discussion importée depuis Paw AI le ${new Date().toLocaleString('fr-FR')}\n\n`;
+/** Messages à publier (toute la conversation ou depuis la dernière question utilisateur). */
+function getForumPublishSlice(messages: ChatMessage[], scope: 'full' | 'last'): ChatMessage[] {
   let slice = messages;
   if (scope === 'last' && messages.length > 0) {
     let lastUser = -1;
@@ -103,12 +166,31 @@ function buildForumBodyFromLexia(messages: ChatMessage[], scope: 'full' | 'last'
     }
     if (lastUser >= 0) slice = messages.slice(lastUser);
   }
-  const parts: string[] = [];
-  for (const m of slice) {
-    const label = m.role === 'user' ? 'Question' : m.isError ? 'Paw AI — erreur' : 'Paw AI';
-    parts.push(`${label}\n\n${stripHtmlToPlainText(m.content)}`);
+  return slice;
+}
+
+/** Corps du fil : en-tête + premier bloc (idéalement la première question). */
+function buildForumThreadOpeningBody(slice: ChatMessage[]): string {
+  const header = `Discussion importée depuis Paw AI le ${new Date().toLocaleString('fr-FR')}\n\n`;
+  const first = slice[0];
+  let main = '';
+  if (first?.role === 'user') {
+    main = stripHtmlToPlainText(first.content);
+  } else if (first) {
+    const label = first.role === 'assistant' ? (first.isError ? 'Paw AI — erreur' : 'Paw AI') : 'Message';
+    main = `${label}\n\n${stripHtmlToPlainText(first.content)}`;
   }
-  return header + parts.join('\n\n---\n\n');
+  let combined = `${header}${main.trim()}`;
+  if (combined.replace(/\s/g, '').length < 10) {
+    combined = `${combined}\n\n(Import Paw AI.)`;
+  }
+  return combined;
+}
+
+/** Texte d’une réponse forum (message suivant le premier). */
+function buildForumReplyPostBody(m: ChatMessage): string {
+  const label = m.role === 'user' ? 'Question' : m.isError ? 'Paw AI — erreur' : 'Paw AI';
+  return `${label}\n\n${stripHtmlToPlainText(m.content)}`.trim();
 }
 
 function ensureForumTitle(raw: string): string {
@@ -338,6 +420,15 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   const [pawSearchLoading, setPawSearchLoading] = useState(false);
   const [pawSearchError, setPawSearchError] = useState<string | null>(null);
   const [pawSearchFiltersOpen, setPawSearchFiltersOpen] = useState(false);
+  /** Modal lecture intégrale d’un fichier du corpus (base interne). */
+  const [knowledgeReader, setKnowledgeReader] = useState<{
+    file: string;
+    loading: boolean;
+    content: string;
+    error: string | null;
+    truncated?: boolean;
+    empty?: boolean;
+  } | null>(null);
   const [filterJuridiction, setFilterJuridiction] = useState('');
   const [filterContentType, setFilterContentType] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -375,6 +466,16 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
     );
   }, [session]);
 
+  /** Prénom seul à côté des bulles utilisateur (pas le nom complet dans un encadré). */
+  const lexiaChatUserLabel = useMemo(() => {
+    const u = session?.user as { googleFirstName?: string } | undefined;
+    const fromGoogle = u?.googleFirstName?.trim();
+    if (fromGoogle) return fromGoogle;
+    const full = lexiaWelcomeName.trim();
+    const first = full.split(/\s+/).filter(Boolean)[0];
+    return first || full;
+  }, [session, lexiaWelcomeName]);
+
   /** Lien « contactez Ada Papers » : messagerie selon le rôle (demande cible /client/messages pour les clients). */
   const lexiaAdaPapersMessagesHref = useMemo(() => {
     const r = String((session?.user as { role?: string } | undefined)?.role || 'client').toLowerCase();
@@ -382,6 +483,36 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
     if (r === 'admin' || r === 'superadmin') return '/admin/messages';
     return '/client/messages';
   }, [session]);
+
+  const openKnowledgeReader = useCallback((file: string) => {
+    const f = String(file || '').trim();
+    if (!f || f.startsWith('api:')) return;
+    setKnowledgeReader({ file: f, loading: true, content: '', error: null });
+    void (async () => {
+      try {
+        const { data } = await lexiaAPI.readKnowledgeFile(f);
+        if (!data?.success) {
+          throw new Error(typeof data?.error === 'string' ? data.error : 'Lecture impossible');
+        }
+        setKnowledgeReader({
+          file: typeof data.file === 'string' && data.file ? data.file : f,
+          loading: false,
+          content: typeof data.content === 'string' ? data.content : '',
+          error: null,
+          truncated: Boolean(data.truncated),
+          empty: Boolean(data.empty),
+        });
+      } catch (e: unknown) {
+        let msg = e instanceof Error ? e.message : 'Erreur réseau';
+        if (typeof e === 'object' && e !== null && 'response' in e) {
+          const d = (e as { response?: { data?: { error?: string; message?: string } } }).response?.data;
+          if (d && typeof d.error === 'string') msg = d.error;
+          else if (d && typeof d.message === 'string') msg = d.message;
+        }
+        setKnowledgeReader({ file: f, loading: false, content: '', error: msg });
+      }
+    })();
+  }, []);
 
   const activeThread = threads.find((t) => t.id === activeThreadId);
   const messages = activeThread?.messages ?? [];
@@ -467,6 +598,15 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+
+  useEffect(() => {
+    if (!knowledgeReader) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setKnowledgeReader(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [knowledgeReader]);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -700,7 +840,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
       try {
         const token = await getAuthToken();
         const url = `${getApiBaseUrl().replace(/\/+$/, '')}/lexia`;
-        const res = await fetch(url, {
+        const res = await fetchLexiaChat(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -713,7 +853,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          throw new Error(typeof data?.error === 'string' ? data.error : res.statusText);
+          const raw = typeof data?.error === 'string' ? data.error : res.statusText;
+          throw new Error(formatLexiaApiError(res.status, raw));
         }
         const finalText = typeof data?.text === 'string' ? data.text : 'Analyse terminée.';
         const searched = Boolean(data?.searched);
@@ -736,6 +877,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                 : rp === 'all'
                   ? 'all'
                   : undefined;
+        const lexiaKnowledgeSources = filterOpenableKnowledgeSources(data?.sources);
         const assistantMsg: ChatMessage = {
           role: 'assistant',
           content: finalText,
@@ -744,6 +886,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           lexiaProvider: resolved,
           sourcesFound,
           totalToolUses,
+          lexiaKnowledgeSources: lexiaKnowledgeSources.length ? lexiaKnowledgeSources : undefined,
         };
         scrollNewAssistantToTopRef.current = assistantMsg.id;
         setThreads((prev) =>
@@ -759,6 +902,12 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         );
       } catch (e: unknown) {
         let msg = e instanceof Error ? e.message : 'Erreur inconnue';
+        const isAbort =
+          (e instanceof Error && e.name === 'AbortError') ||
+          (e != null && typeof e === 'object' && (e as { name?: string }).name === 'AbortError');
+        if (isAbort) {
+          msg = `La requête a dépassé ${LEXIA_CHAT_FETCH_MS / 1000} secondes (annulation côté navigateur). Réessayez ou choisissez un fournisseur plus rapide.`;
+        }
         const low = msg.toLowerCase();
         const looksLikeNetworkFailure =
           low.includes('failed to fetch') ||
@@ -833,8 +982,13 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
     if (!activeThreadId) return;
     const th = threads.find((t) => t.id === activeThreadId);
     if (!th) return;
-    const body = buildForumBodyFromLexia(th.messages, forumScope);
-    if (body.replace(/\s/g, '').length < 10) {
+    const slice = getForumPublishSlice(th.messages, forumScope);
+    if (slice.length === 0) {
+      setForumErr('Aucun message à publier.');
+      return;
+    }
+    const openingBody = buildForumThreadOpeningBody(slice);
+    if (openingBody.replace(/\s/g, '').length < 10) {
       setForumErr('Contenu trop court pour le forum (minimum 10 caractères).');
       return;
     }
@@ -844,7 +998,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
     try {
       const res = await forumAPI.createThread({
         title,
-        body,
+        body: openingBody,
         theme: forumDraftTheme,
       });
       type CreateRes = { success?: boolean; data?: { _id?: string }; message?: string };
@@ -855,10 +1009,44 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         );
       }
       const fid = String(payload.data._id);
+
+      const replyFailures: string[] = [];
+      for (let i = 1; i < slice.length; i += 1) {
+        const replyBody = buildForumReplyPostBody(slice[i]);
+        if (replyBody.replace(/\s/g, '').length < 2) continue;
+        try {
+          const r2 = await forumAPI.replyToThread(fid, { body: replyBody });
+          type ReplyRes = { success?: boolean; message?: string };
+          const p2 = r2.data as ReplyRes;
+          if (!p2?.success) {
+            replyFailures.push(
+              typeof p2?.message === 'string' ? p2.message : `Réponse ${i + 1} non publiée`
+            );
+          }
+        } catch (re: unknown) {
+          let msg = re instanceof Error ? re.message : 'Erreur réseau';
+          if (re && typeof re === 'object' && 'response' in re) {
+            const ax = re as {
+              response?: { data?: { message?: string; errors?: { msg?: string }[] } };
+            };
+            const m2 =
+              ax.response?.data?.errors?.[0]?.msg ||
+              (typeof ax.response?.data?.message === 'string' ? ax.response.data.message : null);
+            if (m2) msg = m2;
+          }
+          replyFailures.push(`Message ${i + 1} : ${msg}`);
+        }
+      }
+
       setThreads((prev) =>
         prev.map((t) => (t.id === activeThreadId ? { ...t, forumThreadId: fid } : t))
       );
       setForumPublishedId(fid);
+      if (replyFailures.length > 0) {
+        setForumErr(
+          `La discussion est en ligne, mais ${replyFailures.length} message(s) n’ont pas pu être publié(s) en réponse : ${replyFailures.join(' — ')}`
+        );
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('forumUnreadUpdated'));
       }
@@ -1899,6 +2087,149 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           white-space: pre-wrap;
           word-break: break-word;
         }
+        .lexia-paw-hit-actions {
+          margin-top: 10px;
+        }
+        .lexia-paw-open-file {
+          font-size: 11px;
+          font-weight: 600;
+          padding: 6px 12px;
+          border-radius: calc(var(--radius) - 2px);
+          border: 1px solid rgb(249 115 22 / 0.45);
+          background: rgb(249 115 22 / 0.1);
+          color: #c2410c;
+          cursor: pointer;
+          transition: background 0.15s, border-color 0.15s;
+        }
+        .lexia-paw-open-file:hover {
+          background: rgb(249 115 22 / 0.18);
+          border-color: rgb(249 115 22 / 0.65);
+        }
+        .lexia-knowledge-strip {
+          margin-top: 12px;
+          padding-top: 10px;
+          border-top: 1px dashed hsl(var(--border));
+        }
+        .lexia-knowledge-strip-label {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: hsl(var(--muted-foreground));
+          margin-bottom: 6px;
+        }
+        .lexia-knowledge-strip-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .lexia-knowledge-strip-btn {
+          text-align: left;
+          width: 100%;
+          font-size: 12px;
+          font-weight: 600;
+          padding: 6px 10px;
+          border-radius: calc(var(--radius) - 2px);
+          border: 1px solid hsl(var(--border));
+          background: hsl(var(--muted) / 0.25);
+          color: hsl(var(--primary));
+          cursor: pointer;
+          word-break: break-word;
+          transition: border-color 0.15s, background 0.15s;
+        }
+        .lexia-knowledge-strip-btn:hover {
+          border-color: rgb(249 115 22 / 0.45);
+          background: rgb(249 115 22 / 0.08);
+        }
+        .lexia-knowledge-strip-score {
+          font-weight: 500;
+          color: hsl(var(--muted-foreground));
+        }
+        .lexia-knowledge-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 12000;
+          background: rgba(0, 0, 0, 0.35);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 16px;
+        }
+        .lexia-knowledge-panel {
+          width: min(96vw, 720px);
+          max-height: min(88vh, 720px);
+          display: flex;
+          flex-direction: column;
+          background: hsl(var(--background));
+          color: hsl(var(--foreground));
+          border-radius: 12px;
+          border: 1px solid hsl(var(--border));
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+          overflow: hidden;
+        }
+        .lexia-knowledge-panel-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 14px;
+          border-bottom: 1px solid hsl(var(--border));
+          flex-shrink: 0;
+        }
+        .lexia-knowledge-panel-title {
+          margin: 0;
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1.35;
+          word-break: break-word;
+        }
+        .lexia-knowledge-panel-close {
+          flex-shrink: 0;
+          width: 36px;
+          height: 36px;
+          border: none;
+          border-radius: 8px;
+          background: hsl(var(--muted) / 0.5);
+          font-size: 22px;
+          line-height: 1;
+          cursor: pointer;
+          color: hsl(var(--foreground));
+        }
+        .lexia-knowledge-panel-close:hover {
+          background: hsl(var(--muted));
+        }
+        .lexia-knowledge-panel-body {
+          padding: 12px 14px 16px;
+          overflow: auto;
+          flex: 1;
+          min-height: 0;
+        }
+        .lexia-knowledge-panel-err {
+          margin: 0;
+          font-size: 13px;
+          color: hsl(var(--destructive, 0 72% 45%));
+        }
+        .lexia-knowledge-panel-empty {
+          margin: 0;
+          font-size: 13px;
+          color: hsl(var(--muted-foreground));
+        }
+        .lexia-knowledge-trunc {
+          margin: 10px 0 0;
+          font-size: 11px;
+          color: hsl(var(--muted-foreground));
+        }
+        .lexia-knowledge-pre {
+          margin: 0;
+          font-size: 12px;
+          line-height: 1.5;
+          white-space: pre-wrap;
+          word-break: break-word;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
         .lexia-paw-err {
           padding: 12px;
           border-radius: var(--radius);
@@ -2355,7 +2686,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           margin-top: 2px;
         }
         @media (max-width: 639px) {
-          .lexia-avatar {
+          .lexia-avatar:not(.lexia-avatar-user) {
             width: 30px;
             height: 30px;
             font-size: 13px;
@@ -2367,23 +2698,25 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           box-shadow: 0 2px 10px hsl(var(--primary) / 0.35);
         }
         .lexia-avatar-user {
-          background: hsl(var(--muted));
-          border: 1px solid hsl(var(--border));
+          background: transparent;
+          border: none;
+          box-shadow: none;
           width: auto;
-          min-width: 34px;
-          max-width: 7.5rem;
-          min-height: 34px;
+          min-width: 0;
+          max-width: none;
+          min-height: 0;
           height: auto;
-          padding: 4px 7px;
-          font-size: 10px;
+          padding: 0;
+          margin-top: 0;
+          font-size: 12px;
           font-weight: 600;
-          line-height: 1.2;
-          text-align: center;
-          word-break: break-word;
-          overflow: hidden;
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
+          line-height: 1.25;
+          text-align: right;
+          color: hsl(var(--muted-foreground));
+          word-break: normal;
+          overflow: visible;
+          display: block;
+          align-self: flex-end;
         }
 
         .lexia-bubble {
@@ -2866,19 +3199,19 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           flex-shrink: 0;
         }
         .lexia-send-btn:not(:disabled) {
-          background: hsl(var(--primary));
-          color: hsl(var(--primary-foreground));
-          box-shadow: 0 2px 10px hsl(var(--primary) / 0.35);
+          background: hsl(var(--secondary));
+          color: hsl(var(--secondary-foreground));
+          box-shadow: 0 1px 4px hsl(var(--foreground) / 0.08);
         }
-        .lexia-send-btn:not(:disabled):hover { filter: brightness(0.95); }
+        .lexia-send-btn:not(:disabled):hover { filter: brightness(0.97); }
         .lexia-send-btn:not(:disabled) .lexia-send-arrow-assistant {
-          color: #f97316 !important;
+          color: currentColor !important;
         }
         .lexia-send-btn:not(:disabled) .lexia-send-arrow-assistant circle,
         .lexia-send-btn:not(:disabled) .lexia-send-arrow-assistant line,
         .lexia-send-btn:not(:disabled) .lexia-send-arrow-assistant path,
         .lexia-send-btn:not(:disabled) .lexia-send-arrow-assistant polyline {
-          stroke: #f97316 !important;
+          stroke: currentColor !important;
         }
         .lexia-send-btn:disabled .lexia-send-arrow-assistant,
         .lexia-send-btn:disabled .lexia-send-arrow-assistant path,
@@ -3245,6 +3578,15 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                           </div>
                         ) : null}
                         <div className="lexia-paw-snippet">{h.snippet || ''}</div>
+                        <div className="lexia-paw-hit-actions">
+                          <button
+                            type="button"
+                            className="lexia-paw-open-file"
+                            onClick={() => openKnowledgeReader(h.file)}
+                          >
+                            Ouvrir le fichier complet
+                          </button>
+                        </div>
                       </article>
                     );
                   })}
@@ -3355,7 +3697,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                           title={lexiaWelcomeName}
                           aria-label={lexiaWelcomeName}
                         >
-                          {lexiaWelcomeName}
+                          {lexiaChatUserLabel}
                         </div>
                         <div className="lexia-bubble lexia-bubble-user">
                           <LexiaMarkdown content={m.content} />
@@ -3369,10 +3711,31 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                         {!m.isError && <div className="lexia-internal-tag">Analyse de la requête</div>}
                         <div className={`lexia-bubble lexia-bubble-ai ${m.isError ? 'lexia-bubble-error' : ''}`}>
                           <LexiaMarkdown content={m.content} />
+                          {!m.isError && m.lexiaKnowledgeSources && m.lexiaKnowledgeSources.length > 0 ? (
+                            <div className="lexia-knowledge-strip" role="region" aria-label="Fichiers de la base interne">
+                              <div className="lexia-knowledge-strip-label">Fichiers (base interne)</div>
+                              <ul className="lexia-knowledge-strip-list">
+                                {m.lexiaKnowledgeSources.map((s) => (
+                                  <li key={s.file}>
+                                    <button
+                                      type="button"
+                                      className="lexia-knowledge-strip-btn"
+                                      onClick={() => openKnowledgeReader(s.file)}
+                                    >
+                                      {s.file}
+                                      {typeof s.score === 'number' ? (
+                                        <span className="lexia-knowledge-strip-score"> · score {s.score.toFixed(1)}</span>
+                                      ) : null}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
                           <p className="lexia-ai-disclaimer" role="note">
                             Les réponses de Paw AI sont données à titre informatif uniquement et ne remplacent pas un
-                            avis professionnel. Paw AI peut se tromper ou omettre des éléments importants. Pour une
-                            prise en charge personnalisée,{' '}
+                            accompagnement personnalisé par Ada Papers. Paw AI peut se tromper ou omettre des éléments
+                            importants. Pour une prise en charge sur mesure,{' '}
                             <Link href={lexiaAdaPapersMessagesHref} className="lexia-ai-disclaimer-link">
                               contactez Ada Papers
                             </Link>
@@ -3487,8 +3850,14 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
             {forumPublishedId ? (
               <>
                 <p style={{ fontSize: 13, margin: '0 0 10px', lineHeight: 1.45 }}>
-                  La discussion a été publiée.
+                  La discussion a été publiée. La première question figure dans le message d’ouverture ; les autres
+                  messages ont été ajoutés comme réponses séparées lorsque c’était possible.
                 </p>
+                {forumErr ? (
+                  <p className="lexia-forum-err" style={{ marginBottom: 10 }}>
+                    {forumErr}
+                  </p>
+                ) : null}
                 <Link href={`/forum/${forumPublishedId}`} className="lexia-forum-success-link">
                   Ouvrir le fil sur le forum
                 </Link>
@@ -3527,6 +3896,10 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                 </label>
                 <fieldset className="lexia-forum-scope" disabled={forumBusy}>
                   <legend>Contenu à publier</legend>
+                  <p style={{ fontSize: 11, margin: '0 0 8px', color: 'hsl(var(--muted-foreground))', lineHeight: 1.4 }}>
+                    Le premier message devient le corps du fil ; chaque message suivant est publié comme une réponse
+                    distincte (comme sur le forum).
+                  </p>
                   <label>
                     <input
                       type="radio"
@@ -3567,6 +3940,56 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {knowledgeReader ? (
+        <div
+          className="lexia-knowledge-backdrop"
+          role="presentation"
+          onClick={() => setKnowledgeReader(null)}
+        >
+          <div
+            className="lexia-knowledge-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Contenu du fichier ${knowledgeReader.file}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="lexia-knowledge-panel-head">
+              <h3 className="lexia-knowledge-panel-title">{knowledgeReader.file}</h3>
+              <button
+                type="button"
+                className="lexia-knowledge-panel-close"
+                onClick={() => setKnowledgeReader(null)}
+                aria-label="Fermer"
+              >
+                ×
+              </button>
+            </div>
+            <div className="lexia-knowledge-panel-body">
+              {knowledgeReader.loading ? <p className="lexia-knowledge-panel-empty">Chargement du texte…</p> : null}
+              {knowledgeReader.error ? (
+                <p className="lexia-knowledge-panel-err">{knowledgeReader.error}</p>
+              ) : null}
+              {!knowledgeReader.loading &&
+              !knowledgeReader.error &&
+              knowledgeReader.empty &&
+              !knowledgeReader.content ? (
+                <p className="lexia-knowledge-panel-empty">
+                  Aucun texte extrait (fichier vide ou extraction impossible).
+                </p>
+              ) : null}
+              {!knowledgeReader.loading && !knowledgeReader.error && knowledgeReader.content ? (
+                <pre className="lexia-knowledge-pre">{knowledgeReader.content}</pre>
+              ) : null}
+              {knowledgeReader.truncated ? (
+                <p className="lexia-knowledge-trunc">
+                  Affichage tronqué (limite serveur LEXIA_FULL_FILE_MAX_CHARS).
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

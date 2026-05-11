@@ -1,12 +1,14 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import type { Components } from 'react-markdown';
 import type { Schema } from 'hast-util-sanitize';
+import { annotateLawArticleRefsInMarkdown } from '@/lib/lexiaArticleAnnotate';
+import { LexiaArticleRef } from '@/components/lexia/LexiaArticleRef';
 
 const LEXIA_SPAN_CLASSES = new Set(['lexia-verified', 'lexia-hypothesis', 'lexia-caution', 'lexia-emphasis']);
 
@@ -15,11 +17,36 @@ const lexiaSanitizeSchema: Schema = {
   tagNames: [...new Set([...(defaultSchema.tagNames ?? []), 'u', 'mark'])],
   attributes: {
     ...defaultSchema.attributes,
-    span: [...(defaultSchema.attributes?.span ?? []), 'className'],
+    span: [
+      ...(defaultSchema.attributes?.span ?? []),
+      'className',
+      'dataLexiaArticleQuery',
+      'dataLexiaLegiartiId',
+    ],
     u: [...(defaultSchema.attributes?.u ?? [])],
     mark: [...(defaultSchema.attributes?.mark ?? []), 'className'],
   },
 };
+
+function pickHastString(prop: Record<string, unknown> | undefined, ...keys: string[]): string | undefined {
+  if (!prop) return undefined;
+  for (const k of keys) {
+    const v = prop[k];
+    if (v == null) continue;
+    if (Array.isArray(v)) return String(v[0]);
+    if (typeof v === 'string' || typeof v === 'number') return String(v);
+  }
+  return undefined;
+}
+
+function decodeArticleQuery(enc: string | undefined): string | undefined {
+  if (!enc) return undefined;
+  try {
+    return decodeURIComponent(enc);
+  } catch {
+    return enc;
+  }
+}
 
 type LexiaMarkdownProps = {
   content: string;
@@ -77,7 +104,18 @@ const mdComponents: Components = {
     }
     return <code className="lexia-md-code-inline">{children}</code>;
   },
-  span: ({ className, children }) => {
+  span: ({ className, children, node }) => {
+    const props = (node as { properties?: Record<string, unknown> } | undefined)?.properties;
+    const rawEnc = pickHastString(props, 'dataLexiaArticleQuery', 'data-lexia-article-query');
+    const legiartiId = pickHastString(props, 'dataLexiaLegiartiId', 'data-lexia-legiarti-id');
+    if (rawEnc || legiartiId) {
+      const query = decodeArticleQuery(rawEnc);
+      return (
+        <LexiaArticleRef query={query} legiartiId={legiartiId}>
+          {children}
+        </LexiaArticleRef>
+      );
+    }
     const cn = filterLexiaClass(className, LEXIA_SPAN_CLASSES);
     return <span className={cn}>{children}</span>;
   },
@@ -89,6 +127,7 @@ const mdComponents: Components = {
 };
 
 export function LexiaMarkdown({ content }: LexiaMarkdownProps) {
+  const annotated = useMemo(() => annotateLawArticleRefsInMarkdown(content), [content]);
   return (
     <div className="lexia-md">
       <Markdown
@@ -97,7 +136,7 @@ export function LexiaMarkdown({ content }: LexiaMarkdownProps) {
         components={mdComponents}
         skipHtml={false}
       >
-        {content}
+        {annotated}
       </Markdown>
     </div>
   );

@@ -5,6 +5,7 @@ export type DossierCategorie =
   | 'regroupement_familial'
   | 'nationalite_francaise'
   | 'eloignement_urgence'
+  | 'constitution_societe'
   | 'autre';
 
 export interface SuggestedStep {
@@ -62,6 +63,13 @@ export const SUGGESTED_STEPS_BY_CATEGORY: Record<DossierCategorie, SuggestedStep
     { id: 'analyse_situation', label: 'Analyse de la situation d’éloignement' },
     { id: 'mesures_urgence', label: 'Mesures d’urgence (référé, recours)' },
     { id: 'suivi_execution', label: 'Suivi de l’exécution / suspension' },
+  ],
+  constitution_societe: [
+    { id: 'analyse_projet', label: 'Analyse du projet et choix de la forme juridique' },
+    { id: 'collecte_actes', label: 'Collecte des pièces et rédaction des actes constitutifs' },
+    { id: 'formalites_depot', label: 'Dépôt des formalités (greffe, RCCM, INPI ou équivalent)' },
+    { id: 'immatriculation', label: 'Immatriculation et obtention des extrait(s) / Kbis / NINEA' },
+    { id: 'suivi_post_creation', label: 'Suivi post-création (comptabilité, obligations déclaratives)' },
   ],
   autre: [
     { id: 'analyse_situation', label: 'Analyse de la situation' },

@@ -209,7 +209,7 @@ router.post(
   '/',
   [
     body('titre').optional().trim(),
-    body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']),
+    body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'constitution_societe', 'autre']),
     body('statut').optional().isString().trim().isLength({ max: 200 }),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente'])
   ],
@@ -694,7 +694,7 @@ router.post(
   '/',
   [
     body('titre').optional().trim(),
-    body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']),
+    body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'constitution_societe', 'autre']),
     body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente'])
   ],
@@ -2845,7 +2845,7 @@ router.put(
   [
     // Validation simplifiée : tous les champs sont optionnels
     // Si un champ est fourni, il sera validé, sinon ignoré
-    body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'autre']).withMessage('Catégorie invalide'),
+    body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'constitution_societe', 'autre']).withMessage('Catégorie invalide'),
     body('titre').optional().trim().isLength({ max: 500 }).withMessage('Titre trop long (max 500 caractères)'),
     body('statut').optional().isString().trim().isLength({ max: 200 }).withMessage('Statut invalide'),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente']).withMessage('Priorité invalide')

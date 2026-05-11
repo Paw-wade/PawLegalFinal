@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { dossiersAPI, notificationsAPI, messagesAPI } from '@/lib/api';
+import { NOTIFICATIONS_UPDATED_EVENT } from '@/lib/notificationsEvents';
 import Link from 'next/link';
 import { FolderOpen, Bell, MessageSquare, Clock, CheckCircle, XCircle } from 'lucide-react';
 
@@ -21,6 +22,21 @@ export default function PartenaireDashboard() {
   
   useEffect(() => {
     loadStats();
+  }, []);
+
+  useEffect(() => {
+    const refreshNotifCount = () => {
+      notificationsAPI
+        .getUnreadCount()
+        .then((res) => {
+          if (res.data.success) {
+            setStats((prev) => ({ ...prev, notificationsNonLues: res.data.count || 0 }));
+          }
+        })
+        .catch(() => {});
+    };
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, refreshNotifCount);
+    return () => window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, refreshNotifCount);
   }, []);
   
   const loadStats = async () => {

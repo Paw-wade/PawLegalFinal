@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -80,6 +80,8 @@ const categoryMapping: { [key: string]: { categorie: string; type: string } } = 
   'conteste_refus_asile_cnda': { categorie: 'asile', type: 'recours_cnda' },
   'conteste_refus_visa': { categorie: 'contentieux_administratif', type: 'recours_refus_sejour' },
   'autre_demande': { categorie: 'autre', type: 'autre' },
+  'constitution_societe_senegal': { categorie: 'constitution_societe', type: 'constitution_societe_senegal' },
+  'constitution_societe_france': { categorie: 'constitution_societe', type: 'constitution_societe_france' },
 };
 
 const clientCategories = {
@@ -105,6 +107,13 @@ const clientCategories = {
       { value: 'conteste_oqtf', label: 'J\'ai reçu une OQTF (obligation de quitter le territoire)' },
       { value: 'conteste_refus_asile_cnda', label: 'Je conteste un refus d\'asile auprès de la CNDA' },
       { value: 'conteste_refus_visa', label: 'Je conteste un refus de visa' },
+    ]
+  },
+  constitution_societe: {
+    label: 'Constitution de société',
+    options: [
+      { value: 'constitution_societe_senegal', label: 'Entreprise / société au Sénégal' },
+      { value: 'constitution_societe_france', label: 'Entreprise / société en France' },
     ]
   }
 };
@@ -310,10 +319,62 @@ export default function CreateDossierPage() {
         { name: 'urgence', label: 'Niveau d\'urgence', type: 'select', options: ['Normale', 'Haute', 'Urgente'], required: false },
         { name: 'date_echeance', label: 'Date d\'échéance (si applicable)', type: 'date', required: false },
       ],
+      'constitution_societe_senegal': [
+        { name: 'denomination_prevue', label: 'Dénomination sociale ou nom commercial envisagé', type: 'text', placeholder: 'Ex. Ma Société SARL', required: false },
+        { name: 'forme_juridique_sn', label: 'Forme juridique envisagée (Sénégal)', type: 'select', options: ['SARL', 'SA', 'SAS / SUARL', 'GIE', 'Entreprise individuelle', 'Autre / à définir'], required: false },
+        { name: 'siege_prevu_sn', label: 'Siège ou ville d’implantation prévue', type: 'text', placeholder: 'Région, ville', required: false },
+        { name: 'activite_principale', label: 'Activité principale', type: 'textarea', placeholder: 'Secteur, objet social, clientèle visée…', required: false },
+        { name: 'nombre_associes_sn', label: 'Nombre d’associés / fondateurs', type: 'text', placeholder: 'Ex. 2 associés', required: false },
+        { name: 'capital_prevu_sn', label: 'Capital social ou apports envisagés', type: 'text', placeholder: 'Montant ou fourchette (FCFA)', required: false },
+      ],
+      'constitution_societe_france': [
+        { name: 'denomination_prevue', label: 'Dénomination sociale envisagée', type: 'text', placeholder: 'Ex. MA SOCIÉTÉ SAS', required: false },
+        { name: 'forme_juridique_fr', label: 'Forme juridique envisagée (France)', type: 'select', options: ['SAS', 'SASU', 'SARL', 'EURL', 'SA', 'SCI', 'Micro-entreprise', 'Autre / à définir'], required: false },
+        { name: 'departement_siege', label: 'Département ou ville du siège social', type: 'text', placeholder: 'Ex. Paris (75)', required: false },
+        { name: 'activite_principale', label: 'Activité principale', type: 'textarea', placeholder: 'Secteur, code APE/NAF si connu, clientèle…', required: false },
+        { name: 'nombre_associes_fr', label: 'Nombre d’associés / associés uniques', type: 'text', placeholder: 'Ex. associé unique', required: false },
+        { name: 'capital_prevu_fr', label: 'Capital social envisagé (€)', type: 'text', placeholder: 'Montant ou fourchette', required: false },
+      ],
     };
 
     return fields[optionValue] || [];
   };
+
+  const urlRubriqueSyncedRef = useRef(false);
+  useEffect(() => {
+    if (urlRubriqueSyncedRef.current || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const rub = params.get('rubrique');
+    const opt = params.get('option');
+    if (rub !== 'constitution_societe' && opt !== 'constitution_societe_senegal' && opt !== 'constitution_societe_france') {
+      return;
+    }
+    urlRubriqueSyncedRef.current = true;
+    setSelectedCategory('constitution_societe');
+    if (opt === 'constitution_societe_senegal' || opt === 'constitution_societe_france') {
+      setSelectedOption(opt);
+      const label =
+        clientCategories.constitution_societe.options.find((o) => o.value === opt)?.label || '';
+      const specificFields = getSpecificFields(opt);
+      setFormData((prev) => {
+        const next: any = {
+          ...prev,
+          titre: label || prev.titre,
+          description: prev.description,
+          nom: prev.nom,
+          prenom: prev.prenom,
+          email: prev.email,
+          telephone: prev.telephone,
+          dateEcheance: prev.dateEcheance,
+          notes: prev.notes,
+        };
+        specificFields.forEach((field) => {
+          next[field.name] = prev[field.name] && prev[field.name] !== '' ? prev[field.name] : '';
+        });
+        return next;
+      });
+    }
+  }, []);
 
   const handleCategorySelect = (categoryKey: string) => {
     setSelectedCategory(categoryKey);
@@ -546,68 +607,78 @@ export default function CreateDossierPage() {
               </div>
               <div className="space-y-4">
                 {Object.entries(clientCategories).map(([key, category]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleCategorySelect(key)}
-                    className={`w-full p-6 rounded-xl border-2 transition-all duration-300 text-left group ${
-                      selectedCategory === key
-                        ? 'border-primary bg-primary/10 shadow-lg scale-[1.02]'
-                        : 'border-border hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
-                    }`}
-                  >
-                    <h3 className={`font-semibold text-lg mb-2 transition-colors ${
-                      selectedCategory === key ? 'text-primary' : 'text-foreground group-hover:text-primary'
-                    }`}>
-                      {category.label}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {category.options.length} option{category.options.length > 1 ? 's' : ''} disponible{category.options.length > 1 ? 's' : ''}
-                    </p>
-                  </button>
+                  <Fragment key={key}>
+                    <button
+                      type="button"
+                      onClick={() => handleCategorySelect(key)}
+                      className={`w-full p-6 rounded-xl border-2 transition-all duration-300 text-left group ${
+                        selectedCategory === key
+                          ? 'border-primary bg-primary/10 shadow-lg scale-[1.02]'
+                          : 'border-border hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
+                      }`}
+                    >
+                      <h3
+                        className={`font-semibold text-lg mb-2 transition-colors ${
+                          selectedCategory === key
+                            ? 'text-primary'
+                            : 'text-foreground group-hover:text-primary'
+                        }`}
+                      >
+                        {category.label}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {category.options.length} option{category.options.length > 1 ? 's' : ''} disponible
+                        {category.options.length > 1 ? 's' : ''}
+                      </p>
+                    </button>
+
+                    {/* Afficher le bloc options juste après la catégorie cliquée */}
+                    {selectedCategory === key && (
+                      <div className="border-t pt-6">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                            <span className="text-primary text-xl">✓</span>
+                          </div>
+                          <Label className="text-xl font-bold text-foreground">
+                            {category.label}
+                          </Label>
+                        </div>
+                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                          {category.options.map((option) => (
+                            <label
+                              key={option.value}
+                              className={`flex items-start p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 group ${
+                                selectedOption === option.value
+                                  ? 'border-primary bg-primary/10 shadow-md'
+                                  : 'border-border hover:border-primary/50 hover:bg-primary/5'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="option"
+                                value={option.value}
+                                checked={selectedOption === option.value}
+                                onChange={(e) => handleOptionSelect(e.target.value)}
+                                className="mr-3 h-5 w-5 text-primary mt-0.5 flex-shrink-0 cursor-pointer"
+                              />
+                              <span
+                                className={`text-sm leading-relaxed ${
+                                  selectedOption === option.value
+                                    ? 'text-foreground font-medium'
+                                    : 'text-foreground'
+                                }`}
+                              >
+                                {option.label}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </Fragment>
                 ))}
               </div>
             </div>
-
-            {/* Sélection de l'option spécifique */}
-            {selectedCategory && (
-              <div className="border-t pt-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <span className="text-primary text-xl">✓</span>
-                  </div>
-                  <Label className="text-xl font-bold text-foreground">
-                    {clientCategories[selectedCategory as keyof typeof clientCategories].label}
-                  </Label>
-                </div>
-                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                  {clientCategories[selectedCategory as keyof typeof clientCategories].options.map((option) => (
-                    <label
-                      key={option.value}
-                      className={`flex items-start p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 group ${
-                        selectedOption === option.value
-                          ? 'border-primary bg-primary/10 shadow-md'
-                          : 'border-border hover:border-primary/50 hover:bg-primary/5'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="option"
-                        value={option.value}
-                        checked={selectedOption === option.value}
-                        onChange={(e) => handleOptionSelect(e.target.value)}
-                        className="mr-3 h-5 w-5 text-primary mt-0.5 flex-shrink-0 cursor-pointer"
-                      />
-                      <span className={`text-sm leading-relaxed ${
-                        selectedOption === option.value ? 'text-foreground font-medium' : 'text-foreground'
-                      }`}>
-                        {option.label}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Colonne droite : Formulaire */}

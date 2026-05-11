@@ -25,6 +25,9 @@ const categories = {
   eloignement_urgence: {
     label: 'Éloignement et urgence',
   },
+  constitution_societe: {
+    label: 'Constitution de société',
+  },
   autre: {
     label: 'Autre',
   }

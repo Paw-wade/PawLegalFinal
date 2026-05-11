@@ -596,6 +596,12 @@ export default function HomePage() {
                               Accéder au calculateur
                             </Button>
                           </Link>
+                        ) : current.ctaHref ? (
+                          <Link href={current.ctaHref}>
+                            <Button size="lg" className="min-w-[200px]">
+                              {current.ctaLabel ?? 'Continuer'}
+                            </Button>
+                          </Link>
                         ) : current.title === 'Consultation juridique' ? (
                           <Link href="/auth/signup">
                             <Button size="lg" className="min-w-[180px]">
@@ -700,9 +706,9 @@ export default function HomePage() {
                         "Nous n'intervenons pas dans les procédures judiciaires. Si votre dossier nécessite une représentation devant un tribunal administratif, un tribunal judiciaire, ou toute autre juridiction, nous vous mettons en relation avec un avocat spécialisé.",
                     },
                     {
-                      title: "Nous ne fournissons pas de conseil juridique personnalisé",
+                      title: "Les contenus généraux ne remplacent pas un accompagnement personnalisé",
                       details:
-                        "Les informations que nous mettons à disposition sont de nature générale et ne constituent pas un conseil juridique personnalisé adapté à votre situation spécifique. Pour obtenir un conseil juridique personnalisé, vous devez consulter un avocat qui pourra analyser votre situation particulière et vous donner des conseils adaptés à votre cas.",
+                        "Les informations que nous mettons à disposition sont de nature générale et ne constituent pas un accompagnement personnalisé adapté à votre situation. Pour un accompagnement personnalisé par Ada Papers sur vos démarches, contactez notre équipe depuis votre espace. Lorsque la situation impose un acte réservé aux avocats ou une représentation en justice, vous devez consulter un avocat qui pourra analyser votre situation et vous orienter.",
                     },
                     {
                       title: "Nous n'assurons aucune représentation légale",

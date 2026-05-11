@@ -539,6 +539,20 @@ export const logsAPI = {
   },
 };
 
+/** Texte intégral d’un fichier du corpus Lexia (POST /api/lexia/knowledge-file, JWT requis). */
+export const lexiaAPI = {
+  readKnowledgeFile: (file: string) =>
+    api.post<{
+      success: boolean;
+      file?: string;
+      content?: string;
+      truncated?: boolean;
+      empty?: boolean;
+      ext?: string;
+      error?: string;
+    }>('/lexia/knowledge-file', { file }, { timeout: 120000 }),
+};
+
 export const pawSearchAPI = {
   search: (data: {
     query?: string;

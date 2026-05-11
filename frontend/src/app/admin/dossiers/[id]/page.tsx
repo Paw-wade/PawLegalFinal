@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, userAPI } from '@/lib/api';
+import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import { SUGGESTED_STEPS_BY_CATEGORY, DossierCategorie } from '@/lib/dossierStepsConfig';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
@@ -637,6 +638,7 @@ export default function AdminDossierDetailPage() {
                       for (const notif of draftAccessNotifs) {
                         try { await notificationsAPI.markAsRead(notif._id); } catch (_) {}
                       }
+                      emitNotificationsUpdated();
                       loadNotifications();
                     }}
                     className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"

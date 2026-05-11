@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, tasksAPI } from '@/lib/api';
+import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction } from '@/lib/dossierUtils';
@@ -363,6 +364,7 @@ export default function PartenaireDossierDetailPage() {
         await notificationsAPI.markAsRead(notif._id);
       } catch (_) {}
     }
+    emitNotificationsUpdated();
     loadNotifications();
   };
 

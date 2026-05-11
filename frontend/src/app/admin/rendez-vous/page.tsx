@@ -103,6 +103,13 @@ const categories = {
       { value: 'contestation_oqtf', label: 'Contestation d\'une OQTF' },
     ]
   },
+  constitution_societe: {
+    label: 'Constitution de société',
+    types: [
+      { value: 'constitution_societe_senegal', label: 'Constitution — entreprise / société au Sénégal' },
+      { value: 'constitution_societe_france', label: 'Constitution — entreprise / société en France' },
+    ]
+  },
   autre: {
     label: 'Autre',
     types: [
@@ -133,6 +140,8 @@ const RDV_MOTIFS_OPTIONS = [
   { value: 'pas_reponse_visa', label: 'Je n’ai pas eu de réponse à ma demande de visa' },
   { value: 'conteste_refus_titre', label: 'Je conteste un refus de titre de séjour' },
   { value: 'conteste_oqtf', label: 'J’ai reçu une OQTF (obligation de quitter le territoire)' },
+  { value: 'constitution_societe_senegal', label: 'Constitution de société — Sénégal' },
+  { value: 'constitution_societe_france', label: 'Constitution de société — France' },
   { value: 'autre', label: 'Autre' },
 ];
 

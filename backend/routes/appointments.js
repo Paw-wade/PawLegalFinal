@@ -21,6 +21,8 @@ const MOTIF_RDV_LABELS = {
   pas_reponse_visa: 'Je n’ai pas eu de réponse à ma demande de visa',
   conteste_refus_titre: 'Je conteste un refus de titre de séjour',
   conteste_oqtf: 'J’ai reçu une OQTF (obligation de quitter le territoire)',
+  constitution_societe_senegal: 'Constitution de société — Sénégal',
+  constitution_societe_france: 'Constitution de société — France',
   autre: 'Autre'
 };
 

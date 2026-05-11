@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type MouseEvent } from 'react';
 import { notificationsAPI } from '@/lib/api';
+import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -58,6 +59,7 @@ export default function PartenaireNotificationsPage() {
       setLoading(true);
       await notificationsAPI.deleteAllNotifications();
       setNotifications([]);
+      emitNotificationsUpdated();
       setToast({ message: '✅ Toutes les notifications ont été supprimées.', type: 'success' });
     } catch (error) {
       console.error('Erreur lors de la suppression des notifications:', error);
@@ -76,6 +78,7 @@ export default function PartenaireNotificationsPage() {
     try {
       await notificationsAPI.markAsRead(notifId);
       await loadNotifications();
+      emitNotificationsUpdated();
       setToast({ message: '✅ Notification marquée comme lue.', type: 'success' });
     } catch (error) {
       console.error('Erreur lors du marquage notification comme lue:', error);
