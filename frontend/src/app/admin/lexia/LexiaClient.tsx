@@ -44,6 +44,8 @@ type ChatMessage = {
   content: string;
   searched?: boolean;
   isError?: boolean;
+  /** Réponse en cours de réception (stream SSE Anthropic). */
+  streaming?: boolean;
   /** Réponse base interne vs modèle cloud vs combinaison */
   lexiaProvider?: 'anthropic' | 'internal' | 'gemini' | 'all';
   /** Clés sources déduites des requêtes web_search (mode Anthropic). */
@@ -103,6 +105,126 @@ function clipTitle(s: string, n = 52) {
 
 /** Délai max pour POST /api/lexia (mode « all » ou recherches longues côté serveur). */
 const LEXIA_CHAT_FETCH_MS = 180_000;
+/** Anthropic en SSE : pas d’abandon à 30–60 s tant que des tokens arrivent. */
+const LEXIA_STREAM_MS = 600_000;
+
+type LexiaSseCompletePayload = {
+  text: string;
+  sources: unknown[];
+  sourcesFound: string[];
+  searched: boolean;
+  provider?: string;
+  resolvedProvider?: string;
+};
+
+function parseLexiaSseChunks(buffer: string): { events: Record<string, unknown>[]; rest: string } {
+  const events: Record<string, unknown>[] = [];
+  let rest = buffer;
+  let sep: number;
+  while ((sep = rest.indexOf('\n\n')) !== -1) {
+    const block = rest.slice(0, sep);
+    rest = rest.slice(sep + 2);
+    for (const line of block.split('\n')) {
+      const trimmed = line.replace(/\r$/, '');
+      if (!trimmed.startsWith('data: ')) continue;
+      const raw = trimmed.slice(6).trim();
+      if (!raw) continue;
+      try {
+        events.push(JSON.parse(raw) as Record<string, unknown>);
+      } catch {
+        /* ligne SSE invalide */
+      }
+    }
+  }
+  return { events, rest };
+}
+
+function applyLexiaSseEvents(
+  events: Record<string, unknown>[],
+  onDelta: (t: string) => void
+): LexiaSseCompletePayload | null {
+  let complete: LexiaSseCompletePayload | null = null;
+  for (const ev of events) {
+    if (ev.type === 'delta' && typeof ev.text === 'string') {
+      onDelta(ev.text);
+    }
+    if (ev.type === 'error') {
+      throw new Error(typeof ev.error === 'string' ? ev.error : 'Erreur Paw AI (stream)');
+    }
+    if (ev.type === 'complete' && ev.success === true && typeof ev.text === 'string') {
+      complete = {
+        text: ev.text,
+        sources: Array.isArray(ev.sources) ? ev.sources : [],
+        sourcesFound: Array.isArray(ev.sourcesFound)
+          ? ev.sourcesFound.filter((s): s is string => typeof s === 'string')
+          : [],
+        searched: Boolean(ev.searched),
+        provider: typeof ev.provider === 'string' ? ev.provider : undefined,
+        resolvedProvider: typeof ev.resolvedProvider === 'string' ? ev.resolvedProvider : undefined,
+      };
+    }
+  }
+  return complete;
+}
+
+async function postLexiaAnthropicSse(
+  url: string,
+  body: { messages: { role: string; content: string }[]; provider: LexiaProviderMode },
+  token: string | null,
+  onDelta: (chunk: string) => void
+): Promise<LexiaSseCompletePayload> {
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), LEXIA_STREAM_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ ...body, stream: true }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(
+        formatLexiaApiError(res.status, typeof data?.error === 'string' ? data.error : res.statusText)
+      );
+    }
+    const reader = res.body?.getReader();
+    if (!reader) {
+      throw new Error('Flux de réponse indisponible.');
+    }
+    const decoder = new TextDecoder();
+    let buf = '';
+    let lastComplete: LexiaSseCompletePayload | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const { events, rest } = parseLexiaSseChunks(buf);
+      buf = rest;
+      const c = applyLexiaSseEvents(events, onDelta);
+      if (c) lastComplete = c;
+    }
+
+    if (buf.trim()) {
+      const { events } = parseLexiaSseChunks(`${buf}\n\n`);
+      const c = applyLexiaSseEvents(events, onDelta);
+      if (c) lastComplete = c;
+    }
+
+    if (!lastComplete?.text) {
+      throw new Error('Réponse stream incomplète.');
+    }
+    return lastComplete;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 async function fetchLexiaChat(url: string, init: RequestInit, timeoutMs = LEXIA_CHAT_FETCH_MS): Promise<Response> {
   const ctrl = new AbortController();
@@ -837,76 +959,183 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         );
       }
 
+      let streamingAssistantId: number | null = null;
       try {
         const token = await getAuthToken();
         const url = `${getApiBaseUrl().replace(/\/+$/, '')}/lexia`;
-        const res = await fetchLexiaChat(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            messages: [...history, { role: 'user', content: text }],
-            provider: lexiaProvider,
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const raw = typeof data?.error === 'string' ? data.error : res.statusText;
-          throw new Error(formatLexiaApiError(res.status, raw));
+        const useAnthropicStream = lexiaProvider === 'anthropic';
+
+        if (useAnthropicStream) {
+          streamingAssistantId = Date.now() + 1;
+          const placeholder: ChatMessage = {
+            role: 'assistant',
+            content: '',
+            id: streamingAssistantId,
+            streaming: true,
+          };
+          scrollNewAssistantToTopRef.current = streamingAssistantId;
+          setThreads((prev) =>
+            prev.map((th) =>
+              th.id !== tid
+                ? th
+                : {
+                    ...th,
+                    messages: [...th.messages, placeholder],
+                    updatedAt: Date.now(),
+                  }
+            )
+          );
+
+          const streamResult = await postLexiaAnthropicSse(
+            url,
+            {
+              messages: [...history, { role: 'user', content: text }],
+              provider: lexiaProvider,
+            },
+            token,
+            (delta) => {
+              setThreads((prev) =>
+                prev.map((th) => {
+                  if (th.id !== tid) return th;
+                  return {
+                    ...th,
+                    messages: th.messages.map((m) =>
+                      m.id === streamingAssistantId ? { ...m, content: m.content + delta } : m
+                    ),
+                    updatedAt: Date.now(),
+                  };
+                })
+              );
+            }
+          );
+
+          const rawSources = streamResult.sourcesFound;
+          const sourcesFound = Array.isArray(rawSources)
+            ? rawSources.filter((k: unknown) => typeof k === 'string')
+            : [];
+          const rp = streamResult.resolvedProvider ?? streamResult.provider;
+          const resolved: ChatMessage['lexiaProvider'] | undefined =
+            rp === 'internal'
+              ? 'internal'
+              : rp === 'anthropic'
+                ? 'anthropic'
+                : rp === 'gemini'
+                  ? 'gemini'
+                  : rp === 'all'
+                    ? 'all'
+                    : undefined;
+          const lexiaKnowledgeSources = filterOpenableKnowledgeSources(streamResult.sources);
+
+          setThreads((prev) =>
+            prev.map((th) =>
+              th.id !== tid
+                ? th
+                : {
+                    ...th,
+                    messages: th.messages.map((m) =>
+                      m.id === streamingAssistantId
+                        ? {
+                            role: 'assistant',
+                            content: streamResult.text,
+                            id: streamingAssistantId,
+                            searched: Boolean(streamResult.searched),
+                            lexiaProvider: resolved,
+                            sourcesFound,
+                            totalToolUses: 0,
+                            lexiaKnowledgeSources: lexiaKnowledgeSources.length ? lexiaKnowledgeSources : undefined,
+                            streaming: false,
+                          }
+                        : m
+                    ),
+                    updatedAt: Date.now(),
+                  }
+            )
+          );
+        } else {
+          const res = await fetchLexiaChat(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              messages: [...history, { role: 'user', content: text }],
+              provider: lexiaProvider,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const raw = typeof data?.error === 'string' ? data.error : res.statusText;
+            throw new Error(formatLexiaApiError(res.status, raw));
+          }
+          const finalText = typeof data?.text === 'string' ? data.text : 'Analyse terminée.';
+          const searched = Boolean(data?.searched);
+          const rawSources = data?.sourcesFound;
+          const sourcesFound = Array.isArray(rawSources)
+            ? rawSources.filter((k: unknown) => typeof k === 'string')
+            : [];
+          const totalToolUses =
+            typeof data?.totalToolUses === 'number' && Number.isFinite(data.totalToolUses)
+              ? data.totalToolUses
+              : 0;
+          const rp = data?.resolvedProvider ?? data?.provider;
+          const resolved: ChatMessage['lexiaProvider'] | undefined =
+            rp === 'internal'
+              ? 'internal'
+              : rp === 'anthropic'
+                ? 'anthropic'
+                : rp === 'gemini'
+                  ? 'gemini'
+                  : rp === 'all'
+                    ? 'all'
+                    : undefined;
+          const lexiaKnowledgeSources = filterOpenableKnowledgeSources(data?.sources);
+          const assistantMsg: ChatMessage = {
+            role: 'assistant',
+            content: finalText,
+            id: Date.now() + 1,
+            searched,
+            lexiaProvider: resolved,
+            sourcesFound,
+            totalToolUses,
+            lexiaKnowledgeSources: lexiaKnowledgeSources.length ? lexiaKnowledgeSources : undefined,
+          };
+          scrollNewAssistantToTopRef.current = assistantMsg.id;
+          setThreads((prev) =>
+            prev.map((th) =>
+              th.id !== tid
+                ? th
+                : {
+                    ...th,
+                    messages: [...th.messages, assistantMsg],
+                    updatedAt: Date.now(),
+                  }
+            )
+          );
         }
-        const finalText = typeof data?.text === 'string' ? data.text : 'Analyse terminée.';
-        const searched = Boolean(data?.searched);
-        const rawSources = data?.sourcesFound;
-        const sourcesFound = Array.isArray(rawSources)
-          ? rawSources.filter((k: unknown) => typeof k === 'string')
-          : [];
-        const totalToolUses =
-          typeof data?.totalToolUses === 'number' && Number.isFinite(data.totalToolUses)
-            ? data.totalToolUses
-            : 0;
-        const rp = data?.resolvedProvider ?? data?.provider;
-        const resolved: ChatMessage['lexiaProvider'] | undefined =
-          rp === 'internal'
-            ? 'internal'
-            : rp === 'anthropic'
-              ? 'anthropic'
-              : rp === 'gemini'
-                ? 'gemini'
-                : rp === 'all'
-                  ? 'all'
-                  : undefined;
-        const lexiaKnowledgeSources = filterOpenableKnowledgeSources(data?.sources);
-        const assistantMsg: ChatMessage = {
-          role: 'assistant',
-          content: finalText,
-          id: Date.now() + 1,
-          searched,
-          lexiaProvider: resolved,
-          sourcesFound,
-          totalToolUses,
-          lexiaKnowledgeSources: lexiaKnowledgeSources.length ? lexiaKnowledgeSources : undefined,
-        };
-        scrollNewAssistantToTopRef.current = assistantMsg.id;
-        setThreads((prev) =>
-          prev.map((th) =>
-            th.id !== tid
-              ? th
-              : {
-                  ...th,
-                  messages: [...th.messages, assistantMsg],
-                  updatedAt: Date.now(),
-                }
-          )
-        );
       } catch (e: unknown) {
+        if (streamingAssistantId != null) {
+          setThreads((prev) =>
+            prev.map((th) =>
+              th.id !== tid
+                ? th
+                : {
+                    ...th,
+                    messages: th.messages.filter((m) => m.id !== streamingAssistantId),
+                    updatedAt: Date.now(),
+                  }
+            )
+          );
+        }
         let msg = e instanceof Error ? e.message : 'Erreur inconnue';
         const isAbort =
           (e instanceof Error && e.name === 'AbortError') ||
           (e != null && typeof e === 'object' && (e as { name?: string }).name === 'AbortError');
         if (isAbort) {
-          msg = `La requête a dépassé ${LEXIA_CHAT_FETCH_MS / 1000} secondes (annulation côté navigateur). Réessayez ou choisissez un fournisseur plus rapide.`;
+          msg =
+            streamingAssistantId != null
+              ? `La requête stream a dépassé ${LEXIA_STREAM_MS / 60_000} minutes (annulation). Réessayez ou raccourcissez la question.`
+              : `La requête a dépassé ${LEXIA_CHAT_FETCH_MS / 1000} secondes (annulation côté navigateur). Réessayez ou choisissez un fournisseur plus rapide.`;
         }
         const low = msg.toLowerCase();
         const looksLikeNetworkFailure =

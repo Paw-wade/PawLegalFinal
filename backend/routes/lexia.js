@@ -8,7 +8,14 @@ const {
   invalidateCache,
   readKnowledgeFileContent,
 } = require('../services/lexiaInternal');
-const { runLexiaWithProvider, toSourcesFound, isGeminiDisabled } = require('../services/lexiaProviders');
+const {
+  runLexiaWithProvider,
+  toSourcesFound,
+  isGeminiDisabled,
+  getAnthropicModelEffective,
+  resolveLexiaProvider,
+  streamAnthropicLexia,
+} = require('../services/lexiaProviders');
 const { protect, authorize } = require('../middleware/auth');
 
 /** Même périmètre que paw-search : lecture du corpus indexé. */
@@ -144,7 +151,7 @@ router.get('/config', async (req, res) => {
       anthropicConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
       geminiConfigured: Boolean(process.env.GEMINI_API_KEY) && !isGeminiDisabled(),
       knowledgeDirRelative: knowledgeDir,
-      anthropicModel: (process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022').trim(),
+      anthropicModel: getAnthropicModelEffective().effective,
       geminiModel: (process.env.GEMINI_MODEL || 'gemini-2.0-flash').trim(),
     });
   } catch (err) {
@@ -167,11 +174,53 @@ router.post('/', async (req, res) => {
   req.on('close', onClose);
 
   try {
-    const { messages = [], provider } = req.body;
+    const { messages = [], provider, stream: streamRequested } = req.body;
+    const wantStream = streamRequested === true || streamRequested === 'true';
 
     if (!Array.isArray(messages) || messages.length === 0) {
       finished = true;
       return res.status(400).json({ success: false, error: 'messages[] requis' });
+    }
+
+    const resolved = resolveLexiaProvider(provider);
+    if (wantStream && resolved !== 'anthropic') {
+      finished = true;
+      return res.status(400).json({
+        success: false,
+        error:
+          'Le streaming (SSE) n’est disponible que pour le fournisseur Anthropic. Choisissez « Anthropic uniquement » ou désactivez stream.',
+        code: 'LEXIA_STREAM_PROVIDER',
+      });
+    }
+
+    if (wantStream && resolved === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
+      finished = true;
+      return res.status(400).json({ success: false, error: 'ANTHROPIC_API_KEY requise pour le streaming Anthropic' });
+    }
+
+    if (wantStream && resolved === 'anthropic') {
+      res.status(200);
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      if (typeof res.flushHeaders === 'function') {
+        res.flushHeaders();
+      }
+      console.log(`[lexia] POST / démarrage (stream SSE, ${messages.length} message(s)) provider=anthropic`);
+      try {
+        await streamAnthropicLexia(res, req, messages);
+        finished = true;
+        console.log(`[lexia] POST / (stream) terminé en ${Date.now() - t0} ms`);
+      } catch (streamErr) {
+        finished = true;
+        console.error('[lexia] POST / stream error:', streamErr.stack || streamErr.message);
+      } finally {
+        if (!res.writableEnded) {
+          res.end();
+        }
+      }
+      return;
     }
 
     console.log(`[lexia] POST / démarrage (${messages.length} message(s)) provider=${String(provider || 'auto')}`);
@@ -206,6 +255,14 @@ router.post('/', async (req, res) => {
       status = 429;
     } else if (code === 'GEMINI_DISABLED') {
       status = 503;
+    } else if (code === 'ANTHROPIC_RATE_LIMIT') {
+      status = 429;
+    } else if (code === 'ANTHROPIC_AUTH') {
+      status = 502;
+    } else if (code === 'ANTHROPIC_MODEL_NOT_FOUND') {
+      status = 400;
+    } else if (Number.isFinite(upstreamStatus) && upstreamStatus === 429) {
+      status = 429;
     } else if (Number.isFinite(upstreamStatus) && upstreamStatus >= 400 && upstreamStatus < 600) {
       status = 502;
     }

@@ -4,6 +4,7 @@
  */
 
 const axios = require('axios');
+const Anthropic = require('@anthropic-ai/sdk');
 const { searchAndCompose, getKnowledgeDir } = require('./lexiaInternal');
 const { getPawAiLegalSystemPrompt } = require('./lexiaLegalCharter');
 
@@ -63,6 +64,197 @@ function normalizeContentsForGemini(messages) {
   return out;
 }
 
+function textFromAnthropicContent(content) {
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((b) => b && b.type === 'text' && b.text != null)
+    .map((b) => String(b.text))
+    .join('');
+}
+
+/** Modèles retirés côté Anthropic : on bascule vers un id supporté (voir docs dépréciations). */
+const ANTHROPIC_MODEL_ALIASES = {
+  'claude-sonnet-4-20250514': 'claude-sonnet-4-6',
+};
+
+function getAnthropicModelEffective() {
+  let work = process.env.ANTHROPIC_MODEL != null ? String(process.env.ANTHROPIC_MODEL).trim() : '';
+  if (work.charCodeAt(0) === 0xfeff) work = work.slice(1).trim();
+  // Faute fréquente : « laude-… » au lieu de « claude-… »
+  if (/^laude-/i.test(work)) {
+    const fixed = (`c${work}`).toLowerCase();
+    console.warn(
+      `[lexia] ANTHROPIC_MODEL corrigé faute « ${work} » → « ${fixed} ». Mettez claude-… dans backend/.env.`
+    );
+    work = fixed;
+  }
+  const requested = (work || 'claude-sonnet-4-6').toLowerCase();
+  const effective = ANTHROPIC_MODEL_ALIASES[requested] || requested;
+  return { requested, effective };
+}
+
+/** Erreur API Anthropic (SDK) → erreur applicative avec `code` / `status`. */
+function mapAnthropicSdkError(e, model) {
+  if (e instanceof Anthropic.APIUserAbortError) {
+    const err = new Error('Requête Anthropic interrompue (annulation ou fermeture de connexion).');
+    err.code = 'ANTHROPIC_USER_ABORT';
+    return err;
+  }
+  if (e instanceof Anthropic.RateLimitError) {
+    const err = new Error(
+      'Limite de débit Anthropic atteinte (trop de requêtes). Réessayez dans quelques instants ou vérifiez votre plan.'
+    );
+    err.code = 'ANTHROPIC_RATE_LIMIT';
+    err.status = 429;
+    return err;
+  }
+  if (e instanceof Anthropic.AuthenticationError) {
+    const err = new Error('Authentification Anthropic refusée (clé API invalide ou révoquée).');
+    err.code = 'ANTHROPIC_AUTH';
+    err.status = 401;
+    return err;
+  }
+  if (e instanceof Anthropic.NotFoundError) {
+    const raw = String(e.message || '');
+    const isModel = raw.toLowerCase().includes('model');
+    const err = new Error(
+      isModel
+        ? `Modèle Anthropic inconnu ou retiré (« ${model} »). Dans backend/.env, définissez par ex. ANTHROPIC_MODEL=claude-sonnet-4-6 (ids à jour sur la console Anthropic).`
+        : raw || 'Ressource Anthropic introuvable.'
+    );
+    err.code = 'ANTHROPIC_MODEL_NOT_FOUND';
+    err.status = 404;
+    return err;
+  }
+  if (e instanceof Anthropic.APIError) {
+    const status = e.status;
+    const raw = e.message || 'Erreur API Anthropic';
+    const low = raw.toLowerCase();
+    if (status === 429 || low.includes('rate limit') || low.includes('too many requests')) {
+      const err = new Error(
+        'Limite de débit Anthropic atteinte (trop de requêtes). Réessayez dans quelques instants ou vérifiez votre plan.'
+      );
+      err.code = 'ANTHROPIC_RATE_LIMIT';
+      err.status = 429;
+      return err;
+    }
+    const err = new Error(raw);
+    err.code = 'ANTHROPIC_API';
+    err.status = status;
+    return err;
+  }
+  if (e instanceof Anthropic.APIConnectionError || e instanceof Anthropic.APIConnectionTimeoutError) {
+    const err = new Error(e.message || 'Connexion à l’API Anthropic impossible.');
+    err.code = 'ANTHROPIC_CONNECTION';
+    return err;
+  }
+  return null;
+}
+
+/**
+ * Anthropic en SSE : garde la connexion ouverte (évite les abandons navigateur sur réponses longues).
+ * Le client doit envoyer `stream: true` et accepter `text/event-stream`.
+ */
+async function streamAnthropicLexia(res, req, messages) {
+  const writeSse = (obj) => {
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    }
+  };
+
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) {
+    const err = new Error('ANTHROPIC_API_KEY non configurée sur le serveur');
+    err.code = 'MISSING_KEY';
+    writeSse({ type: 'error', success: false, error: err.message, code: err.code });
+    throw err;
+  }
+  const { requested, effective: model } = getAnthropicModelEffective();
+  if (model !== requested) {
+    console.warn(
+      `[lexia] ANTHROPIC_MODEL « ${requested} » n’est plus disponible ; utilisation de « ${model} ». Mettez à jour backend/.env.`
+    );
+  }
+  const msgs = normalizeMessagesForAnthropic(messages);
+  if (!msgs.length) {
+    const err = new Error('Aucun message utilisateur valide');
+    err.code = 'EMPTY_MESSAGES';
+    writeSse({ type: 'error', success: false, error: err.message, code: err.code });
+    throw err;
+  }
+
+  const maxTokens = Math.min(Math.max(Number(process.env.ANTHROPIC_MAX_TOKENS) || 4096, 256), 8192);
+  const system = getPawAiLegalSystemPrompt();
+  const timeoutMs = Math.min(Math.max(Number(process.env.ANTHROPIC_TIMEOUT_MS) || 120000, 30000), 600000);
+
+  const client = new Anthropic({ apiKey: key, timeout: timeoutMs });
+  const stream = client.messages.stream({
+    model,
+    max_tokens: maxTokens,
+    system,
+    messages: msgs,
+  });
+
+  /** Évite d’appeler `abort()` après une fin normale — `req` « close » peut arriver trop tôt sur certains proxies. */
+  let upstreamSettled = false;
+  const onResClose = () => {
+    if (upstreamSettled) return;
+    try {
+      stream.abort();
+    } catch (_) {
+      /* ignore */
+    }
+  };
+  res.on('close', onResClose);
+
+  stream.on('text', (delta) => {
+    if (typeof delta === 'string' && delta.length) {
+      writeSse({ type: 'delta', text: delta });
+    }
+  });
+
+  try {
+    const finalText = await stream.finalText();
+    upstreamSettled = true;
+    writeSse({
+      type: 'complete',
+      success: true,
+      text: finalText,
+      sources: [{ file: 'api:anthropic', score: 1, metadata: { model }, source: 'anthropic' }],
+      sourcesFound: [],
+      searched: false,
+      provider: 'anthropic',
+      resolvedProvider: 'anthropic',
+    });
+  } catch (e) {
+    upstreamSettled = true;
+    if (e instanceof Anthropic.APIUserAbortError) {
+      console.warn('[lexia] POST / stream annulé (client, navigation ou double requête).');
+      if (!res.writableEnded) {
+        try {
+          writeSse({
+            type: 'error',
+            success: false,
+            error: 'Connexion interrompue avant la fin de la réponse.',
+            code: 'ANTHROPIC_CLIENT_ABORT',
+          });
+        } catch (_) {
+          /* client déjà parti */
+        }
+      }
+      return;
+    }
+    const mapped = mapAnthropicSdkError(e, model) || e;
+    const msg = mapped instanceof Error ? mapped.message : String(mapped);
+    const code = mapped && typeof mapped === 'object' && 'code' in mapped ? mapped.code : undefined;
+    writeSse({ type: 'error', success: false, error: msg, code: code || undefined });
+    throw mapped instanceof Error ? mapped : e;
+  } finally {
+    upstreamSettled = true;
+    res.removeListener('close', onResClose);
+  }
+}
+
 async function callAnthropic(messages) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
@@ -70,7 +262,12 @@ async function callAnthropic(messages) {
     err.code = 'MISSING_KEY';
     throw err;
   }
-  const model = (process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022').trim();
+  const { requested, effective: model } = getAnthropicModelEffective();
+  if (model !== requested) {
+    console.warn(
+      `[lexia] ANTHROPIC_MODEL « ${requested} » n’est plus disponible ; utilisation de « ${model} ». Mettez à jour backend/.env.`
+    );
+  }
   const msgs = normalizeMessagesForAnthropic(messages);
   if (!msgs.length) {
     const err = new Error('Aucun message utilisateur valide');
@@ -80,55 +277,28 @@ async function callAnthropic(messages) {
 
   const maxTokens = Math.min(Math.max(Number(process.env.ANTHROPIC_MAX_TOKENS) || 4096, 256), 8192);
   const system = getPawAiLegalSystemPrompt();
+  const timeoutMs = Math.min(Math.max(Number(process.env.ANTHROPIC_TIMEOUT_MS) || 120000, 30000), 600000);
 
-  const res = await axios.post(
-    'https://api.anthropic.com/v1/messages',
-    {
+  const client = new Anthropic({ apiKey: key, timeout: timeoutMs });
+
+  try {
+    const data = await client.messages.create({
       model,
       max_tokens: maxTokens,
       system,
       messages: msgs,
-    },
-    {
-      headers: {
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      timeout: 120000,
-      validateStatus: () => true,
+    });
+
+    const text = textFromAnthropicContent(data.content);
+    if (!text && data.stop_reason === 'max_tokens') {
+      return { text: '_(Réponse tronquée — augmentez ANTHROPIC_MAX_TOKENS si besoin.)_', model };
     }
-  );
-
-  const data = res.data;
-  if (res.status >= 400) {
-    const msg =
-      data?.error?.message ||
-      (typeof data === 'string' ? data : null) ||
-      `Anthropic HTTP ${res.status}`;
-    const err = new Error(msg);
-    err.code = 'ANTHROPIC_API';
-    err.status = res.status;
-    throw err;
+    return { text: text || '_(Réponse vide du modèle.)_', model };
+  } catch (e) {
+    const mapped = mapAnthropicSdkError(e, model);
+    if (mapped) throw mapped;
+    throw e;
   }
-
-  if (data.error) {
-    const err = new Error(data.error.message || 'Erreur API Anthropic');
-    err.code = 'ANTHROPIC_API';
-    throw err;
-  }
-  if (data.type === 'error') {
-    const err = new Error(data.error?.message || 'Erreur Anthropic');
-    err.code = 'ANTHROPIC_API';
-    throw err;
-  }
-
-  const block = Array.isArray(data.content) ? data.content.find((c) => c.type === 'text') : null;
-  const text = block?.text != null ? String(block.text) : '';
-  if (!text && data.stop_reason === 'max_tokens') {
-    return { text: '_(Réponse tronquée — augmentez ANTHROPIC_MAX_TOKENS si besoin.)_', model };
-  }
-  return { text: text || '_(Réponse vide du modèle.)_', model };
 }
 
 async function callGemini(messages) {
@@ -458,4 +628,6 @@ module.exports = {
   callGemini,
   toSourcesFound,
   isGeminiDisabled,
+  getAnthropicModelEffective,
+  streamAnthropicLexia,
 };
