@@ -1017,6 +1017,7 @@ export default function AdminMessageDetailPage() {
                       <option value="regroupement_familial">Regroupement familial</option>
                       <option value="nationalite_francaise">Nationalité française</option>
                       <option value="eloignement_urgence">Éloignement et urgence</option>
+                      <option value="constitution_societe">Constitution de société</option>
                       <option value="autre">Autre</option>
                     </select>
                   </div>
@@ -1044,6 +1045,12 @@ export default function AdminMessageDetailPage() {
                             <>
                               <option value="recours_gracieux">Recours gracieux</option>
                               <option value="recours_oqtf">Recours OQTF</option>
+                            </>
+                          )}
+                          {dossierFormData.categorie === 'constitution_societe' && (
+                            <>
+                              <option value="constitution_societe_senegal">Constitution — Sénégal</option>
+                              <option value="constitution_societe_france">Constitution — France</option>
                             </>
                           )}
                           {dossierFormData.categorie === 'autre' && (

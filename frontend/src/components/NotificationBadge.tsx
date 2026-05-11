@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { notificationsAPI } from '@/lib/api';
+import { NOTIFICATIONS_UPDATED_EVENT } from '@/lib/notificationsEvents';
 
 interface NotificationBadgeProps {
   className?: string;
@@ -12,27 +13,61 @@ interface NotificationBadgeProps {
 }
 
 export function NotificationBadge({ className = '', showCount = true, variant = 'header' }: NotificationBadgeProps) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
+  const loadUnreadCount = useCallback(async () => {
+    if (status === 'unauthenticated') {
+      setUnreadCount(0);
+      setIsLoading(false);
+      return;
+    }
+    if (status === 'loading') {
+      return;
+    }
+    const token =
+      typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!session?.user && !token) {
+      setUnreadCount(0);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const response = await notificationsAPI.getUnreadCount();
+      if (response.data.success) {
+        setUnreadCount(response.data.count || 0);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement du nombre de notifications:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session?.user, status]);
+
   useEffect(() => {
-    const loadUnreadCount = async () => {
-      try {
-        const response = await notificationsAPI.getUnreadCount();
-        if (response.data.success) {
-          setUnreadCount(response.data.count || 0);
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement du nombre de notifications:', error);
-      } finally {
-        setIsLoading(false);
+    void loadUnreadCount();
+  }, [loadUnreadCount]);
+
+  useEffect(() => {
+    const onUpdated = () => {
+      void loadUnreadCount();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void loadUnreadCount();
       }
     };
-
-    // Chargement unique au montage pour éviter les rafraîchissements fréquents
-    loadUnreadCount();
-  }, []);
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, onUpdated);
+    window.addEventListener('focus', onUpdated);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, onUpdated);
+      window.removeEventListener('focus', onUpdated);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [loadUnreadCount]);
 
   if (variant === 'header') {
     // Déterminer le lien selon le rôle

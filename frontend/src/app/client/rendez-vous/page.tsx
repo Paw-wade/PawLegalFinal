@@ -744,6 +744,7 @@ function RendezVousPageContent() {
                   <option value="regroupement_familial">Regroupement familial</option>
                   <option value="nationalite_francaise">Nationalité française</option>
                   <option value="eloignement_urgence">Éloignement et urgence</option>
+                  <option value="constitution_societe">Constitution de société</option>
                   <option value="autre">Autre</option>
                 </select>
               </div>

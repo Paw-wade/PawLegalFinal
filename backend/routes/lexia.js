@@ -6,8 +6,31 @@ const {
   getKnowledgeDir,
   getKnowledgeStats,
   invalidateCache,
+  readKnowledgeFileContent,
 } = require('../services/lexiaInternal');
-const { runLexiaWithProvider, toSourcesFound } = require('../services/lexiaProviders');
+const {
+  runLexiaWithProvider,
+  toSourcesFound,
+  isGeminiDisabled,
+  getAnthropicModelEffective,
+  resolveLexiaProvider,
+  streamAnthropicLexia,
+} = require('../services/lexiaProviders');
+const { protect, authorize } = require('../middleware/auth');
+
+/** Même périmètre que paw-search : lecture du corpus indexé. */
+const LEXIA_KNOWLEDGE_READ_ROLES = [
+  'client',
+  'admin',
+  'superadmin',
+  'assistant',
+  'comptable',
+  'secretaire',
+  'juriste',
+  'stagiaire',
+  'visiteur',
+  'partenaire',
+];
 
 
 /**
@@ -88,6 +111,34 @@ router.post('/invalidate-cache', (req, res) => {
 });
 
 /**
+ * POST /api/lexia/knowledge-file
+ * Corps : { file: "chemin/relatif/doc.md" } — texte intégral extrait (sécurisé sous LEXIA_KNOWLEDGE_DIR).
+ */
+router.post('/knowledge-file', protect, authorize(...LEXIA_KNOWLEDGE_READ_ROLES), async (req, res) => {
+  try {
+    const file = String(req.body?.file || '').trim();
+    if (!file) {
+      return res.status(400).json({ success: false, error: 'file requis' });
+    }
+    const result = await readKnowledgeFileContent(file);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    const code = err.code;
+    if (code === 'INVALID_FILE_PATH') {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+    if (code === 'FILE_NOT_FOUND') {
+      return res.status(404).json({ success: false, error: err.message });
+    }
+    if (code === 'UNSUPPORTED_EXT' || code === 'FILE_TOO_LARGE') {
+      return res.status(415).json({ success: false, error: err.message, code });
+    }
+    console.error('[lexia] /knowledge-file:', err.stack || err.message);
+    return res.status(500).json({ success: false, error: err.message || 'Erreur lecture fichier' });
+  }
+});
+
+/**
  * GET /api/lexia/config
  * Configuration du provider Lexia
  */
@@ -98,9 +149,9 @@ router.get('/config', async (req, res) => {
       success: true,
       envProvider: process.env.LEXIA_PROVIDER || 'internal',
       anthropicConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
-      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+      geminiConfigured: Boolean(process.env.GEMINI_API_KEY) && !isGeminiDisabled(),
       knowledgeDirRelative: knowledgeDir,
-      anthropicModel: (process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022').trim(),
+      anthropicModel: getAnthropicModelEffective().effective,
       geminiModel: (process.env.GEMINI_MODEL || 'gemini-2.0-flash').trim(),
     });
   } catch (err) {
@@ -123,11 +174,53 @@ router.post('/', async (req, res) => {
   req.on('close', onClose);
 
   try {
-    const { messages = [], provider } = req.body;
+    const { messages = [], provider, stream: streamRequested } = req.body;
+    const wantStream = streamRequested === true || streamRequested === 'true';
 
     if (!Array.isArray(messages) || messages.length === 0) {
       finished = true;
       return res.status(400).json({ success: false, error: 'messages[] requis' });
+    }
+
+    const resolved = resolveLexiaProvider(provider);
+    if (wantStream && resolved !== 'anthropic') {
+      finished = true;
+      return res.status(400).json({
+        success: false,
+        error:
+          'Le streaming (SSE) n’est disponible que pour le fournisseur Anthropic. Choisissez « Anthropic uniquement » ou désactivez stream.',
+        code: 'LEXIA_STREAM_PROVIDER',
+      });
+    }
+
+    if (wantStream && resolved === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
+      finished = true;
+      return res.status(400).json({ success: false, error: 'ANTHROPIC_API_KEY requise pour le streaming Anthropic' });
+    }
+
+    if (wantStream && resolved === 'anthropic') {
+      res.status(200);
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      if (typeof res.flushHeaders === 'function') {
+        res.flushHeaders();
+      }
+      console.log(`[lexia] POST / démarrage (stream SSE, ${messages.length} message(s)) provider=anthropic`);
+      try {
+        await streamAnthropicLexia(res, req, messages);
+        finished = true;
+        console.log(`[lexia] POST / (stream) terminé en ${Date.now() - t0} ms`);
+      } catch (streamErr) {
+        finished = true;
+        console.error('[lexia] POST / stream error:', streamErr.stack || streamErr.message);
+      } finally {
+        if (!res.writableEnded) {
+          res.end();
+        }
+      }
+      return;
     }
 
     console.log(`[lexia] POST / démarrage (${messages.length} message(s)) provider=${String(provider || 'auto')}`);
@@ -153,12 +246,26 @@ router.post('/', async (req, res) => {
       err.response?.data?.error?.message ||
       (typeof err.response?.data === 'string' ? err.response.data : null);
     const msg = axiosMsg || err.message || 'Erreur interne Lexia';
-    const status =
-      code === 'MISSING_KEY' || code === 'EMPTY_MESSAGES'
-        ? 400
-        : err.response?.status >= 400 && err.response?.status < 500
-          ? 400
-          : 500;
+    /** Erreurs Anthropic/Gemini : on met `status` sur l'erreur sans toujours remplir `err.response` (axios + validateStatus). */
+    const upstreamStatus = Number(err.response?.status ?? err.status);
+    let status = 500;
+    if (code === 'MISSING_KEY' || code === 'EMPTY_MESSAGES') {
+      status = 400;
+    } else if (code === 'GEMINI_QUOTA') {
+      status = 429;
+    } else if (code === 'GEMINI_DISABLED') {
+      status = 503;
+    } else if (code === 'ANTHROPIC_RATE_LIMIT') {
+      status = 429;
+    } else if (code === 'ANTHROPIC_AUTH') {
+      status = 502;
+    } else if (code === 'ANTHROPIC_MODEL_NOT_FOUND') {
+      status = 400;
+    } else if (Number.isFinite(upstreamStatus) && upstreamStatus === 429) {
+      status = 429;
+    } else if (Number.isFinite(upstreamStatus) && upstreamStatus >= 400 && upstreamStatus < 600) {
+      status = 502;
+    }
     res.status(status).json({
       success: false,
       error: msg,

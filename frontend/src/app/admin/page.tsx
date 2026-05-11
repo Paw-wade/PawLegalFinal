@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { MessageNotificationModal } from '@/components/MessageNotificationModal';
 import { AppointmentBadgeModal } from '@/components/AppointmentBadgeModal';
 import { userAPI, appointmentsAPI, documentsAPI, tasksAPI, messagesAPI, dossiersAPI, notificationsAPI } from '@/lib/api';
+import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
 
@@ -178,6 +179,7 @@ export default function AdminDashboardPage() {
       if (ids.length === 0) return;
       await Promise.all(ids.map((id: string) => notificationsAPI.markAsRead(id)));
       setUnreadAppointmentNotifications([]);
+      emitNotificationsUpdated();
     } catch (error) {
       console.error('Erreur lors du marquage des notifications de rendez-vous:', error);
     }

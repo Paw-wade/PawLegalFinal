@@ -145,6 +145,13 @@ const categories = {
       { value: 'audience_jld', label: 'Audience devant le juge des libertés et de la détention (JLD)' },
     ]
   },
+  constitution_societe: {
+    label: 'Constitution de société',
+    types: [
+      { value: 'constitution_societe_senegal', label: 'Constitution — entreprise / société au Sénégal' },
+      { value: 'constitution_societe_france', label: 'Constitution — entreprise / société en France' },
+    ]
+  },
   autre: {
     label: 'Autre',
     types: [

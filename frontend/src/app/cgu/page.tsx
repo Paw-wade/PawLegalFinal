@@ -81,7 +81,8 @@ export default function CGUPage() {
               </ul>
               <p className="mt-2">
                 Sauf mention contraire expresse, Ada Papers n&apos;est pas un cabinet d&apos;avocats et ne se substitue
-                pas à un conseil juridique individualisé dispensé par un avocat ou un professionnel du droit.
+                pas aux actes réservés aux avocats ni à un accompagnement personnalisé par un avocat ou un professionnel
+                du droit lorsque la situation l&apos;exige.
               </p>
             </section>
 
@@ -133,9 +134,10 @@ export default function CGUPage() {
               <h2 className="text-2xl font-semibold mb-4 text-primary">7. Nature des informations fournies</h2>
               <p>
                 Les informations, modèles de documents, guides, FAQ, simulateurs et autres contenus mis à disposition
-                sur la Plateforme ont une vocation pédagogique et pratique. Ils ne constituent ni un avis juridique
-                personnalisé, ni un conseil exhaustif, et ne sauraient se substituer à la consultation d&apos;un avocat
-                ou d&apos;un professionnel du droit lorsque la situation l&apos;exige.
+                sur la Plateforme ont une vocation pédagogique et pratique. Ils ne constituent ni un accompagnement
+                personnalisé suffisant lorsque la situation l&apos;exige, ni un guide exhaustif, et ne sauraient se
+                substituer à la consultation d&apos;un avocat ou d&apos;un professionnel du droit lorsque la situation
+                l&apos;exige.
               </p>
               <p className="mt-2">
                 Ada Papers met tout en œuvre pour fournir des informations à jour, mais ne garantit pas l&apos;exhaustivité

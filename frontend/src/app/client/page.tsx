@@ -193,6 +193,7 @@ function ClientDashboardContent() {
       regroupement_familial: 'Regroupement familial',
       nationalite_francaise: 'Nationalité française',
       eloignement_urgence: 'Éloignement et urgence',
+      constitution_societe: 'Constitution de société',
       autre: 'Autre'
     };
     return categories[categorie] || categorie;
@@ -714,13 +715,13 @@ function ClientDashboardContent() {
         </div>
 
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
-        <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4 scroll-mt-20">
-          <Link href="/client/dossiers" className="group block min-w-0">
+        <div id="dossiers-section" className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4 scroll-mt-20 items-stretch">
+          <Link href="/client/dossiers" className="group flex min-w-0 h-full min-h-[168px] flex-col">
             <div
-              className={`rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-orange-200/70 to-orange-200/70 shadow-sm group-hover:shadow-md group-hover:from-orange-400/70 group-hover:via-orange-400/70 group-hover:to-orange-400/70 transition-all duration-300 cursor-pointer ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
+              className={`flex h-full min-h-0 flex-1 flex-col rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-orange-200/70 to-orange-200/70 shadow-sm group-hover:shadow-md group-hover:from-orange-400/70 group-hover:via-orange-400/70 group-hover:to-orange-400/70 transition-all duration-300 cursor-pointer ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
             >
-              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
-                <div className="flex items-center justify-between mb-3">
+              <div className="flex h-full min-h-0 flex-1 flex-col bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex shrink-0 items-center justify-between mb-3">
                   <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                     <span className="text-2xl">📁</span>
                   </div>
@@ -734,7 +735,7 @@ function ClientDashboardContent() {
                 </div>
                 <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Mes Dossiers</h3>
                 <p className="text-xs text-gray-600 mb-3">Total de vos dossiers</p>
-                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <div className="mt-auto flex shrink-0 items-center justify-between pt-3 border-t border-gray-100">
                   {showDashboardSkeleton ? (
                     <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-200 text-transparent text-xs font-semibold">
                       00 en cours
@@ -751,13 +752,13 @@ function ClientDashboardContent() {
           </Link>
 
           {/* Badge Documents avec lien direct */}
-          <div id="documents-section" className="scroll-mt-20 min-w-0">
-          <Link href="/client/documents" className="group block min-w-0">
+          <div id="documents-section" className="scroll-mt-20 flex min-h-0 min-w-0 h-full flex-col">
+          <Link href="/client/documents" className="group flex min-w-0 h-full min-h-[168px] flex-1 flex-col">
             <div
-              className={`rounded-xl p-[1px] bg-gradient-to-r from-green-200/70 via-emerald-200/70 to-green-200/70 shadow-sm group-hover:shadow-md group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 transition-all duration-300 cursor-pointer ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
+              className={`flex h-full min-h-0 flex-1 flex-col rounded-xl p-[1px] bg-gradient-to-r from-green-200/70 via-emerald-200/70 to-green-200/70 shadow-sm group-hover:shadow-md group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 transition-all duration-300 cursor-pointer ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
             >
-              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
-                <div className="flex items-center justify-between mb-3">
+              <div className="flex h-full min-h-0 flex-1 flex-col bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex shrink-0 items-center justify-between mb-3">
                   <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
                     <span className="text-2xl">📄</span>
                   </div>
@@ -771,7 +772,7 @@ function ClientDashboardContent() {
                 </div>
                 <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Documents</h3>
                 <p className="text-xs text-gray-600 mb-3">Documents disponibles</p>
-                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <div className="mt-auto flex shrink-0 items-center justify-between pt-3 border-t border-gray-100">
                   <span className="text-xs text-gray-600">Tous vos documents</span>
                   <span className="text-green-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
                 </div>
@@ -782,9 +783,9 @@ function ClientDashboardContent() {
         </div>
 
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Rendez-vous et accès</p>
-        <div id="rendez-vous-section" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 scroll-mt-20">
+        <div id="rendez-vous-section" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 scroll-mt-20 items-stretch">
           <div
-            className="group min-w-0 min-h-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+            className="group flex h-full min-h-[200px] min-w-0 flex-col rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
             role="link"
             tabIndex={0}
             aria-label="Rendez-vous : ouvrir la page Mes rendez-vous"
@@ -797,10 +798,10 @@ function ClientDashboardContent() {
             }}
           >
             <div
-              className={`rounded-xl p-[1px] bg-gradient-to-r from-blue-200/70 via-indigo-200/70 to-blue-200/70 shadow-sm group-hover:shadow-md group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 transition-all duration-300 ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
+              className={`flex h-full min-h-0 flex-1 flex-col rounded-xl p-[1px] bg-gradient-to-r from-blue-200/70 via-indigo-200/70 to-blue-200/70 shadow-sm group-hover:shadow-md group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 transition-all duration-300 ${showDashboardSkeleton ? 'animate-pulse' : ''}`}
             >
-              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
-              <div className="flex items-center gap-4 mb-4">
+              <div className="flex h-full min-h-0 flex-1 flex-col bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+              <div className="flex shrink-0 items-center gap-4 mb-4">
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
                   <span className="text-2xl">📅</span>
                 </div>
@@ -816,7 +817,7 @@ function ClientDashboardContent() {
                   <div className="h-12 bg-gray-200 rounded-lg" />
                 </div>
               ) : recentAppointments.length > 0 && (
-                <div className="mb-4 space-y-2 max-h-32 overflow-y-auto">
+                <div className="mb-4 min-h-0 flex-1 space-y-2 max-h-32 overflow-y-auto">
                   {recentAppointments.map((apt: any) => {
                     const needsPropositionResponse =
                       Boolean(apt.attenteReponseClient) && (apt.statut === 'en_attente' || !apt.statut);
@@ -906,7 +907,7 @@ function ClientDashboardContent() {
                 </div>
               )}
               
-              <div className="flex gap-2 pt-4 border-t border-gray-100">
+              <div className="mt-auto flex shrink-0 gap-2 pt-4 border-t border-gray-100">
                 <Button 
                   variant="outline" 
                   type="button"
@@ -927,38 +928,38 @@ function ClientDashboardContent() {
             </div>
           </div>
 
-          <div id="temoignages-section" className="scroll-mt-20 min-w-0">
-          <Link href="/client/temoignages" className="group block min-w-0">
-            <div className="rounded-xl p-[1px] bg-gradient-to-r from-yellow-200/70 via-amber-200/70 to-yellow-200/70 shadow-sm transition-all duration-300 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-md">
-              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
-                <div className="flex items-center gap-4 mb-2">
-                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+          <div id="temoignages-section" className="scroll-mt-20 flex h-full min-h-[200px] min-w-0 flex-col">
+          <Link href="/client/temoignages" className="group flex h-full min-h-[200px] min-w-0 flex-1 flex-col">
+            <div className="flex h-full min-h-0 flex-1 flex-col rounded-xl p-[1px] bg-gradient-to-r from-yellow-200/70 via-amber-200/70 to-yellow-200/70 shadow-sm transition-all duration-300 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-md">
+              <div className="flex h-full min-h-0 flex-1 flex-col bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex shrink-0 items-center gap-4 mb-2">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
                     <span className="text-2xl">⭐</span>
                   </div>
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1">
                     <h3 className="font-semibold text-foreground mb-0.5">Témoignage</h3>
                     <p className="text-xs text-gray-600">Partagez votre expérience</p>
                   </div>
                 </div>
-                <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
+                <p className="mt-auto shrink-0 border-t border-gray-100 pt-2 text-xs text-gray-600">Accéder →</p>
               </div>
             </div>
           </Link>
           </div>
 
-          <Link href="/client/compte" className="group block min-w-0">
-            <div className="rounded-xl p-[1px] bg-gradient-to-r from-gray-200/70 via-slate-200/70 to-gray-200/70 shadow-sm transition-all duration-300 group-hover:from-gray-300/70 group-hover:via-slate-300/70 group-hover:to-gray-300/70 group-hover:shadow-md">
-              <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
-                <div className="flex items-center gap-4 mb-2">
-                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+          <Link href="/client/compte" className="group flex h-full min-h-[200px] min-w-0 flex-col">
+            <div className="flex h-full min-h-0 flex-1 flex-col rounded-xl p-[1px] bg-gradient-to-r from-gray-200/70 via-slate-200/70 to-gray-200/70 shadow-sm transition-all duration-300 group-hover:from-gray-300/70 group-hover:via-slate-300/70 group-hover:to-gray-300/70 group-hover:shadow-md">
+              <div className="flex h-full min-h-0 flex-1 flex-col bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                <div className="flex shrink-0 items-center gap-4 mb-2">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
                     <span className="text-2xl">👤</span>
                   </div>
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1">
                     <h3 className="font-semibold text-foreground mb-0.5">Mon compte</h3>
                     <p className="text-xs text-gray-600">Gérez vos informations</p>
                   </div>
                 </div>
-                <p className="text-xs text-gray-600 pt-2 border-t border-gray-100">Accéder →</p>
+                <p className="mt-auto shrink-0 border-t border-gray-100 pt-2 text-xs text-gray-600">Accéder →</p>
               </div>
             </div>
           </Link>

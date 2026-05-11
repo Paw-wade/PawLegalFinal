@@ -47,6 +47,7 @@ const dossierSchema = new mongoose.Schema({
       'regroupement_familial',
       'nationalite_francaise',
       'eloignement_urgence',
+      'constitution_societe',
       'autre'
     ],
     default: 'autre'

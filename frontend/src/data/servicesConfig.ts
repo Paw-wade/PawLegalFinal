@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Scale, HeartHandshake, LayoutDashboard } from 'lucide-react';
+import { Scale, HeartHandshake, LayoutDashboard, Building2 } from 'lucide-react';
 
 export type ServiceConfig = {
   title: string;
@@ -12,6 +12,9 @@ export type ServiceConfig = {
   prix?: string;
   points?: string[];
   isPortal?: boolean;
+  /** Lien CTA dédié (ex. création de dossier thématique) */
+  ctaHref?: string;
+  ctaLabel?: string;
 };
 
 export const servicesConfig: ServiceConfig[] = [
@@ -63,6 +66,23 @@ export const servicesConfig: ServiceConfig[] = [
       'Assistant de préparation au renouvellement',
       'Suivi des échéances en temps réel',
       'Alertes et rappels automatisés',
+    ],
+  },
+  {
+    title: 'Constitution de société',
+    description:
+      'Structuration de votre projet entrepreneurial : choix de la forme juridique, formalités d’immatriculation et accompagnement au Sénégal ou en France, en lien avec des professionnels du droit des affaires.',
+    icon: Building2,
+    color: 'primary',
+    duree: 'Selon la complexité',
+    prix: 'Sur devis',
+    ctaHref: '/dossiers/create?rubrique=constitution_societe',
+    ctaLabel: 'Créer une demande',
+    points: [
+      'Analyse du projet et de la forme juridique adaptée',
+      'Préparation des pièces et des actes constitutifs',
+      'Parcours dédié : Sénégal ou France',
+      'Mise en relation avec un avocat en droit des affaires si nécessaire',
     ],
   },
 ];

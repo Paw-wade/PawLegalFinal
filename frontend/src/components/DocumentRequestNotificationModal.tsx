@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { documentRequestsAPI, documentsAPI, dossiersAPI } from '@/lib/api';
+import { documentRequestsAPI, documentsAPI, dossiersAPI, notificationsAPI } from '@/lib/api';
+import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 
 interface DocumentRequestNotificationModalProps {
   isOpen: boolean;
@@ -69,6 +70,26 @@ export function DocumentRequestNotificationModal({ isOpen, onClose, notification
       loadExistingDocuments();
     }
   }, [isOpen, notification]);
+
+  useEffect(() => {
+    if (!isOpen || !notification) return;
+    const id = notification._id || notification.id;
+    if (!id || notification.lu) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await notificationsAPI.markAsRead(String(id));
+        if (!cancelled && res.data?.success) {
+          emitNotificationsUpdated();
+        }
+      } catch (err) {
+        console.error('Erreur marquage notification (modal document):', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, notification?._id, notification?.id, notification?.lu]);
 
   const loadDocumentRequest = async () => {
     if (!notification?.data?.documentRequestId) return;

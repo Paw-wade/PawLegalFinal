@@ -640,7 +640,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
   lines.push('## Recherche — base documentaire interne');
   lines.push('');
   lines.push(
-    '_Réponse produite **sans modèle cloud** : extraits classés par pertinence à partir de vos fichiers `.md` / `.txt` / `.xml` / `.pdf` / `.doc` / `.docx`._'
+    '_Réponse **Paw AI** issue uniquement de la base documentaire indexée : extraits classés par pertinence à partir de vos fichiers `.md` / `.txt` / `.xml` / `.pdf` / `.doc` / `.docx`._'
   );
   lines.push('');
   lines.push('### Extraits');
@@ -660,7 +660,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
   lines.push('### Note');
   lines.push('');
   lines.push(
-    'Vérifiez les sources sur le serveur. Pour une synthèse rédigée par un grand modèle (avec citations web), configurez **ANTHROPIC_API_KEY** et le mode **auto** ou **anthropic**.'
+    'Vérifiez les sources sur le serveur. Pour une synthèse rédigée au-delà de ces extraits, l’administrateur peut activer l’analyse Paw AI étendue sur le serveur.'
   );
   lines.push(getInternalModeLegalFooter());
 
@@ -694,6 +694,76 @@ function defaultKnowledgeDirForPlatform() {
 }
 
 let posixOnWindowsWarned = false;
+
+/**
+ * Résout un chemin relatif sûr sous le dossier corpus (pas de .., pas de chemin absolu).
+ * @returns {string|null} chemin absolu du fichier
+ */
+function resolveSafeKnowledgeFilePath(knowledgeDir, relInput) {
+  const knowledgeRoot = path.resolve(knowledgeDir);
+  const raw = String(relInput || '').trim().replace(/\\/g, '/');
+  if (!raw || raw.includes('\0')) return null;
+  const segments = raw.split('/').filter((s) => s.length > 0);
+  if (segments.some((s) => s === '..')) return null;
+  const joined = segments.join(path.sep);
+  const full = path.resolve(knowledgeRoot, joined);
+  const relOut = path.relative(knowledgeRoot, full);
+  if (relOut.startsWith('..') || path.isAbsolute(relOut)) return null;
+  return full;
+}
+
+/**
+ * Texte intégral d’un fichier du corpus (même extraction que l’index), pour affichage Paw AI.
+ */
+async function readKnowledgeFileContent(relFile) {
+  const dir = getKnowledgeDir();
+  const full = resolveSafeKnowledgeFilePath(dir, relFile);
+  if (!full) {
+    const e = new Error('Chemin fichier invalide');
+    e.code = 'INVALID_FILE_PATH';
+    throw e;
+  }
+  let st;
+  try {
+    st = await fsp.stat(full);
+  } catch {
+    const e = new Error('Fichier introuvable');
+    e.code = 'FILE_NOT_FOUND';
+    throw e;
+  }
+  if (!st.isFile()) {
+    const e = new Error('Chemin invalide');
+    e.code = 'INVALID_FILE_PATH';
+    throw e;
+  }
+  const ext = path.extname(full).toLowerCase();
+  if (!KNOWLEDGE_FILE_EXTENSIONS.has(ext)) {
+    const e = new Error('Extension non prise en charge pour la lecture');
+    e.code = 'UNSUPPORTED_EXT';
+    throw e;
+  }
+  const maxRaw = getLexiaMaxRawBytesPerFile();
+  if (st.size > maxRaw) {
+    const e = new Error(`Fichier trop volumineux pour être affiché (>${maxRaw} octets).`);
+    e.code = 'FILE_TOO_LARGE';
+    throw e;
+  }
+  const text = await extractPlainTextFromKnowledgeFile(full);
+  const maxChars = Math.max(50_000, Number(process.env.LEXIA_FULL_FILE_MAX_CHARS) || 1_000_000);
+  let truncated = false;
+  let content = text;
+  if (content.length > maxChars) {
+    content = content.slice(0, maxChars);
+    truncated = true;
+  }
+  return {
+    file: String(relFile).trim().replace(/\\/g, '/'),
+    content,
+    truncated,
+    ext,
+    empty: !String(text || '').trim(),
+  };
+}
 
 function getKnowledgeDir() {
   const raw = (process.env.LEXIA_KNOWLEDGE_DIR || '').trim();
@@ -739,6 +809,7 @@ module.exports = {
   searchKnowledge,
   searchAndCompose,
   getKnowledgeDir,
+  readKnowledgeFileContent,
   getKnowledgeStats: async () => {
     const knowledgeDir = getKnowledgeDir();
     const walk = walkCountKnowledgeFiles(knowledgeDir);

@@ -209,6 +209,15 @@ export default function ServicesPage() {
                           Accéder au calculateur
                         </Button>
                       </Link>
+                    ) : selectedService.ctaHref ? (
+                      <Link href={selectedService.ctaHref}>
+                        <Button
+                          className="bg-primary text-white hover:bg-primary/90 transition-colors"
+                          size="lg"
+                        >
+                          {selectedService.ctaLabel ?? 'Continuer'}
+                        </Button>
+                      </Link>
                     ) : (
                       <Link href="/contact">
                         <Button

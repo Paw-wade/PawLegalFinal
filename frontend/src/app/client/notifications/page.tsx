@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { notificationsAPI } from '@/lib/api';
+import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { Toast } from '@/components/Toast';
 
@@ -89,11 +90,33 @@ function NotificationsContent() {
     }
   };
 
+  const notificationKey = (n: any) => String(n._id || n.id || '');
+
+  /** Marque comme lue à l’ouverture (carte, lien, modal) sans recharger toute la liste. */
+  const markOpenedSilently = async (notification: any) => {
+    if (notification.lu) return;
+    const id = notification._id || notification.id;
+    if (!id) return;
+    try {
+      const response = await notificationsAPI.markAsRead(id);
+      if (response.data.success) {
+        const key = notificationKey(notification);
+        setNotifications((prev) =>
+          prev.map((n) => (notificationKey(n) === key ? { ...n, lu: true } : n))
+        );
+        emitNotificationsUpdated();
+      }
+    } catch (err: any) {
+      console.error('Erreur lors du marquage de la notification comme lue:', err);
+    }
+  };
+
   const handleMarkAsRead = async (id: string) => {
     try {
       const response = await notificationsAPI.markAsRead(id);
       if (response.data.success) {
         await loadNotifications();
+        emitNotificationsUpdated();
         setToast({ message: '✅ Notification marquée comme lue.', type: 'success' });
       }
     } catch (err: any) {
@@ -107,6 +130,7 @@ function NotificationsContent() {
       const response = await notificationsAPI.markAllAsRead();
       if (response.data.success) {
         await loadNotifications();
+        emitNotificationsUpdated();
         setToast({ message: '✅ Toutes les notifications ont été marquées comme lues.', type: 'success' });
       }
     } catch (err: any) {
@@ -120,6 +144,7 @@ function NotificationsContent() {
       const response = await notificationsAPI.deleteNotification(id);
       if (response.data.success) {
         await loadNotifications();
+        emitNotificationsUpdated();
         setToast({ message: '✅ Notification supprimée avec succès.', type: 'success' });
       }
     } catch (err: any) {
@@ -417,6 +442,12 @@ function NotificationsContent() {
                 {visibleNotifications.map((notification: any) => (
                   <div
                     key={notification._id || notification.id}
+                    role="presentation"
+                    onClick={(e) => {
+                      const t = e.target as HTMLElement;
+                      if (t.closest('button, a')) return;
+                      void markOpenedSilently(notification);
+                    }}
                     className={`bg-white rounded-xl border p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_-18px_rgba(59,130,246,0.35)] ${getNotificationColor(notification.type)} ${
                       notification.lu ? 'opacity-90' : ''
                     }`}
@@ -454,6 +485,7 @@ function NotificationsContent() {
                               variant="default"
                               size="sm"
                               onClick={() => {
+                                void markOpenedSilently(notification);
                                 setSelectedDocumentRequestNotification(notification);
                                 setShowDocumentRequestModal(true);
                               }}
@@ -463,7 +495,16 @@ function NotificationsContent() {
                             </Button>
                           )}
                           {notification.lien && (
-                            <Link href={notification.lien}>
+                            <Link
+                              href={notification.lien}
+                              onClick={async (e) => {
+                                if (!notification.lu && (notification._id || notification.id)) {
+                                  e.preventDefault();
+                                  await markOpenedSilently(notification);
+                                  router.push(notification.lien);
+                                }
+                              }}
+                            >
                               <Button variant="outline" size="sm" className="text-xs h-9 px-3">
                                 Ouvrir
                               </Button>

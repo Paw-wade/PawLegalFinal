@@ -66,6 +66,13 @@ const categories = {
       { value: 'contestation_oqtf', label: 'Contestation d\'une OQTF' },
     ]
   },
+  constitution_societe: {
+    label: 'Constitution de société',
+    types: [
+      { value: 'constitution_societe_senegal', label: 'Constitution — entreprise / société au Sénégal' },
+      { value: 'constitution_societe_france', label: 'Constitution — entreprise / société en France' },
+    ]
+  },
   autre: {
     label: 'Autre',
     types: [

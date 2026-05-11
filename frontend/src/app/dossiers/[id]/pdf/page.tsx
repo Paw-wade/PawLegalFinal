@@ -13,6 +13,7 @@ const categories = {
   regroupement_familial: { label: 'Regroupement familial' },
   nationalite_francaise: { label: 'Nationalité française' },
   eloignement_urgence: { label: 'Éloignement et urgence' },
+  constitution_societe: { label: 'Constitution de société' },
   autre: { label: 'Autre' }
 };
 

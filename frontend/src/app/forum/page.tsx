@@ -325,7 +325,7 @@ export default function ForumPage() {
               <ul className="list-disc pl-5 space-y-1 text-xs md:text-sm text-gray-700">
                 <li>Ne publiez pas de données sensibles : numéros de titre de séjour complets, numéros de passeport, adresses exactes, etc.</li>
                 <li>Restez respectueux dans vos échanges, aucun propos discriminatoire ou agressif n&apos;est toléré.</li>
-                <li>Les réponses données sur ce forum sont informatives et ne constituent pas un conseil juridique personnalisé.</li>
+                <li>Les réponses données sur ce forum sont informatives et ne constituent pas un accompagnement personnalisé.</li>
                 <li>Pour une prise en charge complète de votre dossier, utilisez les fonctionnalités de la plateforme et suivez les instructions de votre espace client.</li>
                 <li>Les administrateurs se réservent le droit de modifier ou supprimer tout contenu non conforme à ces règles.</li>
               </ul>
