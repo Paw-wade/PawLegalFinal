@@ -1,0 +1,2269 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<title>Recherche · justicelibre.org</title>
+<meta name="description" content="Moteur de recherche libre sur ~2 millions de décisions de justice françaises et européennes (Cour de cassation, Conseil d'État, CEDH, CJUE, Conseil constitutionnel) et 1,5 million d'articles de loi.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300..800;1,9..40,300..800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles/tokens.css?v=20260501">
+<link rel="stylesheet" href="/styles/base.css?v=20260501">
+<link rel="stylesheet" href="/styles/components.css?v=20260501">
+<style>
+/* Page-specific : SPA layout (flex column, surface light, body 15px) */
+html,body{height:100%}
+body{font-size:15px;background:var(--light);display:flex;flex-direction:column}
+
+/* Scrollbar override : surface = --light pour cette page */
+html{scrollbar-color:var(--line) var(--light)}
+::-webkit-scrollbar-track{background:var(--light)}
+::-webkit-scrollbar-thumb{border-color:var(--light)}
+::-webkit-scrollbar-corner{background:var(--light)}
+
+html[data-theme="dark"] body{background:var(--light)}
+html[data-theme="dark"] .result-card .extract em{background:rgba(212,176,80,.2)}
+@media (prefers-color-scheme: dark){
+  html:not([data-theme="light"]) body{background:var(--light)}
+}
+
+/* ─── TOPBAR : composant fourni par /topbar.js (HTML+CSS injectés au load) ─── */
+
+/* ─── SEARCH BAR ─── */
+.searchbar{
+  background:var(--white);border-bottom:1px solid var(--line);
+  padding:1rem 2.5rem;
+}
+.searchbar-inner{max-width:1400px;margin:0 auto}
+.sb-primary{
+  display:grid;grid-template-columns:1fr 180px 170px auto auto;gap:.5rem;
+}
+.sb-primary input[type=text],
+.sb-primary select{
+  font-family:var(--sans);font-size:.95rem;
+  padding:.75rem 1rem;
+  background:var(--white);color:var(--ink);
+  border:1px solid var(--line);border-radius:3px;
+}
+.sb-primary input[type=text]:focus,
+.sb-primary select:focus{outline:none;border-color:var(--teal)}
+.sb-primary .cs-display{
+  font-size:.95rem;padding:.75rem 1rem;
+}
+.sb-primary button.submit{
+  padding:.75rem 1.8rem;
+  background:var(--teal);color:#fff;
+  font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+  border:none;border-radius:3px;cursor:pointer;
+}
+.sb-primary button.submit:hover{background:var(--teal-l)}
+.sb-primary button.toggle-adv{
+  padding:.75rem 1rem;background:transparent;color:var(--muted);
+  font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
+  border:1px solid var(--line);border-radius:3px;cursor:pointer;
+  display:flex;align-items:center;gap:.4rem;
+}
+.sb-primary button.toggle-adv:hover{color:var(--teal);border-color:var(--teal)}
+.sb-primary button.toggle-adv .chev{display:inline-block;transition:transform .2s}
+.sb-primary button.toggle-adv.open .chev{transform:rotate(180deg)}
+
+/* Filtres avancés */
+.sb-advanced{
+  display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:.5rem;
+  max-height:0;overflow:hidden;
+  transition:max-height .25s ease, padding .25s ease;
+}
+.sb-advanced.open{
+  max-height:420px;padding:.75rem 0 .2rem;
+  /* Une fois ouvert, permet aux popovers (custom dropdown) de déborder */
+  animation:unclip 0s .25s forwards;
+}
+@keyframes unclip{to{overflow:visible}}
+.field label{
+  display:block;font-size:.7rem;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:.25rem;
+}
+.field input,.field select{
+  width:100%;font-family:var(--sans);font-size:.88rem;
+  padding:.55rem .75rem;
+  background:var(--white);color:var(--ink);
+  border:1px solid var(--line);border-radius:3px;
+}
+.field input:focus,.field select:focus{outline:none;border-color:var(--teal)}
+.field .thes-toggle{
+  display:flex;align-items:center;gap:.5rem;
+  height:2.4rem;padding:0 .75rem;
+  background:var(--white);color:var(--ink);
+  border:1px solid var(--line);border-radius:3px;
+  font-size:.88rem;cursor:pointer;
+  user-select:none;
+}
+.field .thes-toggle input[type=checkbox]{
+  width:1rem;height:1rem;margin:0;cursor:pointer;
+  accent-color:var(--teal);
+}
+
+/* ─── EXPANSION SÉMANTIQUE (pills) ─── */
+.expansion-bar{
+  background:var(--cream);border-bottom:1px solid var(--line);
+  padding:.5rem 1.4rem;
+}
+.expansion-inner{
+  max-width:1400px;margin:0 auto;
+  display:flex;align-items:center;flex-wrap:wrap;gap:.6rem;
+  font-size:.8rem;color:var(--muted);
+}
+.exp-label{font-style:italic;flex-shrink:0}
+.exp-pills{display:flex;flex-wrap:wrap;gap:.4rem;flex:1;min-width:0}
+.exp-pill{
+  display:inline-flex;align-items:center;gap:.3rem;
+  padding:.18rem .55rem;background:var(--white);
+  border:1px solid var(--line);border-radius:11px;
+  font-size:.78rem;color:var(--ink);
+  cursor:default;line-height:1.3;
+}
+.exp-pill .exp-pill-src{
+  font-size:.65rem;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.04em;
+}
+.exp-pill button{
+  border:none;background:none;cursor:pointer;
+  color:var(--muted);font-size:.95rem;padding:0 .1rem;line-height:1;
+}
+.exp-pill button:hover{color:var(--ink)}
+.exp-pill.removed{opacity:.4;text-decoration:line-through}
+.exp-disable{
+  border:none;background:none;cursor:pointer;
+  color:var(--muted);font-size:.78rem;
+  text-decoration:underline;padding:0 .3rem;
+}
+.exp-disable:hover{color:var(--ink)}
+
+/* ─── Custom dropdown ─── */
+.cs-wrap{position:relative;width:100%}
+.cs-display{
+  width:100%;text-align:left;cursor:pointer;
+  font-family:var(--sans);font-size:.88rem;color:var(--ink);
+  padding:.55rem .75rem;
+  background:var(--white);border:1px solid var(--line);border-radius:3px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.cs-display:hover{border-color:var(--teal)}
+.cs-display .chev{color:var(--muted);transition:transform .2s}
+.cs-wrap.open .cs-display{border-color:var(--teal)}
+.cs-wrap.open .cs-display .chev{transform:rotate(180deg)}
+.cs-panel{
+  position:absolute;top:calc(100% + 4px);left:0;
+  min-width:100%;width:max-content;max-width:420px;
+  background:var(--white);border:1px solid var(--line);border-radius:3px;
+  box-shadow:0 6px 20px rgba(0,0,0,.12);
+  max-height:360px;overflow-y:auto;
+  z-index:200;display:none;
+}
+.cs-wrap.open .cs-panel{display:block}
+.cs-item{
+  padding:.5rem .85rem;font-size:.85rem;cursor:pointer;
+  color:var(--ink);transition:background .12s;
+}
+.cs-item:hover{background:var(--teal-xl)}
+.cs-item.selected{background:var(--teal-xl);color:var(--teal);font-weight:600}
+/* Headers : match optgroup natif (bold non-italic, texte dark, séparateurs ━) */
+.cs-group{
+  padding:.35rem .85rem;font-size:.85rem;font-weight:700;
+  color:var(--ink);cursor:pointer;
+  background:var(--white);
+  text-align:center;position:relative;
+  transition:background .12s,color .12s;
+}
+.cs-group::before,.cs-group::after{
+  content:"━";display:inline-block;margin:0 .5rem;opacity:.5;
+}
+.cs-group:hover{background:var(--teal);color:#fff}
+.cs-group:hover::before,.cs-group:hover::after{opacity:.8}
+.cs-group.selected{background:var(--teal);color:#fff}
+.cs-group.selected::before,.cs-group.selected::after{opacity:.8}
+/* Hint "tout" visible seulement au hover */
+.cs-group .hint{
+  display:none;
+  font-size:.62rem;font-weight:400;font-style:normal;
+  opacity:.75;text-transform:none;margin-left:.5rem;
+}
+.cs-group:hover .hint{display:inline}
+.cs-item.cs-sub{padding-left:1.6rem;color:var(--body)}
+.cs-item.cs-sub:hover{color:var(--ink)}
+.sb-help{
+  font-size:.74rem;color:var(--muted);margin-top:.5rem;padding-top:.6rem;
+  border-top:1px dashed var(--line);line-height:1.4;
+}
+.sb-help p{margin-bottom:.55rem}
+.sb-help p:last-child{margin-bottom:0}
+.sb-help strong{color:var(--ink);font-weight:600;display:block;margin-bottom:.75rem;font-size:.78rem}
+.sb-help em{font-style:italic;color:var(--muted)}
+.sb-help code{
+  font-family:var(--mono);font-size:.7rem;
+  background:var(--light);padding:.12rem .35rem;border-radius:2px;color:var(--teal);
+  white-space:nowrap;
+}
+
+@media(max-width:720px){
+  .searchbar{padding:1rem 1.2rem}
+  .sb-primary{grid-template-columns:1fr}
+}
+
+/* ─── MAIN GRID ─── */
+.results-shell{
+  flex:1 1 auto;
+  max-width:1400px;width:100%;margin:0 auto;
+  display:grid;grid-template-columns:minmax(320px, 40%) 1fr;gap:1px;
+  background:var(--line);
+  min-height:calc(100vh - 180px);
+}
+.results-list{
+  background:var(--white);
+  overflow-y:auto;max-height:calc(100vh - 180px);
+}
+.results-header{
+  position:sticky;top:0;z-index:2;background:var(--white);
+  padding:.85rem 1.2rem;border-bottom:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;
+}
+.results-header .sort-switch{
+  font-size:.7rem;color:var(--muted);cursor:pointer;
+  padding:.3rem .6rem;background:var(--light);border-radius:3px;
+}
+.results-header .sort-switch:hover{color:var(--teal)}
+
+/* Cartes résultat */
+.result-card{
+  padding:.9rem 1.2rem;border-bottom:1px solid var(--line);
+  cursor:pointer;transition:background .15s;
+}
+.result-card:hover{background:var(--teal-xl)}
+.result-card.active{background:var(--teal-xl);border-left:3px solid var(--teal);padding-left:calc(1.2rem - 3px)}
+.result-card .meta-line{
+  display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;
+  font-size:.72rem;color:var(--muted);
+  margin-bottom:.35rem;
+}
+.result-card .src-badge{
+  display:inline-block;padding:.15rem .5rem;border-radius:2px;
+  font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+  color:#fff;
+}
+.src-badge.ce   {background:var(--src-ce)}
+.src-badge.admin{background:var(--src-admin)}
+.src-badge.jud  {background:var(--src-jud)}
+.src-badge.cedh {background:var(--src-cedh)}
+.src-badge.cjue {background:var(--src-cjue)}
+.result-card .juri{color:var(--teal);font-weight:600}
+.result-card .date{font-variant-numeric:tabular-nums}
+.result-card .meta-line .num{font-variant-numeric:tabular-nums}
+.result-card .meta-line .ecli{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:.68rem;color:var(--muted);
+}
+.result-card .meta-line .sep{color:var(--line);user-select:none}
+.result-card .meta-line .field-empty{color:var(--muted);opacity:.45}
+.result-card .title{
+  font-family:var(--display);font-size:.98rem;line-height:1.3;color:var(--ink);
+  margin-bottom:.3rem;
+}
+.result-card .extract{font-size:.8rem;color:var(--body);line-height:1.45}
+.result-card .extract em{background:rgba(184,147,43,.25);font-style:normal;padding:0 2px;border-radius:1px}
+.result-card .tags{
+  display:flex;gap:.3rem;margin-top:.45rem;flex-wrap:wrap;
+}
+.result-card .tag{
+  font-size:.68rem;color:var(--muted);
+  padding:.1rem .45rem;background:var(--light);border-radius:2px;
+}
+
+/* ─── Loader : dots qui sautent ─── */
+.loader-box{
+  padding:2rem 1.2rem;text-align:center;color:var(--muted);font-size:.85rem;
+}
+.dots{
+  display:inline-block;font-size:1.6rem;line-height:1;letter-spacing:.3em;
+  color:var(--teal);margin-bottom:.8rem;user-select:none;
+}
+.dots span{
+  display:inline-block;opacity:.25;
+  animation:dotPulse 1.4s ease-in-out infinite;
+}
+.dots span:nth-child(1){animation-delay:0s}
+.dots span:nth-child(2){animation-delay:.18s}
+.dots span:nth-child(3){animation-delay:.36s}
+.dots span:nth-child(4){animation-delay:.54s}
+@keyframes dotPulse{
+  0%,60%,100%{opacity:.25;transform:translateY(0)}
+  30%{opacity:1;transform:translateY(-3px)}
+}
+/* Version inline dans le header : même typo que le texte autour */
+.dots-inline{
+  display:inline-block;letter-spacing:.25em;user-select:none;
+  vertical-align:middle;margin-left:.3rem;
+}
+.dots-inline span{
+  display:inline-block;opacity:.25;
+  animation:dotPulse 1.4s ease-in-out infinite;
+}
+.dots-inline span:nth-child(1){animation-delay:0s}
+.dots-inline span:nth-child(2){animation-delay:.18s}
+.dots-inline span:nth-child(3){animation-delay:.36s}
+.dots-inline span:nth-child(4){animation-delay:.54s}
+.loader-note{
+  font-size:.72rem;font-style:italic;color:var(--muted);
+  margin-top:.6rem;max-width:320px;margin-left:auto;margin-right:auto;
+  line-height:1.4;
+}
+.loader-progress{
+  margin-top:.7rem;font-size:.72rem;color:var(--muted);
+  display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;
+}
+.loader-progress span{
+  padding:.1rem .5rem;background:var(--light);border-radius:2px;
+  border:1px solid var(--line);
+}
+
+/* Bandeau avertissement (source timeout) */
+.source-warning{
+  padding:.6rem 1.2rem;background:rgba(184,147,43,.08);
+  border-bottom:1px solid rgba(184,147,43,.3);
+  font-size:.74rem;color:var(--body);
+}
+.source-warning strong{color:var(--gold)}
+
+/* ─── Charger plus ─── */
+.load-more-wrap{
+  padding:1.2rem;text-align:center;border-top:1px solid var(--line);
+}
+.load-more{
+  font-family:var(--sans);font-size:.78rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:.08em;
+  padding:.7rem 1.6rem;
+  background:var(--white);color:var(--teal);
+  border:1px solid var(--teal);border-radius:3px;cursor:pointer;
+  transition:background .15s, color .15s;
+}
+.load-more:hover{background:var(--teal);color:#fff}
+.load-more:disabled{opacity:.5;cursor:wait}
+
+/* ─── TEXTE INTÉGRAL ─── */
+.text-viewer{
+  background:var(--white);padding:2.5rem 3rem;
+  overflow-y:auto;max-height:calc(100vh - 180px);
+}
+.text-viewer.empty{
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:.95rem;padding:4rem;text-align:center;
+}
+.text-viewer h1{
+  font-family:var(--display);font-size:1.7rem;line-height:1.25;color:var(--ink);
+  margin-bottom:.7rem;
+}
+.text-viewer .doc-meta{
+  display:flex;gap:1.2rem;flex-wrap:wrap;
+  font-size:.82rem;color:var(--muted);
+  padding-bottom:1.2rem;margin-bottom:1.5rem;border-bottom:1px solid var(--line);
+}
+.text-viewer .doc-meta strong{color:var(--ink);font-weight:600;margin-right:.3rem}
+.text-viewer .actions{display:flex;gap:.6rem;margin-bottom:1.8rem;flex-wrap:wrap}
+.text-viewer .actions a{
+  font-size:.72rem;padding:.45rem .85rem;
+  background:var(--teal-xl);color:var(--teal);
+  border-radius:3px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;
+}
+.text-viewer .actions a:hover{background:var(--teal);color:#fff;text-decoration:none}
+.text-viewer .source-cta-spa{display:flex;flex-direction:column;align-items:flex-start;
+  gap:.45rem;margin:0 0 1.8rem;padding:.9rem 1.1rem;background:var(--teal-xl);
+  border-left:3px solid var(--teal);border-radius:0 4px 4px 0}
+.text-viewer .btn-source-spa{
+  display:inline-flex;align-items:center;background:var(--teal);color:#fff!important;
+  padding:.55rem 1.1rem;border-radius:3px;font-weight:600;font-size:.85rem;
+  text-decoration:none;letter-spacing:.02em}
+.text-viewer .btn-source-spa:hover{background:var(--teal-l);text-decoration:none}
+.text-viewer .source-cta-spa small{font-size:.74rem;color:var(--muted);font-style:italic;line-height:1.4}
+.text-viewer .body{
+  font-size:.98rem;line-height:1.7;color:var(--body);max-width:70ch;
+}
+.text-viewer .body p{margin-bottom:1em}
+.text-viewer .body .lawref,
+.result-card .extract .lawref{
+  color:#1a7a3e;font-weight:600;cursor:pointer;
+  border-bottom:1px dashed rgba(26,122,62,.4);
+  transition:background .15s;
+}
+.text-viewer .body .lawref:hover,
+.result-card .extract .lawref:hover{
+  background:rgba(26,122,62,.1);border-bottom-style:solid;
+}
+html[data-theme="dark"] .text-viewer .body .lawref,
+html[data-theme="dark"] .result-card .extract .lawref{
+  color:#5cc88a;border-bottom-color:rgba(92,200,138,.5);
+}
+html[data-theme="dark"] .text-viewer .body .lawref:hover,
+html[data-theme="dark"] .result-card .extract .lawref:hover{
+  background:rgba(92,200,138,.15);
+}
+@media (prefers-color-scheme: dark){
+  html:not([data-theme="light"]) .text-viewer .body .lawref,
+  html:not([data-theme="light"]) .result-card .extract .lawref{
+    color:#5cc88a;border-bottom-color:rgba(92,200,138,.5);
+  }
+}
+
+/* Default desktop: les éléments bottom-sheet sont cachés */
+.sheet-backdrop,.sheet-handle,.sheet-close{display:none}
+
+/* ─── LAW VIEWER (panel latéral gauche desktop, stack mobile) ─── */
+.law-viewer{
+  position:fixed;top:0;right:0;bottom:0;width:380px;max-width:90vw;
+  background:var(--white);color:var(--ink);
+  border-left:1px solid var(--line);
+  box-shadow:-4px 0 24px rgba(0,0,0,.12);
+  transform:translateX(100%);transition:transform .25s ease-out;
+  z-index:110;overflow-y:auto;display:flex;flex-direction:column;
+}
+body.law-open .law-viewer{transform:translateX(0)}
+.law-viewer .law-header{
+  padding:1.2rem 1.4rem 1rem;border-bottom:1px solid var(--line);position:sticky;top:0;
+  background:var(--white);z-index:1;
+}
+.law-viewer .law-close{
+  position:absolute;top:12px;right:14px;
+  width:32px;height:32px;border-radius:50%;
+  background:none;border:1px solid var(--line);color:var(--ink);
+  font-size:20px;line-height:1;cursor:pointer;padding:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.law-viewer .law-close:hover{background:var(--line)}
+.law-viewer h2.law-title{
+  font-family:var(--display);font-size:1.25rem;line-height:1.2;
+  margin:0 36px .3rem 0;color:var(--ink);
+}
+.law-viewer .law-meta{
+  font-size:.78rem;color:var(--muted);letter-spacing:.02em;
+}
+.law-viewer .law-meta .law-etat{
+  display:inline-block;padding:.1rem .4rem;border-radius:3px;
+  font-size:.68rem;font-weight:700;text-transform:uppercase;
+  margin-left:.4rem;
+}
+.law-viewer .law-etat-vigueur{background:var(--teal-xl);color:var(--teal)}
+.law-viewer .law-etat-modifie,.law-viewer .law-etat-abroge{
+  background:rgba(138,31,31,.1);color:var(--red);
+}
+.law-viewer .law-note{
+  margin-top:.6rem;padding:.5rem .7rem;background:rgba(184,147,43,.1);
+  border-left:2px solid var(--gold);font-size:.78rem;color:var(--body);
+}
+.law-viewer .law-body{
+  padding:1.2rem 1.4rem;flex:1;
+  font-size:.96rem;line-height:1.7;color:var(--body);
+  white-space:pre-wrap;
+}
+.law-viewer .law-body .law-loading,.law-viewer .law-body .law-error{
+  color:var(--muted);font-style:italic;font-size:.9rem;
+}
+.law-viewer .law-nota{
+  margin-top:1.2rem;padding-top:1rem;border-top:1px dashed var(--line);
+  font-size:.85rem;color:var(--muted);
+}
+.law-viewer .law-nota::before{
+  content:"Note :";font-weight:600;color:var(--ink);display:block;margin-bottom:.3rem;
+}
+.law-viewer .law-footer{
+  padding:.9rem 1.4rem;border-top:1px solid var(--line);
+  display:flex;flex-wrap:wrap;gap:.6rem;background:var(--white);
+}
+.law-viewer .law-footer button,.law-viewer .law-footer a{
+  padding:.5rem .9rem;font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:600;background:none;border:1px solid var(--line);color:var(--body);
+  border-radius:3px;cursor:pointer;text-decoration:none;
+}
+.law-viewer .law-footer button:hover,.law-viewer .law-footer a:hover{
+  color:var(--teal);border-color:var(--teal);text-decoration:none;
+}
+.law-backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,.35);
+  z-index:109;opacity:0;pointer-events:none;transition:opacity .25s;
+}
+body.law-open .law-backdrop{opacity:1;pointer-events:auto}
+
+@media(max-width:860px){
+  /* Sur mobile : le law-viewer est caché ; le panel article s'affiche
+     EN STACK dans le bottom sheet existant (cf. #textViewerBody swap). */
+  .law-viewer, .law-backdrop{display:none !important}
+  .results-shell{grid-template-columns:1fr;min-height:auto}
+  .results-list{max-height:none}
+  /* Bottom sheet mobile : le text-viewer devient un volet fixe slide-up */
+  .text-viewer{
+    position:fixed;left:0;right:0;bottom:0;top:auto;height:92vh;
+    z-index:100;transform:translateY(100%);transition:transform .28s ease-out;
+    border-radius:16px 16px 0 0;overflow-y:auto;
+    box-shadow:0 -6px 24px rgba(0,0,0,.22);
+    padding:1.5rem 1.4rem 3rem;max-height:none;
+  }
+  body.sheet-open .text-viewer{transform:translateY(0)}
+  .text-viewer.empty{display:none}
+  .text-viewer .body{max-width:none}
+  .sheet-backdrop{
+    position:fixed;inset:0;background:rgba(0,0,0,.55);
+    z-index:99;opacity:0;pointer-events:none;
+    transition:opacity .25s;
+  }
+  body.sheet-open .sheet-backdrop{opacity:1;pointer-events:auto}
+  .sheet-handle{
+    display:block;width:44px;height:4px;background:var(--line);
+    border-radius:2px;margin:0 auto 1rem;
+  }
+  .sheet-close{
+    display:flex;align-items:center;justify-content:center;
+    position:absolute;top:12px;right:14px;
+    width:36px;height:36px;border-radius:50%;
+    background:var(--white);border:1px solid var(--line);color:var(--ink);
+    font-size:22px;line-height:1;cursor:pointer;z-index:1;padding:0;
+  }
+  .sheet-close:hover{background:var(--line)}
+}
+
+/* ─── FOOTER ─── */
+.footer-min{
+  padding:.8rem 2.5rem;background:var(--white);border-top:1px solid var(--line);
+  font-size:.75rem;color:var(--muted);text-align:center;
+}
+.footer-min a{color:var(--muted)}
+.footer-min a:hover{color:var(--teal)}
+</style>
+<script defer src="/topbar.js?v=4"></script>
+</head>
+<body>
+
+<!-- ─── TOPBAR : injecté par /topbar.js (composant unique réutilisable) ─── -->
+<div data-topbar-mount></div>
+
+<!-- ─── SEARCH BAR ─── -->
+<div class="searchbar">
+  <div class="searchbar-inner">
+
+    <!-- Ligne principale -->
+    <div class="sb-primary">
+      <input type="text" id="q" placeholder="Mots-clés, n° de décision, ECLI…">
+
+      <div class="cs-wrap" id="sourceCs">
+        <button type="button" class="cs-display"><span class="cs-display-text">Toutes juridictions</span><span class="chev">▾</span></button>
+        <div class="cs-panel">
+          <div class="cs-item selected" data-value="" data-label="Toutes juridictions">Toutes juridictions</div>
+          <div class="cs-item" data-value="admin" data-label="Administratif">Administratif</div>
+          <div class="cs-item" data-value="judic" data-label="Judiciaire">Judiciaire</div>
+          <div class="cs-item" data-value="europ" data-label="Européen">Européen</div>
+        </div>
+      </div>
+      <input type="hidden" id="source" value="">
+
+      <div class="cs-wrap" id="triPrimaryCs">
+        <button type="button" class="cs-display"><span class="cs-display-text">Pertinence</span><span class="chev">▾</span></button>
+        <div class="cs-panel">
+          <div class="cs-item selected" data-value="pertinence" data-label="Pertinence">Pertinence</div>
+          <div class="cs-item" data-value="date_desc" data-label="Plus récent d'abord">Plus récent d'abord</div>
+          <div class="cs-item" data-value="date_asc" data-label="Plus ancien d'abord">Plus ancien d'abord</div>
+        </div>
+      </div>
+
+      <button class="toggle-adv" id="toggleAdv">Filtres <span class="chev">▾</span></button>
+      <button class="submit">Chercher</button>
+    </div>
+
+    <!-- Filtres avancés -->
+    <div class="sb-advanced" id="advPanel">
+
+      <div class="field">
+        <label>Juridiction</label>
+        <div class="cs-wrap" id="juriCs">
+          <button type="button" class="cs-display">
+            <span class="cs-display-text">Toutes juridictions</span>
+            <span class="chev">▾</span>
+          </button>
+          <div class="cs-panel">
+            <div class="cs-item selected" data-value="" data-label="Toutes juridictions">Toutes juridictions</div>
+
+            <div class="cs-group" data-value="admin" data-label="Tout administratif">
+              <span>Administratif</span><span class="hint">tout</span>
+            </div>
+            <div class="cs-item cs-sub" data-value="ce" data-label="Conseil d'État">Conseil d'État</div>
+            <div class="cs-item cs-sub" data-value="caa" data-label="Cours admin. d'appel">Cours administratives d'appel</div>
+            <div class="cs-item cs-sub" data-value="ta" data-label="Tribunaux admin.">Tribunaux administratifs</div>
+
+            <div class="cs-group" data-value="judic" data-label="Tout judiciaire">
+              <span>Judiciaire</span><span class="hint">tout</span>
+            </div>
+            <div class="cs-item cs-sub" data-value="cass" data-label="Cour de cassation">Cour de cassation</div>
+            <div class="cs-item cs-sub" data-value="ca" data-label="Cours d'appel">Cours d'appel</div>
+            <div class="cs-item cs-sub" data-value="tj" data-label="Tribunaux judiciaires">Tribunaux judiciaires <span class="hint">~2k, en cours</span></div>
+            <div class="cs-item cs-sub" data-value="constit" data-label="Conseil constitutionnel">Conseil constitutionnel</div>
+
+            <div class="cs-group" data-value="europ" data-label="Tout européen">
+              <span>Européen</span><span class="hint">tout</span>
+            </div>
+            <div class="cs-item cs-sub" data-value="cedh" data-label="Cour EDH">Cour EDH (Strasbourg)</div>
+            <div class="cs-item cs-sub" data-value="cjue" data-label="CJUE">CJUE + Tribunal UE</div>
+          </div>
+        </div>
+        <input type="hidden" id="juridiction" value="">
+      </div>
+
+      <div class="field" id="fieldLieu" style="display:none">
+        <label>Lieu géographique</label>
+        <div class="cs-wrap" id="lieuCs">
+          <button type="button" class="cs-display"><span class="cs-display-text">Tous</span><span class="chev">▾</span></button>
+          <div class="cs-panel"></div>
+        </div>
+        <input type="hidden" id="lieu" value="">
+      </div>
+
+      <div class="field" id="fieldFormation" style="display:none">
+        <label>Chambre / formation</label>
+        <div class="cs-wrap" id="formationCs">
+          <button type="button" class="cs-display"><span class="cs-display-text">Toutes</span><span class="chev">▾</span></button>
+          <div class="cs-panel"></div>
+        </div>
+        <input type="hidden" id="formation" value="">
+      </div>
+
+      <div class="field">
+        <label>Date (à partir de)</label>
+        <input type="date" id="dateMin">
+      </div>
+
+      <div class="field">
+        <label>Date (jusqu'au)</label>
+        <input type="date" id="dateMax">
+      </div>
+
+      <!-- Champ "N° de pourvoi" supprimé : la barre principale détecte automatiquement
+           les numéros (Cass 19-19.122, RG 23/00456, Constit 2008-562, ECLI...) via
+           query_intent.detect_intent et les route correctement sans devoir choisir un fonds. -->
+
+      <!-- Tri retiré du panel avancé : déplacé dans la barre principale (cf. #triPrimaryCs) -->
+      <input type="hidden" id="tri" value="pertinence">
+
+      <div class="field">
+        <label>Thésaurus</label>
+        <label class="thes-toggle">
+          <input type="checkbox" id="useThesaurus" checked>
+          <span>Recherche élargie</span>
+        </label>
+      </div>
+
+      <div class="sb-help" style="grid-column:1/-1">
+        <strong>Opérateurs acceptés · syntaxes multiples · espaces optionnels</strong>
+        <p><b>ET</b> : <code>AND</code> · <code>ET</code> · <code>&amp;</code> &nbsp;-&nbsp; <b>OU</b> : <code>OR</code> · <code>OU</code> · <code>|</code> &nbsp;-&nbsp; <b>SAUF</b> : <code>NOT</code> · <code>SAUF</code> · <code>-mot</code></p>
+        <p><b>Phrase exacte</b> : <code>"atteinte à la liberté"</code> &nbsp;-&nbsp; <b>Préfixe</b> : <code>signal*</code> (matche signaler, signalement, signalée…)</p>
+        <p><b>Exemples valides</b> : <code>liberté &amp; signalement</code> · <code>liberté ET signalement</code> · <code>licenci* OU renvoi</code> · <code>"vie privée" SAUF médical</code></p>
+        <p><em>Note : le Conseil d'État (ArianeWeb) utilise un moteur sémantique distinct - les opérateurs sont normalisés côté serveur pour chaque source.</em></p>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ─── EXPANSION SÉMANTIQUE (pills) ─── -->
+<div class="expansion-bar" id="expansionBar" style="display:none">
+  <div class="expansion-inner">
+    <span class="exp-label">Recherche élargie aux termes voisins :</span>
+    <div class="exp-pills" id="expPills"></div>
+    <button class="exp-disable" id="expDisable" type="button" title="Désactiver l'expansion sémantique pour cette session">Désactiver</button>
+  </div>
+</div>
+
+<!-- ─── RÉSULTATS ─── -->
+<div class="results-shell">
+
+  <aside class="results-list" id="resultsList">
+    <div class="results-header" id="resultsHeader">
+      <span>Saisissez une requête pour commencer</span>
+    </div>
+  </aside>
+
+  <main class="text-viewer empty" id="textViewer">
+    <span class="sheet-handle" aria-hidden="true"></span>
+    <button class="sheet-close" id="sheetClose" aria-label="Fermer">×</button>
+    <div id="textViewerBody"><div>Sélectionnez une décision dans la liste<br>pour afficher son texte intégral.</div></div>
+  </main>
+
+</div>
+<div class="sheet-backdrop" id="sheetBackdrop" aria-hidden="true"></div>
+
+<!-- Panel article de loi (desktop gauche / mobile stack dans le bottom sheet) -->
+<div class="law-backdrop" id="lawBackdrop" aria-hidden="true"></div>
+<aside class="law-viewer" id="lawViewer" aria-hidden="true">
+  <div class="law-header">
+    <button class="law-close" id="lawClose" aria-label="Fermer">×</button>
+    <h2 class="law-title" id="lawTitle">-</h2>
+    <p class="law-meta" id="lawMeta"></p>
+    <div class="law-note" id="lawNote" style="display:none"></div>
+  </div>
+  <div class="law-body" id="lawBody">
+    <p class="law-loading">Chargement de l'article…</p>
+  </div>
+  <div class="law-footer">
+    <button id="lawVersions" type="button">Voir toutes les versions</button>
+    <a id="lawExtern" href="#" target="_blank" rel="noopener">Voir sur Légifrance ↗</a>
+    <button id="lawFeedback" type="button" title="Signaler un problème" style="font-size:.72rem;color:var(--muted)">Problème ?</button>
+  </div>
+</aside>
+
+<!-- Modal feedback (superposé au panel article) -->
+<div id="feedbackModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--white);color:var(--ink);max-width:480px;width:100%;padding:1.8rem;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+    <h3 style="font-family:var(--display);font-size:1.2rem;margin-bottom:.4rem">Signaler un problème</h3>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Citation d'article non détectée, texte incorrect, mauvaise version… Signalez-le ici. Pas de compte requis ; votre message arrive en append-only sur notre serveur.</p>
+    <textarea id="feedbackMessage" placeholder="Décrivez brièvement le problème (ex : 'L 132-1 du Code pénal cité mais pas cliquable')" style="width:100%;min-height:100px;padding:.7rem;border:1px solid var(--line);border-radius:4px;font-family:var(--sans);font-size:.9rem;background:var(--white);color:var(--ink);resize:vertical"></textarea>
+    <input id="feedbackEmail" type="email" placeholder="Email (optionnel - pour retour)" style="width:100%;padding:.6rem .7rem;border:1px solid var(--line);border-radius:4px;margin-top:.6rem;font-size:.85rem;background:var(--white);color:var(--ink)">
+    <div style="display:flex;gap:.6rem;margin-top:1rem;justify-content:flex-end">
+      <button type="button" id="feedbackCancel" style="padding:.55rem .9rem;background:none;border:1px solid var(--line);color:var(--body);border-radius:4px;cursor:pointer;font-size:.82rem">Annuler</button>
+      <button type="button" id="feedbackSend" style="padding:.55rem 1.1rem;background:var(--teal);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:.82rem;font-weight:600">Envoyer</button>
+    </div>
+    <p id="feedbackStatus" style="font-size:.8rem;margin-top:.6rem;color:var(--muted);display:none"></p>
+  </div>
+</div>
+
+<footer class="footer-min">
+  justicelibre.org · <a href="/">Accueil</a> · <a href="https://github.com/Dahliyaal/justicelibre">GitHub</a> · Licence Ouverte 2.0 (Etalab)
+</footer>
+
+<script>
+/* ─── Dark mode (toggle simple light/dark) ─── */
+const savedTheme = localStorage.getItem('jl-theme');
+if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const html = document.documentElement;
+  let cur = html.dataset.theme;
+  if (!cur) {
+    cur = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  const next = cur === 'dark' ? 'light' : 'dark';
+  html.dataset.theme = next;
+  localStorage.setItem('jl-theme', next);
+});
+
+const toggleBtn = document.getElementById('toggleAdv');
+const advPanel  = document.getElementById('advPanel');
+toggleBtn.addEventListener('click', () => {
+  advPanel.classList.toggle('open');
+  toggleBtn.classList.toggle('open');
+});
+document.querySelectorAll('.result-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.result-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+  });
+});
+
+/* ─── Formations / chambres connues par juridiction ─── */
+const FORMATIONS = {
+  cass: [
+    "Chambre civile 1", "Chambre civile 2", "Chambre civile 3",
+    "Chambre commerciale", "Chambre sociale", "Chambre criminelle",
+    "Assemblée plénière", "Chambre mixte",
+  ],
+  ce: [
+    "Assemblée du contentieux", "Section du contentieux",
+    "1re chambre", "2e chambre", "3e chambre", "4e chambre", "5e chambre",
+    "6e chambre", "7e chambre", "8e chambre", "9e chambre", "10e chambre",
+    "Juge des référés", "Ordonnance",
+  ],
+  caa: [
+    "1re chambre", "2e chambre", "3e chambre", "4e chambre",
+    "5e chambre", "6e chambre", "Formation plénière",
+  ],
+  ta: [
+    "1re chambre", "2e chambre", "3e chambre", "4e chambre",
+    "5e chambre", "6e chambre", "Formation ordinaire",
+    "Juge unique", "Ordonnance (art. R.222-1 CJA)",
+  ],
+  ca: [
+    "Chambre civile", "Chambre sociale", "Chambre commerciale",
+    "Chambre correctionnelle", "Chambre des appels correctionnels",
+    "Chambre de la famille", "Chambre de l'instruction",
+  ],
+  cedh: [
+    "Grande Chambre", "Chambre", "Comité à 3 juges", "Comité à 1 juge",
+  ],
+  // constit / cjue : pas de filtre formation pertinent
+};
+
+/* ─── Géographies des juridictions locales ─── */
+const INSTANCES = {
+  ta: [
+    ['TA06', 'Nice'], ['TA13', 'Marseille'], ['TA14', 'Caen'],
+    ['TA20', 'Bastia'], ['TA21', 'Dijon'], ['TA25', 'Besançon'],
+    ['TA30', 'Nîmes'], ['TA31', 'Toulouse'], ['TA33', 'Bordeaux'],
+    ['TA34', 'Montpellier'], ['TA35', 'Rennes'], ['TA38', 'Grenoble'],
+    ['TA44', 'Nantes'], ['TA45', "Orléans"], ['TA51', 'Châlons-en-Ch.'],
+    ['TA54', 'Nancy'], ['TA59', 'Lille'], ['TA63', 'Clermont-Ferrand'],
+    ['TA64', 'Pau'], ['TA67', 'Strasbourg'], ['TA69', 'Lyon'],
+    ['TA75', 'Paris'], ['TA76', 'Rouen'], ['TA77', 'Melun'],
+    ['TA78', 'Versailles'], ['TA80', 'Amiens'], ['TA83', 'Toulon'],
+    ['TA86', 'Poitiers'], ['TA87', 'Limoges'], ['TA93', 'Montreuil'],
+    ['TA95', 'Cergy-Pontoise'],
+    ['TA101', 'La Réunion'], ['TA102', 'Martinique'], ['TA103', 'Polynésie fr.'],
+    ['TA104', 'Nouvelle-Calédonie'], ['TA105', 'Guadeloupe'],
+    ['TA106', 'Guyane'], ['TA107', 'Mayotte'], ['TA108', 'St-Martin'],
+    ['TA109', 'St-Barthélemy'],
+  ],
+  caa: [
+    ['CAA13', 'Marseille'], ['CAA31', 'Toulouse'], ['CAA33', 'Bordeaux'],
+    ['CAA44', 'Nantes'], ['CAA54', 'Nancy'], ['CAA59', 'Douai'],
+    ['CAA69', 'Lyon'], ['CAA75', 'Paris'], ['CAA78', 'Versailles'],
+  ],
+  ca: [
+    ['Paris', 'Paris'], ['Versailles', 'Versailles'], ['Lyon', 'Lyon'],
+    ['Rennes', 'Rennes'], ['Douai', 'Douai'], ['Angers', 'Angers'],
+    ['Limoges', 'Limoges'], ['Bastia', 'Bastia'], ['Basse-Terre', 'Basse-Terre'],
+    ['Aix-en-Provence', 'Aix-en-Provence'], ['Montpellier', 'Montpellier'],
+    ['Agen', 'Agen'], ['Toulouse', 'Toulouse'], ['Orléans', 'Orléans'],
+    ['Bordeaux', 'Bordeaux'], ['Nîmes', 'Nîmes'], ['Saint-Denis', 'St-Denis Réunion'],
+    ['Rouen', 'Rouen'], ['Metz', 'Metz'], ['Nancy', 'Nancy'],
+    ['Reims', 'Reims'], ['Besançon', 'Besançon'], ['Dijon', 'Dijon'],
+    ['Grenoble', 'Grenoble'], ['Chambéry', 'Chambéry'], ['Poitiers', 'Poitiers'],
+    ['Pau', 'Pau'], ['Riom', 'Riom'], ['Bourges', 'Bourges'],
+    ['Amiens', 'Amiens'], ['Caen', 'Caen'], ['Colmar', 'Colmar'],
+    ['Fort-de-France', 'Fort-de-France'], ['Nouméa', 'Nouméa'],
+    ['Papeete', 'Papeete'], ['Cayenne', 'Cayenne'],
+  ],
+};
+
+/* ─── Custom dropdown logic - réutilisable ─── */
+function bindCs(wrapId, hiddenId) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  const display = wrap.querySelector('.cs-display');
+  const dispText = wrap.querySelector('.cs-display-text');
+  const panel = wrap.querySelector('.cs-panel');
+  const hidden = document.getElementById(hiddenId);
+
+  display.addEventListener('click', e => {
+    e.stopPropagation();
+    // Close other open dropdowns
+    document.querySelectorAll('.cs-wrap.open').forEach(w => {
+      if (w !== wrap) w.classList.remove('open');
+    });
+    wrap.classList.toggle('open');
+  });
+
+  panel.addEventListener('click', e => {
+    const el = e.target.closest('[data-value]');
+    if (!el) return;
+    hidden.value = el.dataset.value;
+    dispText.textContent = el.dataset.label;
+    panel.querySelectorAll('.selected').forEach(n => n.classList.remove('selected'));
+    el.classList.add('selected');
+    wrap.classList.remove('open');
+    hidden.dispatchEvent(new Event('change'));
+  });
+}
+
+document.addEventListener('click', () => {
+  document.querySelectorAll('.cs-wrap.open').forEach(w => w.classList.remove('open'));
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.cs-wrap.open').forEach(w => w.classList.remove('open'));
+  }
+});
+
+bindCs('juriCs', 'juridiction');
+bindCs('sourceCs', 'source');
+bindCs('triPrimaryCs', 'tri');
+bindCs('formationCs', 'formation');
+bindCs('lieuCs', 'lieu');
+
+// Re-déclenche la recherche quand le tri change (si une query est active)
+document.getElementById('tri').addEventListener('change', () => {
+  const q = document.getElementById('q')?.value?.trim();
+  if (q && q.length >= 3) runSearch(false);
+});
+
+const juriEl = document.getElementById('juridiction');
+const sourceEl = document.getElementById('source');
+
+/* ─── Sync coarse (primary) ↔ fine (filters) ─── */
+const PARENT_OF = {
+  // filtre fin → catégorie parent
+  '':        '',       // toutes
+  'admin':   'admin',  'ce': 'admin',  'caa': 'admin',  'ta': 'admin',
+  'judic':   'judic',  'cass': 'judic', 'ca': 'judic',  'constit': 'judic',
+  'europ':   'europ',  'cedh': 'europ', 'cjue': 'europ',
+};
+const COARSE_LABELS = {
+  '':      'Toutes juridictions',
+  'admin': 'Administratif',
+  'judic': 'Judiciaire',
+  'europ': 'Européen',
+};
+const FINE_LABELS_WHEN_COARSE = {
+  '':      ['',      'Toutes juridictions'],
+  'admin': ['admin', 'Tout administratif'],
+  'judic': ['judic', 'Tout judiciaire'],
+  'europ': ['europ', 'Tout européen'],
+};
+
+function setCsDisplay(wrapId, value, label) {
+  const wrap = document.getElementById(wrapId);
+  wrap.querySelector('.cs-display-text').textContent = label;
+  wrap.querySelectorAll('.cs-item.selected,.cs-group.selected').forEach(n => n.classList.remove('selected'));
+  const node = wrap.querySelector(`[data-value="${value}"]`);
+  if (node) node.classList.add('selected');
+}
+
+// Quand on change le filtre fin → remonter au parent dans le primary
+juriEl.addEventListener('change', () => {
+  const fine = juriEl.value;
+  const coarse = PARENT_OF[fine] ?? '';
+  if (sourceEl.value !== coarse) {
+    sourceEl.value = coarse;
+    setCsDisplay('sourceCs', coarse, COARSE_LABELS[coarse]);
+  }
+});
+
+// Quand on change le primary → propager au filtre fin (sélectionne le "tout X")
+sourceEl.addEventListener('change', () => {
+  const coarse = sourceEl.value;
+  const [fineVal, fineLabel] = FINE_LABELS_WHEN_COARSE[coarse] ?? ['', 'Toutes juridictions'];
+  if (juriEl.value !== fineVal) {
+    juriEl.value = fineVal;
+    setCsDisplay('juriCs', fineVal, fineLabel);
+    // Trigger subsequent formation/lieu updates
+    juriEl.dispatchEvent(new Event('change'));
+  }
+});
+const fieldLieu = document.getElementById('fieldLieu');
+const fieldFormation = document.getElementById('fieldFormation');
+const lieuCs = document.getElementById('lieuCs');
+const lieuDisp = lieuCs.querySelector('.cs-display-text');
+const lieuPanel = lieuCs.querySelector('.cs-panel');
+const lieuHidden = document.getElementById('lieu');
+const formCs = document.getElementById('formationCs');
+const formDisp = formCs.querySelector('.cs-display-text');
+const formPanel = formCs.querySelector('.cs-panel');
+const formHidden = document.getElementById('formation');
+
+function fillCs(panel, options, placeholder='Toutes', placeholderLabel='Toutes') {
+  panel.innerHTML = '';
+  const top = document.createElement('div');
+  top.className = 'cs-item selected';
+  top.dataset.value = '';
+  top.dataset.label = placeholderLabel;
+  top.textContent = placeholder;
+  panel.appendChild(top);
+  for (const o of options) {
+    const it = document.createElement('div');
+    it.className = 'cs-item';
+    it.dataset.value = o.value;
+    it.dataset.label = o.label;
+    it.textContent = o.label;
+    panel.appendChild(it);
+  }
+}
+
+/* ─── FETCH API + render ─── */
+const resultsList = document.getElementById('resultsList');
+const resultsHeader = document.getElementById('resultsHeader');
+const textViewer = document.getElementById('textViewer');
+const queryInput = document.getElementById('q');
+const submitBtn = document.querySelector('.sb-primary .submit');
+// Cache local des résultats : utile pour ArianeWeb qui n'a pas d'endpoint /decision
+const resultCache = new Map();
+function cacheKey(src, id) { return src + ':' + id; }
+
+const SRC_BADGES = {
+  ariane: 'ce', admin: 'admin', dila: 'jud', cedh: 'cedh', cjue: 'cjue',
+};
+
+/**
+ * Découpe un bloc de texte juridique en paragraphes lisibles.
+ * DILA/Cass ont perdu leurs séparateurs lors de l'indexation XML :
+ * on recrée les ruptures sur les patterns typiques d'arrêt.
+ */
+function splitLegalBlock(text) {
+  if (!text) return [];
+  let t = text.replace(/\s+/g, ' ').trim();
+  // Decode HTML entities résiduelles (&amp; &quot; etc.) du XML d'origine
+  const tempEl = document.createElement('textarea');
+  tempEl.innerHTML = t;
+  t = tempEl.value;
+
+  // 1) Décorations visuelles de l'arrêt original (lignes d'underscores, bullets)
+  t = t.replace(/_{5,}/g, '\n\n');
+  t = t.replace(/\s•\s/g, '\n\n');
+  t = t.replace(/\s\*\s\*\s\*\s/g, '\n\n');
+
+  // 2) Alinéas numérotés : "... phrase. 2. La cour..." → split avant chaque "N."
+  //    Tolère minuscules après (CEDH FR : "1. Le requérant...")
+  t = t.replace(/\.\s+(?=\d{1,3}\.\s+[A-Za-zÀ-ÖØ-öø-ÿ«])/g, '.\n\n');
+
+  // 3) Marqueurs juridiques canoniques français
+  const KEYWORDS = [
+    'PAR CES MOTIFS', 'CASSE ET ANNULE', 'LA COUR', 'REJETTE', 'RENVOIE',
+    'Faits et procédure', 'Examen des moyens', 'Examen du moyen',
+    'Énoncé du moyen', 'Enoncé du moyen', 'Réponse de la Cour',
+    'Portée et conséquences', 'EN FAIT', 'EN DROIT',
+  ];
+  for (const kw of KEYWORDS) {
+    const re = new RegExp('\\s(?=' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b)', 'g');
+    t = t.replace(re, '\n\n');
+  }
+
+  // 5) Marqueurs "Sur le X moyen"
+  t = t.replace(
+    /\s(?=(?:Sur|Mais sur|Et sur) (?:le|les|ce) (?:premier|second|deuxième|troisième|quatrième|cinquième|sixième|septième|huitième|neuvième|unique) moyen)/gi,
+    '\n\n'
+  );
+
+  // 6) Dispositifs finaux (PAR CES MOTIFS CASSE et ANNULE, ORDONNE, etc.)
+  t = t.replace(/\s(?=(?:DIT QUE|CONDAMNE|ORDONNE|FIXE|DÉBOUTE|DECIDE|DÉCIDE)\b)/g, '\n\n');
+
+  // 7) Fallback : blocs > 1500 chars split sur "... . Suivant... "
+  const parts = t.split(/\n{2,}/).filter(p => p.trim().length > 2);
+  const result = [];
+  for (const p of parts) {
+    if (p.length <= 1500) { result.push(p.trim()); continue; }
+    // Découper sur phrase + majuscule (heuristique souple)
+    const sub = p.split(/(?<=\.)\s+(?=[A-ZÉÈ])/).reduce((acc, sentence) => {
+      if (!acc.length || acc[acc.length - 1].length + sentence.length > 800) {
+        acc.push(sentence);
+      } else {
+        acc[acc.length - 1] += ' ' + sentence;
+      }
+      return acc;
+    }, []);
+    result.push(...sub.map(s => s.trim()));
+  }
+  return result.filter(p => p.length > 2);
+}
+
+function juridictionToSources(juri) {
+  // Nom convivial des backends interrogés selon la juridiction choisie
+  const MAP = {
+    'admin':  ['ArianeWeb', 'opendata.gouv'],
+    'ce':     ['ArianeWeb', 'opendata.gouv'],
+    'caa':    ['opendata.gouv'],
+    'ta':     ['opendata.gouv (fan-out)'],
+    'judic':  ['DILA'],
+    'cass':   ['DILA'],
+    'ca':     ['DILA'],
+    'constit':['DILA'],
+    'europ':  ['HUDOC', 'EUR-Lex'],
+    'cedh':   ['HUDOC'],
+    'cjue':   ['EUR-Lex'],
+  };
+  return MAP[juri] || ['DILA', 'ArianeWeb', 'opendata.gouv', 'HUDOC', 'EUR-Lex'];
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+
+/**
+ * Détecte les citations d'articles de loi/code dans un texte juridique
+ * et les wrap en <span class="lawref">. Le HTML d'entrée doit DÉJÀ être
+ * échappé (pas de tags). On retourne du HTML qui peut contenir des span.
+ *
+ * Patterns détectés :
+ *   - "art. X du code Y" / "article 1240 du Code civil" / "article L. 521-1 CJA"
+ *   - "L. 132-1 du code de la consommation" (sans "art." préfixe)
+ *   - "art. X, alinéa N" / "art. X al. 2"
+ *   - Conventions : CEDH, TFUE, TUE, CDFUE, DDHC, Constitution
+ *   - Règlements UE : "règlement (CE) n° 883/2004", "règlement (UE) n° 492/2011"
+ *   - Directives UE : "directive 2004/38/CE"
+ *   - Lois/décrets/ordonnances nominatives : "loi n° YYYY-NNNN", etc.
+ */
+function highlightLawRefs(escapedHtml) {
+  // Whitelist des codes/lois reconnus + alias.
+  // L'ordre compte : codes les plus spécifiques d'abord pour éviter
+  // qu'un code court matche à la place d'un nom complet.
+  const CODES = [
+    { code: 'CESEDA', patterns: ['code de l[\'’]entrée et du séjour des étrangers et du droit d[\'’]asile', 'CESEDA'] },
+    { code: 'CGCT',   patterns: ['code général des collectivités territoriales', 'CGCT'] },
+    { code: 'CGI',    patterns: ['code général des impôts', 'CGI'] },
+    { code: 'CRPA',   patterns: ['code des relations entre le public et l[\'’]administration', 'CRPA'] },
+    { code: 'CCH',    patterns: ['code de la construction et de l[\'’]habitation', 'CCH'] },
+    { code: 'CPI',    patterns: ['code de la propriété intellectuelle', 'CPI'] },
+    { code: 'CASF',   patterns: ['code de l[\'’]action sociale et des familles', 'CASF'] },
+    { code: 'CMF',    patterns: ['code monétaire et financier', 'CMF'] },
+    { code: 'CSS',    patterns: ['code de la sécurité sociale', 'c\\.\\s*séc\\.\\s*soc\\.', 'CSS'] },
+    { code: 'CSP',    patterns: ['code de la santé publique', 'c\\.\\s*santé\\s*publ\\.', 'CSP'] },
+    { code: 'CJA',    patterns: ['code de justice administrative', 'CJA'] },
+    { code: 'CPC',    patterns: ['code de procédure civile', 'c\\.\\s*pr\\.\\s*civ\\.', 'CPC', 'NCPC'] },
+    { code: 'CPP',    patterns: ['code de procédure pénale', 'c\\.\\s*pr\\.\\s*pén\\.', 'CPP'] },
+    { code: 'C.cons', patterns: ['code de la consommation', 'c\\.\\s*consom?\\.'] },
+    { code: 'C.éduc', patterns: ['code de l[\'’]éducation', 'c\\.\\s*éduc\\.'] },
+    { code: 'C.com',  patterns: ['code de commerce', 'c\\.\\s*com\\.'] },
+    { code: 'CT',     patterns: ['code du travail', 'c\\.\\s*trav\\.', 'CT'] },
+    { code: 'CU',     patterns: ['code de l[\'’]urbanisme', 'c\\.\\s*urb\\.'] },
+    { code: 'C.env',  patterns: ['code de l[\'’]environnement', 'c\\.\\s*env\\.'] },
+    { code: 'CR',     patterns: ['code rural et de la pêche maritime', 'code rural', 'CRPM'] },
+    { code: 'CC',     patterns: ['code civil', 'c\\.\\s*civ\\.', 'CC'] },
+    { code: 'CP',     patterns: ['code pénal', 'c\\.\\s*pén\\.', 'CP'] },
+  ];
+
+  const CONVENTIONS = [
+    { code: 'CEDH',   patterns: ['Convention européenne des droits de l[\'’]homme', 'Conv\\.\\s*EDH', 'CEDH'] },
+    { code: 'TFUE',   patterns: ['Traité sur le fonctionnement de l[\'’]Union européenne', 'TFUE'] },
+    { code: 'TUE',    patterns: ['Traité sur l[\'’]Union européenne', 'TUE'] },
+    { code: 'CDFUE',  patterns: ['Charte des droits fondamentaux de l[\'’]Union européenne', 'CDFUE'] },
+    { code: 'DDHC',   patterns: ['Déclaration des droits de l[\'’]homme et du citoyen', 'DDHC'] },
+    { code: 'CONST',  patterns: ['Constitution(?:\\s+française)?'] },
+  ];
+
+  // Composants regex réutilisables
+  // Article numéro : préfixe lettre optionnel (L./R./D./A.) + chiffres + tirets/points + § optionnel
+  const ART_NUM = '(?:premier|[LRDA]\\b\\.?\\s*)?\\d+(?:[-.\\s]\\d+)*(?:\\s*§\\s*\\d+)?';
+  // Préfixe "art." ou "article(s)"
+  const ART_PREFIX = '(?:articles?|art\\.?)';
+  // Suffixe alinéa optionnel : ", alinéa N" ou " al. N"
+  const ART_ALINEA = '(?:\\s*,?\\s*(?:alinéas?|al\\.)\\s*\\d+)?';
+  // Article complet (avec préfixe)
+  const ART_FULL = `${ART_PREFIX}\\s+${ART_NUM}${ART_ALINEA}(?:\\s*(?:,|et|;)\\s*${ART_NUM}${ART_ALINEA})*`;
+  // Article SANS préfixe : juste "L. 521-1" ou "R. 222-1" (pas pour articles purement numériques pour éviter FP)
+  const ART_LETTER = '[LRDA]\\b\\.?\\s*\\d+(?:[-.\\s]\\d+)*(?:\\s*§\\s*\\d+)?';
+
+  function makeWrap(item, art, code) {
+    // Trouve TOUS les numéros d'article dans le segment (ex: "articles 132-1, 132-20")
+    // → on wrap chaque numéro individuellement, chacun cliquable vers son article.
+    const numRe = /(?:[LRDA]\b\.?\s*)?\d+(?:[-.]\d+)*(?:\s*§\s*\d+)?/g;
+    const matches = [...art.matchAll(numRe)];
+    const safeCode = item.code;
+    if (matches.length <= 1) {
+      const num = matches[0] ? matches[0][0].replace(/\s+/g, '') : '';
+      return `<span class="lawref" data-code="${safeCode}" data-num="${num}" title="${safeCode} ${num}">${art} ${code}</span>`;
+    }
+    // Multi-articles : wrap chaque numéro séparément
+    let html = '';
+    let lastEnd = 0;
+    for (const m of matches) {
+      const num = m[0].replace(/\s+/g, '');
+      html += art.substring(lastEnd, m.index);
+      html += `<span class="lawref" data-code="${safeCode}" data-num="${num}" title="${safeCode} ${num}">${m[0]}</span>`;
+      lastEnd = m.index + m[0].length;
+    }
+    html += art.substring(lastEnd);
+    // Le code (ex "code pénal") wrappé avec la classe générique pour visuel cohérent
+    html += ` <span class="lawref lawref-code" data-code="${safeCode}" title="${safeCode}">${code}</span>`;
+    return html;
+  }
+
+  let result = escapedHtml;
+
+  // Marqueur pour éviter de re-matcher des trucs déjà wrappés
+  const MARKER = '\x00LAWREF\x00';
+
+  // 1) Codes : pattern complet "art. X du code Y" + variante "L. X-Y code Y"
+  for (const item of CODES) {
+    const codeAlts = item.patterns.join('|');
+
+    // 1a - avec préfixe "art."
+    const re_art = new RegExp(
+      `(${ART_FULL})\\s+(?:du\\s+|de\\s+la\\s+)?(${codeAlts})\\b`,
+      'gi'
+    );
+    result = result.replace(re_art, (m, art, code) => {
+      if (m.includes(MARKER)) return m;
+      return MARKER + makeWrap(item, art, code) + MARKER;
+    });
+
+    // 1b - sans préfixe : "L. 521-1 du code Y" / "L. 521-1 CJA"
+    const re_letter = new RegExp(
+      `(?<![\\w-])(${ART_LETTER}${ART_ALINEA})\\s+(?:du\\s+|de\\s+la\\s+)?(${codeAlts})\\b`,
+      'gi'
+    );
+    result = result.replace(re_letter, (m, art, code) => {
+      if (m.includes(MARKER)) return m;
+      return MARKER + makeWrap(item, art, code) + MARKER;
+    });
+  }
+
+  // 2) Conventions internationales : "art. X CEDH", "article 258 TFUE"
+  for (const item of CONVENTIONS) {
+    const codeAlts = item.patterns.join('|');
+    const re = new RegExp(
+      `(${ART_FULL})\\s+(?:du\\s+|de\\s+la\\s+)?(${codeAlts})\\b`,
+      'gi'
+    );
+    result = result.replace(re, (m, art, code) => {
+      if (m.includes(MARKER)) return m;
+      return MARKER + makeWrap(item, art, code) + MARKER;
+    });
+  }
+
+  // 3) Règlements UE : "règlement (CE) n° 883/2004", "règlement (UE) 2016/679"
+  // Le "n°" est optionnel - fréquemment omis pour les actes post-2015.
+  result = result.replace(
+    /\b(règlement\s+\(?(?:CE|UE|CEE)\)?\s+(?:n[°º]\s*)?\d+\/\d+)\b/gi,
+    (m) => {
+      if (m.includes(MARKER)) return m;
+      const num = (m.match(/(\d+\/\d+)/) || [])[1] || '';
+      return MARKER + `<span class="lawref" data-code="REG-EU" data-num="${num}" title="Règlement UE ${num}">${m}</span>` + MARKER;
+    }
+  );
+
+  // 4) Directives UE : "directive 2004/38/CE" ou "directive (UE) 2016/679"
+  result = result.replace(
+    /\b(directive\s+(?:\(?(?:CE|UE)\)?\s+)?\d+\/\d+(?:\/(?:CE|UE))?)\b/gi,
+    (m) => {
+      if (m.includes(MARKER)) return m;
+      const num = (m.match(/\d+\/\d+(?:\/(?:CE|UE))?/) || [])[0] || '';
+      return MARKER + `<span class="lawref" data-code="DIR-EU" data-num="${num}" title="Directive UE ${num}">${m}</span>` + MARKER;
+    }
+  );
+
+  // 5) Lois nominatives : "loi n° YYYY-NNNN du DD mois YYYY"
+  result = result.replace(
+    /\b(loi\s+n[°º]\s*(\d{4}-\d+))\b/gi,
+    (m, full, num) => {
+      if (m.includes(MARKER)) return m;
+      return MARKER + `<span class="lawref" data-code="LOI" data-num="${num}" title="Loi n° ${num}">${full}</span>` + MARKER;
+    }
+  );
+
+  // 6) Décrets : "décret n° YYYY-NNNN"
+  result = result.replace(
+    /\b(décret\s+n[°º]\s*(\d{4}-\d+))\b/gi,
+    (m, full, num) => {
+      if (m.includes(MARKER)) return m;
+      return MARKER + `<span class="lawref" data-code="DECRET" data-num="${num}" title="Décret n° ${num}">${full}</span>` + MARKER;
+    }
+  );
+
+  // 7) Ordonnances : "ordonnance n° YYYY-NNNN"
+  result = result.replace(
+    /\b(ordonnance\s+n[°º]\s*(\d{4}-\d+))\b/gi,
+    (m, full, num) => {
+      if (m.includes(MARKER)) return m;
+      return MARKER + `<span class="lawref" data-code="ORD" data-num="${num}" title="Ordonnance n° ${num}">${full}</span>` + MARKER;
+    }
+  );
+
+  // Nettoyer les marqueurs
+  return result.split(MARKER).join('');
+}
+function highlightExtract(html, q) {
+  // Extract : ArianeWeb utilise ; comme séparateur. DILA pré-formatte avec <em>…</em>.
+  let clean = String(html ?? '').replace(/;+/g, ' · ').trim();
+  if (clean.length > 320) clean = clean.slice(0, 320) + '…';
+  // Détecte si les <em> sont déjà présents (FTS5 snippet côté serveur)
+  const hasPrebuiltEm = /<em>/.test(clean);
+  let escaped = escapeHtml(clean);
+  if (hasPrebuiltEm) {
+    escaped = escaped.replace(/&lt;em&gt;/g, '<em>').replace(/&lt;\/em&gt;/g, '</em>');
+    return escaped;
+  }
+  if (!q) return escaped;
+  const tokens = q.replace(/["*&|]/g, ' ').split(/\s+/).filter(t => t.length > 2 && !['AND','OR','NOT','ET','OU','SAUF'].includes(t.toUpperCase()));
+  if (!tokens.length) return escaped;
+  const re = new RegExp('(' + tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'gi');
+  return escaped.replace(re, '<em>$1</em>');
+}
+function fmtDate(d, opts) {
+  if (!d) return '';
+  // Accepte "YYYY-MM-DD", "YYYY-MM-DDTHH:mm:ss", "YYYYMMDD"
+  let s = String(d).trim();
+  let y, m, dd;
+  if (/^\d{8}$/.test(s)) {
+    y = s.slice(0,4); m = s.slice(4,6); dd = s.slice(6,8);
+  } else {
+    s = s.split('T')[0];
+    [y, m, dd] = s.split('-');
+  }
+  if (!y || !m || !dd) return d;
+  const full = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  const abbr = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  const months = (opts && opts.short) ? abbr : full;
+  const dayNum = parseInt(dd, 10);
+  const monIdx = parseInt(m, 10) - 1;
+  if (monIdx < 0 || monIdx > 11 || isNaN(dayNum)) return d;
+  return `${dayNum} ${months[monIdx]} ${y}`;
+}
+
+function renderResults(data, query) {
+  let results = data.results || [];
+  const perSource = data.per_source || {};
+  const noResult = data.sources_no_result || [];
+  const parts = [];
+
+  // Tri global côté client : le SPA fetch chaque source en parallèle, donc
+  // le merge perd l'ordre. On retrie ici selon le sort actif. Les résultats
+  // sans date partent en queue (date "0000" pour desc, "9999" pour asc).
+  const tri = document.getElementById('tri')?.value || 'pertinence';
+  if (tri === 'date_desc') {
+    results = [...results].sort((a, b) => (b.date || '0000-00-00').localeCompare(a.date || '0000-00-00'));
+  } else if (tri === 'date_asc') {
+    results = [...results].sort((a, b) => (a.date || '9999-12-31').localeCompare(b.date || '9999-12-31'));
+  }
+  // En-tête : on garde juste le placeholder, updateHeader() le remplit
+  parts.push(`<div class="results-header" id="resultsHeader"></div>`);
+  // Avertissement si des sources ont timeout
+  const slow = noResult;
+  if (slow.length) {
+    const retryingNow = (lastSearchState?.pendingSources?.size)
+      ? [...lastSearchState.pendingSources].filter(s => slow.includes(s))
+      : [];
+    const slowLabels = slow.map(s => SOURCE_NAMES[s] || s).join(', ');
+    if (retryingNow.length) {
+      parts.push(`<div class="source-warning"><strong>⚠</strong> ${slowLabels} lent - nouvelle tentative en cours (timeout 60 s) <span class="dots-inline"><span>.</span><span>.</span><span>.</span><span>.</span></span></div>`);
+    } else {
+      parts.push(`<div class="source-warning"><strong>⚠</strong> ${slowLabels} n'a pas répondu (12 s puis 60 s). Affinez la requête pour y accéder.</div>`);
+    }
+  }
+  if (!results.length) {
+    // N'affiche "Aucun résultat" QUE si toutes les sources ont fini (pendingSources vide).
+    // Sinon on affiche un loader propre - sinon on induit l'utilisateur en erreur
+    // pendant que la recherche est encore en cours.
+    const stillPending = (lastSearchState?.pendingSources?.size || 0) > 0;
+    if (stillPending) {
+      parts.push(`<div style="padding:2rem 1.2rem;color:var(--muted);font-size:.9rem;display:flex;align-items:center;gap:.6rem">
+        Recherche en cours <span class="dots-inline"><span>.</span><span>.</span><span>.</span><span>.</span></span>
+      </div>`);
+    } else {
+      parts.push(`<div style="padding:2rem 1.2rem;color:var(--muted);font-size:.9rem">Aucun résultat. Essayez des mots-clés plus larges, ou enlevez certains filtres.</div>`);
+    }
+    resultsList.innerHTML = parts.join('');
+    return;
+  }
+  for (const r of results) {
+    resultCache.set(cacheKey(r.source, r.id), r);
+    const badge = SRC_BADGES[r.source] || 'admin';
+    parts.push(`<article class="result-card" data-source="${escapeHtml(r.source)}" data-id="${escapeHtml(r.id)}">`);
+
+    // Normalise les champs : "undefined" (string), null, "" → vide
+    const isEmpty = v => !v || v === 'undefined' || v === 'null' || (typeof v === 'string' && !v.trim());
+    const hasDate = !isEmpty(r.date);
+    const hasJuri = !isEmpty(r.juridiction);
+    const hasFormation = !isEmpty(r.formation);
+    const hasNumero = !isEmpty(r.numero);
+    const hasEcli = !isEmpty(r.ecli);
+
+    // Juridiction enrichie de la formation quand pertinent (ex : "Cour de cassation, soc")
+    let juriDisplay = hasJuri ? r.juridiction : '';
+    if (hasJuri && hasFormation) {
+      // n'ajoute la formation que si elle apporte de l'info utile (≠ codes opaques courts type HFJUD/JUDG sans intérêt user)
+      // mais on l'affiche quand même - l'utilisateur jugera
+      juriDisplay = `${r.juridiction}, ${r.formation}`;
+    }
+
+    parts.push(`<div class="meta-line">`);
+    parts.push(`<span class="src-badge ${badge}">${escapeHtml(r.source_label)}</span>`);
+
+    // Juridiction (+ formation)
+    if (hasJuri) {
+      parts.push(`<span class="juri">${escapeHtml(juriDisplay)}</span>`);
+    } else {
+      parts.push(`<span class="juri field-empty">-</span>`);
+    }
+
+    parts.push(`<span class="sep">·</span>`);
+
+    // Date
+    if (hasDate) {
+      parts.push(`<span class="date">${escapeHtml(fmtDate(r.date))}</span>`);
+    } else {
+      parts.push(`<span class="date field-empty">-</span>`);
+    }
+
+    parts.push(`<span class="sep">·</span>`);
+
+    // Numéro
+    if (hasNumero) {
+      parts.push(`<span class="num">n°&nbsp;${escapeHtml(r.numero)}</span>`);
+    } else {
+      parts.push(`<span class="num field-empty">n°&nbsp;-</span>`);
+    }
+
+    parts.push(`<span class="sep">·</span>`);
+
+    // ECLI
+    if (hasEcli) {
+      parts.push(`<span class="ecli">${escapeHtml(r.ecli)}</span>`);
+    } else {
+      parts.push(`<span class="ecli field-empty">ECLI&nbsp;-</span>`);
+    }
+
+    parts.push(`</div>`);
+    parts.push(`<h3 class="title">${escapeHtml(r.title || '(sans titre)')}</h3>`);
+    if (r.extract) parts.push(`<p class="extract">${highlightExtract(r.extract, query)}</p>`);
+
+    // Tags secondaires : seuls les champs spécifiques non déjà exposés en meta-line
+    const tags = [];
+    if (r.article) tags.push(`art. ${r.article}`);
+    if (tags.length) {
+      parts.push(`<div class="tags">`);
+      for (const t of tags) parts.push(`<span class="tag">${escapeHtml(t)}</span>`);
+      parts.push(`</div>`);
+    }
+    parts.push(`</article>`);
+  }
+  // Bouton "Charger plus" si la dernière page était pleine
+  const canLoadMore = !lastSearchState?.pendingSources?.size && lastSearchState?.lastChunkSize >= PAGE_SIZE;
+  if (canLoadMore) {
+    parts.push(`<div class="load-more-wrap"><button class="load-more" id="loadMoreBtn">Charger ${PAGE_SIZE} de plus</button></div>`);
+  }
+
+  resultsList.innerHTML = parts.join('');
+  updateHeader();
+
+  // Bind clicks
+  resultsList.querySelectorAll('.result-card').forEach(card => {
+    card.addEventListener('click', () => {
+      resultsList.querySelectorAll('.result-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      loadDecision(card.dataset.source, card.dataset.id);
+    });
+  });
+  const lmBtn = document.getElementById('loadMoreBtn');
+  if (lmBtn) {
+    lmBtn.addEventListener('click', () => {
+      lmBtn.disabled = true;
+      lmBtn.textContent = '';
+      runSearch(true);
+    });
+  }
+}
+
+function openSheet(){ document.body.classList.add('sheet-open'); }
+function closeSheet(){ document.body.classList.remove('sheet-open'); }
+document.getElementById('sheetBackdrop').addEventListener('click', closeSheet);
+document.getElementById('sheetClose').addEventListener('click', closeSheet);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+
+async function loadDecision(source, id) {
+  textViewer.classList.remove('empty');
+  openSheet();
+  const viewerBody = document.getElementById('textViewerBody');
+  viewerBody.innerHTML = `<div style="padding:2rem;color:var(--muted)">Chargement…</div>`;
+
+  // ArianeWeb : le backend sait désormais aller chercher le texte intégral
+  // via le plugin Sinequa `downloadFilePagePlugin`. On laisse suivre
+  // le chemin normal (fetch /api/decision).
+
+  try {
+    const r = await fetch(`/api/decision?source=${encodeURIComponent(source)}&id=${encodeURIComponent(id)}`);
+    const d = await r.json();
+    if (!r.ok || d.error) {
+      viewerBody.innerHTML = `<div style="padding:3rem;color:var(--muted)"><em>${escapeHtml(d.error || 'Erreur inconnue')}</em></div>`;
+      return;
+    }
+    const body = (d.full_text || '').trim();
+    // Découpage multi-niveau des paragraphes : d'abord \n\n ou $$$,
+    // puis fallback sur patterns juridiques (numéros, sections, PAR CES MOTIFS).
+    let paragraphs = body ? body.split(/\n{2,}|\$\$\$/).map(p => p.trim()).filter(Boolean) : [];
+    if (paragraphs.length === 1) {
+      paragraphs = splitLegalBlock(body);
+    } else {
+      // Même si on a déjà des paragraphes, certains peuvent rester denses
+      paragraphs = paragraphs.flatMap(p => p.length > 600 ? splitLegalBlock(p) : [p]);
+    }
+    const html = [];
+    html.push(`<div class="actions">`);
+    html.push(`<a href="#" class="action-copy-link" data-id="${escapeHtml(d.id)}" data-source="${escapeHtml(d.source)}">Copier lien</a>`);
+    html.push(`<a href="#" class="action-download" data-title="${escapeHtml(d.title || 'decision')}">Télécharger .txt</a>`);
+    html.push(`</div>`);
+    const officialSrc = officialSourceFromId(d.id, d.numero);
+    if (officialSrc) {
+      html.push(`<div class="source-cta-spa">`);
+      html.push(`<a class="btn-source-spa" href="${escapeHtml(officialSrc.url)}" target="_blank" rel="external noopener nofollow">`);
+      html.push(`Voir sur ${escapeHtml(officialSrc.label)} <span style="margin-left:.4em">→</span>`);
+      html.push(`</a>`);
+      html.push(`<small>Source publique officielle. JusticeLibre indexe une copie miroir pour les moteurs de recherche et les IA.</small>`);
+      html.push(`</div>`);
+    } else if (/^(DCE_|DCAA_|DTA_|ORTA_)/.test(d.id || '')) {
+      // TAs/CAA opendata : pas de page individuelle indexée publiquement.
+      // On dit la vérité au lieu de mettre un bouton mensonger.
+      html.push(`<div class="source-cta-spa" style="border-left-color:var(--gold)">`);
+      html.push(`<small style="font-style:normal">`);
+      html.push(`<strong>Source : open data du Conseil d'État</strong> (loi pour une République numérique du 7 octobre 2016, art. 20-21).<br>`);
+      html.push(`Cette décision n'est pas publiée au Recueil Lebon - Légifrance ne l'indexe donc pas. JusticeLibre est la seule source web indexable pour cette décision.`);
+      html.push(`</small>`);
+      html.push(`</div>`);
+    }
+    html.push(`<h1>${escapeHtml(d.title || '(sans titre)')}</h1>`);
+    html.push(`<div class="doc-meta">`);
+    if (d.juridiction) html.push(`<span><strong>Juridiction :</strong> ${escapeHtml(d.juridiction)}</span>`);
+    if (d.date) html.push(`<span><strong>Date :</strong> ${escapeHtml(fmtDate(d.date))}</span>`);
+    if (d.formation) html.push(`<span><strong>Formation :</strong> ${escapeHtml(d.formation)}</span>`);
+    if (d.numero) html.push(`<span><strong>N° :</strong> ${escapeHtml(d.numero)}</span>`);
+    if (d.ecli) html.push(`<span><strong>ECLI :</strong> ${escapeHtml(d.ecli)}</span>`);
+    html.push(`<span><strong>ID :</strong> ${escapeHtml(d.id)}</span>`);
+    html.push(`</div>`);
+    html.push(`<div class="body">`);
+    if (paragraphs.length) {
+      for (const p of paragraphs) {
+        html.push(`<p>${highlightLawRefs(escapeHtml(p))}</p>`);
+      }
+    } else {
+      html.push(`<p><em>Texte intégral indisponible pour cette source. Vérifier directement sur le site officiel.</em></p>`);
+    }
+    html.push(`</div>`);
+    viewerBody.innerHTML = html.join('');
+    // Handlers pour les actions (pas d'inline onclick → pas d'XSS via interpolation)
+    const copyBtn = viewerBody.querySelector('.action-copy-link');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const id = copyBtn.dataset.id;
+        const src = copyBtn.dataset.source;
+        const url = `${location.origin}/search.html?id=${encodeURIComponent(id)}&source=${encodeURIComponent(src)}`;
+        navigator.clipboard.writeText(url).then(() => {
+          copyBtn.textContent = 'Copié ✓';
+          setTimeout(() => { copyBtn.textContent = 'Copier lien'; }, 1500);
+        });
+      });
+    }
+    const dlBtn = viewerBody.querySelector('.action-download');
+    if (dlBtn) {
+      dlBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const fullText = paragraphs.join('\n\n');
+        const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (dlBtn.dataset.title || 'decision').replace(/[^\w-]+/g, '_').slice(0, 80) + '.txt';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+    }
+    // Date de la décision courante → utilisée pour trouver la version d'article pertinente
+    window.currentDecisionDate = d.date || null;
+    // Précharger les articles cités (batch) + attacher les handlers click
+    scanCitedArticles(viewerBody, window.currentDecisionDate);
+  } catch (e) {
+    viewerBody.innerHTML = `<div style="padding:3rem;color:var(--muted)"><em>Erreur : ${escapeHtml(e.message)}</em></div>`;
+  }
+}
+
+// ─── LAW VIEWER : article de loi à la version d'époque ─────────────
+
+const LAW_CACHE_PREFIX = 'law:';
+const LAW_CACHE_TTL = 24 * 3600 * 1000; // 24h
+
+function lawCacheKey(code, num, date) {
+  return `${LAW_CACHE_PREFIX}${code}:${num}:${date || 'current'}`;
+}
+
+function lawCacheGet(code, num, date) {
+  try {
+    const raw = localStorage.getItem(lawCacheKey(code, num, date));
+    if (!raw) return null;
+    const {t, d} = JSON.parse(raw);
+    if (Date.now() - t > LAW_CACHE_TTL) {
+      localStorage.removeItem(lawCacheKey(code, num, date));
+      return null;
+    }
+    return d;
+  } catch { return null; }
+}
+
+function lawCacheSet(code, num, date, data) {
+  try {
+    // Éviction LRU naïve : si >500 entrées law:, supprimer les plus anciennes
+    const keys = Object.keys(localStorage).filter(k => k.startsWith(LAW_CACHE_PREFIX));
+    if (keys.length >= 500) {
+      const entries = keys.map(k => {
+        try { return [k, JSON.parse(localStorage.getItem(k)).t]; }
+        catch { return [k, 0]; }
+      }).sort((a,b) => a[1] - b[1]);
+      for (let i = 0; i < 100; i++) localStorage.removeItem(entries[i][0]);
+    }
+    localStorage.setItem(lawCacheKey(code, num, date), JSON.stringify({t: Date.now(), d: data}));
+  } catch { /* quota exceeded - ignore */ }
+}
+
+async function scanCitedArticles(root, date) {
+  const spans = root.querySelectorAll('.lawref[data-num]');
+  if (!spans.length) return;
+  // Dédupliquer par (code, num)
+  const seen = new Set();
+  const refs = [];
+  for (const s of spans) {
+    const code = s.dataset.code || '';
+    const num = s.dataset.num || '';
+    if (!code || !num) continue;
+    const key = `${code}|${num}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    // Skip si déjà en cache
+    if (lawCacheGet(code, num, date)) continue;
+    refs.push({code, num});
+  }
+  if (refs.length) {
+    try {
+      const r = await fetch('/api/law/batch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({date, refs})
+      });
+      if (r.ok) {
+        const data = await r.json();
+        for (const item of (data.items || [])) {
+          if (item.found) lawCacheSet(item.code, item.num, date, item);
+        }
+      }
+    } catch { /* silent - fallback sur fetch au click */ }
+  }
+  // Attacher les handlers click sur les spans
+  root.addEventListener('click', onLawRefClick);
+}
+
+function onLawRefClick(e) {
+  const span = e.target.closest('.lawref[data-num]');
+  if (!span) return;
+  e.preventDefault();
+  openLawPanel(span.dataset.code, span.dataset.num, window.currentDecisionDate);
+}
+
+async function openLawPanel(code, num, date) {
+  const isMobile = window.matchMedia('(max-width:860px)').matches;
+  if (isMobile) {
+    openLawInSheet(code, num, date);
+  } else {
+    openLawInSidebar(code, num, date);
+  }
+}
+
+function formatLawDate(d) {
+  if (!d) return '';
+  const [y, m, dd] = d.split('-');
+  if (!y) return d;
+  const months = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  return `${parseInt(dd)} ${months[parseInt(m) - 1] || ''} ${y}`;
+}
+
+function renderLawInto(container, code, num, data) {
+  if (!data) {
+    container.title.textContent = `Article ${num}`;
+    container.meta.innerHTML = '';
+    container.note.style.display = 'block';
+    container.note.textContent = `Article ${code} ${num} introuvable.`;
+    container.body.innerHTML = '';
+    // Fallback : lien de recherche Légifrance même quand l'article n'est pas en base
+    container.extern.href = `https://www.legifrance.gouv.fr/search/all?query=article+${encodeURIComponent(num)}+${encodeURIComponent(code)}`;
+    container.extern.removeAttribute('hidden');
+    return;
+  }
+  container.title.textContent = `Article ${data.num} ${data.titre_section || ''}`.trim();
+  const etat = data.etat || '';
+  const etatCls = etat === 'VIGUEUR' ? 'law-etat-vigueur'
+                 : (etat === 'ABROGE' ? 'law-etat-abroge' : 'law-etat-modifie');
+  const range = data.date_debut
+    ? `Version du ${formatLawDate(data.date_debut)}${data.date_fin && data.date_fin !== '2999-01-01' ? ' au ' + formatLawDate(data.date_fin) : ' - en vigueur'}`
+    : '';
+  container.meta.innerHTML = `${range}${etat ? ` <span class="law-etat ${etatCls}">${etat}</span>` : ''}`;
+  if (data.note) {
+    container.note.style.display = 'block';
+    container.note.textContent = data.note;
+  } else {
+    container.note.style.display = 'none';
+  }
+  container.body.innerHTML = `<div>${escapeHtml(data.texte || '(pas de texte)')}</div>${data.nota ? `<div class="law-nota">${escapeHtml(data.nota)}</div>` : ''}`;
+  if (data.legiarti) {
+    container.extern.href = `https://www.legifrance.gouv.fr/codes/article_lc/${encodeURIComponent(data.legiarti)}`;
+  }
+}
+
+async function resolveLaw(code, num, date) {
+  let data = lawCacheGet(code, num, date);
+  if (data) return data;
+  try {
+    const url = `/api/law?code=${encodeURIComponent(code)}&num=${encodeURIComponent(num)}${date ? '&date=' + encodeURIComponent(date) : ''}`;
+    const r = await fetch(url);
+    if (r.ok) {
+      data = await r.json();
+      lawCacheSet(code, num, date, data);
+      return data;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function openLawInSidebar(code, num, date) {
+  const panel = document.getElementById('lawViewer');
+  const container = {
+    title: document.getElementById('lawTitle'),
+    meta: document.getElementById('lawMeta'),
+    note: document.getElementById('lawNote'),
+    body: document.getElementById('lawBody'),
+    extern: document.getElementById('lawExtern'),
+  };
+  container.title.textContent = `Article ${num}`;
+  container.meta.textContent = '';
+  container.note.style.display = 'none';
+  container.body.innerHTML = '<p class="law-loading">Chargement…</p>';
+  document.body.classList.add('law-open');
+  panel.setAttribute('aria-hidden', 'false');
+  // Bind fermeture (idempotent)
+  document.getElementById('lawClose').onclick = closeLawPanel;
+  document.getElementById('lawBackdrop').onclick = closeLawPanel;
+  document.getElementById('lawVersions').onclick = () => showLawVersions(code, num);
+  resolveLaw(code, num, date).then(data => renderLawInto(container, code, num, data));
+}
+
+function closeLawPanel() {
+  document.body.classList.remove('law-open');
+  document.getElementById('lawViewer').setAttribute('aria-hidden', 'true');
+}
+
+// Stack navigation mobile : on push le HTML courant du sheet, on remplace par la vue article
+window.sheetStack = [];
+
+function openLawInSheet(code, num, date) {
+  const body = document.getElementById('textViewerBody');
+  // Sauvegarde HTML actuel pour back button
+  window.sheetStack.push(body.innerHTML);
+  body.innerHTML = `
+    <button type="button" class="sheet-back" style="display:inline-flex;align-items:center;gap:.4rem;background:none;border:none;color:var(--teal);cursor:pointer;font-size:.9rem;padding:0;margin-bottom:1rem">← Retour à la décision</button>
+    <h1 id="lawSheetTitle" style="font-family:var(--display);font-size:1.3rem;margin-bottom:.3rem">Article ${escapeHtml(num)}</h1>
+    <p id="lawSheetMeta" class="doc-meta" style="font-size:.78rem;color:var(--muted);margin-bottom:1rem"></p>
+    <div id="lawSheetNote" style="display:none;padding:.5rem .7rem;background:rgba(184,147,43,.1);border-left:2px solid var(--gold);font-size:.82rem;margin-bottom:1rem"></div>
+    <div id="lawSheetBody" style="font-size:.96rem;line-height:1.7;color:var(--body);white-space:pre-wrap"><em style="color:var(--muted)">Chargement…</em></div>
+    <div class="law-footer" style="margin-top:1.5rem">
+      <button id="lawSheetVersions" type="button">Voir toutes les versions</button>
+      <a id="lawSheetExtern" href="#" target="_blank" rel="noopener">Voir sur Légifrance ↗</a>
+      <button id="lawSheetFeedback" type="button" title="Signaler un problème" style="font-size:.72rem;color:var(--muted)">Problème ?</button>
+    </div>
+  `;
+  body.querySelector('.sheet-back').addEventListener('click', popSheet);
+  body.querySelector('#lawSheetVersions').addEventListener('click', () => showLawVersions(code, num));
+  body.querySelector('#lawSheetFeedback').addEventListener('click', () => openFeedback({source: 'law-sheet', code, num, url: location.href}));
+  resolveLaw(code, num, date).then(data => {
+    const container = {
+      title: body.querySelector('#lawSheetTitle'),
+      meta: body.querySelector('#lawSheetMeta'),
+      note: body.querySelector('#lawSheetNote'),
+      body: body.querySelector('#lawSheetBody'),
+      extern: body.querySelector('#lawSheetExtern'),
+    };
+    renderLawInto(container, code, num, data);
+    if (data && data.legiarti) {
+      container.extern.href = data.source_url || `https://www.legifrance.gouv.fr/codes/article_lc/${encodeURIComponent(data.legiarti)}`;
+    }
+  });
+}
+
+function popSheet() {
+  const body = document.getElementById('textViewerBody');
+  const prev = window.sheetStack.pop();
+  if (prev != null) {
+    body.innerHTML = prev;
+    // Ré-attacher les handlers (le HTML restauré a perdu les listeners)
+    const copyBtn = body.querySelector('.action-copy-link');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const id = copyBtn.dataset.id, src = copyBtn.dataset.source;
+        const url = `${location.origin}/search.html?id=${encodeURIComponent(id)}&source=${encodeURIComponent(src)}`;
+        navigator.clipboard.writeText(url).then(() => {
+          copyBtn.textContent = 'Copié ✓';
+          setTimeout(() => { copyBtn.textContent = 'Copier lien'; }, 1500);
+        });
+      });
+    }
+    // Réactiver event delegation pour les .lawref
+    body.addEventListener('click', onLawRefClick);
+  }
+}
+
+async function showLawVersions(code, num) {
+  const body = document.getElementById('lawBody');
+  body.innerHTML = '<p class="law-loading">Chargement des versions…</p>';
+  try {
+    const r = await fetch(`/api/law/versions?code=${encodeURIComponent(code)}&num=${encodeURIComponent(num)}`);
+    const data = await r.json();
+    const vs = data.versions || [];
+    if (!vs.length) { body.innerHTML = '<p class="law-error">Pas de versions trouvées.</p>'; return; }
+    const html = vs.map(v => {
+      const range = `${formatLawDate(v.date_debut)} - ${v.date_fin && v.date_fin !== '2999-01-01' ? formatLawDate(v.date_fin) : 'en vigueur'}`;
+      const cls = v.etat === 'VIGUEUR' ? 'law-etat-vigueur' : (v.etat === 'ABROGE' ? 'law-etat-abroge' : 'law-etat-modifie');
+      return `<div style="padding:.8rem 0;border-bottom:1px dashed var(--line)">
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:.3rem">${range} <span class="law-etat ${cls}">${v.etat}</span></div>
+        <div style="font-size:.92rem;white-space:pre-wrap">${escapeHtml(v.texte || '')}</div>
+      </div>`;
+    }).join('');
+    body.innerHTML = `<h3 style="font-family:var(--display);font-size:1.1rem;margin-bottom:.6rem">Toutes les versions (${vs.length})</h3>${html}`;
+  } catch (e) {
+    body.innerHTML = `<p class="law-error">Erreur : ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+// Ferme le law panel sur Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.body.classList.contains('law-open')) {
+    closeLawPanel();
+  }
+});
+
+// ─── FEEDBACK FORM ─────────────────────────────────────────────
+
+const feedbackModal = document.getElementById('feedbackModal');
+const feedbackStatus = document.getElementById('feedbackStatus');
+
+function openFeedback(context){
+  feedbackStatus.style.display = 'none';
+  document.getElementById('feedbackMessage').value = '';
+  document.getElementById('feedbackEmail').value = '';
+  feedbackModal.dataset.context = JSON.stringify(context || {});
+  feedbackModal.style.display = 'flex';
+}
+
+function closeFeedback(){ feedbackModal.style.display = 'none'; }
+
+document.getElementById('lawFeedback').addEventListener('click', () => {
+  const ctx = {
+    source: 'law-panel',
+    title: document.getElementById('lawTitle').textContent,
+    url: location.href,
+  };
+  openFeedback(ctx);
+});
+document.getElementById('feedbackCancel').addEventListener('click', closeFeedback);
+feedbackModal.addEventListener('click', e => { if (e.target === feedbackModal) closeFeedback(); });
+document.getElementById('feedbackSend').addEventListener('click', async () => {
+  const msg = document.getElementById('feedbackMessage').value.trim();
+  if (msg.length < 5) {
+    feedbackStatus.style.display = 'block';
+    feedbackStatus.textContent = 'Message trop court.';
+    feedbackStatus.style.color = 'var(--red)';
+    return;
+  }
+  const email = document.getElementById('feedbackEmail').value.trim();
+  const context = JSON.parse(feedbackModal.dataset.context || '{}');
+  feedbackStatus.style.display = 'block';
+  feedbackStatus.textContent = 'Envoi…';
+  feedbackStatus.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: msg, email, context, ua: navigator.userAgent}),
+    });
+    if (r.ok) {
+      feedbackStatus.textContent = '✓ Merci ! Signalement enregistré.';
+      feedbackStatus.style.color = 'var(--teal)';
+      setTimeout(closeFeedback, 1500);
+    } else {
+      feedbackStatus.textContent = 'Erreur serveur. Réessaie.';
+      feedbackStatus.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    feedbackStatus.textContent = 'Erreur réseau.';
+    feedbackStatus.style.color = 'var(--red)';
+  }
+});
+
+/**
+ * Résout un decision.id vers son URL source officielle (Légifrance / opendata
+ * justice administrative / HUDOC / EUR-Lex / ArianeWeb / Conseil constit).
+ * Retourne {label, url} ou null. Doit rester en sync avec ssr.py:
+ * _official_source_from_pattern().
+ */
+function officialSourceFromId(id, numero) {
+  if (!id) return null;
+  if (id.startsWith('CETATEXT')) return {label: 'Légifrance', url: `https://www.legifrance.gouv.fr/ceta/id/${id}`};
+  if (id.startsWith('JURITEXT')) return {label: 'Légifrance', url: `https://www.legifrance.gouv.fr/juri/id/${id}`};
+  if (id.startsWith('CONSTEXT')) return {label: 'Légifrance', url: `https://www.legifrance.gouv.fr/cons/id/${id}`};
+  if (id.startsWith('001-')) return {label: 'HUDOC (Cour EDH)', url: `https://hudoc.echr.coe.int/fre?i=${id}`};
+  // CELEX : ECLI:EU:* OU code brut "62025CC0121" / "62021TJ0109" (5 chiffres + 2 lettres + 4 chiffres)
+  if (id.startsWith('ECLI:EU:')) return {label: 'EUR-Lex (CJUE)', url: `https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=${encodeURIComponent(id)}`};
+  if (/^\d{4,5}[A-Z]{2}\d{4}$/.test(id) || id.includes('CELEX')) {
+    const celex = id.replace(/^CELEX:?/, '');
+    return {label: 'EUR-Lex (CJUE)', url: `https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:${celex}`};
+  }
+  // TA / CAA / CE opendata : la majorité des TAs ne sont JAMAIS sur Légifrance
+  // (uniquement les Lebon, ~5%). On retourne null → pas de bouton mensonger.
+  // Un texte alternatif sera affiché à la place (cf. renderResults).
+  if (/^(DCE_|DCAA_|DTA_|ORTA_)/.test(id)) {
+    return null;
+  }
+  // ArianeWeb : l'ID après le `|` est l'ID INTERNE Sinequa, PAS le numéro de pourvoi.
+  // On utilise le `numero` extrait par _norm_ariane (regex sur le texte) si dispo.
+  if (id.includes('Ariane_Web')) {
+    if (numero && /^\d{3,}/.test(numero)) {
+      return {label: 'Légifrance (recherche)', url: `https://www.legifrance.gouv.fr/search/all?query=${encodeURIComponent(numero)}&fonds=cetat`};
+    }
+    // Sans numéro de pourvoi extrait, on n'a aucun moyen fiable → pas de bouton (évite faux résultat).
+    return null;
+  }
+  // Numéro de pourvoi en fallback ultime
+  if (numero && /^\d{3,}/.test(numero)) {
+    return {label: 'Légifrance (recherche)', url: `https://www.legifrance.gouv.fr/search/all?query=${encodeURIComponent(numero)}`};
+  }
+  return null;
+}
+
+/**
+ * Résout un résultat ArianeWeb vers un identifiant admin ES (DCE_*)
+ * pour charger le texte intégral de manière transparente.
+ * Retourne le nouveau id admin, ou null si échec.
+ */
+async function resolveArianeToAdmin(ariane) {
+  // Une seule tentative rapide : numéro à la fin de l'id ArianeWeb
+  // vs dossier n° dans admin ES.
+  const m = (ariane.id || '').match(/\|(\d{3,})$/);
+  if (!m) return null;
+  const num = m[1];
+  try {
+    const r = await fetch(`/api/search?q=${encodeURIComponent(num)}&juridiction=ce&limit=5`);
+    const data = await r.json();
+    for (const hit of data.results || []) {
+      if (hit.source !== 'admin') continue;
+      if ((hit.numero || '').includes(num) || (hit.id || '').includes(num)) {
+        return hit.id;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+function renderAriane(data) {
+  // Affiche l'extrait long d'ArianeWeb comme "texte disponible"
+  const extract = (data.extract || '').trim();
+  const paragraphs = extract
+    ? extract.split(/;+/).map(s => s.trim()).filter(s => s.length > 10)
+    : [];
+  // Deep-link ArianeWeb : /view-document/{documentId URL-encoded}
+  const official = data.id
+    ? `https://www.conseil-etat.fr/arianeweb/#/view-document/${encodeURIComponent(data.id)}`
+    : `https://www.conseil-etat.fr/arianeweb/`;
+  const html = [
+    `<div class="actions">`,
+    `<a href="${official}" target="_blank" rel="noopener">Voir sur ArianeWeb ↗</a>`,
+    `</div>`,
+    `<h1>${escapeHtml(data.title || 'Arrêt du Conseil d\'État')}</h1>`,
+    `<div class="doc-meta">`,
+    `<span><strong>Juridiction :</strong> Conseil d'État (via ArianeWeb)</span>`,
+    `<span><strong>Pertinence :</strong> ${data.relevance ?? '-'}</span>`,
+    `<span><strong>ID ArianeWeb :</strong> ${escapeHtml(data.id)}</span>`,
+    `</div>`,
+    `<p style="font-size:.78rem;color:var(--muted);font-style:italic;margin-bottom:1.2rem">Extrait indexé (ArianeWeb ne fournit pas le texte intégral). <a href="${official}" target="_blank" rel="noopener">Voir sur le site officiel</a>.</p>`,
+    `<div class="body">`,
+  ];
+  if (paragraphs.length) {
+    for (const p of paragraphs) html.push(`<p>${escapeHtml(p)}</p>`);
+  } else {
+    html.push(`<p><em>Extrait indisponible.</em></p>`);
+  }
+  html.push(`</div>`);
+  textViewer.classList.remove('empty');
+  openSheet();
+  document.getElementById('textViewerBody').innerHTML = html.join('');
+}
+
+const PAGE_SIZE = 30;
+let lastSearchState = null; // { q, juri, lieu, offset, accumulated }
+
+const SOURCE_NAMES = {
+  'dila':   'DILA',
+  'ariane': 'Conseil d\'État (ArianeWeb)',
+  'admin':  'justice administrative',
+  'cedh':   'Cour EDH',
+  'cjue':   'CJUE',
+};
+
+function juridictionToSourceSet(juri) {
+  const MAP = {
+    '':        ['dila', 'ariane', 'admin', 'cedh', 'cjue'],
+    'admin':   ['ariane', 'admin'],
+    'ce':      ['ariane', 'admin'],
+    'caa':     ['admin'],
+    'ta':      ['admin'],
+    'judic':   ['dila'],
+    'cass':    ['dila'],
+    'ca':      ['dila'],
+    'constit': ['dila'],
+    'europ':   ['cedh', 'cjue'],
+    'cedh':    ['cedh'],
+    'cjue':    ['cjue'],
+  };
+  return MAP[juri] || MAP[''];
+}
+
+function juridictionToScope(juri) {
+  if (!juri) return 'toutes';
+  if (['admin', 'ce', 'caa', 'ta'].includes(juri)) return 'admin';
+  if (['judic', 'cass', 'ca', 'constit'].includes(juri)) return 'judiciaire';
+  if (['europ', 'cedh', 'cjue'].includes(juri)) return 'europeen';
+  return 'toutes';
+}
+
+const EXPANSION_DISABLED_KEY = 'jl-expansion-disabled';
+
+function expansionEnabled() {
+  // La checkbox UI est la source de vérité ; si elle n'existe pas (HTML pas
+  // encore prêt), on lit le localStorage en fallback.
+  const cb = document.getElementById('useThesaurus');
+  if (cb) return cb.checked;
+  try { return localStorage.getItem(EXPANSION_DISABLED_KEY) !== '1'; } catch { return true; }
+}
+
+function setExpansionEnabled(on) {
+  try { localStorage.setItem(EXPANSION_DISABLED_KEY, on ? '0' : '1'); } catch {}
+  const cb = document.getElementById('useThesaurus');
+  if (cb) cb.checked = on;
+}
+
+async function fetchExpansion(q, scope) {
+  const bar = document.getElementById('expansionBar');
+  const pills = document.getElementById('expPills');
+  if (!bar || !pills) return;
+  if (!expansionEnabled()) { bar.style.display = 'none'; return; }
+  try {
+    const r = await fetch(`/api/expand?q=${encodeURIComponent(q)}&scope=${encodeURIComponent(scope)}`);
+    if (!r.ok) { bar.style.display = 'none'; return; }
+    const data = await r.json();
+    const trace = data.trace || [];
+    pills.innerHTML = '';
+    if (!trace.length) {
+      // État "rien trouvé" : on affiche quand même la barre pour donner du feedback
+      const empty = document.createElement('span');
+      empty.className = 'exp-empty';
+      empty.textContent = 'Aucun terme voisin pour cette requête.';
+      empty.style.cssText = 'color:var(--muted);font-style:italic;font-size:.78rem';
+      pills.appendChild(empty);
+    } else {
+      trace.forEach(t => {
+        (t.synonyms || []).forEach(syn => {
+          const pill = document.createElement('span');
+          pill.className = 'exp-pill';
+          pill.title = `Ajouté pour le terme « ${t.original} »`;
+          const txt = document.createTextNode(syn);
+          pill.appendChild(txt);
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = '×';
+          btn.title = 'Retirer ce terme de la recherche';
+          btn.addEventListener('click', () => {
+            pill.classList.toggle('removed');
+          });
+          pill.appendChild(btn);
+          pills.appendChild(pill);
+        });
+      });
+    }
+    bar.style.display = '';
+  } catch (e) {
+    console.warn('[expand]', e);
+    bar.style.display = 'none';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Init checkbox depuis localStorage
+  const cb = document.getElementById('useThesaurus');
+  if (cb) {
+    try {
+      const stored = localStorage.getItem(EXPANSION_DISABLED_KEY);
+      if (stored === '1') cb.checked = false;
+    } catch {}
+    cb.addEventListener('change', () => {
+      setExpansionEnabled(cb.checked);
+      const bar = document.getElementById('expansionBar');
+      if (!cb.checked && bar) bar.style.display = 'none';
+      // Re-run la recherche si déjà eu un input
+      const q = document.getElementById('q')?.value?.trim();
+      if (q && q.length >= 3 && cb.checked) {
+        fetchExpansion(q, juridictionToScope(document.getElementById('juridiction').value));
+      }
+    });
+  }
+  // Bouton "Désactiver" inline dans la barre = équivalent uncheck
+  const btn = document.getElementById('expDisable');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      setExpansionEnabled(false);
+      const bar = document.getElementById('expansionBar');
+      if (bar) bar.style.display = 'none';
+    });
+  }
+});
+
+async function runSearch(append = false) {
+  const q = queryInput.value.trim();
+  if (!q) return;
+  if (q.length < 3) {
+    resultsList.innerHTML = `<div style="padding:2rem;color:var(--muted)">Merci d'entrer au moins 3 caractères.</div>`;
+    return;
+  }
+  const juri = document.getElementById('juridiction').value;
+  // Lance l'expansion sémantique en parallèle (non-bloquant)
+  fetchExpansion(q, juridictionToScope(juri));
+  const lieu = document.getElementById('lieu').value;
+  const dateMin = (document.getElementById('dateMin')?.value || '').trim();
+  const dateMax = (document.getElementById('dateMax')?.value || '').trim();
+  const sources = juridictionToSourceSet(juri);
+
+  // Reset si nouvelle recherche
+  const isNew = !append || !lastSearchState || lastSearchState.q !== q || lastSearchState.juri !== juri
+                || lastSearchState.lieu !== lieu || lastSearchState.dateMin !== dateMin || lastSearchState.dateMax !== dateMax;
+  if (isNew) {
+    lastSearchState = { q, juri, lieu, dateMin, dateMax, offset: 0, accumulated: [], perSource: {}, noResult: [], pendingSources: new Set(sources) };
+    resultsList.innerHTML = '<div class="results-header" id="resultsHeader"><span>0 résultats <span class="dots-inline" id="hdrDots"><span>.</span><span>.</span><span>.</span><span>.</span></span></span></div>';
+  } else {
+    lastSearchState.pendingSources = new Set(sources);
+    updateHeader();
+  }
+
+  // Lancer un fetch par source, en parallèle
+  await Promise.all(sources.map(src => fetchOneSource(src, q, juri, lieu, lastSearchState.offset, 12, dateMin, dateMax)));
+
+  // Tout est fini (1re passe)
+  lastSearchState.offset += PAGE_SIZE;
+  lastSearchState.lastChunkSize = lastSearchState.accumulated.length - (lastSearchState.previousSize || 0);
+  lastSearchState.previousSize = lastSearchState.accumulated.length;
+  finalizeHeader();
+  // Re-render maintenant que lastChunkSize est connu : sans ça le bouton
+  // "Charger plus" ne s'affiche jamais (canLoadMore évalué quand lastChunkSize
+  // était encore undefined dans les rendus intermédiaires de fetchOneSource).
+  renderResults(
+    { results: lastSearchState.accumulated, per_source: lastSearchState.perSource,
+      sources_no_result: lastSearchState.noResult,
+      sources_queried: Object.keys(lastSearchState.perSource) },
+    lastSearchState.q
+  );
+
+  // Retry en background des sources qui ont timeout (timeout 60s)
+  if (lastSearchState.noResult.length) {
+    retryTimedOutSources();
+  }
+}
+
+async function fetchOneSource(src, q, juri, lieu, offset, timeout = 12, dateMin = '', dateMax = '') {
+  try {
+    updateHeader(src);
+    const params = new URLSearchParams({
+      q, limit: String(PAGE_SIZE),
+      offset: String(offset), sources: src, timeout: String(timeout),
+    });
+    if (juri) params.set('juridiction', juri);
+    if (lieu) params.set('lieu', lieu);
+    if (dateMin) params.set('date_min', dateMin);
+    if (dateMax) params.set('date_max', dateMax);
+    const tri = document.getElementById('tri')?.value || 'pertinence';
+    if (tri && tri !== 'pertinence') params.set('sort', tri);
+    const r = await fetch('/api/search?' + params);
+    const ct = r.headers.get('content-type') || '';
+    if (!ct.includes('json')) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    const count = (data.results || []).length;
+    if (count > 0) {
+      lastSearchState.perSource[src] = (lastSearchState.perSource[src] || 0) + count;
+      lastSearchState.accumulated.push(...(data.results || []));
+      // Si la retry a réussi, retire le warning
+      lastSearchState.noResult = lastSearchState.noResult.filter(s => s !== src);
+      return true; // success
+    }
+    if ((data.sources_no_result || []).includes(src)) {
+      if (!lastSearchState.noResult.includes(src)) lastSearchState.noResult.push(src);
+    }
+    return false;
+  } catch (e) {
+    console.warn(`[${src} err]`, e);
+    if (!lastSearchState.noResult.includes(src)) lastSearchState.noResult.push(src);
+    return false;
+  } finally {
+    lastSearchState.pendingSources.delete(src);
+    renderResults(
+      { results: lastSearchState.accumulated, per_source: lastSearchState.perSource, sources_no_result: lastSearchState.noResult, sources_queried: [...lastSearchState.pendingSources, ...Object.keys(lastSearchState.perSource)] },
+      q
+    );
+  }
+}
+
+async function retryTimedOutSources() {
+  if (!lastSearchState) return;
+  const toRetry = [...lastSearchState.noResult];
+  if (!toRetry.length) return;
+  console.log(`[retry] ${toRetry.join(', ')} avec timeout 60s`);
+  for (const src of toRetry) {
+    // Marquer comme "en re-tentative" dans le warning
+    lastSearchState.pendingSources.add(src);
+    updateHeader(src);
+    await fetchOneSource(src, lastSearchState.q, lastSearchState.juri, lastSearchState.lieu, lastSearchState.offset - PAGE_SIZE, 60, lastSearchState.dateMin || '', lastSearchState.dateMax || '');
+  }
+  finalizeHeader();
+}
+
+function updateHeader(currentSrc) {
+  const pending = [...(lastSearchState?.pendingSources || [])];
+  const hdr = document.getElementById('resultsHeader');
+  if (!hdr) return;
+  const count = lastSearchState?.accumulated?.length || 0;
+  const hasMore = lastSearchState?.lastChunkSize >= PAGE_SIZE;
+  const countStr = `${count}${hasMore ? '+' : ''} résultats`;
+  if (pending.length) {
+    const srcName = SOURCE_NAMES[currentSrc || pending[0]] || pending[0];
+    hdr.innerHTML = `<span>${countStr} · chargement <em style="font-style:normal">${srcName}</em> <span class="dots-inline"><span>.</span><span>.</span><span>.</span><span>.</span></span></span>`;
+  } else {
+    const srcCount = Object.values(lastSearchState?.perSource || {}).filter(n => n > 0).length;
+    hdr.innerHTML = `<span>${countStr} · ${srcCount} sources</span>`;
+  }
+}
+
+function finalizeHeader() {
+  updateHeader();
+}
+
+submitBtn.addEventListener('click', runSearch);
+queryInput.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+// Auto-search sur chargement si la query est préremplie
+if (queryInput.value.trim()) setTimeout(runSearch, 100);
+
+juriEl.addEventListener('change', () => {
+  const v = juriEl.value;
+
+  // Lieu géographique (TA/CAA/CA)
+  const items = INSTANCES[v];
+  if (items) {
+    fieldLieu.style.display = '';
+    const opts = items.map(([code, ville]) => ({ value: code, label: `${ville} (${code})` }));
+    const plLabel = v === 'ta' ? 'Tous TA' : v === 'caa' ? 'Toutes CAA' : 'Toutes CA';
+    fillCs(lieuPanel, opts, plLabel, plLabel);
+    lieuDisp.textContent = plLabel;
+    lieuHidden.value = '';
+  } else {
+    fieldLieu.style.display = 'none';
+  }
+
+  // Formation / chambre (cass, ce, caa, ta, ca, cedh)
+  const formations = FORMATIONS[v];
+  if (formations) {
+    fieldFormation.style.display = '';
+    const opts = formations.map(f => ({ value: f, label: f }));
+    fillCs(formPanel, opts, 'Toutes', 'Toutes');
+    formDisp.textContent = 'Toutes';
+    formHidden.value = '';
+  } else {
+    fieldFormation.style.display = 'none';
+  }
+});
+
+// ─── Deep-link : ouvrir une décision depuis ?id=…&source=… ───
+// Permet aux liens copiés via "Copier lien" de fonctionner.
+(function handleDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id');
+  const source = params.get('source');
+  if (!id || !source) return;
+  // Décodage : URLSearchParams a déjà décodé une fois, mais on accepte aussi
+  // les ID avec slashes/pipes (ex: /Ariane_Web/AW_DCE/|215894)
+  loadDecision(source, id);
+})();
+</script>
+
+</body>
+</html>
