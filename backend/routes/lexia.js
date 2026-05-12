@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const {
   searchKnowledge,
@@ -93,6 +94,23 @@ const LEXIA_KNOWLEDGE_READ_ROLES = [
   'partenaire',
 ];
 
+/** ObjectId Mongo pour LexiaPawAiState (évite cast / findOne qui rejette). */
+function pawAiMongoUserId(req) {
+  const raw = req.user?._id ?? req.user?.id;
+  if (raw == null) return null;
+  if (typeof raw === 'object' && mongoose.Types.ObjectId.isValid(raw)) return raw;
+  const s = String(raw).trim();
+  if (mongoose.Types.ObjectId.isValid(s) && /^[a-f\d]{24}$/i.test(s)) {
+    return new mongoose.Types.ObjectId(s);
+  }
+  return null;
+}
+
+/**
+ * Partage public Paw AI — même préfixe que le proxy Next `/api/lexia/*`.
+ * POST /api/lexia/public-share · GET /api/lexia/public-share/:token
+ */
+router.use('/public-share', require('./pawAiPublicShare'));
 
 /**
  * GET /api/lexia/stats
@@ -228,7 +246,11 @@ router.get('/config', async (req, res) => {
  */
 router.get('/chat-state', protect, authorize(...LEXIA_KNOWLEDGE_READ_ROLES), async (req, res) => {
   try {
-    const userId = req.user._id || req.user.id;
+    const userId = pawAiMongoUserId(req);
+    if (!userId) {
+      console.error('[lexia] GET /chat-state: identifiant utilisateur invalide', req.user?.id);
+      return res.json({ success: true, threads: [] });
+    }
     const doc = await LexiaPawAiState.findOne({ user: userId }).lean();
     res.json({ success: true, threads: Array.isArray(doc?.threads) ? doc.threads : [] });
   } catch (err) {
@@ -244,7 +266,11 @@ router.get('/chat-state', protect, authorize(...LEXIA_KNOWLEDGE_READ_ROLES), asy
 router.put('/chat-state', protect, authorize(...LEXIA_KNOWLEDGE_READ_ROLES), async (req, res) => {
   try {
     const threads = sanitizeChatThreadsForStorage(req.body?.threads);
-    const userId = req.user._id || req.user.id;
+    const userId = pawAiMongoUserId(req);
+    if (!userId) {
+      console.error('[lexia] PUT /chat-state: identifiant utilisateur invalide', req.user?.id);
+      return res.status(400).json({ success: false, error: 'Identifiant utilisateur invalide' });
+    }
     await LexiaPawAiState.findOneAndUpdate(
       { user: userId },
       { $set: { threads } },

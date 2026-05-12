@@ -147,6 +147,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       const pending = list.filter((dossier: any) => {
         if (!dossier || dossier.fraisExoneres) return false;
+        if (dossier.paiementTarificationEffectue) return false;
         const fixedAmount = normalizeMontantTarificationFixe(dossier?.montantTarificationFixe);
         // Badge si un paiement est attendu:
         // - montant fixe demandé par l'administration

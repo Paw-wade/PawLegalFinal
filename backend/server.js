@@ -198,7 +198,7 @@ try {
 
 try {
   app.use('/api/lexia', require('./routes/lexia'));
-  console.log('✅ Route /api/lexia enregistrée');
+  console.log('✅ Route /api/lexia enregistrée (incl. partage public /public-share)');
 } catch (e) {
   console.error('❌ Impossible d\'enregistrer /api/lexia:', e.message);
 }
