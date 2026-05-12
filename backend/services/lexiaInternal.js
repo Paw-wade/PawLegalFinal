@@ -808,6 +808,7 @@ function getKnowledgeDir() {
 module.exports = {
   searchKnowledge,
   searchAndCompose,
+  buildQueryFromMessages,
   getKnowledgeDir,
   readKnowledgeFileContent,
   getKnowledgeStats: async () => {

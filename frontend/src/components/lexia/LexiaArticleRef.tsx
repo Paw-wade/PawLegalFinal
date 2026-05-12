@@ -4,14 +4,31 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom';
 import { getApiBaseUrl, getAuthToken } from '@/lib/api';
 
+type CrossRefItem = {
+  id: string;
+  title?: string | null;
+  legifranceUrl?: string;
+};
+
 type PreviewPayload = {
   success?: boolean;
   title?: string;
   text?: string;
   legifranceUrl?: string;
+  vigueurHint?: string | null;
+  referencesSortantes?: CrossRefItem[];
+  articlesQuiCitent?: CrossRefItem[];
+  crossRefNote?: string;
   error?: string;
   configured?: boolean;
 };
+
+/** N’utilise la voie « id » API que si la chaîne contient un vrai identifiant LEGIARTI… */
+function extractLegiartiApiId(raw: string | undefined): string | undefined {
+  if (!raw || raw.length < 8) return undefined;
+  const m = raw.match(/LEGIARTI[0-9A-Z]+/i);
+  return m ? m[0].toUpperCase() : undefined;
+}
 
 type LexiaArticleRefProps = {
   children: ReactNode;
@@ -53,11 +70,15 @@ export function LexiaArticleRef({ children, className, query, legiartiId }: Lexi
     try {
       const token = await getAuthToken();
       const base = getApiBaseUrl().replace(/\/+$/, '');
-      const body =
-        legiartiId && legiartiId.length > 5
-          ? { id: legiartiId }
-          : { query: query || '', fond: 'CODE_DATE' };
-      slowKill = setTimeout(() => ac.abort(), 45000);
+      const apiLegiarti = extractLegiartiApiId(legiartiId);
+      const body = apiLegiarti
+        ? { id: apiLegiarti, enriched: true }
+        : {
+            query: (query || legiartiId || '').trim(),
+            fond: 'CODE_DATE',
+            enriched: true,
+          };
+      slowKill = setTimeout(() => ac.abort(), 90000);
 
       const res = await fetch(`${base}/legal/article-preview`, {
         method: 'POST',
@@ -190,6 +211,9 @@ export function LexiaArticleRef({ children, className, query, legiartiId }: Lexi
         {!loading && !err && data?.text && (
           <>
             {data.title && <p className="lexia-article-popover-title">{data.title}</p>}
+            {data.vigueurHint && (
+              <p className="lexia-article-popover-vigueur">{data.vigueurHint}</p>
+            )}
             <div className="lexia-article-popover-body">{data.text}</div>
             {data.legifranceUrl && (
               <a
@@ -198,8 +222,43 @@ export function LexiaArticleRef({ children, className, query, legiartiId }: Lexi
                 rel="noopener noreferrer"
                 className="lexia-article-popover-link"
               >
-                Ouvrir sur Légifrance →
+                Ouvrir sur Légifrance (texte consolidé) →
               </a>
+            )}
+            {!!data.referencesSortantes?.length && (
+              <div className="lexia-article-popover-cross">
+                <h4 className="lexia-article-popover-cross-title">Références liées (extrait API)</h4>
+                <ul className="lexia-article-popover-cross-ul">
+                  {data.referencesSortantes.map((it) => (
+                    <li key={it.id}>
+                      <a href={it.legifranceUrl || '#'} target="_blank" rel="noopener noreferrer">
+                        {it.title || it.id}
+                      </a>
+                      <span className="lexia-article-popover-id">{it.id}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {!!data.articlesQuiCitent?.length && (
+              <div className="lexia-article-popover-cross">
+                <h4 className="lexia-article-popover-cross-title">
+                  Autres textes repérés (recherche Légifrance)
+                </h4>
+                <ul className="lexia-article-popover-cross-ul">
+                  {data.articlesQuiCitent.map((it) => (
+                    <li key={it.id}>
+                      <a href={it.legifranceUrl || '#'} target="_blank" rel="noopener noreferrer">
+                        {it.title || it.id}
+                      </a>
+                      <span className="lexia-article-popover-id">{it.id}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {data.crossRefNote && (
+              <p className="lexia-article-popover-note">{data.crossRefNote}</p>
             )}
           </>
         )}
@@ -223,7 +282,7 @@ export function LexiaArticleRef({ children, className, query, legiartiId }: Lexi
         }}
         role="button"
         tabIndex={0}
-        title="Survol ou clic : texte de l’article (Légifrance)"
+        title="Survol ou clic : texte officiel et références (Légifrance)"
       >
         {children}
       </span>
@@ -283,6 +342,50 @@ export function LexiaArticleRef({ children, className, query, legiartiId }: Lexi
           font-size: 12px;
           font-weight: 600;
           color: hsl(var(--primary));
+        }
+        .lexia-article-popover-vigueur {
+          margin: 0 0 8px;
+          font-size: 11px;
+          opacity: 0.85;
+          font-style: italic;
+        }
+        .lexia-article-popover-cross {
+          margin-top: 12px;
+          padding-top: 10px;
+          border-top: 1px solid hsl(var(--border) / 0.6);
+        }
+        .lexia-article-popover-cross-title {
+          margin: 0 0 6px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+          opacity: 0.9;
+        }
+        .lexia-article-popover-cross-ul {
+          margin: 0;
+          padding-left: 1.1rem;
+          font-size: 11.5px;
+        }
+        .lexia-article-popover-cross-ul li {
+          margin-bottom: 4px;
+        }
+        .lexia-article-popover-cross-ul a {
+          color: hsl(var(--primary));
+          font-weight: 600;
+        }
+        .lexia-article-popover-id {
+          display: block;
+          font-family: ui-monospace, monospace;
+          font-size: 10px;
+          opacity: 0.65;
+          margin-top: 1px;
+        }
+        .lexia-article-popover-note {
+          margin: 12px 0 0;
+          font-size: 10.5px;
+          line-height: 1.45;
+          opacity: 0.8;
         }
       `}</style>
     </>

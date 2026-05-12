@@ -103,6 +103,43 @@ function clipTitle(s: string, n = 52) {
   return t.length <= n ? t : `${t.slice(0, n)}…`;
 }
 
+/** Threads avec au moins un message — pour ne pas écraser le cloud avec une seule conversation vide locale. */
+function latestMeaningfulThreadTs(threads: ChatThread[]): number {
+  let m = 0;
+  for (const t of threads) {
+    if (t.messages.length > 0) m = Math.max(m, t.updatedAt || 0);
+  }
+  return m;
+}
+
+function normalizeThreadsFromCloud(raw: unknown): ChatThread[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (x): x is ChatThread =>
+        x != null &&
+        typeof x === 'object' &&
+        typeof (x as ChatThread).id === 'string' &&
+        Array.isArray((x as ChatThread).messages)
+    )
+    .slice(0, MAX_STORED_THREADS)
+    .map((t) => ({
+      ...t,
+      title: typeof t.title === 'string' && t.title.trim() ? t.title : 'Nouvelle conversation',
+      updatedAt:
+        typeof t.updatedAt === 'number' && Number.isFinite(t.updatedAt) ? t.updatedAt : Date.now(),
+      messages: Array.isArray(t.messages) ? t.messages : [],
+    }));
+}
+
+/** Retire les champs purement UI (stream) avant envoi au serveur. */
+function sanitizeThreadsForCloud(threads: ChatThread[]): ChatThread[] {
+  return threads.slice(0, MAX_STORED_THREADS).map((t) => ({
+    ...t,
+    messages: t.messages.map(({ streaming: _omit, ...m }) => m),
+  }));
+}
+
 /** Délai max pour POST /api/lexia (mode « all » ou recherches longues côté serveur). */
 const LEXIA_CHAT_FETCH_MS = 180_000;
 /** Anthropic en SSE : pas d’abandon à 30–60 s tant que des tokens arrivent. */
@@ -120,22 +157,27 @@ type LexiaSseCompletePayload = {
   totalToolUses: number;
 };
 
+/**
+ * Découpe le flux SSE : événements séparés par \n\n ou \r\n\r\n (proxies / Windows).
+ * Chaque ligne `data: {...}` est un JSON (format backend Lexia).
+ */
 function parseLexiaSseChunks(buffer: string): { events: Record<string, unknown>[]; rest: string } {
   const events: Record<string, unknown>[] = [];
-  let rest = buffer;
+  const normalized = buffer.replace(/\r\n/g, '\n');
+  let rest = normalized;
   let sep: number;
   while ((sep = rest.indexOf('\n\n')) !== -1) {
-    const block = rest.slice(0, sep);
+    const block = rest.slice(0, sep).trim();
     rest = rest.slice(sep + 2);
     for (const line of block.split('\n')) {
-      const trimmed = line.replace(/\r$/, '');
-      if (!trimmed.startsWith('data: ')) continue;
-      const raw = trimmed.slice(6).trim();
-      if (!raw) continue;
+      const trimmed = line.replace(/\r$/, '').trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const payload = trimmed.startsWith('data: ') ? trimmed.slice(6).trim() : trimmed.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
       try {
-        events.push(JSON.parse(raw) as Record<string, unknown>);
+        events.push(JSON.parse(payload) as Record<string, unknown>);
       } catch {
-        /* ligne SSE invalide */
+        /* ligne SSE invalide ou JSON tronqué — attendu au prochain chunk */
       }
     }
   }
@@ -154,11 +196,13 @@ function applyLexiaSseEvents(
     if (ev.type === 'error') {
       throw new Error(typeof ev.error === 'string' ? ev.error : 'Erreur Paw AI (stream)');
     }
-    if (ev.type === 'complete' && ev.success === true && typeof ev.text === 'string') {
+    if (ev.type === 'complete' && ev.success === true) {
+      const text =
+        typeof ev.text === 'string' ? ev.text : ev.text != null ? String(ev.text) : '';
       const tu = ev.totalToolUses;
       complete = {
         success: true,
-        text: ev.text,
+        text,
         sources: Array.isArray(ev.sources) ? ev.sources : [],
         sourcesFound: Array.isArray(ev.sourcesFound)
           ? ev.sourcesFound.filter((s): s is string => typeof s === 'string')
@@ -223,8 +267,8 @@ async function postLexiaAnthropicSse(
       if (c) lastComplete = c;
     }
 
-    if (!lastComplete?.text) {
-      throw new Error('Réponse stream incomplète.');
+    if (!lastComplete || lastComplete.success !== true) {
+      throw new Error('Réponse stream incomplète (pas d’événement complete).');
     }
     return lastComplete;
   } finally {
@@ -530,6 +574,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   const [lexiaProvider, setLexiaProvider] = useState<LexiaProviderMode>('auto');
   const [lexiaConfig, setLexiaConfig] = useState<{
     envProvider: LexiaProviderMode;
+    /** Moteur utilisé côté serveur lorsque provider=auto. */
+    resolvedForAuto?: LexiaProviderMode;
     anthropicConfigured: boolean;
     geminiConfigured: boolean;
     knowledgeDirRelative?: string;
@@ -574,6 +620,12 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   const scrollNewAssistantToTopRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const threadsRef = useRef<ChatThread[]>([]);
+  const sessionUserIdOrNull =
+    status === 'authenticated'
+      ? String((session?.user as { id?: string } | undefined)?.id || '').trim() || null
+      : null;
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
 
   const lexiaWelcomeName = useMemo(() => {
     const u = session?.user as
@@ -712,6 +764,56 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   }, [threads, threadsReady]);
 
   useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
+
+  useEffect(() => {
+    setCloudSyncEnabled(false);
+  }, [sessionUserIdOrNull]);
+
+  /** Fusion local / serveur une fois la session et le chargement local prêts. */
+  useEffect(() => {
+    if (status !== 'authenticated' || !sessionUserIdOrNull || !threadsReady) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await lexiaAPI.getChatState();
+        if (cancelled) return;
+        const remote = normalizeThreadsFromCloud(data?.threads);
+        const local = threadsRef.current;
+        const localAct = latestMeaningfulThreadTs(local);
+        const remoteAct = latestMeaningfulThreadTs(remote);
+        if (remote.length > 0 && (localAct === 0 || remoteAct >= localAct)) {
+          setThreads(remote);
+          setActiveThreadId(null);
+        } else if (localAct > remoteAct) {
+          await lexiaAPI.putChatState({ threads: sanitizeThreadsForCloud(local) });
+        } else if (remote.length === 0 && localAct > 0) {
+          await lexiaAPI.putChatState({ threads: sanitizeThreadsForCloud(local) });
+        }
+      } catch {
+        /* hors ligne ou erreur API : conserver le local */
+      } finally {
+        if (!cancelled) setCloudSyncEnabled(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, threadsReady, sessionUserIdOrNull]);
+
+  /** Sauvegarde cloud (debounce) après chaque modification locale. */
+  useEffect(() => {
+    if (!threadsReady || !cloudSyncEnabled || status !== 'authenticated' || !sessionUserIdOrNull) return;
+    const tmr = window.setTimeout(() => {
+      void lexiaAPI
+        .putChatState({ threads: sanitizeThreadsForCloud(threadsRef.current) })
+        .catch(() => {});
+    }, 2000);
+    return () => window.clearTimeout(tmr);
+  }, [threads, threadsReady, cloudSyncEnabled, status, sessionUserIdOrNull]);
+
+  useEffect(() => {
     if (!threadsReady || threads.length === 0) return;
     if (activeThreadId !== null && !threads.some((t) => t.id === activeThreadId)) {
       const sorted = [...threads].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -813,6 +915,10 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         if (cancelled || !res.ok) return;
         setLexiaConfig({
           envProvider: (data?.envProvider as LexiaProviderMode) || 'auto',
+          resolvedForAuto:
+            typeof data?.resolvedForAuto === 'string'
+              ? (data.resolvedForAuto as LexiaProviderMode)
+              : undefined,
           anthropicConfigured: Boolean(data?.anthropicConfigured),
           geminiConfigured: Boolean(data?.geminiConfigured),
           knowledgeDirRelative:
@@ -969,7 +1075,9 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
       try {
         const token = await getAuthToken();
         const url = `${getApiBaseUrl().replace(/\/+$/, '')}/lexia`;
-        const useAnthropicStream = lexiaProvider === 'anthropic';
+        const useAnthropicStream =
+          lexiaProvider === 'anthropic' ||
+          (lexiaProvider === 'auto' && lexiaConfig?.resolvedForAuto === 'anthropic');
 
         if (useAnthropicStream) {
           streamingAssistantId = Date.now() + 1;

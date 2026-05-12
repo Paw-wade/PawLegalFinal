@@ -4,7 +4,15 @@ const fetch = require('node-fetch');
 let cachedToken = null;
 let tokenExpiry = 0;
 
-async function getPisteToken() {
+function clearPisteTokenCache() {
+  cachedToken = null;
+  tokenExpiry = 0;
+}
+
+async function getPisteToken(options = {}) {
+  const forceRefresh = Boolean(options.forceRefresh);
+  if (forceRefresh) clearPisteTokenCache();
+
   // Réutilise le token s'il est encore valide
   if (cachedToken && Date.now() < tokenExpiry - 10000) {
     return cachedToken;
@@ -35,4 +43,4 @@ async function getPisteToken() {
   return cachedToken;
 }
 
-module.exports = { getPisteToken };
+module.exports = { getPisteToken, clearPisteTokenCache };

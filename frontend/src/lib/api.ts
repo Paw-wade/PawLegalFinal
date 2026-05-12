@@ -551,6 +551,18 @@ export const lexiaAPI = {
       ext?: string;
       error?: string;
     }>('/lexia/knowledge-file', { file }, { timeout: 120000 }),
+
+  /** Historique Paw AI du compte (GET /api/lexia/chat-state). */
+  getChatState: () =>
+    api.get<{ success: boolean; threads?: unknown[]; error?: string }>('/lexia/chat-state', {
+      timeout: 60000,
+    }),
+
+  /** Enregistre l’historique Paw AI (PUT /api/lexia/chat-state). */
+  putChatState: (body: { threads: unknown[] }) =>
+    api.put<{ success: boolean; saved?: number; error?: string }>('/lexia/chat-state', body, {
+      timeout: 120000,
+    }),
 };
 
 export const pawSearchAPI = {

@@ -1,7 +1,49 @@
 const fetch = require('node-fetch');
-const { getPisteToken } = require('./auth');
+const { getPisteToken, clearPisteTokenCache } = require('./auth');
 
 const BASE = process.env.LEGIFRANCE_API_URL;
+
+function legifranceBaseUrl() {
+  return String(BASE || '').replace(/\/+$/, '');
+}
+
+/** Message d’aide si Légifrance renvoie 401 (corps souvent vide `{}`). */
+function legifranceUnauthorizedHint() {
+  return (
+    'Légifrance a refusé l’accès (401). Contrôlez sur piste.gouv.fr : l’application est abonnée et validée pour l’API Légifrance ; ' +
+    'PISTE_TOKEN_URL et LEGIFRANCE_API_URL sont du même environnement (bac à sable oauth + base sandbox, ou prod + prod) ; ' +
+    'PISTE_CLIENT_ID / SECRET sans espace en trop ; clés issues du bon espace (sandbox vs production).'
+  );
+}
+
+/**
+ * Appel API Légifrance avec jeton PISTE ; en cas de 401, invalide le cache et retente une fois
+ * (jeton révoqué / décalage d’horloge). Si 401 persiste, erreur avec code LEGIFRANCE_UNAUTHORIZED.
+ */
+async function legifrancePostJson(path, jsonBody) {
+  const base = legifranceBaseUrl();
+  const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+
+  const doFetch = async () => {
+    const token = await getPisteToken();
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(jsonBody),
+    });
+  };
+
+  let res = await doFetch();
+  if (res.status === 401) {
+    clearPisteTokenCache();
+    res = await doFetch();
+  }
+  return res;
+}
 
 async function parseJsonSafe(res) {
   const raw = await res.text();
@@ -31,7 +73,6 @@ async function rechercher(query, fond = 'CODE_DATE') {
   if (!BASE) {
     throw new Error("LEGIFRANCE_API_URL manquant dans l'environnement.");
   }
-  const token = await getPisteToken();
 
   const body = {
     recherche: {
@@ -44,21 +85,24 @@ async function rechercher(query, fond = 'CODE_DATE') {
     fond,
   };
 
-  const res = await fetch(`${BASE}/search`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'accept': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  const res = await legifrancePostJson('/search', body);
 
   const data = await parseJsonSafe(res);
   if (!res.ok) {
-    throw new Error(
+    if (res.status === 401) {
+      const err = new Error(
+        `Legifrance /search a échoué (401 Unauthorized) : ${JSON.stringify(data)} — ${legifranceUnauthorizedHint()}`
+      );
+      err.code = 'LEGIFRANCE_UNAUTHORIZED';
+      err.httpStatus = 401;
+      throw err;
+    }
+    const err = new Error(
       `Legifrance /search a échoué (${res.status} ${res.statusText}) : ${JSON.stringify(data)}`
     );
+    err.code = 'LEGIFRANCE_SEARCH_ERROR';
+    err.httpStatus = res.status;
+    throw err;
   }
   if (!hasSearchResults(data)) {
     throw new Error(
@@ -68,36 +112,94 @@ async function rechercher(query, fond = 'CODE_DATE') {
   return data;
 }
 
+/**
+ * Recherche Légifrance sans lever d’erreur si aucun résultat structuré (pour citations croisées).
+ */
+async function rechercherOptional(query, fond = 'CODE_DATE', pageSize = 25) {
+  if (!BASE) return null;
+  const body = {
+    recherche: {
+      champs: [{ typeChamp: 'ALL', criteres: [{ typeRecherche: 'EXACTE', valeur: query }] }],
+      pageNumber: 1,
+      pageSize,
+      sort: 'PERTINENCE',
+      typePagination: 'DEFAUT',
+    },
+    fond,
+  };
+  const res = await legifrancePostJson('/search', body);
+  const data = await parseJsonSafe(res);
+  if (!res.ok) return null;
+  if (!hasSearchResults(data)) return null;
+  return data;
+}
+
 async function getArticle(id) {
   if (!BASE) {
     throw new Error("LEGIFRANCE_API_URL manquant dans l'environnement.");
   }
-  const token = await getPisteToken();
 
-  const res = await fetch(`${BASE}/consult/getArticle`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ id }),
-  });
+  const res = await legifrancePostJson('/consult/getArticle', { id });
 
   const data = await parseJsonSafe(res);
   if (!res.ok) {
-    throw new Error(
+    if (res.status === 401) {
+      const err = new Error(
+        `Legifrance /consult/getArticle a échoué (401 Unauthorized) : ${JSON.stringify(data)} — ${legifranceUnauthorizedHint()}`
+      );
+      err.httpStatus = 401;
+      err.code = 'LEGIFRANCE_UNAUTHORIZED';
+      throw err;
+    }
+    const err = new Error(
       `Legifrance /consult/getArticle a échoué (${res.status} ${res.statusText}) : ${JSON.stringify(data)}`
     );
+    err.httpStatus = res.status;
+    err.code = res.status === 404 ? 'ARTICLE_NOT_FOUND' : 'LEGIFRANCE_CONSULT_ERROR';
+    throw err;
   }
   return data;
 }
 
-const LEGIARTI_RE = /LEGIARTI[0-9A-Z]+/i;
+function normalizeLegiartiId(id) {
+  const m = String(id || '').match(/LEGIARTI[0-9A-Z]+/i);
+  return m ? m[0].toUpperCase() : '';
+}
+
+function collectLegiartiIdsFromValue(value, out, depth = 0) {
+  if (depth > 40 || !out) return;
+  if (typeof value === 'string') {
+    let m;
+    const re = /LEGIARTI[0-9A-Z]+/gi;
+    while ((m = re.exec(value)) !== null) {
+      out.add(m[0].toUpperCase());
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectLegiartiIdsFromValue(item, out, depth + 1);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const k of Object.keys(value)) {
+      collectLegiartiIdsFromValue(value[k], out, depth + 1);
+    }
+  }
+}
+
+/**
+ * Tous les ids LEGIARTI présents dans la charge utile (réponse search ou getArticle).
+ */
+function collectAllLegiartiIds(payload) {
+  const out = new Set();
+  collectLegiartiIdsFromValue(payload, out);
+  return [...out];
+}
 
 function findLegiartiIdDeep(value, depth = 0) {
   if (depth > 30) return null;
   if (typeof value === 'string') {
-    const m = value.match(LEGIARTI_RE);
+    const m = value.match(/LEGIARTI[0-9A-Z]+/i);
     return m ? m[0] : null;
   }
   if (Array.isArray(value)) {
@@ -109,8 +211,8 @@ function findLegiartiIdDeep(value, depth = 0) {
   }
   if (value && typeof value === 'object') {
     for (const k of Object.keys(value)) {
-      if (k === 'id' && typeof value[k] === 'string' && LEGIARTI_RE.test(value[k])) {
-        return value[k].match(LEGIARTI_RE)[0];
+      if (k === 'id' && typeof value[k] === 'string' && /LEGIARTI[0-9A-Z]+/i.test(value[k])) {
+        return value[k].match(/LEGIARTI[0-9A-Z]+/i)[0];
       }
       const id = findLegiartiIdDeep(value[k], depth + 1);
       if (id) return id;
@@ -194,10 +296,130 @@ async function getArticlePreviewById(id, titleFallback = '') {
   };
 }
 
+function legifranceArticleUrl(legiartiId) {
+  const id = normalizeLegiartiId(legiartiId);
+  if (!id) return '';
+  return `https://www.legifrance.gouv.fr/codes/article_lc/${encodeURIComponent(id)}`;
+}
+
+function extractVigueurHint(data) {
+  if (!data || typeof data !== 'object') return null;
+  const art = data.article || data;
+  const parts = [];
+  if (typeof art.dateDebut === 'string' && art.dateDebut.trim()) {
+    parts.push(`Mention de date : ${art.dateDebut.trim()}`);
+  }
+  if (typeof art.etat === 'string' && art.etat.trim()) {
+    parts.push(`État : ${art.etat.trim()}`);
+  }
+  if (typeof data.etat === 'string' && data.etat.trim()) {
+    parts.push(`État : ${data.etat.trim()}`);
+  }
+  if (typeof art.version === 'string' && art.version.trim()) {
+    parts.push(`Version : ${art.version.trim()}`);
+  }
+  return parts.length ? parts.join(' · ') : null;
+}
+
+async function enrichLegiartiIdsWithTitles(ids, maxResolve) {
+  const slice = [...new Set(ids.map(normalizeLegiartiId).filter(Boolean))].slice(0, maxResolve);
+  const results = await Promise.all(
+    slice.map(async (lid) => {
+      try {
+        const r = await getArticle(lid);
+        return {
+          id: lid,
+          title: extractTitleFromArticlePayload(r) || lid,
+          legifranceUrl: legifranceArticleUrl(lid),
+        };
+      } catch {
+        return {
+          id: lid,
+          title: null,
+          legifranceUrl: legifranceArticleUrl(lid),
+        };
+      }
+    })
+  );
+  return results;
+}
+
+/**
+ * Aperçu article + références sortantes (ids dans la réponse API) + piste d’« autres articles »
+ * via recherche sur l’id LEGIARTI (non exhaustif, dépend des fonds PISTE).
+ */
+async function getArticlePreviewEnriched(id, titleFallback = '') {
+  const selfId = normalizeLegiartiId(id);
+  if (!selfId) {
+    const err = new Error('Identifiant LEGIARTI invalide.');
+    err.code = 'INVALID_LEGIARTI';
+    throw err;
+  }
+  const raw = await getArticle(selfId);
+  const title = extractTitleFromArticlePayload(raw) || titleFallback || selfId;
+  const text = extractTextFromArticlePayload(raw);
+  const legifranceUrl = legifranceArticleUrl(selfId);
+  const vigueurHint = extractVigueurHint(raw);
+
+  const inPayload = collectAllLegiartiIds(raw).filter((x) => x !== selfId);
+  const outgoingIds = [...new Set(inPayload)];
+
+  const maxTitles = Math.min(Math.max(Number(process.env.LEGIFRANCE_CROSSREF_MAX_TITLES) || 10, 4), 20);
+  const maxOutgoingList = Math.min(Math.max(Number(process.env.LEGIFRANCE_CROSSREF_MAX_OUT) || 24, 8), 40);
+
+  const outgoingTrim = outgoingIds.slice(0, maxOutgoingList);
+  const sortantesResolved = await enrichLegiartiIdsWithTitles(outgoingTrim, maxTitles);
+  const sortantesRest = outgoingTrim.slice(maxTitles).map((lid) => ({
+    id: lid,
+    title: null,
+    legifranceUrl: legifranceArticleUrl(lid),
+  }));
+
+  const citingSet = new Set();
+  const fonds = (process.env.LEGIFRANCE_CITATION_FONDS || 'CODE_DATE')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const fond of fonds) {
+    try {
+      const res = await rechercherOptional(selfId, fond, 25);
+      if (!res) continue;
+      for (const lid of collectAllLegiartiIds(res)) {
+        if (lid !== selfId) citingSet.add(lid);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const citingIds = [...citingSet].filter((lid) => !outgoingTrim.includes(lid)).slice(0, maxOutgoingList);
+  const citantsResolved = await enrichLegiartiIdsWithTitles(citingIds, maxTitles);
+  const citantsRest = citingIds.slice(maxTitles).map((lid) => ({
+    id: lid,
+    title: null,
+    legifranceUrl: legifranceArticleUrl(lid),
+  }));
+
+  return {
+    id: selfId,
+    title,
+    text: text || '(Texte non disponible dans la réponse API.)',
+    legifranceUrl,
+    vigueurHint,
+    referencesSortantes: [...sortantesResolved, ...sortantesRest],
+    articlesQuiCitent: [...citantsResolved, ...citantsRest],
+    crossRefNote:
+      'Références sortantes : identifiants LEGIARTI présents dans la réponse API. Autres textes repérés : ids extraits des résultats de recherche Légifrance sur cet identifiant (fonds : variable LEGIFRANCE_CITATION_FONDS, défaut CODE_DATE). Liste non exhaustive — contrôler sur Légifrance.',
+  };
+}
+
 module.exports = {
   rechercher,
+  rechercherOptional,
   getArticle,
   extractLegiartiIdFromSearch,
   searchThenGetArticlePreview,
   getArticlePreviewById,
+  getArticlePreviewEnriched,
+  collectAllLegiartiIds,
+  normalizeLegiartiId,
 };
