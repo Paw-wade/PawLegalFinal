@@ -52,11 +52,13 @@ function getTransactionalApi() {
 async function sendEmail({ to, toName = '', subject, htmlContent, textContent = '' }) {
   const Brevo = getBrevo();
   const api = getTransactionalApi();
+  /** L’API Brevo peut refuser un tableau `to` sans nom (`missing_parameter`). */
+  const recipientName = (toName && String(toName).trim()) || 'Destinataire';
 
   if (Brevo?.SendSmtpEmail) {
     const payload = new Brevo.SendSmtpEmail();
     payload.sender = { email: DEFAULT_SENDER_EMAIL, name: DEFAULT_SENDER_NAME };
-    payload.to = [{ email: to, name: toName }];
+    payload.to = [{ email: to, name: recipientName }];
     payload.subject = subject;
     payload.htmlContent = htmlContent;
     if (textContent) payload.textContent = textContent;
@@ -65,7 +67,7 @@ async function sendEmail({ to, toName = '', subject, htmlContent, textContent = 
 
   return api.sendTransacEmail({
     sender: { email: DEFAULT_SENDER_EMAIL, name: DEFAULT_SENDER_NAME },
-    to: [{ email: to, name: toName }],
+    to: [{ email: to, name: recipientName }],
     subject,
     htmlContent,
     textContent: textContent || undefined,

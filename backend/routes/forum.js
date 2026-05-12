@@ -7,6 +7,7 @@ const ForumPost = require('../models/ForumPost');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { sendTransactionalEmailDetailed } = require('../utils/emailNotifications');
+const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -91,12 +92,6 @@ const decoratePostWithLikeState = (postDoc, actorKey) => {
     likesCount: likedByKeys.length + legacyLikes.length,
     liked: (!!actorKey && likedByKeys.includes(actorKey)) || hasLegacyLike,
   };
-};
-
-const getFrontendBaseUrl = () => {
-  const raw = (process.env.FRONTEND_URL || '').toString();
-  const first = raw.split(',').map((s) => s.trim()).find(Boolean);
-  return first || 'https://adapapers.fr';
 };
 
 const getUserDisplayName = (user) => {
@@ -311,7 +306,7 @@ router.post(
         }
 
         const recipients = Array.from(byEmail.values());
-        const threadUrl = `${getFrontendBaseUrl()}/forum/${thread._id}`;
+        const threadUrl = `${getPrimaryFrontendUrl()}/forum/${thread._id}`;
         await sendForumEmailsSafely(recipients, {
           subject: `Forum - Nouvelle discussion: ${title}`,
           htmlContent: `<p>Une nouvelle discussion a été publiée sur le forum.</p><p><strong>Titre :</strong> ${title}</p><p><a href="${threadUrl}">Voir la discussion</a></p>`,
@@ -512,7 +507,7 @@ router.post(
           const recipients = users
             .filter((u) => !!u?.email)
             .map((u) => ({ email: u.email, name: getUserDisplayName(u) }));
-          const threadUrl = `${getFrontendBaseUrl()}/forum/${thread._id}`;
+          const threadUrl = `${getPrimaryFrontendUrl()}/forum/${thread._id}`;
 
           await sendForumEmailsSafely(recipients, {
             subject: `Forum - Nouvelle réponse: ${thread.title}`,
