@@ -520,7 +520,7 @@ async function runAllAndMerge(messages) {
       `"""${lastUserSnippet}"""\n\n` +
       `Tu reçois trois briques produites en parallèle (ci-dessous sous des intitulés neutres A / B / C — ne **jamais** les répéter tels quels ni révéler à l'utilisateur qu'il s'agit de chaînes ou fournisseurs distincts). ` +
       `Rédige **une seule** réponse en français, claire et structurée (titres markdown ## / ### si utile), comme si **Paw AI** produisait une analyse unifiée. ` +
-      `Respecte impérativement ton instruction système (charte Paw AI : sources, syllogisme, balises span lexia-verified / lexia-hypothesis / lexia-caution, section Recommandations). ` +
+      `Respecte la charte Paw AI (sources, syllogisme, section Recommandations). Balises span lexia-* : **très peu**, uniquement pour l’essentiel (voir consigne « parcimonie ») ; le gras markdown suffit le plus souvent. ` +
       `N'utilise **aucune** étiquette du type [Interne], [Anthropic], [Gemini], [Claude], [Google], ni aucun nom de modèle ou d'API. Ne dis pas quelle « brique » a fourni quoi. ` +
       `Si une brique indique une erreur ou une absence de configuration, intègre l'information de façon générique (« une partie de l'analyse n'a pas pu être produite ») sans nommer de fournisseur. ` +
       `Si tu recommandes un contact humain ou un accompagnement personnalisé sur le dossier, oriente **uniquement** vers **Ada Papers** (plateforme / messagerie Ada Papers) — jamais vers la Cimade, le Gisti, un autre cabinet ou une autre association pour ce suivi.\n\n` +

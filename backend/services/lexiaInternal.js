@@ -121,9 +121,13 @@ function extractDateFromText(input) {
 function inferJuridiction(file, text) {
   const f = normalizeText(file);
   const t = normalizeText(text).slice(0, 4000);
-  if (f.includes('conseil-etat') || f.includes('/ce/') || /\bconseil d.?etat\b/.test(t)) return 'CE';
-  if (f.includes('/caa/') || /\bcour administrative d.?appel\b/.test(t) || /\bcaa\b/.test(t)) return 'CAA';
-  if (f.includes('/ta/') || /\btribunal administratif\b/.test(t) || /\bta\b/.test(t)) return 'TA';
+  if (f.includes('conseil-etat') || f.startsWith('ce/') || f.includes('/ce/') || /\bconseil d.?etat\b/.test(t)) {
+    return 'CE';
+  }
+  if (f.startsWith('caa/') || f.includes('/caa/') || /\bcour administrative d.?appel\b/.test(t) || /\bcaa\b/.test(t)) {
+    return 'CAA';
+  }
+  if (f.startsWith('ta/') || f.includes('/ta/') || /\btribunal administratif\b/.test(t) || /\bta\b/.test(t)) return 'TA';
   if (f.includes('cass') || /\bcour de cassation\b/.test(t)) return 'Cassation';
   return 'Autre';
 }
@@ -145,6 +149,25 @@ function extractDecisionNumber(text) {
   const s = String(text || '');
   const m = s.match(/n[°o]\s*[:\-]?\s*([a-z0-9\-./]{4,})/i);
   return m ? m[1].toUpperCase() : null;
+}
+
+/**
+ * Complète n° / date depuis les noms du type DCA_21NC01540_20220428.xml (courants dans le corpus CAA).
+ */
+function enrichMetadataFromXmlBasename(relTitle, meta) {
+  const base = path.basename(String(relTitle || ''));
+  const m = base.match(/^([A-Za-z]{2,8})_(\d{2}[A-Z0-9]+)_(\d{8})\.xml$/i);
+  if (!m) return meta;
+  const y = m[3].slice(0, 4);
+  const mo = m[3].slice(4, 6);
+  const d = m[3].slice(6, 8);
+  const iso = `${y}-${mo}-${d}`;
+  const num = m[2].toUpperCase();
+  return {
+    ...meta,
+    decisionNumber: meta.decisionNumber || num,
+    dateIso: meta.dateIso || iso,
+  };
 }
 
 /**
@@ -343,17 +366,22 @@ async function loadAllChunks(knowledgeDir) {
         for (const c of sub) {
           if (all.length >= maxChunks) break;
           const dateIso = extractDateFromText(c.text);
+          const baseMeta = {
+            juridiction: inferJuridiction(title, c.text),
+            decisionNumber: extractDecisionNumber(c.text),
+            dateIso,
+            contentType: inferContentType(title, c.text),
+            ext: path.extname(title).replace('.', '').toLowerCase() || 'txt',
+          };
+          const metadata =
+            path.extname(title).toLowerCase() === '.xml'
+              ? enrichMetadataFromXmlBasename(title, baseMeta)
+              : baseMeta;
           all.push({
             file: title,
             text: c.text,
             tokens: tokenize(c.text),
-            metadata: {
-              juridiction: inferJuridiction(title, c.text),
-              decisionNumber: extractDecisionNumber(c.text),
-              dateIso,
-              contentType: inferContentType(title, c.text),
-              ext: path.extname(title).replace('.', '').toLowerCase() || 'txt',
-            },
+            metadata,
           });
         }
       } catch (perFileErr) {

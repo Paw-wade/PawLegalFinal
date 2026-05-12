@@ -294,7 +294,7 @@ Données récupérées automatiquement : index Paw AI, API Judilibre / Légifran
 
 **Règles :**
 - Pour une **référence présentée comme établie**, appuie-toi **prioritairement** sur ce bloc quand il est pertinent.
-- **N’invente pas** de numéros de pourvoi, ECLI ou articles absents du bloc ; utilise <span class="lexia-caution">…</span> si nécessaire.
+- **N’invente pas** de numéros de pourvoi, ECLI ou articles absents du bloc ; si tu dois signaler une incertitude majeure, un **court** <span class="lexia-caution">…</span> suffit (pas de surlignage systématique).
 - Les URL vers des domaines **non autorisés** n’ont **pas** été chargées : ne prétends pas en avoir lu le contenu.`;
 
 async function prepareLlmContext(messages) {

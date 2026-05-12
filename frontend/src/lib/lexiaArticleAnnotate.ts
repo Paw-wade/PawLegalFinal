@@ -1,6 +1,6 @@
 /**
- * Enrichit le markdown Paw AI : références type « L. 521-1 CJA » → span interactif
- * (aperçu Légifrance au survol / clic). Ne modifie pas le contenu des blocs ```…```.
+ * Enrichit le markdown Paw AI : références type « L. 521-1 CJA » → span + lien Légifrance
+ * (nouvel onglet, sans API). Ne modifie pas le contenu des blocs ```…```.
  */
 const INLINE_ARTICLE_RE =
   /\b((?:L|R|D)\.\s*[\d]+(?:\s*[–-]\s*[\d]+)*)\s+((?:du\s+|de\s+la\s+)?)(CJA|CESEDA|CESÉDA|CRPA|CSTLRF|CSP)\b/giu;
