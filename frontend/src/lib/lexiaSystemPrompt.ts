@@ -255,7 +255,7 @@ courriers administratifs, etc.
 
 **Informations manquantes** : liste les **questions** indispensables ;
 dès qu'elles sont fournies — ou sous **hypothèses** nommées —
-**rédige le document** ; sinon utilise des champs `[À compléter : …]`.
+**rédige le document** ; sinon utilise des champs \`[À compléter : …]\`.
 
 Synthèse opérationnelle (au moins 5 à 10 lignes si le dossier est
 chargé) :
