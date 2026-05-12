@@ -54,6 +54,32 @@ function isoToFr(iso: string): string | null {
 }
 
 /**
+ * Filtre les faux positifs (ex. région après « n° » dans le corps du document).
+ */
+export function isPlausibleDecisionNumber(s: string | null | undefined): boolean {
+  const t = String(s || '').trim();
+  if (t.length < 4 || t.length > 48) return false;
+  if (!/\d/.test(t)) return false;
+  if (
+    /^(nouvelle|nvelle|hauts|bas|grand|petit|ile|pays|provence|bourgogne|aquitaine|occitanie|normandie|bretagne|alsace|lorraine|franche|centre|auvergne|rhone|languedoc|corse|guadeloupe|martinique|reunion|mayotte|guyane)/i.test(t) &&
+    !/\d{2}[A-Z]\d/i.test(t)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function pickDecisionNumberForTitle(file: string, mdN: string, fromFile: ReturnType<typeof parseDecisionRefFromKnowledgePath>): string {
+  const mdOk = isPlausibleDecisionNumber(mdN);
+  const fNum = (fromFile.decisionRef || '').trim();
+  const fOk = isPlausibleDecisionNumber(fNum);
+  if (fOk && (!mdOk || fNum.length >= String(mdN).length)) return fNum;
+  if (mdOk) return mdN.trim();
+  if (fOk) return fNum;
+  return '';
+}
+
+/**
  * Titre lisible : juridiction, n° de décision, date — priorité aux métadonnées index, sinon nom de fichier.
  */
 export function formatKnowledgeSourceTitle(
@@ -62,13 +88,13 @@ export function formatKnowledgeSourceTitle(
 ): string {
   const md = (metadata || {}) as LexiaKnowledgeMetadata;
   const mdJ = typeof md.juridiction === 'string' ? md.juridiction.trim() : '';
-  const mdN = typeof md.decisionNumber === 'string' ? md.decisionNumber.trim() : '';
+  const mdNRaw = typeof md.decisionNumber === 'string' ? md.decisionNumber.trim() : '';
   const mdD = typeof md.dateIso === 'string' ? md.dateIso.trim() : '';
 
   const fromFile = parseDecisionRefFromKnowledgePath(file);
+  const num = pickDecisionNumberForTitle(file, mdNRaw, fromFile);
 
-  const jur = mdJ || fromFile.jurisdiction || '';
-  const num = (mdN || fromFile.decisionRef || '').replace(/\s+/g, ' ').trim();
+  const jur = (mdJ && mdJ !== 'Autre' ? mdJ : '') || fromFile.jurisdiction || '';
   let dateStr = isoToFr(mdD) || fromFile.dateLabel || '';
 
   const parts: string[] = [];

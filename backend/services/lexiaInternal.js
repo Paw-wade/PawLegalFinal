@@ -145,19 +145,41 @@ function inferContentType(file, text) {
   return 'document';
 }
 
+/** N° plausible (évite « NOUVELLE-AQUITAINE » capté après « n° » dans le corps). */
+function looksLikeDecisionNumber(s) {
+  const t = String(s || '').trim();
+  if (t.length < 4 || t.length > 48) return false;
+  if (!/\d/.test(t)) return false;
+  if (/^(nouvelle|nvelle|hauts|bas|grand|petit|ile|pays|provence|bourgogne|aquitaine|occitanie|normandie|bretagne|alsace|lorraine|franche|centre|auvergne|rhone|languedoc|corse|guadeloupe|martinique|reunion|mayotte|guyane)/i.test(t) && !/\d{2}[A-Z]\d/i.test(t)) {
+    return false;
+  }
+  return true;
+}
+
 function extractDecisionNumber(text) {
-  const s = String(text || '');
-  const m = s.match(/n[°o]\s*[:\-]?\s*([a-z0-9\-./]{4,})/i);
-  return m ? m[1].toUpperCase() : null;
+  const s = String(text || '').slice(0, 12000);
+  const p1 = s.match(/\bn[°o]\s*[:\-]?\s*(\d{2}[A-Z]{1,4}\d{4,})\b/i);
+  if (p1 && looksLikeDecisionNumber(p1[1])) return String(p1[1]).replace(/\s+/g, ' ').trim().toUpperCase();
+  const p2 = s.match(/\bpourvoi\s+n[°o]\s*([A-Z]?\d[\d.\s-]{3,40})\b/i);
+  if (p2 && looksLikeDecisionNumber(p2[1])) return p2[1].replace(/\s+/g, ' ').trim().toUpperCase();
+  const p3 = s.match(/\breq[uêe]te\s+n[°o]\s*([A-Z]?\d[\d.\s-]{3,40})\b/i);
+  if (p3 && looksLikeDecisionNumber(p3[1])) return p3[1].replace(/\s+/g, ' ').trim().toUpperCase();
+  const loose = s.match(/n[°o]\s*[:\-]?\s*([A-Z0-9][A-Z0-9.\-/]{3,40})\b/i);
+  if (loose && looksLikeDecisionNumber(loose[1])) return loose[1].toUpperCase();
+  return null;
 }
 
 /**
  * Complète n° / date depuis les noms du type DCA_21NC01540_20220428.xml (courants dans le corpus CAA).
+ * Quand le nom de fichier suit ce schéma, il fait foi (priorité sur l’extraction plein texte, souvent bruitée).
  */
 function enrichMetadataFromXmlBasename(relTitle, meta) {
   const base = path.basename(String(relTitle || ''));
   const m = base.match(/^([A-Za-z]{2,8})_(\d{2}[A-Z0-9]+)_(\d{8})\.xml$/i);
-  if (!m) return meta;
+  if (!m) {
+    const dn = meta.decisionNumber && looksLikeDecisionNumber(meta.decisionNumber) ? meta.decisionNumber : null;
+    return { ...meta, decisionNumber: dn };
+  }
   const y = m[3].slice(0, 4);
   const mo = m[3].slice(4, 6);
   const d = m[3].slice(6, 8);
@@ -165,9 +187,34 @@ function enrichMetadataFromXmlBasename(relTitle, meta) {
   const num = m[2].toUpperCase();
   return {
     ...meta,
-    decisionNumber: meta.decisionNumber || num,
-    dateIso: meta.dateIso || iso,
+    decisionNumber: num,
+    dateIso: iso,
   };
+}
+
+/** Libellé de référence stable à partir du chemin (pour API lecture fichier). */
+function buildKnowledgeReferenceLabelFromPath(relFile) {
+  const rel = String(relFile || '').replace(/\\/g, '/');
+  const base = path.basename(rel);
+  const m = base.match(/^([A-Za-z]{2,8})_(\d{2}[A-Z0-9]+)_(\d{8})\.xml$/i);
+  const jur = inferJuridiction(rel, '');
+  if (m) {
+    const num = m[2].toUpperCase();
+    const y = m[3].slice(0, 4);
+    const mo = m[3].slice(4, 6);
+    const day = m[3].slice(6, 8);
+    const dateStr = `${day}/${mo}/${y}`;
+    const j = jur && jur !== 'Autre' ? jur : '';
+    const parts = [];
+    if (j) parts.push(j);
+    parts.push(`n° ${num}`);
+    parts.push(dateStr);
+    return parts.join(' · ');
+  }
+  return base
+    .replace(/\.(xml|md|txt)$/i, '')
+    .replace(/_/g, ' ')
+    .trim();
 }
 
 /**
@@ -366,9 +413,11 @@ async function loadAllChunks(knowledgeDir) {
         for (const c of sub) {
           if (all.length >= maxChunks) break;
           const dateIso = extractDateFromText(c.text);
+          let decisionNumber = extractDecisionNumber(c.text);
+          if (!looksLikeDecisionNumber(decisionNumber)) decisionNumber = null;
           const baseMeta = {
             juridiction: inferJuridiction(title, c.text),
-            decisionNumber: extractDecisionNumber(c.text),
+            decisionNumber,
             dateIso,
             contentType: inferContentType(title, c.text),
             ext: path.extname(title).replace('.', '').toLowerCase() || 'txt',
@@ -784,12 +833,14 @@ async function readKnowledgeFileContent(relFile) {
     content = content.slice(0, maxChars);
     truncated = true;
   }
+  const referenceLabel = buildKnowledgeReferenceLabelFromPath(relFile);
   return {
     file: String(relFile).trim().replace(/\\/g, '/'),
     content,
     truncated,
     ext,
     empty: !String(text || '').trim(),
+    referenceLabel,
   };
 }
 

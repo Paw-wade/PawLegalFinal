@@ -7,6 +7,95 @@ let cachedToken: string | null = null;
 let cachedTokenAt = 0;
 let pendingTokenPromise: Promise<string | null> | null = null;
 
+/** Évite plusieurs redirections si plusieurs requêtes reçoivent 401 en parallèle. */
+let authSessionExpiredRedirectScheduled = false;
+
+/**
+ * Supprime le JWT stocké et invalide le cache mémoire (sans toucher au reste du localStorage).
+ * Utile après 401 « session » ou depuis une déconnexion explicite.
+ */
+export function clearStoredAuthToken(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem('token');
+    window.sessionStorage.removeItem('token');
+  } catch {
+    /* ignore */
+  }
+  cachedToken = null;
+  cachedTokenAt = 0;
+  pendingTokenPromise = null;
+}
+
+function requestHadBearerToken(cfg: { headers?: unknown } | undefined): boolean {
+  const h = cfg?.headers as Record<string, unknown> & { get?: (n: string) => unknown };
+  if (!h) return false;
+  let auth: unknown;
+  if (typeof h.get === 'function') {
+    auth = h.get('Authorization') ?? h.get('authorization');
+  }
+  if (typeof auth !== 'string') {
+    auth = h.Authorization ?? h.authorization;
+  }
+  return typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ');
+}
+
+function shouldSkip401SessionHandling(requestUrl: string): boolean {
+  const u = String(requestUrl || '').toLowerCase();
+  return (
+    u.includes('/auth/login') ||
+    u.includes('/auth/register') ||
+    u.includes('/auth/google-login') ||
+    u.includes('/auth/forgot-password') ||
+    u.includes('/auth/reset-password') ||
+    u.includes('/auth/setup-password') ||
+    u.includes('/auth/complete-signup') ||
+    u.includes('/auth/resend-activation')
+  );
+}
+
+/** Messages backend typiques d’échec JWT / compte (hors « mauvais mot de passe » sur /auth/login). */
+function isSessionInvalidMessage(message: string): boolean {
+  const m = message.trim().toLowerCase();
+  if (!m) return false;
+  if (m.includes('identifiants invalides')) return false;
+  if (m.includes('token google')) return false;
+  if (m.includes('email google')) return false;
+  return (
+    m.includes('token invalide') ||
+    m.includes('token manquant') ||
+    m.includes('utilisateur non trouvé') ||
+    m.includes('session expirée') ||
+    m.includes('compte désactivé')
+  );
+}
+
+function scheduleSessionExpiredRedirect(apiMessage?: string): void {
+  if (typeof window === 'undefined' || authSessionExpiredRedirectScheduled) return;
+  authSessionExpiredRedirectScheduled = true;
+  const hint =
+    typeof apiMessage === 'string' && apiMessage.trim()
+      ? apiMessage.trim()
+      : "Votre session a expiré ou n'est plus valide. Reconnectez-vous.";
+  void (async () => {
+    clearStoredAuthToken();
+    try {
+      const { signOut } = await import('next-auth/react');
+      await signOut({ redirect: false });
+    } catch {
+      /* ignore */
+    }
+    try {
+      const q = new URLSearchParams();
+      q.set('error', 'session');
+      q.set('message', hint);
+      window.location.assign(`/auth/signin?${q.toString()}`);
+    } catch {
+      authSessionExpiredRedirectScheduled = false;
+    }
+  })();
+}
+
 /** URL API terminée par `/api` une seule fois (axios + fetch hors axios). */
 export function getApiBaseUrl(): string {
   return getPublicApiBaseUrl();
@@ -284,12 +373,24 @@ api.interceptors.response.use(
       });
     }
     
-    // Gérer les erreurs 401 (non autorisé)
-    // Ne pas déconnecter automatiquement - laisser l'utilisateur choisir
+    // Gérer les erreurs 401 : session JWT expirée / invalide → nettoyer et renvoyer à la connexion
     if (error.response?.status === 401) {
-      console.warn('⚠️ Token invalide ou expiré pour:', error.config?.url);
-      // Ne pas supprimer le token ni rediriger automatiquement
-      // L'utilisateur peut choisir de se déconnecter manuellement
+      const reqUrl = String(error.config?.url || '');
+      if (!shouldSkip401SessionHandling(reqUrl)) {
+        const hadBearer = requestHadBearerToken(error.config);
+        const apiMsg =
+          typeof error.response?.data?.message === 'string' ? error.response.data.message : '';
+        if (hadBearer || isSessionInvalidMessage(apiMsg)) {
+          if (IS_DEV) {
+            console.warn('⚠️ Session expirée ou non autorisée, redirection connexion:', reqUrl);
+          }
+          scheduleSessionExpiredRedirect(apiMsg);
+        } else if (IS_DEV) {
+          console.warn('⚠️ 401 sans action session (route ou message exclu):', reqUrl, apiMsg);
+        }
+      } else if (IS_DEV) {
+        console.warn('⚠️ 401 sur route auth (pas de redirection session):', reqUrl);
+      }
     }
     
     // Gérer les erreurs 404 (route non trouvée) - sauf pour les clés CMS manquantes
@@ -549,8 +650,18 @@ export const lexiaAPI = {
       truncated?: boolean;
       empty?: boolean;
       ext?: string;
+      /** Libellé de référence aligné sur le document (prioritaire sur le titre affiché). */
+      referenceLabel?: string;
       error?: string;
     }>('/lexia/knowledge-file', { file }, { timeout: 120000 }),
+
+  /** Crée un lien de lecture publique (POST /api/lexia/public-share, JWT requis). */
+  createPublicShare: (body: {
+    title: string;
+    scope: 'full' | 'since_last_user' | 'this_exchange';
+    messages: Array<{ role: 'user' | 'assistant'; content: string; isError?: boolean }>;
+  }) =>
+    api.post<{ success: boolean; token?: string; error?: string }>('/lexia/public-share', body, { timeout: 60000 }),
 
   /** Historique Paw AI du compte (GET /api/lexia/chat-state). */
   getChatState: () =>

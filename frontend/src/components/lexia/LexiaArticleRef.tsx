@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, type ReactNode, type MouseEvent } from 'react';
 import { ExternalLink } from 'lucide-react';
 
 /** Extrait un identifiant LEGIARTI pour l’URL article consolidé. */
@@ -39,20 +39,28 @@ export function LexiaArticleRef({ children, className, query, legiartiId }: Lexi
   const href = useMemo(() => buildLegifranceUrl(query, legiartiId), [query, legiartiId]);
   const labelHint = (query || legiartiId || '').trim() || 'Légifrance';
 
+  const openLegifrance = (e: MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      window.open(href, '_blank', 'noopener,noreferrer');
+    } catch {
+      /* ignore */
+    }
+  };
+
   return (
     <span className={`lexia-article-ref-wrap ${className || ''}`.trim()}>
       <span className="lexia-article-ref-label">{children}</span>
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
+      <button
+        type="button"
         className="lexia-article-ext"
         aria-label={`Ouvrir sur Légifrance : ${labelHint}`}
         title="Ouvrir sur Légifrance (nouvel onglet)"
-        onClick={(e) => e.stopPropagation()}
+        onClick={openLegifrance}
       >
         <ExternalLink size={14} strokeWidth={2.25} aria-hidden />
-      </a>
+      </button>
       <style jsx global>{`
         .lexia-article-ref-wrap {
           display: inline-flex;
@@ -77,6 +85,10 @@ export function LexiaArticleRef({ children, className, query, legiartiId }: Lexi
           padding: 2px;
           margin-left: 1px;
           border-radius: 4px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          font: inherit;
           text-decoration: none;
         }
         .lexia-article-ext:hover {
