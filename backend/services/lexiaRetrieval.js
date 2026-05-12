@@ -33,6 +33,12 @@ function isRetrievalDisabled() {
   return v === '1' || v === 'true' || v === 'yes';
 }
 
+/** Paw AI uniquement : sans abonnement API Légifrance sur PISTE, mettre à 1 pour ne pas appeler lf-engine-app. */
+function isLegifranceRetrievalDisabled() {
+  const v = String(process.env.LEXIA_DISABLE_LEGIFRANCE || '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
 function extraOfficialHosts() {
   return String(process.env.LEXIA_RETRIEVAL_EXTRA_HOSTS || '')
     .split(',')
@@ -229,6 +235,13 @@ async function tryJudilibre(queryText) {
 
 async function tryLegifrance(queryText) {
   const sources = [];
+  if (isLegifranceRetrievalDisabled()) {
+    return {
+      md:
+        '_Légifrance via API PISTE désactivée (`LEXIA_DISABLE_LEGIFRANCE`). Sans abonnement « API Légifrance » sur PISTE, Paw AI utilise surtout **Judilibre** (Cass.), l’index documentaire et les pages officielles ; les utilisateurs peuvent coller des URL legifrance.gouv.fr pour en charger le texte._',
+      sources,
+    };
+  }
   if (!process.env.LEGIFRANCE_API_URL) {
     return { md: '_Légifrance API non configurée (LEGIFRANCE_API_URL)._', sources };
   }
@@ -237,15 +250,42 @@ async function tryLegifrance(queryText) {
     return { md: '_Requête trop courte pour Légifrance._', sources };
   }
   let rechercher;
+  let collectAllLegiartiIds;
+  let getArticlePreviewById;
   try {
-    ({ rechercher } = require('../lib/legifrance'));
+    ({ rechercher, collectAllLegiartiIds, getArticlePreviewById } = require('../lib/legifrance'));
   } catch (e) {
     return { md: `_Module Légifrance indisponible : ${String(e.message || e)}_`, sources };
   }
   const fond = String(process.env.LEXIA_LEGIFRANCE_FOND || 'CODE_DATE').trim() || 'CODE_DATE';
+  const maxArticles = Math.min(Math.max(Number(process.env.LEXIA_LEGIFRANCE_MAX_ARTICLE_FETCH) || 2, 0), 5);
   try {
     const data = await rechercher(q, fond);
     const json = truncate(JSON.stringify(data).replace(/\s+/g, ' '), 8000);
+
+    let articleMd = '';
+    if (maxArticles > 0) {
+      const ids = collectAllLegiartiIds(data)
+        .filter((id, i, arr) => arr.indexOf(id) === i)
+        .slice(0, maxArticles);
+      const parts = [];
+      for (const id of ids) {
+        try {
+          const p = await getArticlePreviewById(id, q);
+          const bodyText = truncate(String(p.text || '').replace(/\s+/g, ' '), 3500);
+          parts.push(
+            `#### ${p.title || id}\n\n\`${p.id}\`\n\n${bodyText}\n\n[Légifrance](${p.legifranceUrl})`
+          );
+        } catch (ae) {
+          parts.push(`#### Article \`${id}\`\n\n_Lecture API : ${String(ae.message || ae)}_`);
+        }
+      }
+      if (parts.length) {
+        articleMd =
+          `### Légifrance — texte d’articles (consult/getArticle)\n\n` + parts.join('\n\n---\n\n') + '\n\n';
+      }
+    }
+
     sources.push({
       file: 'legifrance:search',
       score: 1,
@@ -255,7 +295,8 @@ async function tryLegifrance(queryText) {
     return {
       md:
         `### Légifrance (recherche API — fond \`${fond}\`)\n\n` +
-        `_JSON de résultat (tronqué). Vérifier sur legifrance.gouv.fr._\n\n\`\`\`\n${json}\n\`\`\`\n`,
+        articleMd +
+        `_Réponse recherche (JSON tronqué). À recouper sur legifrance.gouv.fr._\n\n\`\`\`\n${json}\n\`\`\`\n`,
       sources,
     };
   } catch (e) {
@@ -381,5 +422,6 @@ module.exports = {
   gatherExternalOnlyForInternal,
   mergeSystemPrompt,
   isRetrievalDisabled,
+  isLegifranceRetrievalDisabled,
   isAllowedOfficialHost,
 };

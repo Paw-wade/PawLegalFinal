@@ -9,10 +9,15 @@ function legifranceBaseUrl() {
 
 /** Message d’aide si Légifrance renvoie 401 (corps souvent vide `{}`). */
 function legifranceUnauthorizedHint() {
+  const base = String(BASE || '');
+  const sandbox = /sandbox/i.test(base);
+  const oauthHint = sandbox
+    ? 'PISTE_TOKEN_URL doit être https://sandbox-oauth.piste.gouv.fr/api/oauth/token avec LEGIFRANCE_API_URL sandbox.'
+    : 'PISTE_TOKEN_URL doit être https://oauth.piste.gouv.fr/api/oauth/token avec LEGIFRANCE_API_URL production.';
   return (
     'Légifrance a refusé l’accès (401). Contrôlez sur piste.gouv.fr : l’application est abonnée et validée pour l’API Légifrance ; ' +
-    'PISTE_TOKEN_URL et LEGIFRANCE_API_URL sont du même environnement (bac à sable oauth + base sandbox, ou prod + prod) ; ' +
-    'PISTE_CLIENT_ID / SECRET sans espace en trop ; clés issues du bon espace (sandbox vs production).'
+    oauthHint +
+    ' PISTE_CLIENT_ID / SECRET sans espace en trop ; clés issues du bon espace (sandbox vs production).'
   );
 }
 
@@ -69,21 +74,26 @@ function hasSearchResults(payload) {
   return !hasOnlyRequestEcho;
 }
 
+function buildSearchBody(query, fond, pageSize) {
+  // Même forme que l’API documentée / clients officiels : pagination au niveau racine (pas dans `recherche`).
+  return {
+    recherche: {
+      champs: [{ typeChamp: 'ALL', criteres: [{ typeRecherche: 'EXACTE', valeur: query }] }],
+      sort: 'PERTINENCE',
+      typePagination: 'DEFAUT',
+    },
+    fond,
+    pageNumber: 1,
+    pageSize,
+  };
+}
+
 async function rechercher(query, fond = 'CODE_DATE') {
   if (!BASE) {
     throw new Error("LEGIFRANCE_API_URL manquant dans l'environnement.");
   }
 
-  const body = {
-    recherche: {
-      champs: [{ typeChamp: 'ALL', criteres: [{ typeRecherche: 'EXACTE', valeur: query }] }],
-      pageNumber: 1,
-      pageSize: 10,
-      sort: 'PERTINENCE',
-      typePagination: 'DEFAUT',
-    },
-    fond,
-  };
+  const body = buildSearchBody(query, fond, 10);
 
   const res = await legifrancePostJson('/search', body);
 
@@ -117,16 +127,7 @@ async function rechercher(query, fond = 'CODE_DATE') {
  */
 async function rechercherOptional(query, fond = 'CODE_DATE', pageSize = 25) {
   if (!BASE) return null;
-  const body = {
-    recherche: {
-      champs: [{ typeChamp: 'ALL', criteres: [{ typeRecherche: 'EXACTE', valeur: query }] }],
-      pageNumber: 1,
-      pageSize,
-      sort: 'PERTINENCE',
-      typePagination: 'DEFAUT',
-    },
-    fond,
-  };
+  const body = buildSearchBody(query, fond, pageSize);
   const res = await legifrancePostJson('/search', body);
   const data = await parseJsonSafe(res);
   if (!res.ok) return null;
@@ -413,6 +414,7 @@ async function getArticlePreviewEnriched(id, titleFallback = '') {
 }
 
 module.exports = {
+  buildSearchBody,
   rechercher,
   rechercherOptional,
   getArticle,

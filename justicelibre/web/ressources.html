@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ressources & jeux de données ouverts - JusticeLibre</title>
+<meta name="description" content="Thésaurus, vocabulaires contrôlés, dumps de jurisprudence et de codes : tout ce que JusticeLibre utilise, en téléchargement direct, sous licence ouverte.">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<meta property="og:title" content="Ressources ouvertes - JusticeLibre">
+<meta property="og:description" content="Thésaurus juridiques + dumps de jurisprudence en téléchargement direct.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://justicelibre.org/ressources.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300..800;1,9..40,300..800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles/tokens.css?v=20260501">
+<link rel="stylesheet" href="/styles/base.css?v=20260501">
+<link rel="stylesheet" href="/styles/components.css?v=20260501">
+<style>
+/* Page-specific overrides : Inter pour le body, surface cream, body 16px */
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:16px;line-height:1.6}
+html,body{background:var(--cream);color:var(--ink)}
+html{scrollbar-color:var(--line) var(--cream)}
+::-webkit-scrollbar-track{background:var(--cream)}
+::-webkit-scrollbar-thumb{border-color:var(--cream)}
+::-webkit-scrollbar-corner{background:var(--cream)}
+
+/* TOPBAR : composant fourni par /topbar.js (HTML+CSS injectés au load) */
+
+/* HERO */
+.hero{padding:4rem 2.5rem 2rem;text-align:center;max-width:900px;margin:0 auto}
+.hero h1{font-family:var(--display);font-size:clamp(2.2rem,5vw,3.6rem);font-weight:400;line-height:1.15;color:var(--ink);margin-bottom:1.2rem}
+.hero h1 em{color:var(--teal);font-style:italic}
+.hero p{font-size:1.1rem;color:var(--body);max-width:680px;margin:0 auto 1.5rem;line-height:1.7}
+
+/* SECTIONS */
+.wrap{max-width:1100px;margin:0 auto;padding:1.5rem 2.5rem 4rem}
+section.block{margin:3rem 0}
+section.block > h2{font-family:var(--display);font-size:1.8rem;font-weight:400;color:var(--ink);margin-bottom:.4rem;
+  padding-bottom:.6rem;border-bottom:2px solid var(--teal-xl)}
+section.block > p.intro{color:var(--muted);font-size:.95rem;margin-bottom:1.5rem;font-style:italic;max-width:780px}
+
+/* CARDS GRID */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:1.2rem}
+.card{background:var(--white);border:1px solid var(--line);border-radius:6px;padding:1.3rem 1.4rem;
+  display:flex;flex-direction:column;gap:.6rem;transition:border-color .15s;}
+.card:hover{border-color:var(--teal)}
+.card .name{font-family:var(--display);font-size:1.15rem;color:var(--ink);font-weight:400;line-height:1.3}
+.card .source{font-size:.72rem;color:var(--teal);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.card .meta{display:flex;flex-wrap:wrap;gap:.4rem;font-size:.72rem;color:var(--muted);margin-top:.2rem}
+.card .meta span{padding:.15rem .5rem;background:var(--teal-xl);border-radius:3px;color:var(--teal);font-weight:500}
+.card .meta span.lic{background:#fef9e8;color:var(--gold)}
+.card p.desc{font-size:.88rem;color:var(--body);line-height:1.5;flex:1;margin:.2rem 0}
+.card .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem}
+.card .backup-date{font-size:.7rem;color:var(--muted);font-style:italic;margin-top:.3rem}
+.card .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem .8rem;border-radius:3px;
+  font-size:.78rem;font-weight:600;text-decoration:none;transition:background .15s}
+.card .btn-primary{background:var(--teal);color:#fff!important}
+.card .btn-primary:hover{background:var(--teal-l);text-decoration:none}
+.card .btn-secondary{background:var(--teal-xl);color:var(--teal)}
+.card .btn-secondary:hover{background:var(--teal);color:#fff;text-decoration:none}
+.card.coming{opacity:.55;background:var(--cream)}
+.card.coming::after{content:"bientôt";position:absolute;top:.8rem;right:.8rem;font-size:.65rem;
+  text-transform:uppercase;letter-spacing:.1em;color:var(--gold);font-weight:600}
+
+/* INFOBOX */
+.infobox{background:var(--teal-xl);border-left:4px solid var(--teal);padding:1.2rem 1.4rem;border-radius:0 6px 6px 0;margin:1.5rem 0}
+.infobox p{font-size:.92rem;color:var(--ink);margin:0}
+.infobox p + p{margin-top:.6rem}
+
+/* FOOTER */
+footer.foot{padding:2rem 2.5rem;background:var(--white);border-top:1px solid var(--line);text-align:center;font-size:.78rem;color:var(--muted)}
+footer.foot a{color:var(--muted)}
+footer.foot a:hover{color:var(--teal)}
+</style>
+<script defer src="/topbar.js?v=4"></script>
+</head>
+<body>
+
+<!-- ─── TOPBAR : injecté par /topbar.js (composant unique réutilisable) ─── -->
+<div data-topbar-mount></div>
+
+<section class="hero">
+  <h1>Ressources et sources <em>de données</em>.</h1>
+  <p>L'ensemble des sources exploitées par JusticeLibre relève du domaine public. La plateforme procède à l'agrégation de la jurisprudence, des codes et des vocabulaires officiels publiés par l'État français et l'Union européenne sous licence ouverte. La présente page recense l'intégralité de ces sources, disponibles en téléchargement direct, afin de permettre leur vérification, leur réutilisation ou l'élaboration de services tiers.</p>
+</section>
+
+<main class="wrap">
+
+<section class="block">
+  <h2>Thésaurus & vocabulaires contrôlés</h2>
+  <p class="intro">Utilisés par notre moteur d'expansion sémantique pour étendre vos requêtes (ex : « licenciement » → « mise à pied », « licenciement abusif »...). 19 138 concepts unifiés.</p>
+  <div class="cards">
+
+    <div class="card">
+      <span class="source">Office des publications UE</span>
+      <span class="name">EuroVoc</span>
+      <div class="meta">
+        <span>SKOS-RDF</span><span>27 langues</span><span>~7 360 concepts</span><span class="lic">CC-BY UE</span>
+      </div>
+      <p class="desc">Thésaurus multilingue de l'Union européenne. Couvre droit UE, économie, social, politique. Mis à jour 1-2 fois par an.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="/data/eurovoc_skos.zip">Backup local (24 Mo)</a>
+        <a class="btn btn-secondary" href="https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/eurovoc" target="_blank" rel="noopener">Source officielle ↗</a>
+      </div>
+      <div class="backup-date">Backup capturé le 2 mai 2026 (version officielle ~4.13).</div>
+    </div>
+
+    <div class="card">
+      <span class="source">DILA · vie-publique.fr</span>
+      <span class="name">Thésaurus Information Publique</span>
+      <div class="meta">
+        <span>SKOS-RDF</span><span>FR</span><span>~9 716 concepts</span><span class="lic">Etalab 2.0</span>
+      </div>
+      <p class="desc">Thésaurus de l'information publique française. Politiques publiques, action gouvernementale, droit positif. Maintenu par la DILA.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="/data/vp-thesaurus-skos.rdf">Backup local (2,7 Mo)</a>
+        <a class="btn btn-secondary" href="https://www.vie-publique.fr/files/medias/vp-thesaurus-skos.rdf" target="_blank" rel="noopener">Source officielle ↗</a>
+      </div>
+      <div class="backup-date">Backup capturé le 2 mai 2026.</div>
+    </div>
+
+    <div class="card">
+      <span class="source">Cour de cassation</span>
+      <span class="name">Taxonomie Judilibre</span>
+      <div class="meta">
+        <span>JS / JSON</span><span>FR</span><span>~2 862 thèmes</span><span class="lic">Etalab 2.0</span>
+      </div>
+      <p class="desc">Matières civiles, pénales, commerciales (Cass + cours d'appel + tribunaux judiciaires). Hiérarchie NAC officielle.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="/data/judilibre_cass_themes.js">Cass (26 Ko)</a>
+        <a class="btn btn-secondary" href="/data/judilibre_ca_themes.js">CA (105 Ko)</a>
+        <a class="btn btn-secondary" href="/data/judilibre_tj_themes.js">TJ (105 Ko)</a>
+        <a class="btn btn-secondary" href="https://github.com/Cour-de-cassation/judilibre-search/tree/dev/src/taxons" target="_blank" rel="noopener">Source ↗</a>
+      </div>
+      <div class="backup-date">Backup capturé le 2 mai 2026.</div>
+    </div>
+
+    <div class="card">
+      <span class="source">JusticeLibre · reconstruit</span>
+      <span class="name">Plan de Classement de la Jurisprudence Administrative (PCJA)</span>
+      <div class="meta">
+        <span>JSON</span><span>FR</span><span>~4 093 concepts</span><span class="lic">Etalab 2.0</span>
+      </div>
+      <p class="desc">Reconstitué à partir des balises <code>&lt;ANALYSES&gt;</code> de 298 720 décisions JADE. Hiérarchie 7 niveaux et fréquences d'usage incluses. Le Conseil d'État ne publiant pas ce plan au format SKOS, il s'agit à ce jour de l'unique version structurée disponible en données ouvertes.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="/data/pcja_reconstructed.json">Télécharger JSON (1 Mo)</a>
+        <a class="btn btn-secondary" href="https://www.legifrance.gouv.fr/ceta/planclassement" target="_blank" rel="noopener">Plan navigable (Légifrance) ↗</a>
+      </div>
+      <div class="backup-date">Reconstruit le 1er mai 2026 depuis 298 720 sommaires JADE.</div>
+    </div>
+
+    <div class="card" style="grid-column:1/-1;background:var(--teal-xl);border-color:var(--teal)">
+      <span class="source" style="color:var(--ink)">JusticeLibre · base unifiée</span>
+      <span class="name">thesaurus_unified.db - les 4 thésaurus en une seule SQLite</span>
+      <div class="meta">
+        <span>SQLite 3</span><span>19 138 concepts</span><span>29 755 labels</span><span>39 846 relations</span><span class="lic">Etalab 2.0</span>
+      </div>
+      <p class="desc">Tous les thésaurus ci-dessus parsés et fusionnés dans une seule base SQLite indexée par label normalisé (unidecode + uppercase). Tables : <code>thesaurus_concepts</code>, <code>thesaurus_labels</code>, <code>thesaurus_relations</code>. Prêt à requêter pour vos propres expansions sémantiques.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="/data/thesaurus_unified.db">Télécharger SQLite (21 Mo)</a>
+      </div>
+      <div class="backup-date">Construit le 1er mai 2026 depuis les 4 sources ci-dessus.</div>
+    </div>
+
+  </div>
+</section>
+
+<section class="block">
+  <h2>Jeux de données bruts</h2>
+  <p class="intro">Les fichiers massifs d'origine officielle faisant l'objet d'un traitement quotidien. Données publiques, gratuites et librement redistribuables.</p>
+  <div class="cards">
+
+    <div class="card">
+      <span class="source">DILA · echanges.dila.gouv.fr</span>
+      <span class="name">Bulks DILA OPENDATA (9 fonds)</span>
+      <div class="meta">
+        <span>XML zippé</span><span>FTP HTTP</span><span class="lic">Etalab 2.0</span>
+      </div>
+      <p class="desc">JADE (admin), CASS, CAPP, CONSTIT, KALI, LEGI, JORF, INCA, CNIL. Mises à jour quotidiennes + archives complètes Freemium.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://echanges.dila.gouv.fr/OPENDATA/" target="_blank" rel="noopener">Index FTP ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">Conseil d'État · open data</span>
+      <span class="name">opendata.justice-administrative.fr</span>
+      <div class="meta">
+        <span>HTML / API</span><span>~1 M décisions</span><span class="lic">Loi Lemaire 2017</span>
+      </div>
+      <p class="desc">L'intégralité des décisions admin (CE + CAA + 40 TAs), y compris celles non publiées au Recueil Lebon - donc absentes de Légifrance.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://opendata.justice-administrative.fr/" target="_blank" rel="noopener">Site officiel ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">Cour EDH · Strasbourg</span>
+      <span class="name">HUDOC</span>
+      <div class="meta">
+        <span>HTML / API</span><span>~76 000 arrêts</span><span class="lic">Council of Europe</span>
+      </div>
+      <p class="desc">Toute la jurisprudence de la Cour européenne des droits de l'homme depuis 1959.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://hudoc.echr.coe.int/" target="_blank" rel="noopener">HUDOC ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">Office des publications UE</span>
+      <span class="name">EUR-Lex (CJUE)</span>
+      <div class="meta">
+        <span>HTML / OData</span><span>~44 000 arrêts</span><span class="lic">Réutilisation libre UE</span>
+      </div>
+      <p class="desc">CJUE + Tribunal UE + conclusions des avocats généraux. Format CELEX/ECLI.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://eur-lex.europa.eu/" target="_blank" rel="noopener">EUR-Lex ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">DILA · API officielle</span>
+      <span class="name">PISTE Légifrance + Judilibre</span>
+      <div class="meta">
+        <span>REST OAuth2</span><span>quotas 1 500/h</span><span class="lic">Etalab 2.0</span>
+      </div>
+      <p class="desc">API REST officielle (inscription gratuite). Quotas serrés mais utile pour les mises à jour incrémentielles.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://piste.gouv.fr/" target="_blank" rel="noopener">piste.gouv.fr ↗</a>
+        <a class="btn btn-secondary" href="/tutoriel-piste.html">Tutoriel</a>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="block">
+  <h2>Code source et interfaces d'accès</h2>
+  <p class="intro">Le code source et les données dérivées de JusticeLibre sont publiés sous licence libre (MIT). Disponibles pour duplication, auto-hébergement ou contribution.</p>
+  <div class="cards">
+
+    <div class="card">
+      <span class="source">GitHub · @Dahliyaal</span>
+      <span class="name">justicelibre</span>
+      <div class="meta">
+        <span>Python</span><span>MIT</span><span>MCP server</span>
+      </div>
+      <p class="desc">Code source du serveur MCP, des analyseurs (parsers DILA), du moteur de recherche fédérée et de l'interface utilisateur. Les signalements d'anomalies (issues) et propositions de modifications (pull requests) sont bienvenus.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/Dahliyaal/justicelibre" target="_blank" rel="noopener">Repo GitHub ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">Point d'accès MCP</span>
+      <span class="name">justicelibre.org/mcp</span>
+      <div class="meta">
+        <span>JSON-RPC</span><span>HTTP streaming</span><span>29 outils</span>
+      </div>
+      <p class="desc">Connecteur direct (Model Context Protocol) pour modèles de langage (Claude, ChatGPT, Perplexity...). Accès aux 6,5 millions de décisions sans authentification préalable ni restriction de volume.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="/#connect">Configuration ↗</a>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="block">
+  <h2>Écosystème des données ouvertes - dépôts tiers</h2>
+  <p class="intro">Sélection de dépôts publics et associatifs pertinents (formats JSON, parsers XML, schémas normalisés) concernant le droit français.</p>
+  <div class="cards">
+
+    <div class="card">
+      <span class="source">SocialGouv (Min. Travail)</span>
+      <span class="name">legi-data - codes LEGI en JSON</span>
+      <div class="meta">
+        <span>JSON</span><span>quotidien</span><span>4 codes</span><span class="lic">Apache 2.0</span>
+      </div>
+      <p class="desc">Dump JSON quotidien des codes (Travail, Sécurité sociale, CRPM, CRPA) construit depuis l'API Légifrance. Format <code>unist</code> arborescent.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/SocialGouv/legi-data" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">SocialGouv (Min. Travail)</span>
+      <span class="name">kali-data - conventions collectives JSON</span>
+      <div class="meta">
+        <span>JSON</span><span>quotidien</span><span class="lic">Apache 2.0</span>
+      </div>
+      <p class="desc">L'intégralité de KALI (conventions collectives + accords de branche) en JSON arborescent prêt à l'emploi.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/SocialGouv/kali-data" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">Cour de cassation</span>
+      <span class="name">judilibre-search</span>
+      <div class="meta">
+        <span>Node.js</span><span>API REST</span><span class="lic">Etalab 2.0</span>
+      </div>
+      <p class="desc">Code source de l'API officielle Judilibre. Référence pour les mappings Elasticsearch et les schémas de champs des décisions Cass.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/Cour-de-cassation/judilibre-search" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">Cour de cassation</span>
+      <span class="name">jurinorm + dbsder-api</span>
+      <div class="meta">
+        <span>TypeScript</span><span class="lic">MIT</span>
+      </div>
+      <p class="desc">Pipeline de normalisation des décisions de justice + schéma officiel de la base DBSDER. Règles de nettoyage/parsing officielles.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/Cour-de-cassation/jurinorm" target="_blank" rel="noopener">jurinorm ↗</a>
+        <a class="btn btn-secondary" href="https://github.com/Cour-de-cassation/dbsder-api" target="_blank" rel="noopener">dbsder-api ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">Cour de cassation</span>
+      <span class="name">juritcom - tribunaux de commerce</span>
+      <div class="meta">
+        <span>TypeScript</span><span class="lic">MIT</span>
+      </div>
+      <p class="desc">Collecte des décisions des tribunaux de commerce (extension Judilibre). Encore peu indexées chez nous - à intégrer.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/Cour-de-cassation/juritcom" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">Legilibre (asso)</span>
+      <span class="name">legi.py - parser LEGI XML → SQLite</span>
+      <div class="meta">
+        <span>Python</span><span>60 ★</span><span class="lic">AGPL/CeCILL</span>
+      </div>
+      <p class="desc">Référence absolue pour parser les dumps DILA bruts. Documentation complète des DTD/RNG officielles.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/Legilibre/legi.py" target="_blank" rel="noopener">GitHub ↗</a>
+        <a class="btn btn-secondary" href="https://github.com/Legilibre/.github/wiki" target="_blank" rel="noopener">Wiki DTD ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">Legilibre (asso)</span>
+      <span class="name">Archéo-Lex - histoire de la loi</span>
+      <div class="meta">
+        <span>Git+Markdown</span><span>104 ★</span><span class="lic">WTFPL</span>
+      </div>
+      <p class="desc">L'histoire complète de la loi française versionnée en Git. Vue diachronique des codes article par article.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/Legilibre/Archeo-Lex" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">SocialGouv</span>
+      <span class="name">dila2sql - DILA → Postgres</span>
+      <div class="meta">
+        <span>Python</span><span class="lic">Apache 2.0</span>
+      </div>
+      <p class="desc">Pipeline ETL prêt à l'emploi pour importer les dumps DILA (LEGI/JORF) dans PostgreSQL.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/SocialGouv/dila2sql" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">SocialGouv</span>
+      <span class="name">fiches-vdd & fiches-travail-data</span>
+      <div class="meta">
+        <span>JSON</span><span class="lic">Apache 2.0</span>
+      </div>
+      <p class="desc">Fiches "Vos droits et démarches" service-public.fr + fiches travail-emploi.gouv.fr en JSON. Vulgarisation officielle.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/SocialGouv/fiches-vdd" target="_blank" rel="noopener">fiches-vdd ↗</a>
+        <a class="btn btn-secondary" href="https://github.com/SocialGouv/fiches-travail-data" target="_blank" rel="noopener">travail-data ↗</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="source">data.gouv.fr (DINUM)</span>
+      <span class="name">schema.data.gouv.fr</span>
+      <div class="meta">
+        <span>TableSchema / JSON Schema</span><span class="lic">Etalab 2.0</span>
+      </div>
+      <p class="desc">Catalogue officiel des schémas de données ouvertes françaises. Point d'entrée pour réutiliser des structures normalisées.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/datagouv/schema.data.gouv.fr" target="_blank" rel="noopener">GitHub ↗</a>
+        <a class="btn btn-secondary" href="https://schema.data.gouv.fr/" target="_blank" rel="noopener">Site ↗</a>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="block">
+  <h2>Données non diffusées par les autorités publiques</h2>
+  <p class="intro">Ressources techniques dont la publication par les autorités compétentes fait actuellement défaut. Certaines existent en interne mais ne sont pas exposées en données ouvertes.</p>
+  <div class="infobox">
+    <p>• <strong>PCJA au format SKOS-RDF.</strong> Le Conseil d'État maintient le Plan de Classement en interne mais ne publie pas la version SKOS associée à des URI stables. Notre version reconstituée (4 093 concepts) couvre environ 80 % du plan officiel.</p>
+    <p>• <strong>Absence de dépôts de code institutionnels</strong> pour le Conseil d'État, le Conseil constitutionnel, la CNIL, la CADA et le Défenseur des droits. Ces institutions exposent uniquement des API propriétaires (Sinequa, OpenCNIL) sans miroir code ou données associées sur GitHub.</p>
+    <p>• <strong>Absence de schéma ECLI unifié</strong> et de table de correspondance entre la norme ECLI et les identifiants nationaux. JusticeLibre tente de combler cette lacune via son moteur de résolution croisée.</p>
+  </div>
+</section>
+
+<div class="infobox">
+  <p><strong>Appel à contributions :</strong> pour signaler une ressource manquante, ouvrez un ticket sur notre dépôt <a href="https://github.com/Dahliyaal/justicelibre/issues">GitHub</a> ou utilisez le formulaire de contact.</p>
+</div>
+
+</main>
+
+<footer class="foot">
+  justicelibre.org · <a href="/">Accueil</a> · <a href="/search.html">Recherche</a> · <a href="https://github.com/Dahliyaal/justicelibre">GitHub</a> · Contenus sous Licence Ouverte 2.0 (Etalab) sauf mention contraire.
+</footer>
+
+<script>
+// Theme toggle (cohérent avec search.html)
+(function(){
+  const KEY = 'jl-theme';
+  const html = document.documentElement;
+  try {
+    const stored = localStorage.getItem(KEY);
+    if (stored === 'light' || stored === 'dark') html.setAttribute('data-theme', stored);
+  } catch {}
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.addEventListener('click', () => {
+    const isDark = html.getAttribute('data-theme') === 'dark'
+      || (!html.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    const next = isDark ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch {}
+  });
+})();
+</script>
+</body>
+</html>

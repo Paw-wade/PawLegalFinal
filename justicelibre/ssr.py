@@ -1,0 +1,1352 @@
+"""Server-Side Rendering : pages HTML indexables par Google.
+
+Génère du HTML statique à la volée pour chaque décision / article, avec
+métadonnées propres (title, description, canonical, OpenGraph, JSON-LD).
+Permet à Google d'indexer ~6.5M documents que le SPA seul ne pouvait pas
+exposer (rendu différé du JS, pas de meta par route).
+
+Cache HTTP : `Cache-Control: public, max-age=86400` → Cloudflare absorbe
+les 99% de trafic après la première visite.
+
+Routes câblées dans token_server.py :
+  GET /decision/{source}/{id}  → SSR HTML décision
+  GET /loi/{code}/{num}         → SSR HTML article de loi
+  GET /sitemap.xml              → index sitemap (renvoie vers sub-sitemaps)
+  GET /sitemap-{name}-{n}.xml   → sub-sitemap (50k URLs max)
+  GET /robots.txt               → servi en statique par nginx
+"""
+from __future__ import annotations
+
+import asyncio
+import html
+import re
+import sqlite3
+from pathlib import Path
+from typing import Iterable
+
+from functools import lru_cache
+
+from search_api import fetch_decision
+from sources import citations as _citations
+from sources import warehouse as _wh
+
+
+@lru_cache(maxsize=20000)
+def _cached_law_url(code: str, num: str, date: str) -> str | None:
+    """LRU cache mémoire des résolutions article→URL Légifrance.
+
+    Les mêmes articles (L262-8 CASF, R411-1 CJA…) sont cités dans des
+    milliers de décisions. Sans cache : 1 lookup HTTP warehouse par article
+    par décision = 250-500ms cumulés → CloudFlare 502 quand >5s.
+    Avec cache : 1ère décision paye, les suivantes sont gratuites.
+    """
+    try:
+        row = _wh.sync_get_law(code, num, date or None)
+        return row.get("source_url") if row else None
+    except Exception:
+        return None
+
+
+_PCJA_CODE_RE = __import__('re').compile(r'\b(\d{1,3}(?:-\d{1,3}){2,5})(?:,\s*(RJ\d+|FXH))?\s+', flags=__import__('re').UNICODE)
+_RENVOIS_RE = __import__('re').compile(r'(?:^|\s)(\d+\.\s+(?:Cf\.|Rappr\.|Comp\.|V\.\s+aussi|Voir))', flags=__import__('re').UNICODE)
+
+
+def _clean_dila_text(t: str) -> str:
+    """Nettoie le texte stocké en DB des artefacts XML/HTML résiduels.
+
+    Le parser DILA laisse parfois passer des `<br/>`, `&amp;`, etc. Si on
+    laisse, le navigateur affiche la balise littérale après html.escape.
+    On les remplace par des séparateurs naturels en amont.
+
+    Bonus : si le texte n'a AUCUN retour à la ligne (cas Cass moderne où le
+    parser a tout concaténé), on insère des paragraphes intelligents pour
+    éviter le rendu en gros bloc dégueulasse.
+    """
+    if not t:
+        return ""
+    import html as _html
+    import re as _re
+    # 1. Décoder les entités déjà présentes (au cas où double-encodées)
+    t = _html.unescape(t)
+    # 2. Remplacer les balises HTML résiduelles par des espaces/retours
+    t = _re.sub(r'<\s*br\s*/?\s*>', '\n', t, flags=_re.IGNORECASE)
+    t = _re.sub(r'<\s*p\s*/?\s*>', '\n\n', t, flags=_re.IGNORECASE)
+    t = _re.sub(r'<[^>]+>', '', t)  # autres tags : strip
+    # 3. Collapse multiples retours
+    t = _re.sub(r'\n{3,}', '\n\n', t)
+    t = t.strip()
+    # 4. Bonus : si pas de \n du tout et texte > 500 ch, on essaie de splitter
+    #    par patterns juridiques (Sur le moyen, Considérant, Vu, EN CONSÉQUENCE...).
+    if t and '\n' not in t and len(t) > 500:
+        t = _smart_paragraph_split(t)
+    return t
+
+
+def _smart_paragraph_split(t: str) -> str:
+    """Insère des sauts de paragraphe intelligents dans un texte juridique
+    qui a perdu ses retours à la ligne (parser DILA qui concatène tout).
+
+    Pattern : insère \\n\\n AVANT les marqueurs juridiques courants.
+    """
+    import re as _re
+    # Marqueurs juridiques qui démarrent un nouveau paragraphe
+    markers = [
+        r'(?<=[\.;])\s+(?=Sur (?:le|les|ce) (?:premier|second|deuxième|troisième|quatrième|cinquième|sixième|moyen))',
+        r'(?<=[\.;])\s+(?=Mais sur le)',
+        r'(?<=[\.;])\s+(?=Et sur le)',
+        r'(?<=[\.;])\s+(?=Considérant (?:que|qu\'|ce qui))',
+        r'(?<=[\.;])\s+(?=Vu (?:la|le|les|l\')(?:\s+\w+){1,3}\s)',
+        r'(?<=[\.;])\s+(?=Attendu (?:que|qu\'))',
+        r'(?<=[\.;])\s+(?=PAR CES MOTIFS)',
+        r'(?<=[\.;])\s+(?=EN CONSÉQUENCE)',
+        r'(?<=[\.;])\s+(?=DÉCIDE\s*:)',
+        r'(?<=[\.;])\s+(?=DECIDE\s*:)',
+        r'(?<=[\.;])\s+(?=ARTICLE\s+\d)',
+        r'(?<=[\.;])\s+(?=Article\s+\d)',
+        r'(?<=[\.;])\s+(?=Le moyen pris)',
+        r'(?<=[\.;])\s+(?=La cour)',
+        r'(?<=[\.;])\s+(?=Le tribunal)',
+        r'(?<=[\.;])\s+(?=DÉCISION DE)',
+        r'(?<=[\.;])\s+(?=R [ÉE] P U B L I Q U E)',
+        # Numérotation paragraphes type "1.", "2." en début de phrase juridique
+        r'(?<=[\.;])\s+(?=\d{1,2}\.\s+[A-ZÉÈÀÂÊÎÔÛÇ])',
+    ]
+    for pat in markers:
+        t = _re.sub(pat, '\n\n', t)
+    # Nettoie les multi-retours créés
+    t = _re.sub(r'\n{3,}', '\n\n', t)
+    return t
+
+
+def _render_legal_text(text: str, esc, resolve, sommaire: str = "",
+                       abstrats: str = "", resume: str = "",
+                       renvois: str = "") -> str:
+    """Rend le texte d'une décision en HTML structuré.
+
+    Stratégie de priorité :
+      A. Si abstrats/resume/renvois sont fournis séparément (cas idéal,
+         post-enrich_dila), on les utilise directement → rendu propre,
+         pas de regex fragile.
+      B. Sinon (legacy), on retombe sur l'ancienne logique : sommaire
+         concaténé puis découpage par regex.
+
+    3 cas legacy :
+      1. Sommaire séparé fourni + texte intégral → texte intégral en haut,
+         puis sections "Plan de classement / Résumé / Renvois" sous le texte.
+      2. Pas de sommaire séparé, texte court qui commence par code PCJA
+         (vieux arrêt pré-numérisation) → on splitte le texte en sections.
+      3. Texte intégral classique sans analyses → rendu paragraphes simple.
+    """
+    has_structured = bool(abstrats or resume or renvois)
+
+    if not text and not sommaire and not has_structured:
+        return "<p><em>Texte indisponible.</em></p>"
+
+    # ── Cas A (préféré) : sections sémantiques pré-extraites ──
+    if has_structured:
+        if text:
+            text_linked = _citations.linkify(text, esc, url_resolver=resolve)
+            body = "<p>" + text_linked.replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
+        else:
+            body = ""
+        sections_html = _render_structured_sections(
+            abstrats, resume, renvois, esc, resolve
+        )
+        return body + sections_html
+
+    # ── Fallback legacy ────────────────────────────────────────
+    # Détection « vieux arrêt » : texte court (<3000 ch) qui commence par un code PCJA
+    is_old_summary = (text and len(text) < 3000 and bool(_PCJA_CODE_RE.match(text)))
+
+    # Si text == sommaire (cas où DILA a juste recopié le sommaire dans la balise
+    # texte faute de texte intégral disponible) : on ne rend que la version
+    # structurée pour éviter le doublon.
+    if text and sommaire and (text.strip() == sommaire.strip() or text.strip() in sommaire.strip()):
+        return _split_sommaire_sections(sommaire, esc, resolve)
+
+    # Cas 1 : texte intégral + sommaire séparé fourni
+    if text and sommaire and not is_old_summary:
+        text_linked = _citations.linkify(text, esc, url_resolver=resolve)
+        body = "<p>" + text_linked.replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
+        # Découpe le sommaire en abstrats / résumé / renvois (même logique que vieux arrêts)
+        sections_html = _split_sommaire_sections(sommaire, esc, resolve)
+        return body + sections_html
+
+    if is_old_summary:
+        return _split_sommaire_sections(text, esc, resolve)
+
+    # Cas 3 général (arrêt avec texte intégral seulement) : rendu paragraphes
+    text_linked = _citations.linkify(text, esc, url_resolver=resolve)
+    return "<p>" + text_linked.replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
+
+
+def _render_structured_sections(abstrats: str, resume: str, renvois: str,
+                                esc, resolve) -> str:
+    """Rend directement les sections issues du XML DILA (pas de regex)."""
+    out = []
+    if abstrats and abstrats.strip():
+        out.append('<section class="legal-section">')
+        out.append('<h3>Plan de classement</h3>')
+        out.append(f'<div class="abstrats">{esc(abstrats.strip())}</div>')
+        out.append('</section>')
+    if resume and resume.strip():
+        resume_linked = _citations.linkify(resume.strip(), esc, url_resolver=resolve)
+        # Préserver les paragraphes (résumé peut contenir 1) 2) 3)…)
+        resume_html = resume_linked.replace("\n\n", "</p><p>").replace("\n", "<br>")
+        out.append('<section class="legal-section">')
+        out.append('<h3>Résumé</h3>')
+        out.append(f'<p>{resume_html}</p>')
+        out.append('</section>')
+    if renvois and renvois.strip():
+        renvois_linked = _citations.linkify(renvois.strip(), esc, url_resolver=resolve)
+        renvois_html = renvois_linked.replace("\n\n", "</p><p>").replace("\n", "<br>")
+        out.append('<section class="legal-section">')
+        out.append('<h3>Renvois jurisprudentiels</h3>')
+        out.append(f'<p>{renvois_html}</p>')
+        out.append('</section>')
+    return "\n".join(out)
+
+
+def _split_sommaire_sections(text: str, esc, resolve) -> str:
+    """Découpe un sommaire/analyse en 3 sections : Plan de classement (Abstrats), Résumé, Renvois."""
+    parts = {"abstrats": "", "resume": "", "renvois": ""}
+    import re as _re
+    # 1. Isoler les renvois jurisprudentiels (commencent par "1. Cf.", "1. Comp.", etc.)
+    m_renvois = _RENVOIS_RE.search(text)
+    if m_renvois:
+        parts["renvois"] = text[m_renvois.start():].strip()
+        text = text[:m_renvois.start()].strip()
+    # 2. Splitter abstrats / résumé : le résumé commence typiquement par
+    #    `[code-PCJA] [Maj]...` après la fin de l'abstrat (qui finit par `.`)
+    #    Ex : `... [art. R.111-14-1].` puis `68-03-02-08 L'article R.111-14-1...`
+    #    On cherche : `.` + espace + nouveau code PCJA + espace + lettre majuscule
+    m_resume = _re.search(r'\.\s+(\d{1,3}(?:-\d{1,3}){2,5}(?:,\s*\d{1,3}(?:-\d{1,3}){2,5})*)\s+([A-ZÉÈÀÂÊÎÔÛÇŒÆ])', text)
+    if m_resume:
+        # Le résumé commence au code PCJA qui le préfixe
+        parts["abstrats"] = text[:m_resume.start(1)].rstrip(' .').strip()
+        parts["resume"] = text[m_resume.start(1):].strip()
+    else:
+        parts["abstrats"] = text.strip()
+    out = []
+    if parts["abstrats"]:
+        out.append('<section class="legal-section">')
+        out.append('<h3>Plan de classement</h3>')
+        out.append(f'<div class="abstrats">{esc(parts["abstrats"])}</div>')
+        out.append('</section>')
+    if parts["resume"]:
+        text_resume_linked = _citations.linkify(parts["resume"], esc, url_resolver=resolve)
+        out.append('<section class="legal-section">')
+        out.append('<h3>Résumé</h3>')
+        out.append(f'<p>{text_resume_linked}</p>')
+        out.append('</section>')
+    if parts["renvois"]:
+        out.append('<section class="legal-section">')
+        out.append('<h3>Renvois jurisprudentiels</h3>')
+        out.append(f'<p>{esc(parts["renvois"])}</p>')
+        out.append('</section>')
+    return "\n".join(out)
+
+
+_LANG_NAMES = {
+    "fr": "français", "en": "anglais", "de": "allemand", "es": "espagnol",
+    "it": "italien", "pt": "portugais", "nl": "néerlandais", "ro": "roumain",
+    "pl": "polonais", "cs": "tchèque", "el": "grec", "hu": "hongrois",
+    "sv": "suédois", "da": "danois", "fi": "finnois", "bg": "bulgare",
+    "hr": "croate", "et": "estonien", "lv": "letton", "lt": "lituanien",
+    "mt": "maltais", "sk": "slovaque", "sl": "slovène", "ga": "irlandais",
+    "tr": "turc", "ru": "russe", "uk": "ukrainien", "no": "norvégien",
+    "sq": "albanais", "mk": "macédonien", "sr": "serbe", "bs": "bosniaque",
+    "az": "azéri", "hy": "arménien", "ka": "géorgien",
+}
+
+
+def _lang_warning(text_lang: str, decision_id: str, source: str) -> str:
+    """Bandeau honnête quand le texte n'est pas en français.
+
+    Pour les arrêts CEDH/CJUE où la version FR n'existe pas (cas fréquent
+    pour CEDH : seulement EN ou autre langue officielle), on prévient le
+    lecteur clairement et on lui propose un lien externe vers DeepL.
+    Pas de traduction automatique stockée chez nous (risque d'erreur juridique).
+    """
+    lang = (text_lang or "fr").lower()
+    if lang == "fr" or not lang:
+        return ""
+    lang_name = _LANG_NAMES.get(lang, lang)
+    deepl_url = f"https://www.deepl.com/translator#{lang}/fr/"
+    return (
+        '<div class="lang-warning">'
+        '<div class="lang-warning__inner">'
+        f'<strong>Texte original en {esc(lang_name)}.</strong> '
+        f"La version française de cette décision n'a pas été publiée. "
+        "Vous pouvez le traduire via un service externe : "
+        f'<a href="{deepl_url}" target="_blank" rel="external noopener">DeepL ↗</a> '
+        "(coller le texte ci-dessous)."
+        '</div>'
+        '</div>'
+    )
+
+
+def _official_source_button(decision_id: str) -> str:
+    """Génère le HTML du gros bouton CTA 'Voir sur source officielle'.
+
+    Pour les DTA/CAA récents : pas de bouton, mais un encadré honnête
+    (la décision n'est PAS sur Légifrance, uniquement open data CE).
+    """
+    import re as _re
+    if decision_id and _re.match(r"^(?:DCE|DCAA|DTA|ORTA)_", decision_id):
+        return (
+            '<div class="source-cta" style="border-left-color:var(--gold)">'
+            '<small style="font-style:normal">'
+            '<strong>Source : open data du Conseil d\'État</strong> '
+            '(loi pour une République numérique du 7 octobre 2016, art. 20-21).<br>'
+            'Cette décision n\'est pas publiée au Recueil Lebon - Légifrance ne l\'indexe donc pas. '
+            'JusticeLibre est la seule source web indexable pour cette décision.'
+            '</small>'
+            '</div>'
+        )
+    pat = _official_source_from_pattern(decision_id)
+    if not pat:
+        return ""
+    label, url = pat
+    return (
+        '<div class="source-cta">'
+        '<a class="btn-source" href="' + url + '" target="_blank" rel="external noopener nofollow">'
+        '<span class="btn-source-label">Voir sur ' + label + '</span>'
+        '<span class="btn-source-arrow">→</span>'
+        '</a>'
+        '<small>Cette décision est aussi disponible sur la source publique officielle. '
+        'JusticeLibre est une copie miroir indexée pour les moteurs de recherche et les IA.</small>'
+        '</div>'
+    )
+
+
+def _official_source_from_pattern(decision_id: str) -> tuple[str, str] | None:
+    """Devine l'URL source officielle à partir du pattern de l'ID.
+
+    Retourne (label_court_pour_bouton, url) ou None si pattern non reconnu.
+
+    Patterns supportés (vérifiés en base) :
+      - CETATEXT*   → Légifrance/ceta (Conseil d'État + JADE)
+      - JURITEXT*   → Légifrance/juri (Cour de cassation)
+      - CONSTEXT*   → Légifrance/jorf (Conseil constitutionnel)
+      - DCE_/DCAA_/DTA_*  → opendata.justice-administrative.fr (admin récents)
+      - 001-*       → HUDOC (Cour EDH)
+      - ECLI:EU:* / *CELEX*  → EUR-Lex (CJUE)
+    """
+    if not decision_id:
+        return None
+    if decision_id.startswith("CETATEXT"):
+        return ("Légifrance", f"https://www.legifrance.gouv.fr/ceta/id/{decision_id}")
+    if decision_id.startswith("JURITEXT"):
+        return ("Légifrance", f"https://www.legifrance.gouv.fr/juri/id/{decision_id}")
+    if decision_id.startswith("CONSTEXT"):
+        return ("Légifrance", f"https://www.legifrance.gouv.fr/cons/id/{decision_id}")
+    if decision_id.startswith("001-"):
+        # /fre = version française par défaut quand dispo (sinon HUDOC fallback EN)
+        return ("HUDOC -CEDH", f"https://hudoc.echr.coe.int/fre?i={decision_id}")
+    if decision_id.startswith("ECLI:EU:"):
+        return ("EUR-Lex", f"https://eur-lex.europa.eu/legal-content/FR/TXT/?uri={decision_id}")
+    # CELEX brut ou avec préfixe : 5 chiffres + 2 lettres + 4 chiffres (ex 62025CC0121, 62021TJ0109)
+    import re as _re
+    if _re.match(r"^\d{4,5}[A-Z]{2}\d{4}$", decision_id) or "CELEX" in decision_id:
+        celex = decision_id.replace("CELEX:", "").replace("CELEX", "")
+        return ("EUR-Lex", f"https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:{celex}")
+    # TA / CAA / CE opendata : la majorité des TAs ne sont JAMAIS sur Légifrance
+    # (uniquement les Lebon, ~5%). On retourne None → pas de bouton mensonger.
+    # Le SSR affichera à la place un encadré "open data CE" honnête (cf. render_decision).
+    if _re.match(r"^(?:DCE|DCAA|DTA|ORTA)_", decision_id):
+        return None
+    return None
+
+
+@lru_cache(maxsize=20000)
+def _cached_decision_url(decision_id: str, date: str) -> str | None:
+    """Résout decision_id → URL source officielle.
+
+    Stratégie : pattern local d'abord (rapide, jamais d'erreur réseau),
+    puis fallback warehouse si pattern non reconnu (cas exotique).
+    """
+    pat = _official_source_from_pattern(decision_id)
+    if pat:
+        return pat[1]
+    try:
+        return _wh.sync_build_url(decision_id, date=date or None)
+    except Exception:
+        return None
+
+BASE_URL = "https://justicelibre.org"
+SITE_NAME = "JusticeLibre"
+DILA_DB = Path("/opt/justicelibre/dila/judiciaire.db")
+
+SOURCE_LABELS = {
+    "admin": "Justice administrative",
+    "dila": "Justice judiciaire",
+    "cedh": "Cour européenne des droits de l'homme",
+    "cjue": "Cour de justice de l'Union européenne",
+    "ariane": "Conseil d'État (ArianeWeb)",
+    "cnil": "CNIL",
+}
+
+# Origine de la donnée bulk pour chaque source. Important pour la confiance :
+# montre d'où vient l'info (vs un site « AI slop » qui invente des décisions).
+# Affiché dans la meta-table sous "Source de l'archive".
+BULK_SOURCES = {
+    "admin":  ("DILA -bulk JADE",
+               "https://echanges.dila.gouv.fr/OPENDATA/JADE/"),
+    "dila":   ("DILA -bulks CASS / CAPP / CONSTIT",
+               "https://echanges.dila.gouv.fr/OPENDATA/CASS/"),
+    "cedh":   ("HUDOC -Cour européenne des droits de l'homme",
+               "https://hudoc.echr.coe.int/"),
+    "cjue":   ("InforCuria -CJUE",
+               "https://curia.europa.eu/jcms/jcms/j_6/fr/"),
+    "ariane": ("ArianeWeb -Conseil d'État",
+               "https://www.conseil-etat.fr/arianeweb/"),
+    "cnil":   ("DILA -bulk CNIL délibérations",
+               "https://echanges.dila.gouv.fr/OPENDATA/CNIL/"),
+}
+
+# ─── Composants partagés (reproduits du SPA pour cohérence visuelle) ───
+# Ces blocs HTML/CSS sont une copie simplifiée du <head> + topbar de
+# web/search.html. Toute mise à jour visuelle du SPA doit être répercutée
+# ici pour que les pages SSR ne dépareillent pas.
+
+GOOGLE_FONTS = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link href="https://fonts.googleapis.com/css2?'
+    'family=DM+Serif+Display:ital@0;1&'
+    'family=DM+Sans:ital,opsz,wght@0,9..40,300..800;1,9..40,300..800&'
+    'family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">'
+)
+
+SHARED_STYLES_LINKS = (
+    '<link rel="stylesheet" href="/styles/tokens.css?v=20260501">'
+    '<link rel="stylesheet" href="/styles/base.css?v=20260501">'
+    '<link rel="stylesheet" href="/styles/components.css?v=20260501">'
+)
+
+# CSS specifique aux pages SSR (decision/loi). Les tokens/base/components
+# viennent via SHARED_STYLES_LINKS ci-dessus. Ce bloc ne contient plus que
+# le CSS unique des pages decision/loi (topbar, meta-table, article body...).
+SHARED_CSS = """
+html,body{min-height:100%}
+body{font-size:15px;background:var(--light);display:flex;flex-direction:column;min-height:100vh}
+/* Topbar (synchronisé avec /topbar.js — px absolus pour cohérence pixel) */
+.topbar{
+  position:sticky;top:0;z-index:100;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:13px 40px;border-bottom:1px solid var(--line);
+  font-size:15px;line-height:normal;
+  font-family:'DM Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+.topbar *{line-height:normal}
+.topbar .logo-area{display:flex;align-items:center;gap:13px;color:var(--ink);text-decoration:none}
+.topbar .logo-area img{width:44px;height:44px}
+.topbar .logo-area .name{font-family:'DM Serif Display',Georgia,serif;font-size:17px;color:var(--ink);font-weight:400}
+.topbar .logo-area .name .tld{color:var(--teal)}
+.topbar .proto-badge{display:inline-block;margin-left:10px;font-size:9px;font-weight:700;
+  letter-spacing:1.5px;text-transform:uppercase;padding:3px 7px;
+  border:1px solid var(--gold);color:var(--gold);border-radius:2px;
+  vertical-align:middle;cursor:help;font-family:'DM Sans','Inter',sans-serif;line-height:1.2;}
+.topbar nav.main-nav{display:flex;align-items:center;gap:32px}
+.topbar nav.main-nav a{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
+  color:var(--ink);padding-bottom:6px;border-bottom:3px solid transparent;font-family:inherit}
+.topbar nav.main-nav a:hover{border-bottom-color:var(--teal);text-decoration:none}
+.topbar nav.main-nav a.active{color:var(--teal);border-bottom-color:var(--teal)}
+@media(max-width:860px){.topbar nav.main-nav a:not(.active){display:none}}
+/* Dark mode SSR : ajustements page-specifiques (theme-toggle vient de base.css) */
+html[data-theme="dark"] body{background:var(--light)}
+html[data-theme="dark"] .topbar{background:rgba(30,30,28,.96)}
+@media (prefers-color-scheme: dark){
+  html:not([data-theme="light"]) body{background:var(--light)}
+  html:not([data-theme="light"]) .topbar{background:rgba(30,30,28,.96)}
+}
+/* Conteneur principal */
+.wrap{max-width:820px;margin:0 auto;padding:2.5rem 1.5rem 5rem;flex:1;width:100%}
+/* Sub-bar (analogue de .searchbar du SPA, contient le fil d'ariane) */
+.page-subbar{
+  background:var(--white);border-bottom:1px solid var(--line);
+  padding:.85rem 2.5rem;display:flex;align-items:center;gap:1rem;justify-content:space-between;
+}
+.page-subbar .crumb{font-size:.75rem;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.12em;font-weight:600}
+.page-subbar .crumb a{color:var(--muted)}
+.page-subbar .crumb a:hover{color:var(--teal)}
+.page-subbar .return{font-size:.78rem;color:var(--teal);font-weight:600}
+.page-subbar .return:hover{text-decoration:underline}
+/* Title block */
+.kicker{font-size:.78rem;color:var(--teal);font-weight:600;text-transform:uppercase;
+  letter-spacing:.15em;margin-bottom:.6rem}
+h1{font-family:var(--display);font-size:2.2rem;line-height:1.15;color:var(--ink);
+  font-weight:400;margin-bottom:.3rem}
+h1 em{color:var(--teal);font-style:italic}
+.subline{color:var(--muted);font-size:.95rem;margin-bottom:2rem}
+/* Meta table */
+.meta-table{width:100%;border-collapse:collapse;font-size:.88rem;
+  margin:1.5rem 0 2.5rem;background:var(--white);border:1px solid var(--line);border-radius:6px}
+.meta-table th{text-align:left;color:var(--muted);font-weight:500;
+  padding:.55rem 1rem;width:30%;vertical-align:top;border-bottom:1px solid var(--line)}
+.meta-table td{padding:.55rem 1rem;vertical-align:top;color:var(--ink);border-bottom:1px solid var(--line)}
+.meta-table tr:last-child th,.meta-table tr:last-child td{border-bottom:0}
+.meta-table .source-row{background:var(--teal-xl)}
+.meta-table .source-row a{font-weight:600}
+/* CTA Source officielle */
+.source-cta{display:flex;flex-direction:column;align-items:flex-start;gap:.5rem;
+  margin:1.5rem 0 0;padding:1.1rem 1.4rem;background:var(--teal-xl);
+  border-left:4px solid var(--teal);border-radius:0 6px 6px 0}
+.btn-source{display:inline-flex;align-items:center;gap:.6rem;
+  background:var(--teal);color:#fff!important;padding:.7rem 1.3rem;
+  border-radius:4px;font-weight:600;font-size:.95rem;text-decoration:none;
+  transition:background .15s ease}
+.btn-source:hover{background:var(--teal-l)}
+.btn-source-arrow{font-size:1.1em;line-height:1}
+.source-cta small{font-size:.78rem;color:var(--muted);line-height:1.45;font-style:italic}
+/* Bandeau langue (CEDH/CJUE quand version FR pas dispo) */
+.lang-warning{margin:1.5rem 0 1rem}
+.lang-warning__inner{background:#fff8e6;border:1px solid var(--gold);border-left:4px solid var(--gold);
+  padding:.85rem 1.1rem;border-radius:0 4px 4px 0;font-size:.88rem;color:var(--ink);line-height:1.5}
+.lang-warning__inner strong{color:var(--gold)}
+.lang-warning__inner a{font-weight:600}
+/* Article body */
+article{font-size:1rem;color:var(--body);background:var(--white);line-height:1.6;
+  padding:2rem;border:1px solid var(--line);border-radius:6px}
+article p{margin:0 0 1em}
+article p:last-child{margin-bottom:0}
+/* Sections analytiques (vieux arrêts pré-numérisation : abstrats + résumé + renvois) */
+.legal-section{margin:0 0 1.5em;padding:0}
+.legal-section + .legal-section{padding-top:1em;border-top:1px solid var(--line)}
+.legal-section h3{font-family:var(--display);font-size:1.05rem;font-weight:400;color:var(--teal);
+  margin:0 0 .6em;padding:0}
+.legal-section .abstrats{font-size:.88rem;line-height:1.55;color:var(--body);
+  background:var(--cream);padding:.9em 1.1em;border-left:2px solid var(--line);border-radius:0 4px 4px 0;
+  white-space:pre-wrap;font-family:var(--sans)}
+.legal-section p{margin:0}
+.wrap, .wrap p, .wrap .subline{line-height:1.5}
+.lawref{color:var(--teal);text-decoration:underline;text-decoration-color:rgba(26,78,78,.3);
+  text-underline-offset:.15em}
+.lawref:hover{text-decoration-color:var(--teal)}
+.lawref.external::after{content:" ↗";font-size:.8em;color:var(--muted)}
+/* Nota */
+.nota{font-size:.9rem;background:var(--teal-xl);padding:1rem 1.2rem;
+  border-left:3px solid var(--teal);margin:1.5rem 0;color:var(--ink)}
+.nota strong{color:var(--teal)}
+/* Footer */
+footer.page-footer{margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--line);
+  font-size:.85rem;color:var(--muted)}
+footer.page-footer a{color:var(--teal)}
+.cta-row{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem}
+.cta{display:inline-block;padding:.6rem 1.2rem;background:var(--teal);color:#fff;
+  border-radius:4px;font-size:.85rem;text-decoration:none}
+.cta:hover{background:var(--teal-l);text-decoration:none}
+.cta.alt{background:transparent;color:var(--teal);border:1px solid var(--teal)}
+.cta.alt:hover{background:var(--teal-xl)}
+"""
+
+# Source de vérité unique : on extrait le <header class="topbar">…</header>
+# de search.html à chaque render (avec mémo léger 60s pour ne pas re-lire
+# le fichier à chaque requête). Si jamais on touche au topbar dans
+# search.html, le SSR se met à jour automatiquement -> plus de drift.
+SEARCH_HTML_PATH = Path("/var/www/justicelibre/search.html")
+_TOPBAR_CACHE: dict = {"html": None, "loaded_at": 0.0}
+_TOPBAR_TTL = 60.0  # secondes, suffit pour propager les MAJ
+
+_TOPBAR_FALLBACK = """<header class="topbar">
+  <a href="/" class="logo-area">
+    <img src="/logo.svg" alt="">
+    <span class="name">justicelibre<span class="tld">.org</span></span>
+    <span class="proto-badge" title="Version bêta">bêta</span>
+  </a>
+  <nav class="main-nav">
+    <a href="/">Accueil</a>
+    <a href="/search.html">Recherche</a>
+    <a href="/#connect">MCP</a>
+    <a href="https://github.com/Dahliyaal/justicelibre">GitHub</a>
+  </nav>
+</header>"""
+
+
+_TOPBAR_JS_PATH = Path("/var/www/justicelibre/topbar.js")
+
+
+def get_topbar_html() -> str:
+    """Lit le HTML topbar depuis /web/topbar.js?v=3 (source unique du composant).
+
+    Le composant `topbar.js` contient la const TOPBAR_HTML = `...`. On extrait
+    son contenu via regex pour l'inliner dans le SSR (SEO + LLMs ont besoin
+    du HTML servi initialement, pas du JS-rendered). Cache 60s.
+    """
+    import time as _time
+    now = _time.time()
+    if _TOPBAR_CACHE["html"] and (now - _TOPBAR_CACHE["loaded_at"] < _TOPBAR_TTL):
+        return _TOPBAR_CACHE["html"]
+    html_str = _TOPBAR_FALLBACK
+    try:
+        if _TOPBAR_JS_PATH.exists():
+            content = _TOPBAR_JS_PATH.read_text(encoding="utf-8")
+            # Extrait le contenu entre TOPBAR_HTML = ` et `;
+            m = re.search(r'const\s+TOPBAR_HTML\s*=\s*`(.*?)`\.trim\(\);',
+                          content, re.DOTALL)
+            if m:
+                html_str = m.group(1).strip()
+        elif SEARCH_HTML_PATH.exists():
+            # Fallback : lit search.html (legacy)
+            content = SEARCH_HTML_PATH.read_text(encoding="utf-8")
+            m = re.search(r'<header class="topbar">.*?</header>', content, re.DOTALL)
+            if m:
+                html_str = m.group(0).replace(' class="active"', '')
+    except Exception:
+        pass
+    _TOPBAR_CACHE["html"] = html_str
+    _TOPBAR_CACHE["loaded_at"] = now
+    return html_str
+
+
+# Petit JS pour wire le bouton theme-toggle de la topbar (sync avec search.html).
+# Inline en bas des pages SSR pour éviter une round-trip + protéger des
+# erreurs si le bouton n'existe pas (defensive null check).
+THEME_JS = """<script>
+(function(){
+  // Init: theme stocké, sinon hérite du système (sans set explicite)
+  var saved = localStorage.getItem('jl-theme');
+  if (saved) document.documentElement.dataset.theme = saved;
+  var btn = document.getElementById('themeToggle');
+  if (!btn) return;
+  btn.addEventListener('click', function(){
+    var h = document.documentElement;
+    var cur = h.dataset.theme;
+    if (!cur) {
+      // pas de choix explicite: bascule à l'opposé du système
+      cur = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    var nxt = cur === 'dark' ? 'light' : 'dark';
+    h.dataset.theme = nxt;
+    localStorage.setItem('jl-theme', nxt);
+  });
+})();
+</script>"""
+
+
+# Compat avec le code existant qui référence TOPBAR_HTML comme constante.
+# Note: cette ligne est résolue au moment de l'import. Pour avoir la version
+# fraîche à chaque render, le code utilise désormais get_topbar_html().
+TOPBAR_HTML = get_topbar_html()
+
+# ─── Helpers ──────────────────────────────────────────────────────────
+
+def esc(s: str) -> str:
+    """HTML-escape pour interpolation dans un template."""
+    return html.escape(s or "", quote=True)
+
+
+def _strip(text: str, n: int = 200) -> str:
+    """Premiers `n` caractères de texte propre pour <meta description>."""
+    if not text:
+        return ""
+    t = re.sub(r"\s+", " ", text).strip()
+    if len(t) <= n:
+        return t
+    return t[:n].rsplit(" ", 1)[0] + "…"
+
+
+def _canonical(source: str, decision_id: str) -> str:
+    return f"{BASE_URL}/decision/{source}/{decision_id}"
+
+
+# ─── Decision page rendering ──────────────────────────────────────────
+
+def render_decision(source: str, decision_id: str, data: dict) -> str:
+    """Génère la page HTML SSR d'une décision (style cohérent avec le SPA).
+
+    Le résolveur de citations est optionnel mais activé par défaut : pour
+    chaque article cité dans le texte, on essaie de fetch l'URL Légifrance
+    dated/officielle (sync_get_law). Linkifiable en target=_blank.
+    """
+    juri = data.get("juridiction", "")
+    date = data.get("date", "")
+    numero = data.get("numero") or data.get("numero_dossier") or ""
+    titre_brut = data.get("titre") or data.get("title") or ""
+    text = data.get("text") or data.get("full_text") or data.get("paragraph") or ""
+    sommaire = data.get("sommaire") or ""  # legacy concat (fallback)
+    # Sections sémantiques séparées (issues du XML DILA, post-enrich_dila)
+    abstrats = data.get("abstrats") or ""
+    resume = data.get("resume") or ""
+    renvois = data.get("renvois") or ""
+    ecli = data.get("ecli", "")
+    formation = data.get("formation", "")
+    solution = data.get("solution", "")
+    nature = data.get("nature", "")
+    rapporteur = data.get("rapporteur", "")
+    commissaire_gvt = data.get("commissaire_gvt", "")
+    type_rec = data.get("type_rec", "")
+    publi_recueil = data.get("publi_recueil", "")
+    publi_bull = data.get("publi_bull", "")
+    nature_qualifiee = data.get("nature_qualifiee", "")
+    # Langue du texte (cas CEDH/CJUE : FR pas toujours dispo)
+    text_lang = (data.get("text_lang") or "fr").lower()
+
+    # Titre H1 : juridiction en kicker, le n° + date en gros
+    main_id = f"n° {numero}" if numero else titre_brut or f"Décision {decision_id}"
+    title_h1 = main_id
+    if date:
+        title_h1 = f"{main_id} <em>· {esc(_format_fr_date(date))}</em>"
+    title_h1_plain = f"{main_id} · {_format_fr_date(date)}" if date else main_id
+    title_seo = f"{juri or main_id}, {numero or ''} {(_format_fr_date(date) or '').strip()} -{SITE_NAME}".strip()
+
+    desc = _strip(text, 200) or f"{SOURCE_LABELS.get(source, '')} -{juri}".strip(" -")
+    canonical = _canonical(source, decision_id)
+
+    # Source officielle de la décision (Légifrance, opendata, hudoc, eur-lex)
+    source_url = _cached_decision_url(decision_id, date or "") if decision_id else None
+
+    # Citations dans le texte → pré-fetch parallèle pour éviter timeout CloudFlare
+    # quand la décision cite 20+ articles (cas typique des grosses décisions Cass/Constit).
+    cited = _citations.detect_citations(text)  # [(code, num, span)]
+    if cited:
+        from concurrent.futures import ThreadPoolExecutor
+        unique_keys = {(c, n) for (c, n, _) in cited}
+        # parallélise jusqu'à 16 lookups simultanés (réseau bound, pas CPU)
+        with ThreadPoolExecutor(max_workers=min(16, len(unique_keys))) as ex:
+            list(ex.map(lambda kn: _cached_law_url(kn[0], kn[1], date or ""), unique_keys))
+    # Maintenant tout est en cache LRU mémoire → linkify est instantané
+    def _resolve(code: str, num: str) -> str | None:
+        return _cached_law_url(code, num, date or "")
+    # Nettoyage texte source : élimine les balises HTML brutes stockées en DB
+    # (artefact du parsing XML DILA qui laisse passer <br/>, &lt;br&gt; etc.)
+    # avant escape, sinon le navigateur affiche la balise littérale.
+    text = _clean_dila_text(text)
+    sommaire = _clean_dila_text(sommaire)
+    abstrats = _clean_dila_text(abstrats)
+    resume = _clean_dila_text(resume)
+    renvois = _clean_dila_text(renvois)
+    # Priorité : sections séparées (post-enrich_dila) ; sinon fallback regex sommaire.
+    text_html = _render_legal_text(
+        text, esc, _resolve,
+        sommaire=sommaire,
+        abstrats=abstrats, resume=resume, renvois=renvois,
+    )
+
+    jsonld = {
+        "@context": "https://schema.org",
+        "@type": ["LegalCase", "CreativeWork"],
+        "name": title_h1_plain,
+        "headline": title_h1_plain,
+        "url": canonical,
+        "datePublished": date or None,
+        "creator": {"@type": "GovernmentOrganization", "name": juri} if juri else None,
+        "publisher": {"@type": "Organization", "name": SITE_NAME, "url": BASE_URL},
+        "inLanguage": "fr",
+        "license": "https://www.etalab.gouv.fr/licence-ouverte-open-licence",
+        "identifier": ecli or numero or decision_id,
+        "sameAs": source_url or None,
+    }
+    jsonld_clean = {k: v for k, v in jsonld.items() if v is not None}
+    import json as _json
+    jsonld_str = esc(_json.dumps(jsonld_clean, ensure_ascii=False))
+
+    rows = []
+    if juri: rows.append(("Juridiction", esc(juri)))
+    if date: rows.append(("Date", esc(_format_fr_date(date))))
+    if numero: rows.append(("Numéro", esc(numero)))
+    if ecli: rows.append(("ECLI", f'<code>{esc(ecli)}</code>'))
+    if formation: rows.append(("Formation", esc(formation)))
+    if nature_qualifiee: rows.append(("Nature", esc(nature_qualifiee)))
+    elif nature: rows.append(("Nature", esc(nature)))
+    if type_rec: rows.append(("Type de recours", esc(type_rec)))
+    if solution: rows.append(("Solution", esc(solution)))
+    if rapporteur: rows.append(("Rapporteur", esc(rapporteur)))
+    if commissaire_gvt: rows.append(("Rapporteur public", esc(commissaire_gvt)))
+    # Indicateurs de publication officielle (Lebon, Bulletin Cass)
+    if publi_recueil:
+        _label_lebon = {"A": "Recueil Lebon", "B": "Tables Lebon",
+                        "C": "Inédit"}.get(publi_recueil, publi_recueil)
+        rows.append(("Publication", esc(_label_lebon)))
+    elif publi_bull == "oui":
+        rows.append(("Publication", "Bulletin Cass."))
+    meta_html = "".join(
+        f'<tr><th>{k}</th><td>{v}</td></tr>' for k, v in rows
+    )
+    if source_url:
+        meta_html += (
+            f'<tr class="source-row"><th>Source officielle</th>'
+            f'<td><a href="{esc(source_url)}" target="_blank" rel="external noopener">'
+            f'{_source_host(source_url)} ↗</a></td></tr>'
+        )
+    bulk_label, bulk_url = BULK_SOURCES.get(source, ("", ""))
+    if bulk_url:
+        meta_html += (
+            f'<tr class="source-row"><th>Source de l\'archive</th>'
+            f'<td><a href="{esc(bulk_url)}" target="_blank" rel="external noopener">'
+            f'{esc(bulk_label)} ↗</a></td></tr>'
+        )
+
+    return f"""<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{esc(title_seo)}</title>
+<meta name="description" content="{esc(desc)}">
+<link rel="canonical" href="{esc(canonical)}">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{esc(title_h1_plain)}">
+<meta property="og:description" content="{esc(desc)}">
+<meta property="og:url" content="{esc(canonical)}">
+<meta property="og:site_name" content="{SITE_NAME}">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{esc(title_h1_plain)}">
+<meta name="twitter:description" content="{esc(desc)}">
+<script type="application/ld+json">{jsonld_str}</script>
+{GOOGLE_FONTS}
+{SHARED_STYLES_LINKS}
+<style>{SHARED_CSS}</style>
+</head>
+<body>
+{get_topbar_html()}
+<div class="page-subbar">
+  <div class="crumb"><a href="/">Accueil</a> &nbsp;›&nbsp; <a href="/search.html">Recherche</a> &nbsp;›&nbsp; {esc(SOURCE_LABELS.get(source, source))}</div>
+</div>
+<main class="wrap">
+  <div class="kicker">{esc(juri or SOURCE_LABELS.get(source, ''))}</div>
+  <h1>{title_h1}</h1>
+  <p class="subline">Décision rendue par {esc(juri or 'la juridiction')}{', le ' + esc(_format_fr_date(date)) if date else ''}.</p>
+  {_official_source_button(decision_id)}
+  <table class="meta-table">{meta_html}</table>
+  {_lang_warning(text_lang, decision_id, source)}
+  <article>{text_html}</article>
+  <footer class="page-footer">
+    <p>Document juridique publié sous <a href="https://www.etalab.gouv.fr/licence-ouverte-open-licence" rel="noopener">Licence Ouverte 2.0</a>. Accès libre via <strong>JusticeLibre</strong> -alternative open source à Doctrine, Lexis et Légifrance pour la jurisprudence française et européenne.</p>
+  </footer>
+</main>
+{THEME_JS}
+</body>
+</html>"""
+
+
+def _format_fr_date(iso: str) -> str:
+    """`2023-02-14` → `14 février 2023`. Robuste à des formats variés."""
+    if not iso or len(iso) < 7:
+        return iso or ""
+    months_fr = ["janvier","février","mars","avril","mai","juin",
+                 "juillet","août","septembre","octobre","novembre","décembre"]
+    try:
+        y, m, *rest = iso.split("-")
+        d = rest[0] if rest else ""
+        mi = int(m) - 1
+        if 0 <= mi < 12:
+            return f"{int(d) if d else ''} {months_fr[mi]} {y}".strip()
+    except Exception:
+        pass
+    return iso
+
+
+def _source_host(url: str) -> str:
+    """Affiche un nom de domaine lisible pour le bouton source."""
+    if not url: return ""
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(url).netloc
+        host = host.removeprefix("www.")
+        return host
+    except Exception:
+        return url[:30]
+
+
+def render_law(code: str, num: str, data: dict) -> str:
+    """Page HTML SSR d'un article de loi (style cohérent avec le SPA)."""
+    titre_section = data.get("titre_section", "")
+    texte = data.get("texte", "") or ""
+    etat = data.get("etat", "")
+    date_debut = data.get("date_debut", "")
+    date_fin = data.get("date_fin", "")
+    nota = data.get("nota", "") or ""
+    source_url = data.get("source_url", "")
+    legitext = data.get("legitext", "")
+    legiarti = data.get("legiarti", "")
+
+    code_label = titre_section or code
+    title_h1 = f"Article {num}"
+    title_seo = f"Article {num} -{code_label} -{SITE_NAME}"
+    desc = _strip(texte, 200) or f"Article {num} du {code_label}"
+    canonical = f"{BASE_URL}/loi/{code}/{num}"
+
+    text_html = "<p>" + esc(texte).replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
+    nota_html = f'<aside class="nota"><strong>Note :</strong> {esc(nota)}</aside>' if nota else ""
+
+    jsonld = {
+        "@context": "https://schema.org",
+        "@type": "Legislation",
+        "name": f"{title_h1} -{code_label}",
+        "headline": title_h1,
+        "url": canonical,
+        "legislationIdentifier": legiarti or num,
+        "legislationJurisdiction": "FR",
+        "datePublished": date_debut or None,
+        "expires": date_fin if date_fin and date_fin != "2999-01-01" else None,
+        "inLanguage": "fr",
+        "license": "https://www.etalab.gouv.fr/licence-ouverte-open-licence",
+        "isPartOf": {"@type": "Legislation", "name": code_label},
+        "publisher": {"@type": "Organization", "name": SITE_NAME, "url": BASE_URL},
+        "legislationLegalForce": "InForce" if etat == "VIGUEUR" else "PartiallyInForce",
+        "sameAs": source_url or None,
+    }
+    jsonld_clean = {k: v for k, v in jsonld.items() if v is not None}
+    import json as _json
+    jsonld_str = esc(_json.dumps(jsonld_clean, ensure_ascii=False))
+
+    rows = [("Code", esc(code_label)), ("État", esc(etat or "-"))]
+    if date_debut: rows.append(("En vigueur depuis", esc(_format_fr_date(date_debut))))
+    if date_fin and date_fin != "2999-01-01":
+        rows.append(("Jusqu'au", esc(_format_fr_date(date_fin))))
+    if legiarti: rows.append(("Identifiant", f'<code>{esc(legiarti)}</code>'))
+    meta_html = "".join(
+        f'<tr><th>{k}</th><td>{v}</td></tr>' for k, v in rows
+    )
+    if source_url:
+        meta_html += (
+            f'<tr class="source-row"><th>Source officielle</th>'
+            f'<td><a href="{esc(source_url)}" target="_blank" rel="external noopener">'
+            f'{_source_host(source_url)} ↗</a></td></tr>'
+        )
+    # Bulk LEGI pour les articles de loi (toujours pareil)
+    meta_html += (
+        '<tr class="source-row"><th>Source de l\'archive</th>'
+        '<td><a href="https://echanges.dila.gouv.fr/OPENDATA/LEGI/" '
+        'target="_blank" rel="external noopener">'
+        'DILA -bulk LEGI (codes consolidés) ↗</a></td></tr>'
+    )
+
+    return f"""<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{esc(title_seo)}</title>
+<meta name="description" content="{esc(desc)}">
+<link rel="canonical" href="{esc(canonical)}">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{esc(title_h1 + ' -' + code_label)}">
+<meta property="og:description" content="{esc(desc)}">
+<meta property="og:url" content="{esc(canonical)}">
+<meta property="og:site_name" content="{SITE_NAME}">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{esc(title_h1 + ' -' + code_label)}">
+<meta name="twitter:description" content="{esc(desc)}">
+<script type="application/ld+json">{jsonld_str}</script>
+{GOOGLE_FONTS}
+{SHARED_STYLES_LINKS}
+<style>{SHARED_CSS}</style>
+</head>
+<body>
+{get_topbar_html()}
+<div class="page-subbar">
+  <div class="crumb"><a href="/">Accueil</a> &nbsp;›&nbsp; <a href="/search.html">Recherche</a> &nbsp;›&nbsp; {esc(code_label)}</div>
+</div>
+<main class="wrap">
+  <div class="kicker">{esc(code_label)}</div>
+  <h1>Article <em>{esc(num)}</em></h1>
+  <p class="subline">Article{(' en vigueur depuis le ' + _format_fr_date(date_debut)) if date_debut else ''}.</p>
+  <table class="meta-table">{meta_html}</table>
+  <article>{text_html}{nota_html}</article>
+  <footer class="page-footer">
+    <p>Article de loi publié sous <a href="https://www.etalab.gouv.fr/licence-ouverte-open-licence" rel="noopener">Licence Ouverte 2.0</a> via <strong>JusticeLibre</strong>.</p>
+  </footer>
+</main>
+{THEME_JS}
+</body>
+</html>"""
+
+
+def render_law_404(code: str, num: str) -> str:
+    return f"""<!doctype html>
+<html lang="fr"><head>
+<meta charset="utf-8">
+<title>Article {esc(code)} {esc(num)} introuvable -{SITE_NAME}</title>
+<meta name="robots" content="noindex">
+</head><body style="font-family:sans-serif;max-width:600px;margin:3rem auto;padding:1rem">
+<h1>Article introuvable</h1>
+<p>L'article <code>{esc(num)}</code> du <code>{esc(code)}</code> n'a pas été trouvé.</p>
+<p>Vérifie le code (CC, CT, CJA, CASF…) et le numéro (sans points : <code>R772-8</code>, pas <code>R.772-8</code>).</p>
+<p><a href="/search.html">Recherche libre</a></p>
+</body></html>"""
+
+
+def render_decision_404(source: str, decision_id: str) -> str:
+    """Page 404 cohérente avec la charte JusticeLibre.
+
+    Réutilise topbar + fonts + SHARED_CSS pour que l'utilisateur reste dans
+    l'écosystème du site même quand on lui sert une 404.
+    """
+    src_label = SOURCE_LABELS.get(source, source)
+    archive = BULK_SOURCES.get(source, ("Source officielle", "https://www.legifrance.gouv.fr/"))[0]
+    archive_url = BULK_SOURCES.get(source, ("", "https://www.legifrance.gouv.fr/"))[1]
+    return f"""<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Décision introuvable -{SITE_NAME}</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+{GOOGLE_FONTS}
+{SHARED_STYLES_LINKS}
+<style>{SHARED_CSS}
+.notfound-wrap{{max-width:680px;margin:0 auto;padding:80px 24px 120px;text-align:left}}
+.notfound-kicker{{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:24px}}
+.notfound-h1{{font-family:'DM Serif Display',Georgia,serif;font-size:42px;line-height:1.15;color:var(--ink);margin:0 0 16px}}
+.notfound-sub{{font-size:17px;line-height:1.6;color:var(--muted);margin:0 0 28px}}
+.notfound-id{{display:inline-block;padding:8px 14px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;background:var(--cream);border:1px solid var(--line);border-radius:3px;color:var(--ink);word-break:break-all}}
+.notfound-actions{{display:flex;flex-wrap:wrap;gap:12px;margin-top:36px}}
+.notfound-actions a{{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border:1px solid var(--line);border-radius:3px;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--ink);text-decoration:none;transition:all .2s}}
+.notfound-actions a:hover{{border-color:var(--teal);color:var(--teal);text-decoration:none}}
+.notfound-actions a.primary{{background:var(--teal);color:#fff;border-color:var(--teal)}}
+.notfound-actions a.primary:hover{{background:transparent;color:var(--teal)}}
+.notfound-help{{margin-top:48px;padding-top:32px;border-top:1px solid var(--line);font-size:14px;line-height:1.7;color:var(--muted)}}
+.notfound-help strong{{color:var(--ink)}}
+.notfound-help ul{{margin:12px 0 0;padding-left:20px}}
+.notfound-help li{{margin-bottom:6px}}
+</style>
+</head>
+<body>
+{get_topbar_html()}
+<main class="notfound-wrap">
+  <div class="notfound-kicker">Erreur 404 · {esc(src_label)}</div>
+  <h1 class="notfound-h1">Cette décision n'existe pas dans la base.</h1>
+  <p class="notfound-sub">Aucun document ne correspond à l'identifiant suivant&nbsp;:</p>
+  <div class="notfound-id">{esc(decision_id)}</div>
+
+  <div class="notfound-actions">
+    <a href="/search.html" class="primary">Rechercher dans la base →</a>
+    <a href="{esc(archive_url)}" target="_blank" rel="external noopener">Vérifier sur {esc(archive)} ↗</a>
+  </div>
+
+  <div class="notfound-help">
+    <strong>Causes possibles&nbsp;:</strong>
+    <ul>
+      <li>L'identifiant est mal recopié (vérifie les caractères, majuscules, tirets).</li>
+      <li>La décision existe à la source officielle mais n'a pas encore été indexée chez nous.</li>
+      <li>Le document a été retiré ou anonymisé après publication.</li>
+    </ul>
+  </div>
+</main>
+{THEME_JS}
+</body>
+</html>"""
+
+
+# ─── Sitemap generation ───────────────────────────────────────────────
+
+STATIC_PAGES = [
+    ("/", "1.0", "weekly"),
+    ("/search.html", "0.9", "weekly"),
+    ("/tutoriel-piste.html", "0.6", "monthly"),
+    ("/stats.html", "0.4", "weekly"),
+]
+
+
+SITEMAP_PAGE_SIZE = 50000
+
+
+def render_sitemap_index() -> str:
+    """Index des sitemaps (l'unique fichier que tu soumets à Search Console).
+
+    Annonce :
+    - 1 sitemap statique (landing, search, tutoriel, stats)
+    - N sub-sitemaps DILA (Cass + CA + CC, ~225k)
+    - N sub-sitemaps JADE (CE + 9 CAA + 40 TA, ~4M, via warehouse)
+    - N sub-sitemaps LEGI (articles de loi en vigueur, ~1.5M, via warehouse)
+    """
+    sub = [f"{BASE_URL}/sitemap-static.xml"]
+    # DILA local SQLite
+    try:
+        with sqlite3.connect(f"file:{DILA_DB}?mode=ro", uri=True) as c:
+            total = c.execute("SELECT COUNT(*) FROM decisions").fetchone()[0]
+        n_pages = (total // SITEMAP_PAGE_SIZE) + 1
+        for i in range(1, n_pages + 1):
+            sub.append(f"{BASE_URL}/sitemap-dila-{i}.xml")
+    except Exception:
+        pass
+    # JADE distant warehouse (CE + 9 CAA admin)
+    try:
+        total_jade = _wh.sync_count_fond("jade")
+        if total_jade > 0:
+            n_pages = (total_jade // SITEMAP_PAGE_SIZE) + 1
+            for i in range(1, n_pages + 1):
+                sub.append(f"{BASE_URL}/sitemap-jade-{i}.xml")
+    except Exception:
+        pass
+    # Opendata progressivement crawlé (TAs + CAA + CE complets)
+    try:
+        total_od = _wh.sync_count_fond("opendata")
+        if total_od > 0:
+            n_pages = (total_od // SITEMAP_PAGE_SIZE) + 1
+            for i in range(1, n_pages + 1):
+                sub.append(f"{BASE_URL}/sitemap-opendata-{i}.xml")
+    except Exception:
+        pass
+    # CEDH local PROD (~76k, 1 page)
+    try:
+        with sqlite3.connect(f"file:{DILA_DB}?mode=ro", uri=True) as c:
+            n = c.execute("SELECT COUNT(*) FROM cedh_decisions").fetchone()[0]
+        for i in range(1, (n // SITEMAP_PAGE_SIZE) + 2):
+            sub.append(f"{BASE_URL}/sitemap-cedh-{i}.xml")
+    except Exception:
+        pass
+    # CJUE local PROD (~44k, 1 page)
+    try:
+        with sqlite3.connect(f"file:{DILA_DB}?mode=ro", uri=True) as c:
+            n = c.execute("SELECT COUNT(*) FROM cjue_decisions").fetchone()[0]
+        for i in range(1, (n // SITEMAP_PAGE_SIZE) + 2):
+            sub.append(f"{BASE_URL}/sitemap-cjue-{i}.xml")
+    except Exception:
+        pass
+    # ArianeWeb CE local PROD (~60k, 1-2 pages)
+    try:
+        with sqlite3.connect(f"file:{DILA_DB}?mode=ro", uri=True) as c:
+            n = c.execute("SELECT COUNT(*) FROM ariane_decisions").fetchone()[0]
+        for i in range(1, (n // SITEMAP_PAGE_SIZE) + 2):
+            sub.append(f"{BASE_URL}/sitemap-ariane-{i}.xml")
+    except Exception:
+        pass
+    # CNIL délibérations al-uzza (~26k, 1 page)
+    try:
+        total_cnil = _wh.sync_count_fond("cnil")
+        if total_cnil > 0:
+            for i in range(1, (total_cnil // SITEMAP_PAGE_SIZE) + 2):
+                sub.append(f"{BASE_URL}/sitemap-cnil-{i}.xml")
+    except Exception:
+        pass
+    # LEGI : articles de loi NON indexés (le site cible la jurisprudence,
+    # pas Légifrance bis). Les pages /loi/ restent accessibles pour le
+    # cross-linking depuis les décisions, mais hors sitemap → Google ne
+    # les découvrira plus comme cibles d'indexation.
+
+    items = "\n".join(f"  <sitemap><loc>{u}</loc></sitemap>" for u in sub)
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{items}
+</sitemapindex>"""
+
+
+def render_sitemap_jade(page: int, page_size: int = SITEMAP_PAGE_SIZE) -> str:
+    """Sub-sitemap JADE (admin), trié par date DESC. `page` 1-indexed."""
+    if page < 1:
+        page = 1
+    offset = (page - 1) * page_size
+    rows = _wh.sync_enumerate_fond("jade", offset=offset, limit=page_size)
+    items = "\n".join(
+        f'  <url><loc>{BASE_URL}/decision/admin/{esc(r.get("id",""))}</loc>'
+        f'<lastmod>{esc(r.get("date") or "")}</lastmod></url>'
+        for r in rows if r.get("id")
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{items}
+</urlset>"""
+
+
+def render_sitemap_cedh(page: int = 1, page_size: int = SITEMAP_PAGE_SIZE) -> str:
+    """Sub-sitemap CEDH (~76k). Lit la table cedh_decisions de PROD."""
+    if page < 1: page = 1
+    offset = (page - 1) * page_size
+    rows = []
+    try:
+        with sqlite3.connect(f"file:{DILA_DB}?mode=ro", uri=True) as c:
+            rows = c.execute(
+                "SELECT itemid, date FROM cedh_decisions ORDER BY date DESC LIMIT ? OFFSET ?",
+                (page_size, offset),
+            ).fetchall()
+    except Exception:
+        pass
+    items = "\n".join(
+        f'  <url><loc>{BASE_URL}/decision/cedh/{esc(rid)}</loc>'
+        f'<lastmod>{esc(d) if d else ""}</lastmod></url>'
+        for rid, d in rows if rid
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{items}
+</urlset>"""
+
+
+def render_sitemap_cjue(page: int = 1, page_size: int = SITEMAP_PAGE_SIZE) -> str:
+    """Sub-sitemap CJUE (~44k). Lit la table cjue_decisions de PROD."""
+    if page < 1: page = 1
+    offset = (page - 1) * page_size
+    rows = []
+    try:
+        with sqlite3.connect(f"file:{DILA_DB}?mode=ro", uri=True) as c:
+            rows = c.execute(
+                "SELECT celex, date FROM cjue_decisions ORDER BY date DESC LIMIT ? OFFSET ?",
+                (page_size, offset),
+            ).fetchall()
+    except Exception:
+        pass
+    items = "\n".join(
+        f'  <url><loc>{BASE_URL}/decision/cjue/{esc(rid)}</loc>'
+        f'<lastmod>{esc(d) if d else ""}</lastmod></url>'
+        for rid, d in rows if rid
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{items}
+</urlset>"""
+
+
+def render_sitemap_ariane(page: int = 1, page_size: int = SITEMAP_PAGE_SIZE) -> str:
+    """Sub-sitemap ArianeWeb CE (~60k). ariane_decisions n'a pas de date,
+    on utilise fetched_at comme proxy lastmod."""
+    if page < 1: page = 1
+    offset = (page - 1) * page_size
+    rows = []
+    try:
+        with sqlite3.connect(f"file:{DILA_DB}?mode=ro", uri=True) as c:
+            rows = c.execute(
+                "SELECT ariane_id, fetched_at FROM ariane_decisions "
+                "ORDER BY ariane_num DESC LIMIT ? OFFSET ?",
+                (page_size, offset),
+            ).fetchall()
+    except Exception:
+        pass
+    items = []
+    for rid, ts in rows:
+        if not rid:
+            continue
+        # ariane_id ressemble à "/Ariane_Web/AW_DCE/|497566" -on URL-encode
+        # simplement le path tel qu'attendu par fetch_decision(source=ariane).
+        from urllib.parse import quote
+        slug = quote(rid, safe="")
+        lastmod = (ts or "")[:10] if ts else ""
+        items.append(
+            f'  <url><loc>{BASE_URL}/decision/ariane/{esc(slug)}</loc>'
+            f'<lastmod>{esc(lastmod)}</lastmod></url>'
+        )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{chr(10).join(items)}
+</urlset>"""
+
+
+def render_sitemap_opendata(page: int = 1, page_size: int = SITEMAP_PAGE_SIZE) -> str:
+    """Sub-sitemap opendata.justice-administrative.fr (TAs + CAA + CE).
+    Le DL est progressif (cf download_opendata.py) : ce sub-sitemap reflète
+    l'état courant à chaque appel. Cache 1h pour suivre la croissance.
+    """
+    if page < 1: page = 1
+    offset = (page - 1) * page_size
+    rows = _wh.sync_enumerate_fond("opendata", offset=offset, limit=page_size)
+    items = "\n".join(
+        f'  <url><loc>{BASE_URL}/decision/admin/{esc(r.get("id",""))}</loc>'
+        f'<lastmod>{esc(r.get("date") or "")}</lastmod></url>'
+        for r in rows if r.get("id")
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{items}
+</urlset>"""
+
+
+def render_sitemap_cnil(page: int = 1, page_size: int = SITEMAP_PAGE_SIZE) -> str:
+    """Sub-sitemap CNIL délibérations (~26k). Via warehouse al-uzza."""
+    if page < 1: page = 1
+    offset = (page - 1) * page_size
+    rows = _wh.sync_enumerate_fond("cnil", offset=offset, limit=page_size)
+    items = "\n".join(
+        f'  <url><loc>{BASE_URL}/decision/cnil/{esc(r.get("id",""))}</loc>'
+        f'<lastmod>{esc(r.get("date") or "")}</lastmod></url>'
+        for r in rows if r.get("id")
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{items}
+</urlset>"""
+
+
+def render_sitemap_legi(page: int, page_size: int = SITEMAP_PAGE_SIZE) -> str:
+    """Sub-sitemap LEGI (articles de loi VIGUEUR). URL = /loi/{code}/{num}.
+
+    On utilise le LEGITEXT du parent comme pseudo-code si pas de mapping
+    inverse disponible -sinon Google va essayer d'indexer une URL invalide.
+    Pour LEGI, l'enumerate retourne (id=legiarti, legitext, num, date).
+    On a besoin du code court (CC, CT, CASF…) pour matcher CODE_TO_LEGITEXT
+    côté warehouse.
+    """
+    if page < 1:
+        page = 1
+    offset = (page - 1) * page_size
+    rows = _wh.sync_enumerate_fond("legi", offset=offset, limit=page_size)
+    # Mapping LEGITEXT → code court (lazy import pour éviter cycles)
+    from sources import legi as _legi
+    LEGITEXT_TO_CODE = {v: k for k, v in _legi.SUPPORTED_CODES_LEGITEXT.items()} \
+        if hasattr(_legi, "SUPPORTED_CODES_LEGITEXT") else {}
+    items_list = []
+    for r in rows:
+        legitext = r.get("legitext") or ""
+        num = r.get("num") or ""
+        if not legitext or not num:
+            continue
+        code = LEGITEXT_TO_CODE.get(legitext)
+        if not code:
+            # Fallback : utiliser le LEGITEXT directement comme code
+            # (warehouse_server.law_at_date accepte LEGITEXT* en input)
+            code = legitext
+        items_list.append(
+            f'  <url><loc>{BASE_URL}/loi/{esc(code)}/{esc(num)}</loc>'
+            f'<lastmod>{esc(r.get("date") or "")}</lastmod></url>'
+        )
+    items = "\n".join(items_list)
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{items}
+</urlset>"""
+
+
+def render_sitemap_static() -> str:
+    items = "\n".join(
+        f'  <url><loc>{BASE_URL}{path}</loc><priority>{prio}</priority><changefreq>{freq}</changefreq></url>'
+        for path, prio, freq in STATIC_PAGES
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{items}
+</urlset>"""
+
+
+def render_sitemap_dila(page: int, page_size: int = 50000) -> str:
+    """Sub-sitemap DILA (Cass + CA + CC), trié par date DESC.
+    `page` est 1-indexed.
+    """
+    if page < 1:
+        page = 1
+    offset = (page - 1) * page_size
+    rows = []
+    try:
+        with sqlite3.connect(f"file:{DILA_DB}?mode=ro", uri=True) as c:
+            cur = c.execute(
+                "SELECT id, date FROM decisions ORDER BY date DESC LIMIT ? OFFSET ?",
+                (page_size, offset),
+            )
+            rows = cur.fetchall()
+    except Exception:
+        rows = []
+    items = "\n".join(
+        f'  <url><loc>{BASE_URL}/decision/dila/{esc(rid)}</loc>'
+        f'<lastmod>{esc(d) if d else ""}</lastmod></url>'
+        for rid, d in rows
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{items}
+</urlset>"""
+
+
+# ─── Sync wrappers (token_server is sync HTTPServer) ──────────────────
+
+def fetch_decision_sync(source: str, decision_id: str) -> dict | None:
+    try:
+        return asyncio.run(fetch_decision(source=source, decision_id=decision_id))
+    except Exception:
+        return None
