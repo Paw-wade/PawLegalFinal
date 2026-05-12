@@ -188,7 +188,6 @@ async function postLexiaAnthropicSse(
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
-        'Cache-Control': 'no-cache',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ ...body, stream: true }),

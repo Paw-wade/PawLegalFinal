@@ -57,6 +57,50 @@ function isLocalhostOrigin(urlStr) {
   }
 }
 
+/** Hôte type sous-domaine API (souvent en première position dans FRONTEND_URL) — à ne pas utiliser pour les liens e-mail. */
+function isApiSubdomainHostname(hostname) {
+  return String(hostname || '')
+    .toLowerCase()
+    .startsWith('api.');
+}
+
+/**
+ * Si l’URL pointe vers un hôte `api.*`, tente l’équivalent `www.*` (convention courante).
+ * Évite les liens e-mail qui mènent au serveur Express (404 sur les pages Next).
+ */
+function publicSiteUrlFromPossiblyApiUrl(urlStr) {
+  const s = stripTrailingSlashes(String(urlStr || '').trim());
+  if (!s) return s;
+  try {
+    const u = new URL(s);
+    if (isApiSubdomainHostname(u.hostname)) {
+      const rest = u.hostname.slice(4);
+      return stripTrailingSlashes(`${u.protocol}//www.${rest}`);
+    }
+  } catch {
+    /* ignore */
+  }
+  return s;
+}
+
+function pickHttpsEmailBase(remoteHttps) {
+  if (!remoteHttps.length) return null;
+  const nonApi = remoteHttps.filter((u) => {
+    try {
+      return !isApiSubdomainHostname(new URL(u).hostname);
+    } catch {
+      return true;
+    }
+  });
+  const pool = nonApi.length > 0 ? nonApi : remoteHttps;
+  const preferred = pool.find(
+    (u) => stripTrailingSlashes(u).toLowerCase() === 'https://www.adapapers.fr'
+  );
+  if (preferred) return preferred;
+  if (nonApi.length > 0) return nonApi[0];
+  return publicSiteUrlFromPossiblyApiUrl(remoteHttps[0]) || remoteHttps[0];
+}
+
 /**
  * Base URL pour les liens dans les e-mails (Brevo / SMTP).
  * Ne doit pas être confondue avec l’URL de l’API (api.adapapers.fr).
@@ -64,7 +108,7 @@ function isLocalhostOrigin(urlStr) {
 function getPrimaryFrontendUrl() {
   const explicit = stripTrailingSlashes(process.env.PUBLIC_APP_URL || '');
   if (explicit) {
-    return explicit;
+    return publicSiteUrlFromPossiblyApiUrl(explicit);
   }
 
   const list = getFrontendOriginsList();
@@ -75,10 +119,7 @@ function getPrimaryFrontendUrl() {
     return low.startsWith('https://') && !isLocalhostOrigin(u);
   });
   if (remoteHttps.length > 0) {
-    const preferred = remoteHttps.find(
-      (u) => stripTrailingSlashes(u).toLowerCase() === 'https://www.adapapers.fr'
-    );
-    return preferred || remoteHttps[0];
+    return pickHttpsEmailBase(remoteHttps);
   }
 
   const remoteHttp = normalized.filter((u) => {
