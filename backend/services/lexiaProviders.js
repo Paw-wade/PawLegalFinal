@@ -7,6 +7,7 @@ const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
 const { searchAndCompose, getKnowledgeDir } = require('./lexiaInternal');
 const { getPawAiLegalSystemPrompt } = require('./lexiaLegalCharter');
+const { prepareLlmContext, gatherExternalOnlyForInternal, mergeSystemPrompt } = require('./lexiaRetrieval');
 
 const VALID = new Set(['auto', 'internal', 'anthropic', 'gemini', 'all']);
 
@@ -183,8 +184,16 @@ async function streamAnthropicLexia(res, req, messages) {
     throw err;
   }
 
+  let retrievalCtx;
+  try {
+    retrievalCtx = await prepareLlmContext(messages);
+  } catch (prepErr) {
+    console.warn('[lexia] Récupération documentaire (stream) — non bloquant:', prepErr?.message || prepErr);
+    retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
+  }
+
   const maxTokens = Math.min(Math.max(Number(process.env.ANTHROPIC_MAX_TOKENS) || 4096, 256), 8192);
-  const system = getPawAiLegalSystemPrompt();
+  const system = mergeSystemPrompt(getPawAiLegalSystemPrompt(), retrievalCtx.systemAppendix);
   const timeoutMs = Math.min(Math.max(Number(process.env.ANTHROPIC_TIMEOUT_MS) || 120000, 30000), 600000);
 
   const client = new Anthropic({ apiKey: key, timeout: timeoutMs });
@@ -220,8 +229,12 @@ async function streamAnthropicLexia(res, req, messages) {
       type: 'complete',
       ...buildLexiaChatSuccessPayload({
         text: finalText,
-        sources: [{ file: 'api:anthropic', score: 1, metadata: { model }, source: 'anthropic' }],
-        searched: false,
+        sources: [
+          ...(Array.isArray(retrievalCtx.sources) ? retrievalCtx.sources : []),
+          { file: 'api:anthropic', score: 1, metadata: { model }, source: 'anthropic' },
+        ],
+        searched: Boolean(retrievalCtx.searched),
+        totalToolUses: retrievalCtx.totalToolUses,
         provider: 'anthropic',
         resolvedProvider: 'anthropic',
       }),
@@ -255,7 +268,7 @@ async function streamAnthropicLexia(res, req, messages) {
   }
 }
 
-async function callAnthropic(messages) {
+async function callAnthropic(messages, retrievalCtx = null) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
     const err = new Error('ANTHROPIC_API_KEY non configurée sur le serveur');
@@ -275,8 +288,18 @@ async function callAnthropic(messages) {
     throw err;
   }
 
+  let ctx = retrievalCtx;
+  if (ctx == null) {
+    try {
+      ctx = await prepareLlmContext(messages);
+    } catch (prepErr) {
+      console.warn('[lexia] Récupération documentaire — non bloquant:', prepErr?.message || prepErr);
+      ctx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
+    }
+  }
+
   const maxTokens = Math.min(Math.max(Number(process.env.ANTHROPIC_MAX_TOKENS) || 4096, 256), 8192);
-  const system = getPawAiLegalSystemPrompt();
+  const system = mergeSystemPrompt(getPawAiLegalSystemPrompt(), ctx.systemAppendix);
   const timeoutMs = Math.min(Math.max(Number(process.env.ANTHROPIC_TIMEOUT_MS) || 120000, 30000), 600000);
 
   const client = new Anthropic({ apiKey: key, timeout: timeoutMs });
@@ -291,9 +314,9 @@ async function callAnthropic(messages) {
 
     const text = textFromAnthropicContent(data.content);
     if (!text && data.stop_reason === 'max_tokens') {
-      return { text: '_(Réponse tronquée — augmentez ANTHROPIC_MAX_TOKENS si besoin.)_', model };
+      return { text: '_(Réponse tronquée — augmentez ANTHROPIC_MAX_TOKENS si besoin.)_', model, retrievalCtx: ctx };
     }
-    return { text: text || '_(Réponse vide du modèle.)_', model };
+    return { text: text || '_(Réponse vide du modèle.)_', model, retrievalCtx: ctx };
   } catch (e) {
     const mapped = mapAnthropicSdkError(e, model);
     if (mapped) throw mapped;
@@ -301,7 +324,7 @@ async function callAnthropic(messages) {
   }
 }
 
-async function callGemini(messages) {
+async function callGemini(messages, retrievalCtx = null) {
   if (isGeminiDisabled()) {
     const err = new Error('Gemini est désactivé sur ce serveur (LEXIA_DISABLE_GEMINI).');
     err.code = 'GEMINI_DISABLED';
@@ -321,8 +344,20 @@ async function callGemini(messages) {
     throw err;
   }
 
+  let ctx = retrievalCtx;
+  if (ctx == null) {
+    try {
+      ctx = await prepareLlmContext(messages);
+    } catch (prepErr) {
+      console.warn('[lexia] Récupération documentaire (Gemini) — non bloquant:', prepErr?.message || prepErr);
+      ctx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
+    }
+  }
+
   const maxOut = Math.min(Math.max(Number(process.env.GEMINI_MAX_TOKENS) || 8192, 256), 8192);
-  const systemInstruction = { parts: [{ text: getPawAiLegalSystemPrompt() }] };
+  const systemInstruction = {
+    parts: [{ text: mergeSystemPrompt(getPawAiLegalSystemPrompt(), ctx.systemAppendix) }],
+  };
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
   )}:generateContent?key=${encodeURIComponent(key)}`;
@@ -391,7 +426,7 @@ async function callGemini(messages) {
 
   const parts = cand?.content?.parts;
   const text = Array.isArray(parts) ? parts.map((p) => (p.text != null ? String(p.text) : '')).join('') : '';
-  return { text: text || '_(Réponse vide du modèle.)_', model };
+  return { text: text || '_(Réponse vide du modèle.)_', model, retrievalCtx: ctx };
 }
 
 function sourcesFromInternal(internalResult) {
@@ -440,13 +475,20 @@ async function runAllAndMerge(messages) {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   const lastUserSnippet = String(lastUser?.content || '').slice(0, 2000);
 
+  let retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
+  try {
+    retrievalCtx = await prepareLlmContext(messages);
+  } catch (prepErr) {
+    console.warn('[lexia] Mode « all » — récupération documentaire non bloquante:', prepErr?.message || prepErr);
+  }
+
   const internalP = searchAndCompose(messages, dir).catch((e) => ({
     text: `## Base interne — erreur\n\n${String(e.message || e)}`,
     sources: [],
   }));
 
   const anthropicP = process.env.ANTHROPIC_API_KEY
-    ? callAnthropic(messages).catch((e) => ({
+    ? callAnthropic(messages, retrievalCtx).catch((e) => ({
         text: `_(Analyse externe indisponible : ${String(e.message || e)})_`,
         failed: true,
       }))
@@ -458,7 +500,7 @@ async function runAllAndMerge(messages) {
   } else if (isGeminiDisabled()) {
     geminiP = Promise.resolve({ text: '_(Gemini désactivé sur ce serveur (LEXIA_DISABLE_GEMINI).)_', skipped: true });
   } else {
-    geminiP = callGemini(messages).catch((e) => ({
+    geminiP = callGemini(messages, retrievalCtx).catch((e) => ({
       text: `_(Seconde analyse externe indisponible : ${String(e.message || e)})_`,
       failed: true,
     }));
@@ -478,7 +520,7 @@ async function runAllAndMerge(messages) {
       `"""${lastUserSnippet}"""\n\n` +
       `Tu reçois trois briques produites en parallèle (ci-dessous sous des intitulés neutres A / B / C — ne **jamais** les répéter tels quels ni révéler à l'utilisateur qu'il s'agit de chaînes ou fournisseurs distincts). ` +
       `Rédige **une seule** réponse en français, claire et structurée (titres markdown ## / ### si utile), comme si **Paw AI** produisait une analyse unifiée. ` +
-      `Respecte impérativement ton instruction système (charte Paw AI : sources, syllogisme, balises span lexia-verified / lexia-hypothesis / lexia-caution, section Recommandations). ` +
+      `Respecte la charte Paw AI (sources, syllogisme, section Recommandations). Balises span lexia-* : **très peu**, uniquement pour l’essentiel (voir consigne « parcimonie ») ; le gras markdown suffit le plus souvent. ` +
       `N'utilise **aucune** étiquette du type [Interne], [Anthropic], [Gemini], [Claude], [Google], ni aucun nom de modèle ou d'API. Ne dis pas quelle « brique » a fourni quoi. ` +
       `Si une brique indique une erreur ou une absence de configuration, intègre l'information de façon générique (« une partie de l'analyse n'a pas pu être produite ») sans nommer de fournisseur. ` +
       `Si tu recommandes un contact humain ou un accompagnement personnalisé sur le dossier, oriente **uniquement** vers **Ada Papers** (plateforme / messagerie Ada Papers) — jamais vers la Cimade, le Gisti, un autre cabinet ou une autre association pour ce suivi.\n\n` +
@@ -487,11 +529,14 @@ async function runAllAndMerge(messages) {
       `---\n### Brique C — analyse complémentaire\n\n${gemText.slice(0, 16000)}`,
   };
 
+  const retrievalNonIndex = (retrievalCtx.sources || []).filter((s) => s && s.source !== 'internal_index');
+
   if (process.env.ANTHROPIC_API_KEY) {
     try {
-      const out = await callAnthropic([synthUserMessage]);
+      const out = await callAnthropic([synthUserMessage], retrievalCtx);
       const mergedSources = [
         ...internalSources,
+        ...retrievalNonIndex,
         { file: 'api:anthropic', score: 1, metadata: {}, source: 'anthropic' },
         { file: 'api:gemini', score: 1, metadata: {}, source: 'gemini' },
       ];
@@ -499,6 +544,7 @@ async function runAllAndMerge(messages) {
         text: out.text,
         sources: mergedSources,
         searched: true,
+        totalToolUses: retrievalCtx.totalToolUses,
       };
     } catch (e) {
       console.warn('[lexia] Synthèse mode « all » via Anthropic échouée, repli Gemini ou concat :', e.message);
@@ -507,9 +553,10 @@ async function runAllAndMerge(messages) {
 
   if (process.env.GEMINI_API_KEY && !isGeminiDisabled()) {
     try {
-      const out = await callGemini([synthUserMessage]);
+      const out = await callGemini([synthUserMessage], retrievalCtx);
       const mergedSources = [
         ...internalSources,
+        ...retrievalNonIndex,
         { file: 'api:anthropic', score: 1, metadata: {}, source: 'anthropic' },
         { file: 'api:gemini', score: 1, metadata: {}, source: 'gemini' },
       ];
@@ -517,6 +564,7 @@ async function runAllAndMerge(messages) {
         text: out.text,
         sources: mergedSources,
         searched: true,
+        totalToolUses: retrievalCtx.totalToolUses,
       };
     } catch (e) {
       console.warn('[lexia] Synthèse mode « all » via Gemini échouée, concaténation :', e.message);
@@ -542,10 +590,12 @@ async function runAllAndMerge(messages) {
     text: concat,
     sources: [
       ...internalSources,
+      ...retrievalNonIndex,
       { file: 'api:anthropic', score: 1, metadata: {}, source: 'anthropic' },
       { file: 'api:gemini', score: 1, metadata: {}, source: 'gemini' },
     ],
     searched: true,
+    totalToolUses: retrievalCtx.totalToolUses,
   };
 }
 
@@ -557,11 +607,16 @@ async function runLexiaWithProvider(messages, providerRequested) {
   const dir = getKnowledgeDir();
 
   if (resolved === 'internal') {
-    const result = await searchAndCompose(messages, dir);
+    const [result, ext] = await Promise.all([
+      searchAndCompose(messages, dir),
+      gatherExternalOnlyForInternal(messages),
+    ]);
+    const text = ext.markdown?.trim() ? `${result.text}\n\n${ext.markdown}` : result.text;
     return {
-      text: result.text,
-      sources: result.sources || [],
+      text,
+      sources: [...(result.sources || []), ...(ext.sources || [])],
       searched: true,
+      totalToolUses: ext.totalToolUses,
       provider: 'internal',
       resolvedProvider: 'internal',
     };
@@ -569,23 +624,42 @@ async function runLexiaWithProvider(messages, providerRequested) {
 
   if (resolved === 'anthropic') {
     try {
-      const out = await callAnthropic(messages);
-      const sources = [{ file: 'api:anthropic', score: 1, metadata: { model: out.model }, source: 'anthropic' }];
+      let retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
+      try {
+        retrievalCtx = await prepareLlmContext(messages);
+      } catch (prepErr) {
+        console.warn('[lexia] Récupération (Anthropic) — non bloquant:', prepErr?.message || prepErr);
+      }
+      const out = await callAnthropic(messages, retrievalCtx);
+      const ctx = out.retrievalCtx || retrievalCtx;
+      const sources = [
+        ...(Array.isArray(ctx.sources) ? ctx.sources : []),
+        { file: 'api:anthropic', score: 1, metadata: { model: out.model }, source: 'anthropic' },
+      ];
       return {
         text: out.text,
         sources,
-        searched: false,
+        searched: Boolean(ctx.searched),
+        totalToolUses: ctx.totalToolUses,
         provider: 'anthropic',
         resolvedProvider: 'anthropic',
       };
     } catch (e) {
       if (isAutoRequested(providerRequested)) {
         console.warn('[lexia] Anthropic échoué, repli base interne (mode auto):', e.message || e);
-        const result = await searchAndCompose(messages, dir);
+        const [result, ext] = await Promise.all([
+          searchAndCompose(messages, dir),
+          gatherExternalOnlyForInternal(messages),
+        ]);
+        const text =
+          String(result.text || '') +
+          LEXIA_AUTO_FALLBACK_NOTE +
+          (ext.markdown?.trim() ? `\n\n${ext.markdown}` : '');
         return {
-          text: String(result.text || '') + LEXIA_AUTO_FALLBACK_NOTE,
-          sources: result.sources || [],
+          text,
+          sources: [...(result.sources || []), ...(ext.sources || [])],
           searched: true,
+          totalToolUses: ext.totalToolUses,
           provider: 'internal',
           resolvedProvider: 'internal',
         };
@@ -596,23 +670,42 @@ async function runLexiaWithProvider(messages, providerRequested) {
 
   if (resolved === 'gemini') {
     try {
-      const out = await callGemini(messages);
-      const sources = [{ file: 'api:gemini', score: 1, metadata: { model: out.model }, source: 'gemini' }];
+      let retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
+      try {
+        retrievalCtx = await prepareLlmContext(messages);
+      } catch (prepErr) {
+        console.warn('[lexia] Récupération (Gemini) — non bloquant:', prepErr?.message || prepErr);
+      }
+      const out = await callGemini(messages, retrievalCtx);
+      const ctx = out.retrievalCtx || retrievalCtx;
+      const sources = [
+        ...(Array.isArray(ctx.sources) ? ctx.sources : []),
+        { file: 'api:gemini', score: 1, metadata: { model: out.model }, source: 'gemini' },
+      ];
       return {
         text: out.text,
         sources,
-        searched: false,
+        searched: Boolean(ctx.searched),
+        totalToolUses: ctx.totalToolUses,
         provider: 'gemini',
         resolvedProvider: 'gemini',
       };
     } catch (e) {
       if (isAutoRequested(providerRequested)) {
         console.warn('[lexia] Gemini échoué, repli base interne (mode auto):', e.message || e);
-        const result = await searchAndCompose(messages, dir);
+        const [result, ext] = await Promise.all([
+          searchAndCompose(messages, dir),
+          gatherExternalOnlyForInternal(messages),
+        ]);
+        const text =
+          String(result.text || '') +
+          LEXIA_AUTO_FALLBACK_NOTE +
+          (ext.markdown?.trim() ? `\n\n${ext.markdown}` : '');
         return {
-          text: String(result.text || '') + LEXIA_AUTO_FALLBACK_NOTE,
-          sources: result.sources || [],
+          text,
+          sources: [...(result.sources || []), ...(ext.sources || [])],
           searched: true,
+          totalToolUses: ext.totalToolUses,
           provider: 'internal',
           resolvedProvider: 'internal',
         };
@@ -627,17 +720,23 @@ async function runLexiaWithProvider(messages, providerRequested) {
       text: result.text,
       sources: result.sources || [],
       searched: Boolean(result.searched),
+      totalToolUses: result.totalToolUses,
       provider: 'all',
       resolvedProvider: 'all',
     };
   }
 
   // auto (ne devrait pas arriver ici — resolveLexiaProvider renvoie déjà un mode concret)
-  const fallback = await searchAndCompose(messages, dir);
+  const [fallback, ext] = await Promise.all([
+    searchAndCompose(messages, dir),
+    gatherExternalOnlyForInternal(messages),
+  ]);
+  const text = ext.markdown?.trim() ? `${fallback.text}\n\n${ext.markdown}` : fallback.text;
   return {
-    text: fallback.text,
-    sources: fallback.sources || [],
+    text,
+    sources: [...(fallback.sources || []), ...(ext.sources || [])],
     searched: true,
+    totalToolUses: ext.totalToolUses,
     provider: 'internal',
     resolvedProvider: 'internal',
   };

@@ -12,7 +12,8 @@
     "kill-port": "node scripts/kill-port.js",
     "start:clean": "node scripts/kill-port.js 3005 && node --max-old-space-size=8192 server.js",
     "init-cms": "node scripts/initCmsContent.js",
-    "email:test-forum": "node scripts/sendForumTestEmail.js"
+    "email:test-forum": "node scripts/sendForumTestEmail.js",
+    "test:lexia-sse": "node scripts/testLexiaSseStream.js"
   },
   "keywords": [],
   "author": "",

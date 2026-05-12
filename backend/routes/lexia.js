@@ -17,6 +17,67 @@ const {
   streamAnthropicLexia,
 } = require('../services/lexiaProviders');
 const { protect, authorize } = require('../middleware/auth');
+const LexiaPawAiState = require('../models/LexiaPawAiState');
+
+const MAX_CLOUD_THREADS = 40;
+const MAX_CLOUD_MESSAGES_PER_THREAD = 80;
+const MAX_CLOUD_MESSAGE_CHARS = 48000;
+
+/**
+ * Nettoie le JSON threads côté serveur (évite documents Mongo hors limites / injection).
+ */
+function sanitizeChatThreadsForStorage(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, MAX_CLOUD_THREADS)
+    .map((t) => {
+      if (!t || typeof t !== 'object') return null;
+      const id = typeof t.id === 'string' && t.id.length > 0 && t.id.length < 200 ? t.id : null;
+      if (!id) return null;
+      const title =
+        typeof t.title === 'string' && t.title.trim() ? t.title.trim().slice(0, 500) : 'Nouvelle conversation';
+      const rawMsgs = Array.isArray(t.messages) ? t.messages : [];
+      const messages = rawMsgs.slice(0, MAX_CLOUD_MESSAGES_PER_THREAD).map((m) => {
+        if (!m || typeof m !== 'object') return null;
+        const role = m.role === 'user' || m.role === 'assistant' ? m.role : null;
+        if (!role) return null;
+        let content = typeof m.content === 'string' ? m.content : '';
+        if (content.length > MAX_CLOUD_MESSAGE_CHARS) {
+          content = content.slice(0, MAX_CLOUD_MESSAGE_CHARS);
+        }
+        const mid =
+          typeof m.id === 'number' && Number.isFinite(m.id) ? m.id : Math.floor(Date.now() + Math.random() * 1e6);
+        const row = {
+          id: mid,
+          role,
+          content,
+        };
+        if (m.searched === true) row.searched = true;
+        if (m.isError === true) row.isError = true;
+        if (typeof m.lexiaProvider === 'string' && m.lexiaProvider.length < 40) {
+          row.lexiaProvider = m.lexiaProvider;
+        }
+        if (Array.isArray(m.sourcesFound)) {
+          row.sourcesFound = m.sourcesFound.filter((x) => typeof x === 'string').slice(0, 200);
+        }
+        if (typeof m.totalToolUses === 'number' && Number.isFinite(m.totalToolUses)) {
+          row.totalToolUses = m.totalToolUses;
+        }
+        if (Array.isArray(m.lexiaKnowledgeSources)) {
+          row.lexiaKnowledgeSources = m.lexiaKnowledgeSources.slice(0, 400);
+        }
+        return row;
+      }).filter(Boolean);
+      const updatedAt =
+        typeof t.updatedAt === 'number' && Number.isFinite(t.updatedAt) ? t.updatedAt : Date.now();
+      const row = { id, title, messages, updatedAt };
+      if (typeof t.forumThreadId === 'string' && t.forumThreadId.length < 80) {
+        row.forumThreadId = t.forumThreadId;
+      }
+      return row;
+    })
+    .filter(Boolean);
+}
 
 /** Même périmètre que paw-search : lecture du corpus indexé. */
 const LEXIA_KNOWLEDGE_READ_ROLES = [
@@ -148,6 +209,8 @@ router.get('/config', async (req, res) => {
     res.json({
       success: true,
       envProvider: process.env.LEXIA_PROVIDER || 'internal',
+      /** Moteur effectif si le client envoie provider=auto (même logique que POST /api/lexia). */
+      resolvedForAuto: resolveLexiaProvider('auto'),
       anthropicConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
       geminiConfigured: Boolean(process.env.GEMINI_API_KEY) && !isGeminiDisabled(),
       knowledgeDirRelative: knowledgeDir,
@@ -156,6 +219,41 @@ router.get('/config', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/lexia/chat-state
+ * Historique Paw AI du compte connecté (multi-appareils).
+ */
+router.get('/chat-state', protect, authorize(...LEXIA_KNOWLEDGE_READ_ROLES), async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const doc = await LexiaPawAiState.findOne({ user: userId }).lean();
+    res.json({ success: true, threads: Array.isArray(doc?.threads) ? doc.threads : [] });
+  } catch (err) {
+    console.error('[lexia] GET /chat-state:', err.message);
+    res.status(500).json({ success: false, error: err.message || 'Erreur serveur' });
+  }
+});
+
+/**
+ * PUT /api/lexia/chat-state
+ * Remplace l’historique Paw AI du compte (dernière version client, debouncée).
+ */
+router.put('/chat-state', protect, authorize(...LEXIA_KNOWLEDGE_READ_ROLES), async (req, res) => {
+  try {
+    const threads = sanitizeChatThreadsForStorage(req.body?.threads);
+    const userId = req.user._id || req.user.id;
+    await LexiaPawAiState.findOneAndUpdate(
+      { user: userId },
+      { $set: { threads } },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true, saved: threads.length });
+  } catch (err) {
+    console.error('[lexia] PUT /chat-state:', err.message);
+    res.status(500).json({ success: false, error: err.message || 'Erreur serveur' });
   }
 });
 
@@ -223,7 +321,10 @@ router.post('/', async (req, res) => {
       return;
     }
 
-    console.log(`[lexia] POST / démarrage (${messages.length} message(s)) provider=${String(provider || 'auto')}`);
+    const resolvedForLog = resolveLexiaProvider(provider);
+    console.log(
+      `[lexia] POST / démarrage (${messages.length} message(s)) provider=${String(provider || 'auto')} → résolu=${resolvedForLog}`
+    );
     const result = await runLexiaWithProvider(messages, provider);
     res.json(buildLexiaChatSuccessPayload(result));
     finished = true;
