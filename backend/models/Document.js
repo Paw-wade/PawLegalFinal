@@ -51,6 +51,23 @@ const documentSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  /** Dépôt via lien public tiers (invitation admin). */
+  uploadedViaGuestLink: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  guestUploadInviteId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'DossierGuestUploadInvite',
+    default: null,
+  },
+  guestContributorName: {
+    type: String,
+    trim: true,
+    maxlength: 200,
+    default: '',
+  },
   createdAt: {
     type: Date,
     default: Date.now

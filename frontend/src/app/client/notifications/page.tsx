@@ -172,6 +172,7 @@ function NotificationsContent() {
       message_received: '💬',
       tarification_choice_requested: '💶',
       tarification_payment_reminder: '💶',
+      tarification_prestation_paid: '✅',
       other: '🔔',
     };
     return icons[type] || '🔔';

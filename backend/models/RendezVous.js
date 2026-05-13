@@ -100,6 +100,12 @@ const rendezVousSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  /** ID événement Google Calendar (sync cabinet) — renseigné après création côté Google. */
+  googleCalendarEventId: {
+    type: String,
+    trim: true,
+    default: undefined,
+  },
   createdAt: {
     type: Date,
     default: Date.now

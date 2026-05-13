@@ -1024,6 +1024,10 @@ export const dossiersAPI = {
   sendTarificationPaymentReminder: (dossierId: string) =>
     api.post(`/user/dossiers/${dossierId}/tarification-payment-reminder`),
 
+  /** Admin / superadmin : marquer une prestation de tarification comme réglée */
+  markTarificationPrestationPaid: (dossierId: string, prestationId: string) =>
+    api.post(`/user/dossiers/${dossierId}/tarification-prestations/${prestationId}/mark-paid`),
+
   /** Admin / superadmin : retirer la dernière demande tarification envoyée (sans formule enregistrée, sans montant fixe) */
   retractTarificationChoiceRequest: (dossierId: string) =>
     api.put(`/user/dossiers/${dossierId}`, { retractTarificationChoiceRequest: true }),
@@ -1233,6 +1237,40 @@ export const documentsAPI = {
   // Supprimer un document
   deleteDocument: (id: string) =>
     api.delete(`/user/documents/${id}`),
+
+  /** Admin — autoriser ou masquer un document pour le client */
+  updateDocumentVisibility: (
+    id: string,
+    data: { visibleToClient?: boolean; confidentialReason?: string }
+  ) => api.patch(`/user/documents/${id}/visibility`, data),
+};
+
+export const dossierGuestUploadAPI = {
+  createInvite: (data: { dossierId: string; recipientEmail: string; message?: string }) =>
+    api.post<{
+      success: boolean;
+      token?: string;
+      url?: string;
+      expiresAt?: string;
+      message?: string;
+    }>('/dossier-guest-upload/invites', data),
+};
+
+export const documentDownloadShareAPI = {
+  createShare: (data: {
+    resourceType: 'document' | 'recours_template';
+    resourceId: string;
+    recipientEmail?: string;
+    message?: string;
+  }) =>
+    api.post<{
+      success: boolean;
+      token?: string;
+      url?: string;
+      expiresAt?: string;
+      shareId?: string;
+      message?: string;
+    }>('/document-download-share/shares', data),
 };
 
 export const collaborativeDraftsAPI = {

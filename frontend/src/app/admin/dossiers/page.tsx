@@ -11,6 +11,7 @@ import {
   notificationsAPI,
   messagesAPI,
   documentsAPI,
+  dossierGuestUploadAPI,
   tasksAPI,
   collaborativeDraftsAPI,
   dossierDocumentDraftsAPI,
@@ -456,6 +457,13 @@ export default function AdminDossiersPage() {
   });
   const [directUploadError, setDirectUploadError] = useState<string | null>(null);
   const [directUploading, setDirectUploading] = useState(false);
+  const [guestInviteModalDossier, setGuestInviteModalDossier] = useState<any>(null);
+  const [guestInviteEmail, setGuestInviteEmail] = useState('');
+  const [guestInviteMessage, setGuestInviteMessage] = useState('');
+  const [guestInviteBusy, setGuestInviteBusy] = useState(false);
+  const [guestInviteError, setGuestInviteError] = useState<string | null>(null);
+  const [guestInviteCreatedUrl, setGuestInviteCreatedUrl] = useState<string | null>(null);
+  const [authorizingDocumentId, setAuthorizingDocumentId] = useState<string | null>(null);
   const [activeQuickComplementDossierId, setActiveQuickComplementDossierId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   const directFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1285,6 +1293,69 @@ export default function AdminDossiersPage() {
       setToast({ message, type: 'error' });
     } finally {
       setDeletingDocumentId(null);
+    }
+  };
+
+  const closeGuestInviteModal = () => {
+    setGuestInviteModalDossier(null);
+    setGuestInviteEmail('');
+    setGuestInviteMessage('');
+    setGuestInviteError(null);
+    setGuestInviteCreatedUrl(null);
+    setGuestInviteBusy(false);
+  };
+
+  const handleCreateGuestUploadInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guestInviteModalDossier) return;
+    const dossierId = String(guestInviteModalDossier._id || guestInviteModalDossier.id || '');
+    if (!/^[a-f0-9]{24}$/i.test(dossierId)) {
+      setGuestInviteError('Dossier invalide.');
+      return;
+    }
+    if (!guestInviteEmail.trim()) {
+      setGuestInviteError('Indiquez l’e-mail du destinataire.');
+      return;
+    }
+    setGuestInviteBusy(true);
+    setGuestInviteError(null);
+    setGuestInviteCreatedUrl(null);
+    try {
+      const response = await dossierGuestUploadAPI.createInvite({
+        dossierId,
+        recipientEmail: guestInviteEmail.trim(),
+        message: guestInviteMessage.trim() || undefined,
+      });
+      if (!response?.data?.success || !response.data.url) {
+        throw new Error(response?.data?.message || 'Création du lien impossible.');
+      }
+      setGuestInviteCreatedUrl(response.data.url);
+      setToast({ message: 'Invitation envoyée par e-mail.', type: 'success' });
+    } catch (err: any) {
+      setGuestInviteError(err?.response?.data?.message || err?.message || 'Erreur lors de l’invitation.');
+    } finally {
+      setGuestInviteBusy(false);
+    }
+  };
+
+  const handleAuthorizeClientDocument = async (doc: any) => {
+    const docId = String(doc?._id || doc?.id || '');
+    if (!docId) return;
+    setAuthorizingDocumentId(docId);
+    try {
+      const response = await documentsAPI.updateDocumentVisibility(docId, { visibleToClient: true });
+      if (!response?.data?.success) {
+        throw new Error(response?.data?.message || 'Mise à jour impossible.');
+      }
+      setToast({ message: 'Document visible pour le client.', type: 'success' });
+      await loadDossierDocuments();
+    } catch (err: any) {
+      setToast({
+        message: err?.response?.data?.message || err?.message || 'Erreur lors de l’autorisation.',
+        type: 'error',
+      });
+    } finally {
+      setAuthorizingDocumentId(null);
     }
   };
 
@@ -3596,6 +3667,23 @@ export default function AdminDossiersPage() {
                               <Button
                                 type="button"
                                 variant="outline"
+                                title="Inviter un tiers à déposer un document"
+                                aria-label="Inviter un tiers à déposer un document"
+                                className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setGuestInviteError(null);
+                                  setGuestInviteCreatedUrl(null);
+                                  setGuestInviteEmail('');
+                                  setGuestInviteMessage('');
+                                  setGuestInviteModalDossier(dossier);
+                                }}
+                              >
+                                ✉️
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
                                 title="Ajouter un document"
                                 aria-label="Ajouter un document"
                                 className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
@@ -3910,12 +3998,22 @@ export default function AdminDossiersPage() {
                                           </h5>
                                         </div>
                                         <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-semibold flex-shrink-0">
-                                          Sans demande préalable
+                                          {doc.uploadedViaGuestLink ? 'Tiers' : 'Sans demande préalable'}
                                         </span>
+                                        {doc.visibleToClient === false && (
+                                          <span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded text-xs font-semibold flex-shrink-0">
+                                            Confidentiel client
+                                          </span>
+                                        )}
                                         <span className="px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 bg-green-100 text-green-800">
                                           Reçu
                                         </span>
                                       </div>
+                                      {doc.guestContributorName ? (
+                                        <p className="text-xs text-muted-foreground mb-2 ml-7">
+                                          Déposé par : {doc.guestContributorName}
+                                        </p>
+                                      ) : null}
                                       {doc.description && (
                                         <p className="text-xs text-muted-foreground mb-2 ml-7 line-clamp-2">
                                           {doc.description}
@@ -3963,6 +4061,21 @@ export default function AdminDossiersPage() {
                                         >
                                           ⬇️ Télécharger
                                         </button>
+                                        {doc.visibleToClient === false && (
+                                          <button
+                                            type="button"
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              await handleAuthorizeClientDocument(doc);
+                                            }}
+                                            disabled={authorizingDocumentId === String(doc._id || doc.id)}
+                                            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded text-xs font-medium transition-colors disabled:opacity-60"
+                                          >
+                                            {authorizingDocumentId === String(doc._id || doc.id)
+                                              ? '…'
+                                              : 'Autoriser l’accès client'}
+                                          </button>
+                                        )}
                                         <button
                                           type="button"
                                           onClick={async (e) => {
@@ -5125,6 +5238,59 @@ export default function AdminDossiersPage() {
         </div>
       )}
       
+      {guestInviteModalDossier && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold">Inviter un tiers à déposer un document</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Dossier : {guestInviteModalDossier.titre || guestInviteModalDossier.numero || '—'}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Lien valable 7 jours, plusieurs dépôts possibles. Les fichiers seront confidentiels pour le client tant que vous n’autoriserez pas l’accès.
+            </p>
+            <form onSubmit={handleCreateGuestUploadInvite} className="mt-4 space-y-3">
+              <div>
+                <Label htmlFor="guestInviteEmail">E-mail du destinataire *</Label>
+                <Input
+                  id="guestInviteEmail"
+                  type="email"
+                  value={guestInviteEmail}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGuestInviteEmail(e.target.value)}
+                  required
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="guestInviteMessage">Message (optionnel)</Label>
+                <textarea
+                  id="guestInviteMessage"
+                  value={guestInviteMessage}
+                  onChange={(e) => setGuestInviteMessage(e.target.value)}
+                  rows={3}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+              {guestInviteError && (
+                <p className="text-sm text-destructive">{guestInviteError}</p>
+              )}
+              {guestInviteCreatedUrl && (
+                <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-900 break-all">
+                  Lien envoyé : {guestInviteCreatedUrl}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={closeGuestInviteModal} disabled={guestInviteBusy}>
+                  Fermer
+                </Button>
+                <Button type="submit" disabled={guestInviteBusy}>
+                  {guestInviteBusy ? 'Envoi…' : 'Envoyer l’invitation'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal de prévisualisation de document */}
       {selectedDocumentForPreview && (
         <DocumentPreview

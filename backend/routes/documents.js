@@ -219,6 +219,43 @@ const resolveDocumentPhysicalPath = async (document) => {
   return filePath;
 };
 
+const sanitizeDownloadName = (raw) => {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  return path.basename(value.replace(/[\\/]/g, '_'));
+};
+
+const pickFileExtension = (...names) => {
+  for (const name of names) {
+    const ext = path.extname(String(name || '')).toLowerCase();
+    if (ext && ext.length > 1) return ext;
+  }
+  return '';
+};
+
+function resolveDocumentDownloadFileName(document, localPath) {
+  const displayName = sanitizeDownloadName(document?.nom);
+  const storedName = sanitizeDownloadName(document?.nomFichier);
+  const pathName = sanitizeDownloadName(
+    localPath ? path.basename(localPath) : document?.cheminFichier
+  );
+  const extension = pickFileExtension(storedName, pathName, displayName);
+
+  if (displayName) {
+    const displayExt = path.extname(displayName).toLowerCase();
+    if (displayExt && extension && displayExt !== extension) {
+      const base = displayName.slice(0, -displayExt.length) || displayName;
+      return `${base}${extension}`;
+    }
+    if (!displayExt && extension) return `${displayName}${extension}`;
+    return displayName;
+  }
+
+  if (storedName) return storedName;
+  if (pathName) return pathName;
+  return extension ? `document${extension}` : 'document';
+}
+
 // Normaliser la catégorie pour éviter les erreurs de validation Mongoose
 // lorsque la valeur vient d'écrans différents (libellés libres, accents, etc.).
 const normalizeCategorie = (rawCategorie) => {
@@ -1043,7 +1080,7 @@ router.get('/:id/download', async (req, res) => {
     }
 
     console.log('✅ Téléchargement — fichier local:', localPath);
-    return res.download(localPath, document.nom || document.nomFichier || 'document');
+    return res.download(localPath, resolveDocumentDownloadFileName(document, localPath));
   } catch (error) {
     console.error('Erreur lors du téléchargement du document:', error);
     res.status(500).json({
@@ -1051,6 +1088,46 @@ router.get('/:id/download', async (req, res) => {
       message: 'Erreur serveur',
       error: error.message
     });
+  }
+});
+
+// @route   PATCH /api/user/documents/:id/visibility
+// @desc    Autoriser ou restreindre l’accès client à un document (admin)
+// @access  Private (Admin, Superadmin)
+router.patch('/:id/visibility', authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Identifiant de document invalide' });
+    }
+
+    const document = await Document.findById(req.params.id);
+    if (!document) {
+      return res.status(404).json({ success: false, message: 'Document non trouvé' });
+    }
+
+    const { visibleToClient, confidentialReason } = req.body || {};
+    if (visibleToClient !== undefined) {
+      document.visibleToClient = parseBoolean(visibleToClient, true);
+    }
+    if (confidentialReason !== undefined) {
+      document.confidentialReason = String(confidentialReason || '').trim();
+    }
+    if (document.visibleToClient === true) {
+      document.confidentialReason = '';
+    }
+
+    await document.save();
+
+    return res.json({
+      success: true,
+      message: document.visibleToClient
+        ? 'Le document est désormais visible pour le client.'
+        : 'Le document est marqué comme confidentiel pour le client.',
+      document,
+    });
+  } catch (error) {
+    console.error('Erreur PATCH visibility document:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
@@ -1183,5 +1260,19 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+async function deliverDocumentFileResponse(document, res) {
+  const fileUrl = document.cheminFichier;
+  if (fileUrl && String(fileUrl).trim().toLowerCase().startsWith('http')) {
+    return res.redirect(fileUrl);
+  }
+  const localPath = await resolveDocumentPhysicalPath(document);
+  if (!localPath) {
+    return res.status(404).json({ success: false, message: 'Fichier non trouvé' });
+  }
+  return res.download(localPath, resolveDocumentDownloadFileName(document, localPath));
+}
+
 module.exports = router;
+module.exports.deliverDocumentFileResponse = deliverDocumentFileResponse;
+module.exports.resolveDocumentDownloadFileName = resolveDocumentDownloadFileName;
 
