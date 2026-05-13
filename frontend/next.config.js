@@ -51,6 +51,10 @@ function devApiRewriteRules(backendOrigin) {
     'temoignages',
     'collaborative-drafts',
     'dossier-document-drafts',
+    'dossier-guest-upload',
+    'document-download-share',
+    'dossiers',
+    'drafts',
     'recours',
   ];
 

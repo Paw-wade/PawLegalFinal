@@ -147,11 +147,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       const pending = list.filter((dossier: any) => {
         if (!dossier || dossier.fraisExoneres) return false;
+        const prestations = Array.isArray(dossier?.tarificationPrestations)
+          ? dossier.tarificationPrestations
+          : [];
+        const hasUnpaidPrestations = prestations.some(
+          (p: any) => String(p?.statut || 'a_regler') === 'a_regler'
+        );
+        if (hasUnpaidPrestations) return true;
         if (dossier.paiementTarificationEffectue) return false;
         const fixedAmount = normalizeMontantTarificationFixe(dossier?.montantTarificationFixe);
-        // Badge si un paiement est attendu:
-        // - montant fixe demandé par l'administration
-        // - ou formule non encore choisie.
         return fixedAmount > 0 || !dossier?.formuleTarifaire;
       }).length;
 

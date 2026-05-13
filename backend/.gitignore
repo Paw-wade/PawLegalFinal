@@ -33,5 +33,7 @@ build/
 uploads/
 !uploads/.gitkeep
 
-
+# Google Calendar — clés compte de service (ne pas versionner)
+config/google-calendar-sa.json
+config/*-sa.json
 

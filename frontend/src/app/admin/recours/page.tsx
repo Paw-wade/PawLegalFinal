@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { recoursAPI } from '@/lib/recoursAPI';
-import { documentsAPI } from '@/lib/api';
+import { documentsAPI, documentDownloadShareAPI } from '@/lib/api';
 import { getPublicApiBaseUrl } from '@/lib/publicApiUrl';
 import { Toast } from '@/components/Toast';
 
@@ -84,6 +84,12 @@ export default function RecoursDirectoryPage() {
   const [previewTemplate, setPreviewTemplate] = useState<RecoursTemplate | null>(null);
   const [previewTargetTypeId, setPreviewTargetTypeId] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [shareModalTemplate, setShareModalTemplate] = useState<RecoursTemplate | null>(null);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareMessage, setShareMessage] = useState('');
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -182,6 +188,51 @@ export default function RecoursDirectoryPage() {
       setToast({ message: e.response?.data?.message || 'Erreur lors du déplacement du document', type: 'error' });
     } finally {
       setMovingTemplateId(null);
+    }
+  };
+
+  const openShareModal = (tpl: RecoursTemplate) => {
+    setShareModalTemplate(tpl);
+    setShareEmail('');
+    setShareMessage('');
+    setShareUrl(null);
+    setShareError(null);
+  };
+
+  const closeShareModal = () => {
+    if (shareBusy) return;
+    setShareModalTemplate(null);
+    setShareEmail('');
+    setShareMessage('');
+    setShareUrl(null);
+    setShareError(null);
+  };
+
+  const handleCreateDownloadShare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shareModalTemplate) return;
+    setShareBusy(true);
+    setShareError(null);
+    setShareUrl(null);
+    try {
+      const response = await documentDownloadShareAPI.createShare({
+        resourceType: 'recours_template',
+        resourceId: shareModalTemplate._id,
+        recipientEmail: shareEmail.trim() || undefined,
+        message: shareMessage.trim() || undefined,
+      });
+      if (!response.data?.success || !response.data?.url) {
+        throw new Error(response.data?.message || 'Impossible de créer le lien.');
+      }
+      setShareUrl(response.data.url);
+      setToast({
+        message: shareEmail.trim() ? 'Lien de téléchargement envoyé par e-mail.' : 'Lien de téléchargement créé.',
+        type: 'success',
+      });
+    } catch (e: any) {
+      setShareError(e?.response?.data?.message || e?.message || 'Erreur lors de la création du lien.');
+    } finally {
+      setShareBusy(false);
     }
   };
 
@@ -598,6 +649,13 @@ export default function RecoursDirectoryPage() {
                         >
                           👁️ Ouvrir
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => openShareModal(tpl)}
+                          className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100"
+                        >
+                          🔗 Lien public
+                        </button>
                         <a href={buildSecureFileUrl(tpl.fileUrl)} download className="inline-block">
                           <button
                             type="button"
@@ -700,6 +758,69 @@ export default function RecoursDirectoryPage() {
                 />
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {shareModalTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold">Lien de téléchargement public</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Modèle : {shareModalTemplate.title || shareModalTemplate.fileName}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Lien valable 7 jours, plusieurs téléchargements possibles, sans connexion Ada Papers.
+            </p>
+            <form onSubmit={handleCreateDownloadShare} className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-700" htmlFor="recoursShareEmail">
+                  E-mail du destinataire (optionnel)
+                </label>
+                <input
+                  id="recoursShareEmail"
+                  type="email"
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                  className="mt-1 block w-full text-xs border rounded-md px-2 py-1.5"
+                  placeholder="Laisser vide pour copier le lien uniquement"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700" htmlFor="recoursShareMessage">
+                  Message (optionnel)
+                </label>
+                <textarea
+                  id="recoursShareMessage"
+                  value={shareMessage}
+                  onChange={(e) => setShareMessage(e.target.value)}
+                  rows={3}
+                  className="mt-1 block w-full text-xs border rounded-md px-2 py-1.5"
+                />
+              </div>
+              {shareError && <p className="text-xs text-red-600">{shareError}</p>}
+              {shareUrl && (
+                <div className="rounded-md border border-green-200 bg-green-50 p-3 text-xs text-green-900 break-all">
+                  Lien : {shareUrl}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={closeShareModal}
+                  disabled={shareBusy}
+                  className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+                >
+                  Fermer
+                </button>
+                <button
+                  type="submit"
+                  disabled={shareBusy}
+                  className="px-3 py-1.5 text-xs rounded-md bg-primary text-white hover:bg-primary/90 disabled:opacity-60"
+                >
+                  {shareBusy ? 'Création…' : shareEmail.trim() ? 'Créer et envoyer' : 'Créer le lien'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -482,6 +482,44 @@ const DEFAULT_TEMPLATES = [
       { name: 'endTime', description: 'Heure fin', example: '23:30' },
     ],
   },
+  {
+    code: 'dossier_guest_upload_invite',
+    name: 'Invitation depot document tiers',
+    description: 'Lien public pour deposer un document sur un dossier',
+    subject: 'Dépôt de document — Ada Papers',
+    htmlContent:
+      '<p>Bonjour,</p><p>Ada Papers vous invite a transmettre un document pour le dossier <strong>{{dossierTitle}}</strong>.</p>{{cabinetMessageBlock}}<p>Utilisez le lien ci-dessous pour deposer votre fichier (valable 7 jours, plusieurs depots possibles) :</p><p><a href="{{depotUrl}}">{{depotUrl}}</a></p><p>Ce lien expire le {{expiryLabel}}.</p><p>Merci de ne pas transferer ce lien a d autres personnes.</p>',
+    textContent:
+      'Bonjour,\n\nAda Papers vous invite a transmettre un document pour le dossier « {{dossierTitle}} ».\n{{cabinetMessageText}}Lien de depot (7 jours, usage multiple) :\n{{depotUrl}}\n\nExpiration : {{expiryLabel}}\n\nMerci de ne pas transferer ce lien a d autres personnes.',
+    category: 'dossier',
+    isSystem: true,
+    variables: [
+      { name: 'dossierTitle', description: 'Titre ou numero du dossier', example: 'Dossier titre de sejour' },
+      { name: 'depotUrl', description: 'Lien public de depot', example: 'https://adapapers.fr/depot-dossier/abc123' },
+      { name: 'expiryLabel', description: 'Date d expiration du lien', example: 'mardi 20 mai 2026' },
+      { name: 'cabinetMessageBlock', description: 'Bloc HTML message optionnel du cabinet', example: '' },
+      { name: 'cabinetMessageText', description: 'Bloc texte message optionnel du cabinet', example: '' },
+    ],
+  },
+  {
+    code: 'document_download_share',
+    name: 'Lien telechargement document public',
+    description: 'Lien public pour telecharger un document ou un modele',
+    subject: 'Téléchargement de document — Ada Papers',
+    htmlContent:
+      '<p>Bonjour,</p><p>Ada Papers vous transmet un lien pour telecharger le document <strong>{{title}}</strong>.</p>{{cabinetMessageBlock}}<p>Utilisez le lien ci-dessous (valable 7 jours, plusieurs telechargements possibles) :</p><p><a href="{{downloadUrl}}">{{downloadUrl}}</a></p><p>Ce lien expire le {{expiryLabel}}.</p>',
+    textContent:
+      'Bonjour,\n\nAda Papers vous transmet un lien pour telecharger le document « {{title}} ».\n{{cabinetMessageText}}Lien de telechargement (7 jours, usage multiple) :\n{{downloadUrl}}\n\nExpiration : {{expiryLabel}}',
+    category: 'dossier',
+    isSystem: true,
+    variables: [
+      { name: 'title', description: 'Titre du document', example: 'Document scanne.pdf' },
+      { name: 'downloadUrl', description: 'Lien public de telechargement', example: 'https://adapapers.fr/telechargement/abc123' },
+      { name: 'expiryLabel', description: 'Date d expiration du lien', example: 'mardi 20 mai 2026' },
+      { name: 'cabinetMessageBlock', description: 'Bloc HTML message optionnel du cabinet', example: '' },
+      { name: 'cabinetMessageText', description: 'Bloc texte message optionnel du cabinet', example: '' },
+    ],
+  },
 ];
 
 const DEFAULT_EVENTS = [
@@ -506,6 +544,8 @@ const DEFAULT_EVENTS = [
   { eventKey: 'tarification_exonerated', label: 'Tarification exoneree', description: 'Notification exoneration des frais', category: 'payment', templateCode: 'tarification_exonerated' },
   { eventKey: 'task_deadline_reminder', label: 'Rappel echeance tache', description: 'Rappel avant echeance de tache', category: 'task', templateCode: 'task_deadline_reminder' },
   { eventKey: 'task_overdue', label: 'Tache en retard', description: 'Notification tache en retard', category: 'task', templateCode: 'task_overdue' },
+  { eventKey: 'dossier_guest_upload_invite', label: 'Invitation depot tiers', description: 'Lien public de depot document sur dossier', category: 'dossier', templateCode: 'dossier_guest_upload_invite' },
+  { eventKey: 'document_download_share', label: 'Lien telechargement public', description: 'Lien public de telechargement document', category: 'dossier', templateCode: 'document_download_share' },
 ];
 
 function renderWithVariables(template, variables = {}) {

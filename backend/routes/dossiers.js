@@ -2112,6 +2112,110 @@ En cas de difficulté, notre équipe reste à votre disposition.`,
   }
 );
 
+// @route   POST /api/user/dossiers/:id/tarification-prestations/:prestationId/mark-paid
+// @desc    Marquer une prestation de tarification comme réglée (admin / superadmin)
+// @access  Private (admin, superadmin)
+router.post(
+  '/:id/tarification-prestations/:prestationId/mark-paid',
+  protect,
+  authorize('admin', 'superadmin'),
+  async (req, res) => {
+    try {
+      const dossierId = req.params.id;
+      const prestationId = String(req.params.prestationId || '').trim();
+      if (!mongoose.Types.ObjectId.isValid(dossierId) || !mongoose.Types.ObjectId.isValid(prestationId)) {
+        return res.status(400).json({ success: false, message: 'Identifiant invalide.' });
+      }
+
+      const dossier = await Dossier.findById(dossierId);
+      if (!dossier) {
+        return res.status(404).json({ success: false, message: 'Dossier non trouvé.' });
+      }
+      if (dossier.fraisExoneres) {
+        return res.status(400).json({ success: false, message: 'Dossier exonéré : prestation non applicable.' });
+      }
+
+      const prestations = Array.isArray(dossier.tarificationPrestations) ? dossier.tarificationPrestations : [];
+      const prestation = prestations.find((p) => String(p?._id || '') === prestationId);
+      if (!prestation) {
+        return res.status(404).json({ success: false, message: 'Prestation introuvable.' });
+      }
+      if (String(prestation.statut || 'a_regler') === 'reglee') {
+        return res.status(400).json({ success: false, message: 'Cette prestation est déjà marquée comme réglée.' });
+      }
+
+      prestation.statut = 'reglee';
+      prestation.regleeAt = new Date();
+      prestation.regleeBy = req.user.id;
+
+      const remaining = prestations.filter((p) => String(p?.statut || 'a_regler') !== 'reglee');
+      if (remaining.length === 0) {
+        dossier.paiementTarificationEffectue = true;
+        dossier.paiementTarificationEffectueAt = new Date();
+        dossier.paiementTarificationEffectueBy = req.user.id;
+      }
+
+      await dossier.save();
+
+      let clientUserId = null;
+      if (dossier.user) {
+        clientUserId = dossier.user.toString();
+      } else if (dossier.clientEmail) {
+        const userByEmail = await User.findOne({
+          email: String(dossier.clientEmail).toLowerCase(),
+        }).select('_id');
+        if (userByEmail) clientUserId = userByEmail._id.toString();
+      }
+
+      const dossierTitle = dossier.titre || dossier.numero || 'votre dossier';
+      const label = String(prestation.label || 'Prestation').trim();
+      const montant = Number(prestation.montant || 0);
+      const amountText = Number.isFinite(montant)
+        ? montant.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : '0,00';
+
+      if (clientUserId) {
+        const remainingCount = remaining.length;
+        const message =
+          remainingCount > 0
+            ? `Ada Papers a enregistré le règlement de la prestation « ${label} » (${amountText} EUR) pour le dossier « ${dossierTitle} ». Il reste ${remainingCount} prestation${remainingCount > 1 ? 's' : ''} à régler.`
+            : `Ada Papers a enregistré le règlement de la prestation « ${label} » (${amountText} EUR) pour le dossier « ${dossierTitle} ». Toutes les prestations de tarification sont désormais réglées.`;
+
+        await createNotification(
+          clientUserId,
+          'tarification_prestation_paid',
+          remainingCount > 0 ? 'Paiement de prestation enregistré' : 'Tarification réglée',
+          message,
+          '/client/tarification',
+          {
+            dossierId: dossier._id.toString(),
+            prestationId,
+            prestationLabel: label,
+            remainingCount,
+          }
+        );
+      }
+
+      const dossierPopulated = await Dossier.findById(dossier._id)
+        .populate('user', 'firstName lastName email phone profilePhoto')
+        .populate('createdBy', 'firstName lastName email');
+
+      return res.json({
+        success: true,
+        message: 'Prestation marquée comme réglée.',
+        dossier: dossierPopulated,
+      });
+    } catch (error) {
+      console.error('Erreur marquage prestation tarification:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+  }
+);
+
 // @route   POST /api/user/dossiers/tarification-notify-user
 // @desc    Envoi d'une demande de tarification à un utilisateur, même sans dossier (in-app + push + email + SMS +33)
 // @access  Private (admin, superadmin)

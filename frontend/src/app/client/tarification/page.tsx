@@ -89,9 +89,19 @@ export default function ClientTarificationPage() {
   const fraisExoneresPourDossier = !!selectedDossier?.fraisExoneres;
   const montantTarificationFixe = normalizeMontantTarificationFixe(selectedDossier?.montantTarificationFixe);
   const hasMontantFixe = montantTarificationFixe > 0;
-  /** Dès qu’un montant fixe Ada Papers ou une exonération s’applique, plus de choix de formule en ligne. */
-  const lockFormuleChoice = fraisExoneresPourDossier || hasMontantFixe;
   const paiementTarifEffectue = !!selectedDossier?.paiementTarificationEffectue;
+  const tarificationPrestations = Array.isArray(selectedDossier?.tarificationPrestations)
+    ? selectedDossier.tarificationPrestations
+    : [];
+  const prestationsARegler = tarificationPrestations.filter(
+    (p: any) => String(p?.statut || 'a_regler') === 'a_regler'
+  );
+  const prestationsReglees = tarificationPrestations.filter(
+    (p: any) => String(p?.statut || 'a_regler') === 'reglee'
+  );
+  const hasPrestationsTarif = tarificationPrestations.length > 0;
+  /** Dès qu’un montant fixe, des prestations ou une exonération s’applique, plus de choix de formule en ligne. */
+  const lockFormuleChoice = fraisExoneresPourDossier || hasMontantFixe || hasPrestationsTarif;
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -292,6 +302,58 @@ export default function ClientTarificationPage() {
                   <p className="text-emerald-800/90 mt-1">
                     La Platefoeme n’attend pas de choix de formule tarifaire. Vous pouvez ignorer cette page pour ce dossier.
                   </p>
+                </div>
+              ) : hasPrestationsTarif ? (
+                <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-sm text-indigo-950">
+                  <p className="font-semibold">Tarification par prestations</p>
+                  <p className="text-indigo-900/90 mt-1">
+                    Ada Papers a défini {tarificationPrestations.length} prestation
+                    {tarificationPrestations.length > 1 ? 's' : ''} pour ce dossier.
+                  </p>
+                  {prestationsARegler.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-sm">
+                      {prestationsARegler.map((p: any, idx: number) => {
+                        const m = Number(p?.montant || 0);
+                        const label = String(p?.label || `Prestation ${idx + 1}`).trim();
+                        return (
+                          <li key={String(p?._id || `${label}-${idx}`)}>
+                            À régler : {label} —{' '}
+                            {Number.isFinite(m)
+                              ? m.toLocaleString('fr-FR', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })
+                              : '0,00'}{' '}
+                            EUR
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs font-semibold text-emerald-800">
+                      Toutes les prestations sont enregistrées comme réglées.
+                    </p>
+                  )}
+                  {prestationsReglees.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-xs text-emerald-900">
+                      {prestationsReglees.map((p: any, idx: number) => {
+                        const m = Number(p?.montant || 0);
+                        const label = String(p?.label || `Prestation ${idx + 1}`).trim();
+                        return (
+                          <li key={String(p?._id || `paid-${label}-${idx}`)}>
+                            Réglée : {label} —{' '}
+                            {Number.isFinite(m)
+                              ? m.toLocaleString('fr-FR', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })
+                              : '0,00'}{' '}
+                            EUR
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
                 </div>
               ) : hasMontantFixe ? (
                 <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-900">

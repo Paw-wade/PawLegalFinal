@@ -22,6 +22,7 @@ export default function AdminDossiersTarificationPage() {
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [filterText, setFilterText] = useState('');
   const [updatingPaymentId, setUpdatingPaymentId] = useState<string | null>(null);
+  const [updatingPrestationKey, setUpdatingPrestationKey] = useState<string | null>(null);
   const [remindingId, setRemindingId] = useState<string | null>(null);
   const [retractingId, setRetractingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -198,20 +199,54 @@ export default function AdminDossiersTarificationPage() {
     try {
       await dossiersAPI.updateDossier(id, { paiementTarificationEffectue: nextValue });
       setDossiers((prev) =>
-        prev.map((item: any) =>
-          String(item?._id || item?.id || '') === id
-            ? {
-                ...item,
-                paiementTarificationEffectue: nextValue,
-                paiementTarificationEffectueAt: nextValue ? new Date().toISOString() : null,
-              }
-            : item
-        )
+        prev.map((d) => {
+          const did = String(d?._id || d?.id || '');
+          if (did !== id) return d;
+          return { ...d, paiementTarificationEffectue: nextValue };
+        })
       );
-    } catch (e) {
-      console.error('Erreur mise à jour paiement tarification:', e);
+      setFeedback({
+        type: 'success',
+        text: nextValue ? 'Paiement enregistré comme effectué.' : 'Paiement marqué comme non effectué.',
+      });
+    } catch (e: any) {
+      setFeedback({
+        type: 'error',
+        text: e?.response?.data?.message || e?.message || 'Erreur lors de la mise à jour du paiement.',
+      });
     } finally {
       setUpdatingPaymentId(null);
+    }
+  };
+
+  const handleMarkPrestationPaid = async (dossier: any, prestation: any) => {
+    const dossierId = String(dossier?._id || dossier?.id || '');
+    const prestationId = String(prestation?._id || '');
+    if (!dossierId || !prestationId) return;
+    const key = `${dossierId}:${prestationId}`;
+    setUpdatingPrestationKey(key);
+    setFeedback(null);
+    try {
+      const res = await dossiersAPI.markTarificationPrestationPaid(dossierId, prestationId);
+      if (!res.data?.success) {
+        throw new Error(res.data?.message || 'Échec de la mise à jour.');
+      }
+      const updated = res.data?.dossier;
+      setDossiers((prev) =>
+        prev.map((d) => {
+          const did = String(d?._id || d?.id || '');
+          if (did !== dossierId) return d;
+          return updated || d;
+        })
+      );
+      setFeedback({ type: 'success', text: res.data?.message || 'Prestation marquée comme réglée.' });
+    } catch (e: any) {
+      setFeedback({
+        type: 'error',
+        text: e?.response?.data?.message || e?.message || 'Erreur lors du marquage de la prestation.',
+      });
+    } finally {
+      setUpdatingPrestationKey(null);
     }
   };
 
@@ -515,17 +550,32 @@ export default function AdminDossiersTarificationPage() {
                       {prestationsARegler.map((p: any, idx: number) => {
                         const m = Number(p?.montant || 0);
                         const label = String(p?.label || `Prestation ${idx + 1}`).trim();
+                        const prestationId = String(p?._id || '');
+                        const prestationKey = `${String(id)}:${prestationId}`;
                         return (
-                          <p key={`${label}-${idx}`}>
-                            - {label} :{' '}
-                            {Number.isFinite(m)
-                              ? m.toLocaleString('fr-FR', {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })
-                              : '0.00'}{' '}
-                            EUR
-                          </p>
+                          <div
+                            key={prestationId || `${label}-${idx}`}
+                            className="flex flex-wrap items-center justify-between gap-2"
+                          >
+                            <p>
+                              - {label} :{' '}
+                              {Number.isFinite(m)
+                                ? m.toLocaleString('fr-FR', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })
+                                : '0.00'}{' '}
+                              EUR
+                            </p>
+                            <button
+                              type="button"
+                              disabled={!prestationId || updatingPrestationKey === prestationKey}
+                              onClick={() => handleMarkPrestationPaid(dossier, p)}
+                              className="rounded-md border border-emerald-600 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {updatingPrestationKey === prestationKey ? 'Enregistrement…' : 'Marquer réglée'}
+                            </button>
+                          </div>
                         );
                       })}
                     </div>

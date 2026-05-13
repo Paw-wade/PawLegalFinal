@@ -7,6 +7,10 @@ const { protect, authorize } = require('../middleware/auth');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const { sendSMS, formatPhoneNumber } = require('../sendSMS');
+const {
+  syncAppointmentGoogleCalendar,
+  removeGoogleCalendarEventIfAny,
+} = require('../services/googleCalendarSync');
 
 /** Libellés des motifs (formulaire public) — pour les notifications admin. */
 const MOTIF_RDV_LABELS = {
@@ -261,6 +265,12 @@ router.post(
       });
 
       console.log('✅ Rendez-vous créé avec succès:', rendezVous._id);
+
+      setImmediate(() => {
+        syncAppointmentGoogleCalendar(rendezVous, getMotifRdvLabel).catch((err) =>
+          console.error('⚠️ Google Calendar (création RDV):', err?.message || err)
+        );
+      });
 
       if (linkedDossierId) {
         try {
@@ -868,6 +878,12 @@ router.patch(
       await rendezVous.save();
       await rendezVous.populate('user', 'firstName lastName email phone');
 
+      setImmediate(() => {
+        removeGoogleCalendarEventIfAny(rendezVous).catch((err) =>
+          console.error('⚠️ Google Calendar (annulation client RDV):', err?.message || err)
+        );
+      });
+
       // Créer une notification pour l'utilisateur
       if (rendezVous.user) {
         try {
@@ -1073,6 +1089,14 @@ router.patch(
       await rendezVous.save();
       await rendezVous.populate('user', 'firstName lastName email phone');
 
+      if (decision === 'accept') {
+        setImmediate(() => {
+          syncAppointmentGoogleCalendar(rendezVous, getMotifRdvLabel).catch((err) =>
+            console.error('⚠️ Google Calendar (acceptation client RDV):', err?.message || err)
+          );
+        });
+      }
+
       const User = require('../models/User');
       const admins = await User.find({
         role: { $in: ['admin', 'superadmin'] },
@@ -1259,6 +1283,14 @@ router.put(
       await rendezVous.save();
       await rendezVous.populate('user', 'firstName lastName email');
 
+      if (rendezVous.statut !== 'annule') {
+        setImmediate(() => {
+          syncAppointmentGoogleCalendar(rendezVous, getMotifRdvLabel).catch((err) =>
+            console.error('⚠️ Google Calendar (client modifie RDV):', err?.message || err)
+          );
+        });
+      }
+
       // Créer une notification pour l'utilisateur si des modifications ont été apportées
       if (rendezVous.user) {
         try {
@@ -1398,6 +1430,20 @@ router.patch(
 
       await rendezVous.save();
       await rendezVous.populate('user', 'firstName lastName email');
+
+      if (statut === 'annule' && oldStatut !== 'annule') {
+        setImmediate(() => {
+          removeGoogleCalendarEventIfAny(rendezVous).catch((err) =>
+            console.error('⚠️ Google Calendar (admin → annulé):', err?.message || err)
+          );
+        });
+      } else if (rendezVous.statut !== 'annule') {
+        setImmediate(() => {
+          syncAppointmentGoogleCalendar(rendezVous, getMotifRdvLabel).catch((err) =>
+            console.error('⚠️ Google Calendar (admin mise à jour RDV):', err?.message || err)
+          );
+        });
+      }
 
       // Créer une notification pour l'utilisateur si des modifications ont été apportées
       if (rendezVous.user) {

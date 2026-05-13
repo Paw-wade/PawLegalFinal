@@ -136,6 +136,20 @@ try {
   app.use('/api/document-requests', require('./routes/document-requests'));
 } catch (e) {}
 
+try {
+  app.use('/api/dossier-guest-upload', require('./routes/dossierGuestUpload'));
+  console.log('✅ Route /api/dossier-guest-upload enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/dossier-guest-upload:', e.message);
+}
+
+try {
+  app.use('/api/document-download-share', require('./routes/documentDownloadShare'));
+  console.log('✅ Route /api/document-download-share enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/document-download-share:', e.message);
+}
+
 app.use('/api/user', require('./routes/user'));
 
 try {

@@ -230,6 +230,8 @@ const dossierSchema = new mongoose.Schema({
         enum: ['a_regler', 'reglee'],
         default: 'a_regler',
       },
+      regleeAt: { type: Date, required: false },
+      regleeBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
       createdAt: { type: Date, default: Date.now },
       createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
     },

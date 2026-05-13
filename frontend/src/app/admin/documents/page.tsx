@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { documentsAPI, dossiersAPI } from '@/lib/api';
+import { documentsAPI, dossiersAPI, documentDownloadShareAPI } from '@/lib/api';
 import Link from 'next/link';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { FileText, Download, Folder, Upload, Search, Filter, User, Eye, Trash2 } from 'lucide-react';
+import { FileText, Download, Folder, Upload, Search, Filter, User, Eye, Trash2, Link2 } from 'lucide-react';
 
 function Button({ children, variant = 'default', className = '', disabled, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
@@ -60,6 +60,12 @@ export default function AdminDocumentsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [previewDocument, setPreviewDocument] = useState<any | null>(null);
   const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(new Set());
+  const [shareModalDoc, setShareModalDoc] = useState<{ id: string; title: string } | null>(null);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareMessage, setShareMessage] = useState('');
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -202,6 +208,49 @@ export default function AdminDocumentsPage() {
     } catch (err: any) {
       console.error('Erreur lors de la suppression:', err);
       setError(err.response?.data?.message || 'Erreur lors de la suppression du document');
+    }
+  };
+
+  const openShareModal = (docId: string, title: string) => {
+    setShareModalDoc({ id: docId, title });
+    setShareEmail('');
+    setShareMessage('');
+    setShareUrl(null);
+    setShareError(null);
+  };
+
+  const closeShareModal = () => {
+    if (shareBusy) return;
+    setShareModalDoc(null);
+    setShareEmail('');
+    setShareMessage('');
+    setShareUrl(null);
+    setShareError(null);
+  };
+
+  const handleCreateDownloadShare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shareModalDoc) return;
+    setShareBusy(true);
+    setShareError(null);
+    setShareUrl(null);
+    try {
+      const response = await documentDownloadShareAPI.createShare({
+        resourceType: 'document',
+        resourceId: shareModalDoc.id,
+        recipientEmail: shareEmail.trim() || undefined,
+        message: shareMessage.trim() || undefined,
+      });
+      if (!response.data?.success || !response.data?.url) {
+        throw new Error(response.data?.message || 'Impossible de créer le lien.');
+      }
+      setShareUrl(response.data.url);
+      setSuccess(shareEmail.trim() ? 'Lien envoyé par e-mail.' : 'Lien de téléchargement créé.');
+      setTimeout(() => setSuccess(null), 4000);
+    } catch (err: any) {
+      setShareError(err?.response?.data?.message || err?.message || 'Erreur lors de la création du lien.');
+    } finally {
+      setShareBusy(false);
     }
   };
 
@@ -619,6 +668,15 @@ export default function AdminDocumentsPage() {
                                   <Eye className="h-4 w-4" />
                                 </Button>
                                 <Button
+                                  variant="outline"
+                                  onClick={() => openShareModal(docId, docNom)}
+                                  title="Lien de téléchargement public"
+                                  aria-label="Lien de téléchargement public"
+                                  className="h-11 w-11 min-h-[44px] min-w-[44px] sm:h-9 sm:w-9 sm:min-h-0 sm:min-w-0 shrink-0 p-0"
+                                >
+                                  <Link2 className="h-4 w-4" />
+                                </Button>
+                                <Button
                                   variant="default"
                                   onClick={() => handleDownload(docId, originalName)}
                                   title="Télécharger"
@@ -714,6 +772,55 @@ export default function AdminDocumentsPage() {
           isOpen={!!previewDocument}
           onClose={() => setPreviewDocument(null)}
         />
+      )}
+
+      {shareModalDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold">Lien de téléchargement public</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Document : {shareModalDoc.title}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Lien valable 7 jours, plusieurs téléchargements possibles, sans connexion Ada Papers.
+            </p>
+            <form onSubmit={handleCreateDownloadShare} className="mt-4 space-y-3">
+              <div>
+                <Label htmlFor="shareEmail">E-mail du destinataire (optionnel)</Label>
+                <Input
+                  id="shareEmail"
+                  type="email"
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                  className="mt-1"
+                  placeholder="Laisser vide pour copier le lien uniquement"
+                />
+              </div>
+              <div>
+                <Label htmlFor="shareMessage">Message (optionnel)</Label>
+                <textarea
+                  id="shareMessage"
+                  value={shareMessage}
+                  onChange={(e) => setShareMessage(e.target.value)}
+                  rows={3}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+              {shareError && <p className="text-sm text-destructive">{shareError}</p>}
+              {shareUrl && (
+                <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-900 break-all">
+                  Lien : {shareUrl}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={closeShareModal} disabled={shareBusy}>
+                  Fermer
+                </Button>
+                <Button type="submit" disabled={shareBusy}>
+                  {shareBusy ? 'Création…' : shareEmail.trim() ? 'Créer et envoyer' : 'Créer le lien'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
