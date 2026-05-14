@@ -38,6 +38,8 @@ const notificationSchema = new mongoose.Schema({
       'tarification_choice_requested',
       'tarification_choice_retracted',
       'tarification_payment_reminder',
+      'tarification_installment_reminder',
+      'tarification_installment_plan',
       'tarification_prestation_paid',
       'other'
     ]

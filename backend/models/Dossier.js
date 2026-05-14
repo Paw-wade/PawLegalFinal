@@ -260,6 +260,28 @@ const dossierSchema = new mongoose.Schema({
     ref: 'User',
     required: false
   },
+  /** Paiement en plusieurs fois autorisé par l’admin (montant tarifaire > 100 EUR). */
+  tarificationPaiementEnPlusieursFoisAutorise: {
+    type: Boolean,
+    default: false,
+  },
+  tarificationEcheances: [
+    {
+      label: { type: String, trim: true, maxlength: 160 },
+      montant: { type: Number, min: 0, required: true },
+      dateEcheance: { type: Date, required: true },
+      statut: {
+        type: String,
+        enum: ['a_regler', 'reglee'],
+        default: 'a_regler',
+      },
+      regleeAt: { type: Date, required: false },
+      regleeBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+      notifiedAvantEcheanceAt: { type: Date, required: false },
+      createdAt: { type: Date, default: Date.now },
+      createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+    },
+  ],
   // Exonération des frais de tarification (décision admin à l’acceptation ou ultérieurement)
   fraisExoneres: {
     type: Boolean,

@@ -1,298 +1,124 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { appointmentsAPI, notificationsAPI } from '@/lib/api';
+import { useRouter } from 'next/navigation';
+import { Bell, CalendarDays, CheckSquare, ChevronRight, FileText, X } from 'lucide-react';
+import { dossiersAPI } from '@/lib/api';
+import {
+  countDashboardTodoBannerItems,
+  loadDashboardTodoBannerItems,
+  notificationsHubHref,
+  type DashboardTodoPayload,
+  type DashboardTodoUserRole,
+} from '@/lib/loadDashboardTodoBannerItems';
+import { NOTIFICATIONS_UPDATED_EVENT } from '@/lib/notificationsEvents';
 import { useNotificationBannerVisibility } from '@/hooks/useNotificationBannerVisibility';
 
 interface NotificationBannerProps {
-  userRole: 'admin' | 'client' | 'partenaire';
+  userRole: DashboardTodoUserRole;
   userId?: string;
 }
 
-// Fonction pour convertir en string de manière sécurisée
-const safeString = (value: any): string => {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number') return String(value);
-  if (typeof value === 'boolean') return String(value);
-  // Si c'est un objet, ne pas le convertir, retourner une chaîne vide
-  if (typeof value === 'object') {
-    console.warn('Tentative de convertir un objet en string:', value);
-    return '';
-  }
-  return '';
-};
-
-interface BannerItem {
-  id: string;
-  type: 'appointment' | 'document' | 'dossier' | 'custom';
-  message: string;
-  link?: string;
-  icon: string;
-  priority: 'high' | 'normal';
-}
-
 export function NotificationBanner({ userRole, userId }: NotificationBannerProps) {
-  const [bannerItems, setBannerItems] = useState<BannerItem[]>([]);
+  const router = useRouter();
+  const [payload, setPayload] = useState<DashboardTodoPayload>({
+    appointments: [],
+    items: [],
+    transmissions: [],
+  });
   const [isLoading, setIsLoading] = useState(true);
+  const [processingDossiers, setProcessingDossiers] = useState<Set<string>>(new Set());
   const { isVisible, toggleVisibility } = useNotificationBannerVisibility();
 
-  useEffect(() => {
-    // Chargement unique au montage / changement de rôle utilisateur
-    loadBannerItems();
-  }, [userRole, userId]);
-
-  const loadBannerItems = async () => {
+  const refreshBanner = useCallback(async () => {
     setIsLoading(true);
     try {
-      const items: BannerItem[] = [];
-
-      // Pour les admins et partenaires : nouveaux rendez-vous
-      if (userRole === 'admin' || userRole === 'partenaire') {
-        try {
-          const appointmentsResponse = await appointmentsAPI.getAllAppointments();
-          if (appointmentsResponse.data.success) {
-            const appointments = appointmentsResponse.data.data || appointmentsResponse.data.appointments || [];
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-
-            // Rendez-vous d'aujourd'hui
-            const todayApps = appointments.filter((apt: any) => {
-              if (!apt.date) return false;
-              const aptDate = new Date(apt.date);
-              aptDate.setHours(0, 0, 0, 0);
-              return aptDate.getTime() === today.getTime() && apt.statut !== 'annule' && apt.statut !== 'annulé';
-            });
-
-            // Rendez-vous de demain
-            const tomorrowApps = appointments.filter((apt: any) => {
-              if (!apt.date) return false;
-              const aptDate = new Date(apt.date);
-              aptDate.setHours(0, 0, 0, 0);
-              return aptDate.getTime() === tomorrow.getTime() && apt.statut !== 'annule' && apt.statut !== 'annulé';
-            });
-
-            // Ajouter les rendez-vous d'aujourd'hui
-            todayApps.slice(0, 3).forEach((apt: any) => {
-              const aptId = safeString(apt._id) || safeString(apt.id) || '';
-              const clientName = `${safeString(apt.prenom)} ${safeString(apt.nom)}`.trim() || 'Client';
-              const heure = safeString(apt.heure);
-              const aptDate = apt.date ? safeString(apt.date) : '';
-              const link = userRole === 'partenaire' 
-                ? `/partenaire/rendez-vous?date=${aptDate}`
-                : `/admin/rendez-vous?date=${aptDate}`;
-              
-              items.push({
-                id: `appointment-today-${aptId || Math.random()}`,
-                type: 'appointment',
-                message: `Rendez-vous aujourd'hui avec ${clientName}${heure ? ` à ${heure.substring(0, 5)}` : ''}`,
-                link,
-                icon: '📅',
-                priority: 'high'
-              });
-            });
-
-            // Ajouter les rendez-vous de demain
-            tomorrowApps.slice(0, 2).forEach((apt: any) => {
-              const aptId = safeString(apt._id) || safeString(apt.id) || '';
-              const clientName = `${safeString(apt.prenom)} ${safeString(apt.nom)}`.trim() || 'Client';
-              const heure = safeString(apt.heure);
-              const aptDate = apt.date ? safeString(apt.date) : '';
-              const link = userRole === 'partenaire' 
-                ? `/partenaire/rendez-vous?date=${aptDate}`
-                : `/admin/rendez-vous?date=${aptDate}`;
-              
-              items.push({
-                id: `appointment-tomorrow-${aptId || Math.random()}`,
-                type: 'appointment',
-                message: `Rendez-vous demain avec ${clientName}${heure ? ` à ${heure.substring(0, 5)}` : ''}`,
-                link,
-                icon: '📆',
-                priority: 'normal'
-              });
-            });
-          }
-        } catch (error) {
-          console.error('Erreur lors du chargement des rendez-vous:', error);
-        }
-      }
-
-      // Pour les clients : notifications importantes de dossiers (documents, échéances, explications)
-      if (userRole === 'client' && userId) {
-        try {
-          const notificationsResponse = await notificationsAPI.getNotifications({
-            lu: false,
-            limit: 10
-          });
-          if (notificationsResponse.data.success) {
-            const notifications = notificationsResponse.data.notifications || [];
-            
-            // Filtrer les notifications importantes pour le client :
-            // - demandes de documents
-            // - transmissions de dossier
-            // - clôture / archivage de dossier
-            // - tarification (choix demandé, montant fixé, exonération)
-            const importantNotifications = notifications.filter((notif: any) => {
-              const rawType = notif.type || '';
-              const type = rawType.toLowerCase();
-
-              const isDocument =
-                type === 'document_request' ||
-                type.includes('document');
-
-              const isTransmission =
-                type.includes('transmis') ||
-                type.includes('transmission');
-
-              const isClosureOrArchive =
-                type.includes('cloture') ||
-                type.includes('clôture') ||
-                type.includes('closed') ||
-                type.includes('archive');
-
-              const isTarification =
-                type === 'tarification_choice_requested' ||
-                type.includes('tarification');
-
-              return isDocument || isTransmission || isClosureOrArchive || isTarification;
-            });
-
-            importantNotifications.slice(0, 3).forEach((notif: any) => {
-              // Utiliser safeString pour éviter de rendre des objets
-              let message = safeString(notif.message) || safeString(notif.titre) || 'Nouvelle notification';
-              let link = '/client/notifications';
-              let icon = '🔔';
-
-              const notifType = notif.type || '';
-              const lowerType = notifType.toLowerCase();
-              const data = notif.data || notif.metadata || {};
-
-              if (notifType === 'document_request') {
-                // Cas spécifique: demande de document pour le client
-                const dossierId = safeString(data.dossierId);
-                const dossierNumero = safeString(data.dossierNumero);
-                const label =
-                  safeString(data.documentTypeLabel) ||
-                  safeString(data.documentType) ||
-                  'document';
-                const isUrgent = !!data.isUrgent;
-
-                message = `${isUrgent ? '[URGENT] ' : ''}Un document "${label}" est demandé pour votre dossier ${dossierNumero || ''}`.trim();
-                icon = '📄';
-                link = dossierId ? `/client/dossiers/${dossierId}` : '/client/documents';
-
-                items.push({
-                  id: `notification-${safeString(notif._id) || safeString(notif.id) || Math.random()}`,
-                  type: 'dossier',
-                  message,
-                  link,
-                  icon,
-                  priority: isUrgent ? 'high' : 'normal'
-                });
-                return;
-              }
-
-              if (notifType === 'tarification_choice_requested' || lowerType.includes('tarification')) {
-                message =
-                  safeString(notif.message) ||
-                  safeString(notif.titre) ||
-                  'Information de tarification disponible pour votre dossier.';
-                icon = '💶';
-                link = '/client/tarification';
-                items.push({
-                  id: `notification-${safeString(notif._id) || safeString(notif.id) || Math.random()}`,
-                  type: 'custom',
-                  message,
-                  link,
-                  icon,
-                  priority: 'high'
-                });
-                return;
-              }
-
-              if (lowerType.includes('document')) {
-                icon = '📄';
-                const dossierId = safeString(notif.dossierId) || safeString(notif.metadata?.dossierId);
-                if (dossierId) {
-                  link = `/client/dossiers/${dossierId}`;
-                }
-              } else if (
-                lowerType.includes('transmis') ||
-                lowerType.includes('transmission')
-              ) {
-                icon = '📤';
-                const dossierId =
-                  safeString(notif.dossierId) ||
-                  safeString(notif.metadata?.dossierId) ||
-                  safeString(data.dossierId);
-                if (dossierId) {
-                  link = `/client/dossiers/${dossierId}`;
-                }
-                if (!message) {
-                  message = 'Votre dossier a été transmis.';
-                }
-              } else if (
-                lowerType.includes('cloture') ||
-                lowerType.includes('clôture') ||
-                lowerType.includes('closed') ||
-                lowerType.includes('archive')
-              ) {
-                icon = '📁';
-                const dossierId =
-                  safeString(notif.dossierId) ||
-                  safeString(notif.metadata?.dossierId) ||
-                  safeString(data.dossierId);
-                if (dossierId) {
-                  link = `/client/dossiers/${dossierId}`;
-                }
-                if (!message) {
-                  message = 'Le statut de votre dossier a été mis à jour.';
-                }
-              }
-
-              items.push({
-                id: `notification-${safeString(notif._id) || safeString(notif.id) || Math.random()}`,
-                type: 'dossier',
-                message,
-                link,
-                icon,
-                priority: notifType.includes('urgent') ? 'high' : 'normal'
-              });
-            });
-          }
-        } catch (error) {
-          console.error('Erreur lors du chargement des notifications:', error);
-        }
-      }
-
-      setBannerItems(items);
+      const next = await loadDashboardTodoBannerItems(userRole, userId);
+      setPayload(next);
     } catch (error) {
-      console.error('Erreur lors du chargement des éléments de la bannière:', error);
+      console.error('Erreur lors du chargement de la bannière À traiter:', error);
     } finally {
       setIsLoading(false);
     }
+  }, [userRole, userId]);
+
+  useEffect(() => {
+    void refreshBanner();
+  }, [refreshBanner]);
+
+  useEffect(() => {
+    const onNotificationsUpdated = () => {
+      void refreshBanner();
+    };
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, onNotificationsUpdated);
+    return () => window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, onNotificationsUpdated);
+  }, [refreshBanner]);
+
+  const totalCount = countDashboardTodoBannerItems(payload);
+
+  const handleAcceptTransmission = async (dossierId: string) => {
+    if (!dossierId || processingDossiers.has(dossierId)) return;
+    setProcessingDossiers((prev) => new Set(prev).add(dossierId));
+    try {
+      const response = await dossiersAPI.acknowledgeDossier(dossierId, 'accept');
+      if (response.data.success) {
+        await refreshBanner();
+        router.push(`/partenaire/dossiers/${dossierId}`);
+      } else {
+        alert(response.data.message || "Erreur lors de l'acceptation du dossier");
+      }
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      alert(err.response?.data?.message || "Erreur lors de l'acceptation du dossier");
+    } finally {
+      setProcessingDossiers((prev) => {
+        const next = new Set(prev);
+        next.delete(dossierId);
+        return next;
+      });
+    }
   };
 
-  // Ne rien afficher si on charge ou s'il n'y a pas d'éléments
-  if (isLoading || bannerItems.length === 0) {
+  const handleRefuseTransmission = async (dossierId: string) => {
+    if (!dossierId || processingDossiers.has(dossierId)) return;
+    if (!window.confirm('Êtes-vous sûr de vouloir refuser ce dossier ?')) return;
+    setProcessingDossiers((prev) => new Set(prev).add(dossierId));
+    try {
+      const response = await dossiersAPI.acknowledgeDossier(dossierId, 'refuse');
+      if (response.data.success) {
+        await refreshBanner();
+      } else {
+        alert(response.data.message || 'Erreur lors du refus du dossier');
+      }
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      alert(err.response?.data?.message || 'Erreur lors du refus du dossier');
+    } finally {
+      setProcessingDossiers((prev) => {
+        const next = new Set(prev);
+        next.delete(dossierId);
+        return next;
+      });
+    }
+  };
+
+  if (isLoading || totalCount === 0) {
     return null;
   }
 
-  // Si la bannière est fermée, afficher une petite barre pour la rouvrir
   if (!isVisible) {
     return (
-      <div className="w-full bg-gradient-to-r from-primary/5 via-primary/3 to-primary/5 border-b border-primary/10 shadow-sm">
-        <div className="flex items-center justify-center py-2">
+      <div className="w-full border-b border-border/70 bg-muted/30">
+        <div className="mx-auto flex max-w-5xl items-center justify-center px-3 py-2">
           <button
+            type="button"
             onClick={() => toggleVisibility(true)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-            aria-label="Afficher la bannière de notifications"
+            className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            aria-label="Afficher les éléments à traiter"
           >
-            <span>🔔</span>
-            <span>Notifications</span>
+            <Bell className="h-3.5 w-3.5" aria-hidden />
+            <span>À traiter ({totalCount})</span>
           </button>
         </div>
       </div>
@@ -300,41 +126,152 @@ export function NotificationBanner({ userRole, userId }: NotificationBannerProps
   }
 
   return (
-    <div className="w-full bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border-b border-primary/20 shadow-sm relative">
-      <button
-        onClick={() => toggleVisibility(false)}
-        className="absolute top-2 right-2 z-10 w-6 h-6 flex items-center justify-center rounded-full bg-white/80 hover:bg-white text-muted-foreground hover:text-foreground transition-all shadow-sm"
-        aria-label="Fermer la bannière de notifications"
-        title="Fermer"
-      >
-        <span className="text-sm">×</span>
-      </button>
-      <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2.5">
-        <div className="space-y-2">
-          {bannerItems.map((item) => (
-            <Link
-              key={item.id}
-              href={item.link || '#'}
-              className={`flex items-start gap-2 px-3 py-2 rounded-lg transition-all hover:bg-primary/10 ${
-                item.priority === 'high' ? 'bg-red-50 border border-red-200' : 'bg-white/70 border border-primary/10'
-              }`}
+    <div className="relative w-full border-b border-primary/15 bg-gradient-to-r from-primary/8 via-background to-primary/5">
+      <div className="mx-auto flex max-w-5xl items-start gap-3 px-3 py-2.5 sm:px-4">
+        <div className="hidden shrink-0 sm:block">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">À traiter</p>
+          <p className="text-lg font-semibold leading-none text-foreground">{totalCount}</p>
+        </div>
+
+        <div className="min-w-0 flex-1 space-y-2">
+          {payload.appointments.map((group) => (
+            <div
+              key={group.key}
+              className="rounded-lg border border-border/80 bg-card/80 px-3 py-2 shadow-sm"
             >
-              <span className="text-lg mt-0.5">{item.icon}</span>
-              <div className="flex-1 min-w-0">
-                <p
-                  className={`text-sm font-medium leading-snug ${
-                    item.priority === 'high' ? 'text-red-900' : 'text-foreground'
-                  }`}
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <CalendarDays className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                  <p className="truncate text-sm font-semibold text-foreground">{group.label}</p>
+                </div>
+                <Link
+                  href={group.listLink}
+                  className="shrink-0 text-xs font-medium text-primary hover:underline"
                 >
-                  {item.message}
-                </p>
+                  Agenda
+                </Link>
               </div>
-              <span className="text-xs text-muted-foreground shrink-0 mt-0.5">→</span>
-            </Link>
+              <div className="flex flex-wrap gap-1.5">
+                {group.slots.map((slot) => (
+                  <Link
+                    key={slot.id}
+                    href={slot.link}
+                    className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/15 bg-primary/5 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-primary/10"
+                  >
+                    <span className="tabular-nums text-primary">{slot.time}</span>
+                    <span className="truncate">{slot.name}</span>
+                  </Link>
+                ))}
+                {group.overflow > 0 ? (
+                  <Link
+                    href={group.listLink}
+                    className="inline-flex items-center rounded-full border border-dashed border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                  >
+                    +{group.overflow} autre{group.overflow > 1 ? 's' : ''}
+                  </Link>
+                ) : null}
+              </div>
+            </div>
           ))}
+
+          {payload.transmissions.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {payload.transmissions.map((item) => {
+                const isProcessing = processingDossiers.has(item.dossierId);
+                return (
+                  <div
+                    key={item.id}
+                    className="min-w-[min(100%,18rem)] flex-1 rounded-lg border border-orange-200/80 bg-orange-50/70 px-3 py-2 shadow-sm"
+                  >
+                    <div className="flex items-start gap-2">
+                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-orange-600" aria-hidden />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Link
+                        href={item.link}
+                        className="rounded-md bg-white px-2.5 py-1 text-xs font-medium text-foreground ring-1 ring-border hover:bg-muted/50"
+                      >
+                        Ouvrir
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => void handleAcceptTransmission(item.dossierId)}
+                        disabled={isProcessing}
+                        className="rounded-md bg-green-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                      >
+                        Accepter
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleRefuseTransmission(item.dossierId)}
+                        disabled={isProcessing}
+                        className="rounded-md bg-white px-2.5 py-1 text-xs font-medium text-red-700 ring-1 ring-red-200 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Refuser
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {payload.items.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {payload.items.map((item) => {
+                const Icon = item.kind === 'task' ? CheckSquare : item.kind === 'dossier' ? FileText : Bell;
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.link}
+                    className={`inline-flex min-w-[min(100%,16rem)] flex-1 items-start gap-2 rounded-lg border px-3 py-2 shadow-sm transition-colors hover:bg-muted/40 ${
+                      item.priority === 'high'
+                        ? 'border-red-200/80 bg-red-50/60'
+                        : 'border-border/80 bg-card/80'
+                    }`}
+                  >
+                    <Icon
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${
+                        item.priority === 'high' ? 'text-red-600' : 'text-primary'
+                      }`}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold leading-snug text-foreground">{item.title}</span>
+                      {item.subtitle ? (
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{item.subtitle}</span>
+                      ) : null}
+                    </span>
+                    <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
+          <button
+            type="button"
+            onClick={() => toggleVisibility(false)}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/80 bg-background/90 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
+            aria-label="Masquer la bannière À traiter"
+            title="Masquer"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+          <Link
+            href={notificationsHubHref(userRole)}
+            className="hidden text-xs font-medium text-primary hover:underline sm:inline"
+          >
+            Tout voir
+          </Link>
         </div>
       </div>
     </div>
   );
 }
-

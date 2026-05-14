@@ -309,6 +309,15 @@ const startServer = async () => {
         .catch((e) => {
           console.warn(`⚠️ Paw AI (interne) — impossible de compter les fichiers: ${e.message}`);
         });
+
+      if (isDatabaseConnected) {
+        const { checkTarificationInstallmentReminders } = require('./utils/tarificationInstallmentNotifications');
+        const runTarificationInstallmentReminders = () => {
+          void checkTarificationInstallmentReminders();
+        };
+        setTimeout(runTarificationInstallmentReminders, 60_000);
+        setInterval(runTarificationInstallmentReminders, 24 * 60 * 60 * 1000);
+      }
     });
 
     server.on('error', (err) => {

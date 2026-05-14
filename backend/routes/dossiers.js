@@ -26,6 +26,103 @@ function normalizeMontantTarificationFixe(v) {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
+const TARIFICATION_INSTALLMENT_MIN_AMOUNT = 100;
+
+function getTarificationReferenceAmount(dossier) {
+  const fixedAmount = normalizeMontantTarificationFixe(dossier?.montantTarificationFixe);
+  if (fixedAmount > 0) return fixedAmount;
+
+  const prestations = Array.isArray(dossier?.tarificationPrestations) ? dossier.tarificationPrestations : [];
+  const prestationsDue = prestations
+    .filter((p) => String(p?.statut || 'a_regler') === 'a_regler')
+    .reduce((acc, p) => acc + normalizeMontantTarificationFixe(p?.montant), 0);
+  if (prestationsDue > 0) return prestationsDue;
+
+  if (dossier?.formuleTarifaire === 'premium') return 150;
+  if (dossier?.formuleTarifaire === 'standard') return 250;
+
+  return 0;
+}
+
+function normalizeTarificationEcheancesPayload(input, existing = [], userId) {
+  if (!Array.isArray(input)) return [];
+  const existingRows = Array.isArray(existing) ? existing : [];
+
+  return input
+    .map((row, idx) => {
+      const rowId = row?._id ? String(row._id) : '';
+      const existingRow = rowId ? existingRows.find((item) => String(item?._id || '') === rowId) : null;
+      const montant = normalizeMontantTarificationFixe(
+        typeof row?.montant === 'string' ? row.montant.replace(',', '.').trim() : row?.montant
+      );
+      const dateEcheance = row?.dateEcheance ? new Date(row.dateEcheance) : null;
+      if (!dateEcheance || Number.isNaN(dateEcheance.getTime()) || montant <= 0) return null;
+
+      const previousDueMs = existingRow?.dateEcheance ? new Date(existingRow.dateEcheance).getTime() : null;
+      const nextDueMs = dateEcheance.getTime();
+      const notifiedAvantEcheanceAt =
+        previousDueMs != null && previousDueMs === nextDueMs ? existingRow?.notifiedAvantEcheanceAt : undefined;
+
+      return {
+        _id: existingRow?._id,
+        label: String(row?.label || existingRow?.label || `Échéance ${idx + 1}`).trim().slice(0, 160),
+        montant,
+        dateEcheance,
+        statut:
+          existingRow?.statut === 'reglee' || row?.statut === 'reglee' ? 'reglee' : 'a_regler',
+        regleeAt: existingRow?.regleeAt,
+        regleeBy: existingRow?.regleeBy,
+        notifiedAvantEcheanceAt,
+        createdAt: existingRow?.createdAt || new Date(),
+        createdBy: existingRow?.createdBy || userId,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 24);
+}
+
+function serializeTarificationInstallmentPlan(echeances) {
+  const rows = Array.isArray(echeances) ? echeances : [];
+  return JSON.stringify(
+    rows
+      .map((row) => ({
+        label: String(row?.label || '').trim(),
+        montant: normalizeMontantTarificationFixe(row?.montant),
+        dateIso: row?.dateEcheance
+          ? new Date(row.dateEcheance).toISOString().slice(0, 10)
+          : '',
+      }))
+      .sort(
+        (a, b) =>
+          a.dateIso.localeCompare(b.dateIso, 'fr') || a.label.localeCompare(b.label, 'fr')
+      )
+  );
+}
+
+function buildTarificationInstallmentPlanMessage(dossierTitle, echeances) {
+  const rows = Array.isArray(echeances) ? echeances : [];
+  const lines = rows.map((row, index) => {
+    const label = String(row?.label || `Échéance ${index + 1}`).trim() || `Échéance ${index + 1}`;
+    const dueLabel = row?.dateEcheance
+      ? new Date(row.dateEcheance).toLocaleDateString('fr-FR', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        })
+      : 'date à confirmer';
+    const amountText = normalizeMontantTarificationFixe(row?.montant).toLocaleString('fr-FR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const paid = String(row?.statut || 'a_regler') === 'reglee';
+    return `- ${label} : ${amountText} EUR le ${dueLabel}${paid ? ' (réglée)' : ''}`;
+  });
+
+  return `Pour le dossier « ${dossierTitle} », votre règlement en plusieurs fois a été défini dans la rubrique Tarification :\n${lines.join(
+    '\n'
+  )}\n\nUn rappel vous sera adressé 3 jours avant chaque échéance à régler.`;
+}
+
 // Helper function pour créer une notification
 function sanitizeDossierForPartenaire(dossier) {
   const o = dossier && typeof dossier.toObject === 'function' ? dossier.toObject() : { ...dossier };
@@ -2216,6 +2313,71 @@ router.post(
   }
 );
 
+// @route   POST /api/user/dossiers/:id/tarification-echeances/:echeanceId/mark-paid
+// @desc    Marquer une échéance de tarification comme réglée (admin / superadmin)
+// @access  Private (admin, superadmin)
+router.post(
+  '/:id/tarification-echeances/:echeanceId/mark-paid',
+  protect,
+  authorize('admin', 'superadmin'),
+  async (req, res) => {
+    try {
+      const dossierId = req.params.id;
+      const echeanceId = String(req.params.echeanceId || '').trim();
+      if (!mongoose.Types.ObjectId.isValid(dossierId) || !mongoose.Types.ObjectId.isValid(echeanceId)) {
+        return res.status(400).json({ success: false, message: 'Identifiant invalide.' });
+      }
+
+      const dossier = await Dossier.findById(dossierId);
+      if (!dossier) {
+        return res.status(404).json({ success: false, message: 'Dossier non trouvé.' });
+      }
+      if (dossier.fraisExoneres) {
+        return res.status(400).json({ success: false, message: 'Dossier exonéré : échéance non applicable.' });
+      }
+
+      const echeances = Array.isArray(dossier.tarificationEcheances) ? dossier.tarificationEcheances : [];
+      const echeance = echeances.find((row) => String(row?._id || '') === echeanceId);
+      if (!echeance) {
+        return res.status(404).json({ success: false, message: 'Échéance introuvable.' });
+      }
+      if (String(echeance.statut || 'a_regler') === 'reglee') {
+        return res.status(400).json({ success: false, message: 'Cette échéance est déjà marquée comme réglée.' });
+      }
+
+      echeance.statut = 'reglee';
+      echeance.regleeAt = new Date();
+      echeance.regleeBy = req.user.id;
+
+      const remaining = echeances.filter((row) => String(row?.statut || 'a_regler') !== 'reglee');
+      if (remaining.length === 0) {
+        dossier.paiementTarificationEffectue = true;
+        dossier.paiementTarificationEffectueAt = new Date();
+        dossier.paiementTarificationEffectueBy = req.user.id;
+      }
+
+      await dossier.save();
+
+      const dossierPopulated = await Dossier.findById(dossier._id)
+        .populate('user', 'firstName lastName email phone profilePhoto')
+        .populate('createdBy', 'firstName lastName email');
+
+      return res.json({
+        success: true,
+        message: 'Échéance marquée comme réglée.',
+        dossier: dossierPopulated,
+      });
+    } catch (error) {
+      console.error('Erreur marquage échéance tarification:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+  }
+);
+
 // @route   POST /api/user/dossiers/tarification-notify-user
 // @desc    Envoi d'une demande de tarification à un utilisateur, même sans dossier (in-app + push + email + SMS +33)
 // @access  Private (admin, superadmin)
@@ -3049,6 +3211,8 @@ router.put(
         montantTarificationFixe,
         tarificationPrestations,
         paiementTarificationEffectue,
+        tarificationPaiementEnPlusieursFoisAutorise,
+        tarificationEcheances,
         notifyTarificationClient,
         retractTarificationChoiceRequest,
         tarificationClientMessage,
@@ -3092,6 +3256,7 @@ router.put(
       if (
         (montantTarificationFixe !== undefined ||
           tarificationPrestations !== undefined ||
+          tarificationEcheances !== undefined ||
           shouldNotifyTarificationClientNow ||
           shouldRetractTarificationChoiceRequest) &&
         !isCabinetTarifRole
@@ -3124,6 +3289,7 @@ router.put(
         fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
         montantTarificationFixe: normalizeMontantTarificationFixe(dossier.montantTarificationFixe),
         tarificationPrestationsJson: JSON.stringify(dossier.tarificationPrestations || []),
+        tarificationInstallmentPlanJson: serializeTarificationInstallmentPlan(dossier.tarificationEcheances),
         paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
         isStandby: !!dossier.isStandby,
         standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
@@ -3256,6 +3422,8 @@ router.put(
             dossier.fraisExoneres = true;
             dossier.fraisExoneresAt = new Date();
             dossier.fraisExoneresBy = req.user.id;
+            dossier.tarificationPaiementEnPlusieursFoisAutorise = false;
+            dossier.tarificationEcheances = [];
             if (bodyFraisExoneresMotif !== undefined && bodyFraisExoneresMotif !== null) {
               const m = String(bodyFraisExoneresMotif).trim();
               dossier.fraisExoneresMotif = m ? m.slice(0, 500) : undefined;
@@ -3368,6 +3536,99 @@ router.put(
         }
       }
 
+      if (
+        isCabinetTarifRole &&
+        tarificationPaiementEnPlusieursFoisAutorise !== undefined &&
+        tarificationPaiementEnPlusieursFoisAutorise !== null
+      ) {
+        const truthy =
+          tarificationPaiementEnPlusieursFoisAutorise === true ||
+          tarificationPaiementEnPlusieursFoisAutorise === 'true' ||
+          tarificationPaiementEnPlusieursFoisAutorise === 1 ||
+          tarificationPaiementEnPlusieursFoisAutorise === '1';
+        const falsy =
+          tarificationPaiementEnPlusieursFoisAutorise === false ||
+          tarificationPaiementEnPlusieursFoisAutorise === 'false' ||
+          tarificationPaiementEnPlusieursFoisAutorise === 0 ||
+          tarificationPaiementEnPlusieursFoisAutorise === '0';
+
+        if (truthy) {
+          const referenceAmount = getTarificationReferenceAmount(dossier);
+          if (referenceAmount <= TARIFICATION_INSTALLMENT_MIN_AMOUNT) {
+            return res.status(400).json({
+              success: false,
+              message: `Le paiement en plusieurs fois n'est disponible qu'au-delà de ${TARIFICATION_INSTALLMENT_MIN_AMOUNT} EUR.`,
+            });
+          }
+          dossier.tarificationPaiementEnPlusieursFoisAutorise = true;
+        } else if (falsy) {
+          dossier.tarificationPaiementEnPlusieursFoisAutorise = false;
+          dossier.tarificationEcheances = [];
+        }
+      }
+
+      if (isCabinetTarifRole && tarificationEcheances !== undefined) {
+        if (!Array.isArray(tarificationEcheances)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Le format des échéances de tarification est invalide (tableau attendu).',
+          });
+        }
+
+        const normalizedEcheances = normalizeTarificationEcheancesPayload(
+          tarificationEcheances,
+          dossier.tarificationEcheances,
+          req.user.id
+        );
+
+        if (normalizedEcheances.length === 0) {
+          dossier.tarificationEcheances = [];
+          dossier.tarificationPaiementEnPlusieursFoisAutorise = false;
+        } else {
+          const referenceAmount = getTarificationReferenceAmount(dossier);
+          if (referenceAmount <= TARIFICATION_INSTALLMENT_MIN_AMOUNT) {
+            return res.status(400).json({
+              success: false,
+              message: `Le paiement en plusieurs fois n'est disponible qu'au-delà de ${TARIFICATION_INSTALLMENT_MIN_AMOUNT} EUR.`,
+            });
+          }
+          if (normalizedEcheances.length < 2) {
+            return res.status(400).json({
+              success: false,
+              message: 'Définissez au moins deux échéances pour un paiement en plusieurs fois.',
+            });
+          }
+
+          const totalEcheances = normalizedEcheances.reduce(
+            (sum, row) => sum + normalizeMontantTarificationFixe(row.montant),
+            0
+          );
+          if (Math.abs(totalEcheances - referenceAmount) > 0.01) {
+            return res.status(400).json({
+              success: false,
+              message: `Le total des échéances (${totalEcheances.toLocaleString('fr-FR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })} EUR) doit correspondre au montant tarifaire (${referenceAmount.toLocaleString('fr-FR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })} EUR).`,
+            });
+          }
+
+          dossier.tarificationEcheances = normalizedEcheances;
+          dossier.tarificationPaiementEnPlusieursFoisAutorise = true;
+        }
+      }
+
+      if (
+        dossier.tarificationPaiementEnPlusieursFoisAutorise &&
+        getTarificationReferenceAmount(dossier) <= TARIFICATION_INSTALLMENT_MIN_AMOUNT
+      ) {
+        dossier.tarificationPaiementEnPlusieursFoisAutorise = false;
+        dossier.tarificationEcheances = [];
+      }
+
       // Gérer l'assignation
       if (assignedTo !== undefined) {
         const previousAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
@@ -3424,6 +3685,7 @@ router.put(
         fraisExoneresMotif: dossier.fraisExoneresMotif == null ? '' : String(dossier.fraisExoneresMotif),
         montantTarificationFixe: normalizeMontantTarificationFixe(dossier.montantTarificationFixe),
         tarificationPrestationsJson: JSON.stringify(dossier.tarificationPrestations || []),
+        tarificationInstallmentPlanJson: serializeTarificationInstallmentPlan(dossier.tarificationEcheances),
         paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
         isStandby: !!dossier.isStandby,
         standbyReason: dossier.standbyReason == null ? '' : String(dossier.standbyReason),
@@ -3498,6 +3760,8 @@ router.put(
         dossierSnapshotBeforeUpdate.montantTarificationFixe !== dossierSnapshotAfterUpdate.montantTarificationFixe ||
         dossierSnapshotBeforeUpdate.tarificationPrestationsJson !==
           dossierSnapshotAfterUpdate.tarificationPrestationsJson ||
+        dossierSnapshotBeforeUpdate.tarificationInstallmentPlanJson !==
+          dossierSnapshotAfterUpdate.tarificationInstallmentPlanJson ||
         dossierSnapshotBeforeUpdate.paiementTarificationEffectue !== dossierSnapshotAfterUpdate.paiementTarificationEffectue ||
         shouldNotifyTarificationClientNow ||
         shouldRetractTarificationChoiceRequest;
@@ -3910,6 +4174,71 @@ Nous vous remercions de réaliser les actions demandées depuis votre espace cli
           }
         } catch (tarifErr) {
           console.error('⚠️ Notification tarification manuelle non envoyée:', tarifErr);
+        }
+      }
+
+      const installmentPlanChanged =
+        dossierSnapshotBeforeUpdate.tarificationInstallmentPlanJson !==
+        dossierSnapshotAfterUpdate.tarificationInstallmentPlanJson;
+      const shouldNotifyTarificationInstallmentPlan =
+        isCabinetTarifRole &&
+        installmentPlanChanged &&
+        Array.isArray(dossierForNotification?.tarificationEcheances) &&
+        dossierForNotification.tarificationEcheances.length >= 2;
+
+      if (shouldNotifyTarificationInstallmentPlan) {
+        try {
+          let clientUserId = null;
+          if (dossierForNotification.user) {
+            clientUserId = dossierForNotification.user._id
+              ? dossierForNotification.user._id.toString()
+              : dossierForNotification.user.toString();
+          } else if (dossierForNotification.clientEmail) {
+            const userByEmail = await User.findOne({
+              email: String(dossierForNotification.clientEmail).toLowerCase(),
+            }).select('_id');
+            if (userByEmail) clientUserId = userByEmail._id.toString();
+          }
+
+          if (clientUserId) {
+            const dossierTitle =
+              dossierForNotification.titre || dossierForNotification.numero || 'votre dossier';
+            const messageInstallments = buildTarificationInstallmentPlanMessage(
+              dossierTitle,
+              dossierForNotification.tarificationEcheances
+            );
+
+            await createNotification(
+              clientUserId,
+              'tarification_installment_plan',
+              'Échéances de tarification définies',
+              messageInstallments,
+              '/client/tarification',
+              {
+                dossierId: dossierForNotification._id.toString(),
+                installmentCount: dossierForNotification.tarificationEcheances.length,
+              }
+            );
+
+            const mailUserInstallments = await User.findById(clientUserId).select('email firstName');
+            if (
+              mailUserInstallments?.email &&
+              String(mailUserInstallments.email).trim() &&
+              !dossierForNotification.isStandby
+            ) {
+              await sendTransactionalEmail({
+                to: mailUserInstallments.email,
+                toName: mailUserInstallments.firstName || '',
+                subject: 'Échéances de tarification — Ada Papers',
+                htmlContent: `<p>${escapeHtml(messageInstallments).replace(/\n/g, '<br/>')}</p><p>Consultez la rubrique Tarification de votre espace client pour le détail et les modalités de paiement.</p>`,
+                textContent: `${messageInstallments}
+
+Consultez la rubrique Tarification de votre espace client pour le détail et les modalités de paiement.`,
+              });
+            }
+          }
+        } catch (installmentErr) {
+          console.error('⚠️ Notification échéances tarification non envoyée:', installmentErr);
         }
       }
 

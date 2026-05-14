@@ -1027,6 +1027,8 @@ export const dossiersAPI = {
   /** Admin / superadmin : marquer une prestation de tarification comme réglée */
   markTarificationPrestationPaid: (dossierId: string, prestationId: string) =>
     api.post(`/user/dossiers/${dossierId}/tarification-prestations/${prestationId}/mark-paid`),
+  markTarificationEcheancePaid: (dossierId: string, echeanceId: string) =>
+    api.post(`/user/dossiers/${dossierId}/tarification-echeances/${echeanceId}/mark-paid`),
 
   /** Admin / superadmin : retirer la dernière demande tarification envoyée (sans formule enregistrée, sans montant fixe) */
   retractTarificationChoiceRequest: (dossierId: string) =>
