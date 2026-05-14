@@ -19,6 +19,6 @@ export function normalizeDossierId(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function dossierListCardId(scope: 'admin' | 'partenaire', dossierId: string): string {
+export function dossierListCardId(scope: 'admin' | 'partenaire' | 'client', dossierId: string): string {
   return `${scope}-dossier-card-${normalizeDossierId(dossierId)}`;
 }

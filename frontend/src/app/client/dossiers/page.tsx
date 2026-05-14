@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, notificationsAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
@@ -11,6 +11,13 @@ import { Toast } from '@/components/Toast';
 import { QuickComplementTabsForm } from '@/components/dossiers/QuickComplementTabsForm';
 import { Eye, Download } from 'lucide-react';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getEditedEtapesOnly, customEtapeMatchesStatut, getDossierProgressFromEditedEtapes } from '@/lib/dossierUtils';
+import { normalizeDossierId, dossierListCardId } from '@/lib/dossierAccess';
+import {
+  getDossierCustomStatutLabel,
+  getDossierDisplayTitle,
+  getDossierTransmittedPartners,
+  getDossierTransmissionSummary,
+} from '@/lib/dossierListPresentation';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -85,6 +92,13 @@ const getCategorieLabel = (categorie: string) => {
   return categories[categorie as keyof typeof categories]?.label || categorie;
 };
 
+const getClientDossierExpandedIds = (dossiers: any[]) =>
+  new Set(
+    dossiers
+      .map((dossier) => normalizeDossierId(dossier._id || dossier.id))
+      .filter((dossierId) => dossierId.length > 0)
+  );
+
 const getTypeLabel = (categorie: string, type: string) => {
   const categorieTypes = categories[categorie as keyof typeof categories]?.types || [];
   const typeObj = categorieTypes.find(t => t.value === type);
@@ -109,6 +123,7 @@ function Button({ children, variant = 'default', size = 'default', className = '
 export default function DossiersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -167,6 +182,74 @@ export default function DossiersPage() {
       loadDocumentRequests();
     }
   }, [session, status, router]);
+
+  useEffect(() => {
+    const dossierIdToOpen = searchParams?.get('dossierId');
+    if (!dossierIdToOpen) return;
+
+    const normalizedId = normalizeDossierId(dossierIdToOpen);
+    if (!normalizedId) return;
+
+    setExpandedDossiers((prev) => {
+      const next = new Set(prev);
+      next.add(normalizedId);
+      return next;
+    });
+  }, [searchParams]);
+
+  useEffect(() => {
+    const dossierIdToOpen = searchParams?.get('dossierId');
+    if (!dossierIdToOpen) return;
+
+    const normalizedId = normalizeDossierId(dossierIdToOpen);
+    if (!normalizedId || dossiers.length === 0) return;
+    if (dossiers.some((dossier: any) => normalizeDossierId(dossier._id || dossier.id) === normalizedId)) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await dossiersAPI.getDossierById(normalizedId);
+        if (cancelled || !response.data?.success || !response.data.dossier) return;
+        setDossiers((prev) => {
+          if (prev.some((dossier: any) => normalizeDossierId(dossier._id || dossier.id) === normalizedId)) {
+            return prev;
+          }
+          return [response.data.dossier, ...prev];
+        });
+        setExpandedDossiers((prev) => {
+          const next = new Set(prev);
+          next.add(normalizedId);
+          return next;
+        });
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, dossiers]);
+
+  useEffect(() => {
+    const dossierIdToOpen = searchParams?.get('dossierId');
+    if (!dossierIdToOpen) return;
+
+    const normalizedId = normalizeDossierId(dossierIdToOpen);
+    if (!normalizedId) return;
+    if (!expandedDossiers.has(normalizedId)) return;
+    if (!dossiers.some((dossier: any) => normalizeDossierId(dossier._id || dossier.id) === normalizedId)) return;
+
+    const timer = window.setTimeout(() => {
+      document.getElementById(dossierListCardId('client', normalizedId))?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+      router.replace('/client/dossiers', { scroll: false });
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [searchParams, dossiers, expandedDossiers, router]);
 
   // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
@@ -433,13 +516,7 @@ export default function DossiersPage() {
         console.log('✅ Liste des dossiers:', dossiersList);
         setDossiers(dossiersList);
         await loadDossierDocumentsForList(dossiersList);
-        // Toujours déplier tous les badges pour l'espace client
-        const allIds = new Set<string>();
-        dossiersList.forEach((d: any) => {
-          const id = (d._id || d.id || d.numero || '').toString();
-          if (id) allIds.add(id);
-        });
-        setExpandedDossiers(allIds);
+        setExpandedDossiers(getClientDossierExpandedIds(dossiersList));
       } else {
         console.error('❌ Réponse API indique un échec:', response.data);
         setError(response.data.message || 'Erreur lors du chargement des dossiers');
@@ -527,159 +604,146 @@ export default function DossiersPage() {
           <>
             {/* Liste des dossiers en pleine largeur */}
             <div className="space-y-4">
-              {dossiers.map((dossier) => (
+              {dossiers.map((dossier) => {
+                const dossierId = normalizeDossierId(dossier._id || dossier.id);
+                const isExpanded = expandedDossiers.has(dossierId);
+                const dossierRequests = documentRequests[dossierId] || [];
+                const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
+                const totalDocuments = dossierDocuments[dossierId]?.length || dossier.documents?.length || 0;
+                const unreadNotifications = getUnreadNotificationsCountForDossier(dossierId);
+                const transmittedPartners = getDossierTransmittedPartners(dossier);
+                const transmissionSummary = getDossierTransmissionSummary(transmittedPartners);
+                const hasDeadline = !!dossier.dateEcheance;
+                const deadlineDays = hasDeadline ? calculateDaysUntil(dossier.dateEcheance) : null;
+                const detailHref = `/client/dossiers/${dossierId}`;
+
+                return (
                 <div
-                  key={dossier._id || dossier.id}
+                  key={dossierId}
+                  id={dossierListCardId('client', dossierId)}
                   className={`relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 bg-gradient-to-r shadow-sm w-full min-w-0 ${
-                    dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
+                    dossier.isStandby
+                      ? 'from-violet-200/70 via-fuchsia-200/70 to-violet-200/70 group-hover:from-violet-400/70 group-hover:via-fuchsia-400/70 group-hover:to-violet-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(168,85,247,0.5)]'
+                      : dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
                       ? 'from-yellow-200/70 via-amber-200/70 to-yellow-200/70 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(234,179,8,0.5)]'
                       : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
                       ? 'from-green-200/70 via-emerald-200/70 to-green-200/70 group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(34,197,94,0.5)]'
-                      : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet'
+                      : dossier.statut === 'decision_defavorable' || dossier.statut === 'refuse' || dossier.statut === 'rejet' || dossier.statut === 'annule'
                       ? 'from-red-200/70 via-rose-200/70 to-red-200/70 group-hover:from-red-400/70 group-hover:via-rose-400/70 group-hover:to-red-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(239,68,68,0.5)]'
                       : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
                   }`}
                 >
-                  <div className="bg-white rounded-xl border border-white/70 p-3 sm:p-4 md:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
-                    {/* En-tête de la carte : sur mobile en colonne (titre puis badges + lien) */}
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
-                      <div className="flex-1 min-w-0 pr-0 sm:pr-2">
+                  <div
+                    className={`relative bg-white border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer ${isExpanded ? 'rounded-t-xl' : 'rounded-xl'}`}
+                    onClick={() => router.push(detailHref)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        router.push(detailHref);
+                      }
+                    }}
+                    role="link"
+                    tabIndex={0}
+                  >
+                    {hasDeadline && deadlineDays !== null && deadlineDays < 0 ? (
+                      <div className="-mx-4 -mt-4 mb-3 rounded-t-xl border-b border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-800 sm:-mx-5 sm:-mt-5 sm:px-5">
+                        Échéance dépassée depuis {Math.abs(deadlineDays)} jour{Math.abs(deadlineDays) > 1 ? 's' : ''}
+                      </div>
+                    ) : hasDeadline && deadlineDays !== null && isDeadlineApproaching(dossier.dateEcheance) ? (
+                      <div className="-mx-4 -mt-4 mb-3 rounded-t-xl border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-900 sm:-mx-5 sm:-mt-5 sm:px-5">
+                        Échéance dans {deadlineDays} jour{deadlineDays > 1 ? 's' : ''}
+                      </div>
+                    ) : null}
+                    <div className="flex flex-col gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const newExpanded = new Set(expandedDossiers);
+                              if (newExpanded.has(dossierId)) {
+                                newExpanded.delete(dossierId);
+                              } else {
+                                newExpanded.add(dossierId);
+                              }
+                              setExpandedDossiers(newExpanded);
+                            }}
+                            className="p-2 -m-1 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary flex-shrink-0"
+                            title={isExpanded ? 'Plier le dossier' : 'Déplier le dossier'}
+                            aria-label={isExpanded ? 'Plier le dossier' : 'Déplier le dossier'}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d={isExpanded ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
+                            </svg>
+                          </button>
                           <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-baseline gap-2">
-                            <h3 className="font-semibold text-sm sm:text-base md:text-lg text-foreground line-clamp-1 leading-snug truncate">
-                              {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
+                            <h3 className="font-semibold text-base text-foreground line-clamp-1 leading-snug truncate">
+                              {getDossierDisplayTitle(dossier)}
                             </h3>
-                            {(typeof dossier.numero === 'string' || typeof dossier.numeroDossier === 'string') && (
-                              <span className="text-xs md:text-sm text-primary font-mono font-semibold">
-                                Réf. {typeof dossier.numero === 'string' ? dossier.numero : dossier.numeroDossier}
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getStatutColor(dossier.statut)}`}>
+                                {getDossierCustomStatutLabel(dossier)}
                               </span>
-                            )}
-                          </div>
-                          {/* Créateur du dossier et transmissions masqués pour le client */}
-                          {/* Bloc métriques (dossier plié) */}
-                          {!expandedDossiers.has(dossier._id || dossier.id) && (
-                            <div className="mt-1.5 space-y-1.5">
-                              {(() => {
-                                const dossierRequests = documentRequests[dossier._id || dossier.id] || [];
-                                const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
-                                const totalDocuments = dossierDocuments[dossier._id || dossier.id]?.length || dossier.documents?.length || 0;
-                                const rawSteps = dossier.etapesSupplementaires;
-                                const editedEtapes = getEditedEtapesOnly(rawSteps);
-                                const progress = getDossierProgressFromEditedEtapes(dossier.statut, editedEtapes);
-                                const currentEtapeIdx = editedEtapes.findIndex((step) =>
-                                  customEtapeMatchesStatut(step, dossier.statut || '')
-                                );
-
-                                return (
-                                  <>
-                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs md:text-sm text-muted-foreground">
-                                      <span>Documents : <span className="font-semibold text-foreground">{totalDocuments}</span></span>
-                                      {dossierRequests.length > 0 && (
-                                        <span>Demandes : <span className="font-semibold text-orange-600">{pendingRequests.length}</span> en attente</span>
-                                      )}
-                                      <div className="w-full mt-1">
-                                        <div className="flex items-center justify-between text-xs mb-1.5">
-                                          <span className="text-muted-foreground font-medium">Avancement (étapes éditées)</span>
-                                          <span className="font-semibold text-foreground">{progress} %</span>
-                                        </div>
-                                        {editedEtapes.length === 0 ? (
-                                          <p className="text-[11px] text-muted-foreground leading-snug">
-                                            Aucune étape personnalisée. Définissez-les dans la fiche dossier via{' '}
-                                            <span className="font-medium text-foreground">Éditer les étapes</span> pour suivre la progression ici.
-                                          </p>
-                                        ) : (
-                                          <div className="overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch] pb-0.5 -mx-0.5 px-0.5 sm:overflow-visible sm:mx-0 sm:px-0">
-                                            <div className="w-max min-w-full sm:w-full sm:min-w-0 space-y-1.5">
-                                              <div className="flex h-2 rounded-full overflow-hidden ring-1 ring-gray-200 bg-gray-100">
-                                                {editedEtapes.map((step, index) => {
-                                                  const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
-                                                  const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
-                                                  const fillClass = isCompleted
-                                                    ? 'bg-green-500'
-                                                    : isCurrent
-                                                      ? 'bg-blue-500'
-                                                      : 'bg-gray-300';
-
-                                                  return (
-                                                    <div
-                                                      key={step.id + String(index)}
-                                                      className="h-2 w-[4.75rem] flex-shrink-0 border-r border-white/60 last:border-r-0 sm:w-auto sm:flex-1 sm:min-w-0"
-                                                      title={step.label}
-                                                    >
-                                                      <div className={`h-full w-full ${fillClass}`} />
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                              <div className="flex items-start gap-0 sm:gap-0.5 sm:justify-between">
-                                                {editedEtapes.map((step, index) => {
-                                                  const isCurrent = currentEtapeIdx >= 0 && index === currentEtapeIdx;
-                                                  const isCompleted = currentEtapeIdx >= 0 && index < currentEtapeIdx;
-                                                  return (
-                                                    <div
-                                                      key={`lbl-${step.id}-${index}`}
-                                                      className="w-[4.75rem] flex-shrink-0 flex flex-col items-center px-1 box-border sm:w-auto sm:flex-1 sm:min-w-0"
-                                                    >
-                                                      <span
-                                                        className={`text-[9px] text-center leading-tight line-clamp-3 break-words w-full ${
-                                                          isCurrent
-                                                            ? 'text-blue-700 font-semibold'
-                                                            : isCompleted
-                                                              ? 'text-green-700 font-medium'
-                                                              : 'text-gray-400'
-                                                        }`}
-                                                        title={step.label}
-                                                      >
-                                                        {step.label}
-                                                      </span>
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                      {dossier.updatedAt && (
-                                        <span>Dernière activité : {formatRelativeTime(dossier.updatedAt)}</span>
-                                      )}
-                                      {dossier.dateEcheance && isDeadlineApproaching(dossier.dateEcheance) && (
-                                        <span className="text-red-600 font-medium">Échéance : {calculateDaysUntil(dossier.dateEcheance)} j</span>
-                                      )}
-                                    </div>
-                                  </>
-                                );
-                              })()}
+                              {dossier.priorite ? (
+                                <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getPrioriteColor(dossier.priorite)}`}>
+                                  {dossier.priorite}
+                                </span>
+                              ) : null}
+                              {dossier.isStandby ? (
+                                <span
+                                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-violet-100 text-violet-900 border border-violet-200"
+                                  title={dossier.standbyReason ? String(dossier.standbyReason) : 'Dossier temporairement en attente de traitement'}
+                                >
+                                  Stand-by
+                                </span>
+                              ) : null}
                             </div>
-                          )}
+                            {(dossier.numero || dossier.numeroDossier) && (
+                              <p className="mt-1 text-xs font-mono font-semibold text-muted-foreground">
+                                Réf. {dossier.numero || dossier.numeroDossier}
+                              </p>
+                            )}
+                            {!isExpanded ? (
+                              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Documents</p>
+                                  <p className="text-sm font-semibold text-foreground">{totalDocuments}</p>
+                                </div>
+                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Demandes</p>
+                                  <p className="text-sm font-semibold text-foreground">{pendingRequests.length}</p>
+                                </div>
+                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Notifications</p>
+                                  <p className="text-sm font-semibold text-foreground">{unreadNotifications > 0 ? unreadNotifications : '—'}</p>
+                                </div>
+                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Intervenants</p>
+                                  <p className="truncate text-sm font-semibold text-foreground" title={transmissionSummary}>
+                                    {transmissionSummary}
+                                  </p>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex flex-col sm:items-end gap-1.5 flex-shrink-0 w-full sm:w-auto sm:max-w-none">
-                      <div className="flex flex-wrap items-center gap-2 justify-end sm:justify-end">
-                        <span className={`px-2.5 py-1 rounded-md text-[11px] md:text-sm font-semibold ${getStatutColor(dossier.statut)}`}>
-                          {getStatutLabel(dossier.statut)}
-                        </span>
-                        {dossier.priorite && (
-                          <span className={`px-2.5 py-1 rounded-md text-[11px] md:text-sm font-semibold ${getPrioriteColor(dossier.priorite)}`}>
-                            {dossier.priorite}
-                          </span>
-                        )}
+                      <div className="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3 sm:flex-row sm:items-center sm:justify-end">
+                        <Link
+                          href={detailHref}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors"
+                        >
+                          Ouvrir
+                        </Link>
                       </div>
-                      <Link
-                        href={`/client/dossiers/${dossier._id || dossier.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center justify-center px-3 py-2 min-h-[40px] sm:min-h-[36px] rounded-md bg-primary text-white text-sm md:text-base font-medium hover:bg-primary/90 transition-colors text-center w-full sm:w-auto"
-                      >
-                        Voir les détails
-                      </Link>
                     </div>
                   </div>
 
-                  {/* Contenu détaillé (affiché uniquement si le dossier est déplié) — affichage compact */}
-                  {expandedDossiers.has(dossier._id || dossier.id) && (
-                    <div className="pt-2 mt-1 border-t border-gray-100">
+                  {isExpanded && (
+                    <div className="bg-white rounded-b-xl border-t border-gray-100 px-4 pb-4 pt-2 sm:px-5 sm:pb-5">
 
                   {/* Ligne compacte : avancement + échéance + prochaine action (avancement masqué sur mobile) */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2 pb-2 border-b border-gray-100">
@@ -1294,11 +1358,10 @@ export default function DossiersPage() {
                       </div>
                     </div>
                   </div>
-                    </div>
-                  )}
                   </div>
+                  )}
                 </div>
-              ))}
+              );})}
             </div>
 
             {dossiers.length > 0 && (
