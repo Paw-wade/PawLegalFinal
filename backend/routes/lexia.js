@@ -19,6 +19,8 @@ const {
 } = require('../services/lexiaProviders');
 const { protect, authorize } = require('../middleware/auth');
 const LexiaPawAiState = require('../models/LexiaPawAiState');
+const jwt = require('jsonwebtoken');
+const { buildThreadAttachmentAppendix } = require('../services/lexiaThreadAttachments');
 
 const MAX_CLOUD_THREADS = 40;
 const MAX_CLOUD_MESSAGES_PER_THREAD = 80;
@@ -111,9 +113,20 @@ function pawAiMongoUserId(req) {
  * POST /api/lexia/public-share · GET /api/lexia/public-share/:token
  */
 router.use('/public-share', require('./pawAiPublicShare'));
+router.use('/thread-attachments', require('./lexiaThreadAttachments'));
+
+function resolveOptionalLexiaUserId(req) {
+  try {
+    const bearer = req.headers.authorization;
+    if (!bearer || !bearer.startsWith('Bearer ')) return null;
+    const decoded = jwt.verify(bearer.slice(7), process.env.JWT_SECRET || 'your-secret-key-here');
+    return pawAiMongoUserId({ user: { _id: decoded.id, id: decoded.id } });
+  } catch {
+    return null;
+  }
+}
 
 /**
- * GET /api/lexia/stats
  * Statistiques du corpus indexé (nombre de fichiers, extensions, etc.)
  */
 router.get('/stats', async (req, res) => {
@@ -298,13 +311,25 @@ router.post('/', async (req, res) => {
   req.on('close', onClose);
 
   try {
-    const { messages = [], provider, stream: streamRequested } = req.body;
+    const { messages = [], provider, stream: streamRequested, threadId } = req.body;
     const wantStream = streamRequested === true || streamRequested === 'true';
 
     if (!Array.isArray(messages) || messages.length === 0) {
       finished = true;
       return res.status(400).json({ success: false, error: 'messages[] requis' });
     }
+
+    let threadAttachmentAppendix = '';
+    const safeThreadId = typeof threadId === 'string' ? threadId.trim() : '';
+    const lexiaUserId = resolveOptionalLexiaUserId(req);
+    if (safeThreadId && lexiaUserId) {
+      try {
+        threadAttachmentAppendix = await buildThreadAttachmentAppendix(lexiaUserId, safeThreadId);
+      } catch (attachErr) {
+        console.warn('[lexia] Pièces jointes du fil — non bloquant:', attachErr?.message || attachErr);
+      }
+    }
+    const lexiaOpts = { threadAttachmentAppendix };
 
     const resolved = resolveLexiaProvider(provider);
     if (wantStream && resolved !== 'anthropic') {
@@ -333,7 +358,7 @@ router.post('/', async (req, res) => {
       }
       console.log(`[lexia] POST / démarrage (stream SSE, ${messages.length} message(s)) provider=anthropic`);
       try {
-        await streamAnthropicLexia(res, req, messages);
+        await streamAnthropicLexia(res, req, messages, lexiaOpts);
         finished = true;
         console.log(`[lexia] POST / (stream) terminé en ${Date.now() - t0} ms`);
       } catch (streamErr) {
@@ -351,7 +376,7 @@ router.post('/', async (req, res) => {
     console.log(
       `[lexia] POST / démarrage (${messages.length} message(s)) provider=${String(provider || 'auto')} → résolu=${resolvedForLog}`
     );
-    const result = await runLexiaWithProvider(messages, provider);
+    const result = await runLexiaWithProvider(messages, provider, lexiaOpts);
     res.json(buildLexiaChatSuccessPayload(result));
     finished = true;
     console.log(`[lexia] POST / terminé en ${Date.now() - t0} ms`);

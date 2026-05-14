@@ -80,11 +80,14 @@ function PreparationActionsMenu({
   openMenuKey,
   setOpenMenuKey,
   children,
+  menuAlign = 'end',
 }: {
   rowKey: string;
   openMenuKey: string | null;
   setOpenMenuKey: (k: string | null) => void;
   children: ReactNode;
+  /** Sur mobile, menus alignés à gauche évitent le débordement hors écran. */
+  menuAlign?: 'start' | 'end';
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const isOpen = openMenuKey === rowKey;
@@ -98,8 +101,12 @@ function PreparationActionsMenu({
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, [isOpen, rowKey, setOpenMenuKey]);
+  const menuPos =
+    menuAlign === 'start'
+      ? 'left-0 right-auto'
+      : 'right-0 left-auto max-[calc(100vw-1.5rem)] sm:max-w-none';
   return (
-    <div className="relative inline-flex justify-end" ref={rootRef}>
+    <div className={`relative inline-flex ${menuAlign === 'end' ? 'justify-end' : 'justify-start'} shrink-0`} ref={rootRef}>
       <button
         type="button"
         aria-expanded={isOpen}
@@ -114,7 +121,10 @@ function PreparationActionsMenu({
         <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen ? (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[12rem] rounded-md border border-gray-200 bg-white py-1 shadow-lg" role="menu">
+        <div
+          className={`absolute top-full z-50 mt-1 min-w-[min(100%,12rem)] sm:min-w-[12rem] rounded-md border border-gray-200 bg-white py-1 shadow-lg ${menuPos}`}
+          role="menu"
+        >
           {children}
         </div>
       ) : null}
@@ -148,6 +158,105 @@ function mergeAndSort(wordDrafts: any[], collabDrafts: any[]): UnifiedPreparatio
     const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
     return tb - ta;
   });
+}
+
+function PreparationRowMenuItems({
+  row,
+  collabEditHref,
+  completed,
+  menuItemClass,
+  setOpenMenuKey,
+  onDownloadWord,
+  onDeleteWord,
+  onDeleteCollab,
+  onSetCompleted,
+}: {
+  row: UnifiedPreparationRow;
+  collabEditHref: string | false;
+  completed: boolean;
+  menuItemClass: string;
+  setOpenMenuKey: (k: string | null) => void;
+  onDownloadWord: (id: string, title: string) => void;
+  onDeleteWord: (id: string) => void;
+  onDeleteCollab: (id: string) => void;
+  onSetCompleted: (row: UnifiedPreparationRow, completed: boolean) => void;
+}) {
+  if (row.kind === 'word') {
+    return (
+      <>
+        <Link
+          href={`/admin/documents/preparation/${row._id}`}
+          className={`${menuItemClass} text-primary font-medium`}
+          onClick={() => setOpenMenuKey(null)}
+        >
+          Éditer
+        </Link>
+        <button
+          type="button"
+          role="menuitem"
+          className={menuItemClass}
+          onClick={() => onDownloadWord(row._id, row.title)}
+        >
+          Télécharger (.docx)
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={`${menuItemClass} text-red-700`}
+          onClick={() => onDeleteWord(row._id)}
+        >
+          Supprimer
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={menuItemClass}
+          onClick={() => onSetCompleted(row, !completed)}
+        >
+          {completed ? 'Rouvrir (non terminé)' : 'Marquer terminé'}
+        </button>
+      </>
+    );
+  }
+  if (collabEditHref) {
+    return (
+      <>
+        <Link
+          href={collabEditHref}
+          className={`${menuItemClass} text-primary font-medium`}
+          onClick={() => setOpenMenuKey(null)}
+        >
+          Éditer
+        </Link>
+        <button
+          type="button"
+          role="menuitem"
+          className={menuItemClass}
+          disabled
+          title="Export .docx réservé aux documents Ada Papers"
+        >
+          Télécharger (.docx)
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={`${menuItemClass} text-red-700`}
+          onClick={() => onDeleteCollab(row._id)}
+        >
+          Supprimer
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={menuItemClass}
+          onClick={() => onSetCompleted(row, !completed)}
+        >
+          {completed ? 'Rouvrir (non terminé)' : 'Marquer terminé'}
+        </button>
+      </>
+    );
+  }
+  return <span className="block px-3 py-2 text-xs text-muted-foreground">Lien dossier manquant</span>;
 }
 
 export default function AdminDocumentsPreparationPage() {
@@ -344,16 +453,20 @@ export default function AdminDocumentsPreparationPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Documents en préparation</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+    <div className="w-full min-w-0 max-w-6xl mx-auto space-y-4 sm:space-y-6 py-4 sm:py-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Documents en préparation</h1>
+          <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed max-w-prose">
             Tous les brouillons utilisent l&apos;éditeur riche. Export Word (.docx) disponible pour les documents
             Ada Papers.
           </p>
         </div>
-        <Button variant="outline" onClick={() => setCreateOpen((v) => !v)} className="gap-2 shrink-0">
+        <Button
+          variant="outline"
+          onClick={() => setCreateOpen((v) => !v)}
+          className="gap-2 shrink-0 w-full sm:w-auto h-11 sm:h-10"
+        >
           <Plus className="w-4 h-4" />
           Nouveau document
         </Button>
@@ -367,7 +480,7 @@ export default function AdminDocumentsPreparationPage() {
       )}
 
       {createOpen && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm space-y-4">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm space-y-4 max-h-[min(92dvh,900px)] overflow-y-auto overscroll-contain">
           <h2 className="font-semibold text-gray-900">Nouveau document</h2>
           <p className="text-xs text-muted-foreground">
             Rédaction au format riche ; vous pourrez exporter en .docx après enregistrement.
@@ -411,22 +524,26 @@ export default function AdminDocumentsPreparationPage() {
               <Input id="due" type="date" value={createDueDate} onChange={(e) => setCreateDueDate(e.target.value)} />
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleCreate} disabled={creating || !createDossierId || !createTitle.trim()}>
-              {creating ? 'Création…' : 'Créer et ouvrir'}
-            </Button>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setCreateOpen(false)} className="w-full sm:w-auto">
               Fermer
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={creating || !createDossierId || !createTitle.trim()}
+              className="w-full sm:w-auto"
+            >
+              {creating ? 'Création…' : 'Créer et ouvrir'}
             </Button>
           </div>
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+        <div className="relative flex-1 min-w-0 sm:max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           <Input
-            className="pl-9"
+            className="pl-9 h-11 sm:h-10"
             placeholder="Rechercher par titre…"
             value={inputQ}
             onChange={(e) => setInputQ(e.target.value)}
@@ -439,6 +556,7 @@ export default function AdminDocumentsPreparationPage() {
         </div>
         <Button
           variant="outline"
+          className="w-full sm:w-auto shrink-0 h-11 sm:h-10"
           onClick={() => {
             setFilterQ(inputQ);
           }}
@@ -447,41 +565,35 @@ export default function AdminDocumentsPreparationPage() {
         </Button>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-muted-foreground">Chargement…</div>
+          <div className="p-10 sm:p-12 text-center text-muted-foreground">Chargement…</div>
         ) : rows.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">Aucun document en préparation pour le moment.</div>
+          <div className="p-10 sm:p-12 text-center text-muted-foreground text-sm sm:text-base">
+            Aucun document en préparation pour le moment.
+          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left font-semibold text-gray-700 px-4 py-3">Document</th>
-                  <th className="text-left font-semibold text-gray-700 px-4 py-3">Dossier</th>
-                  <th className="text-left font-semibold text-gray-700 px-4 py-3">Client</th>
-                  <th className="text-left font-semibold text-gray-700 px-4 py-3 whitespace-nowrap">Échéance</th>
-                  <th className="text-left font-semibold text-gray-700 px-4 py-3 whitespace-nowrap">Mise à jour</th>
-                  <th className="text-right font-semibold text-gray-700 px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const dossierId = row.dossier?._id?.toString();
-                  const updated = row.updatedAt ? new Date(row.updatedAt).toLocaleString('fr-FR') : '—';
-                  const completed = Boolean(row.completedAt);
-                  const overdue = isEcheanceDepassee(row.dueDate) && !completed;
-                  const collabEditHref =
-                    dossierId &&
-                    `/admin/dossiers/${dossierId}/documents-en-preparation?draft=${encodeURIComponent(row._id)}`;
-                  const rowMenuKey = `${row.kind}-${row._id}`;
-                  return (
-                    <tr key={rowMenuKey} className="border-b border-gray-100 hover:bg-gray-50/80">
-                      <td className="px-4 py-3 max-w-[240px]">
-                        <div className="font-medium text-gray-900 truncate" title={row.title}>
-                          {row.title}
-                        </div>
-                        <div className="flex flex-wrap gap-1 mt-1">
+          <>
+            {/* Mobile : cartes empilées, pas de scroll horizontal */}
+            <ul className="md:hidden divide-y divide-gray-100" aria-label="Liste des documents">
+              {rows.map((row) => {
+                const dossierId = row.dossier?._id?.toString();
+                const updated = row.updatedAt ? new Date(row.updatedAt).toLocaleString('fr-FR') : '—';
+                const completed = Boolean(row.completedAt);
+                const overdue = isEcheanceDepassee(row.dueDate) && !completed;
+                const collabEditHref = dossierId
+                  ? `/admin/dossiers/${dossierId}/documents-en-preparation?draft=${encodeURIComponent(row._id)}`
+                  : false;
+                const rowMenuKey = `${row.kind}-${row._id}`;
+                return (
+                  <li key={rowMenuKey} className="p-4 sm:p-5">
+                    <div className="flex gap-3 justify-between items-start min-w-0">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <p className="font-semibold text-gray-900 text-[15px] leading-snug break-words">{row.title}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="inline-flex rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+                            {row.kind === 'word' ? 'Ada Papers (.docx)' : 'Éditeur riche'}
+                          </span>
                           {completed ? (
                             <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
                               Terminé
@@ -493,117 +605,163 @@ export default function AdminDocumentsPreparationPage() {
                             </span>
                           ) : null}
                         </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {dossierId ? (
-                          <Link
-                            href={`/admin/dossiers/${dossierId}`}
-                            className="inline-flex items-center gap-1 text-primary hover:underline"
-                          >
-                            <FolderOpen className="w-4 h-4 shrink-0" />
-                            <span className="truncate max-w-[180px]">{row.dossier?.numero || dossierId}</span>
-                          </Link>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 max-w-[160px] truncate">{row.clientName || '—'}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {row.dueDate ? (
-                          <span className={overdue ? 'text-red-700 font-medium' : 'text-gray-700'}>
-                            {formatEcheance(row.dueDate)}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{updated}</td>
-                      <td className="px-4 py-3 text-right align-top">
-                        <PreparationActionsMenu
-                          rowKey={rowMenuKey}
-                          openMenuKey={openMenuKey}
+                      </div>
+                      <PreparationActionsMenu
+                        rowKey={rowMenuKey}
+                        openMenuKey={openMenuKey}
+                        setOpenMenuKey={setOpenMenuKey}
+                        menuAlign="start"
+                      >
+                        <PreparationRowMenuItems
+                          row={row}
+                          collabEditHref={collabEditHref}
+                          completed={completed}
+                          menuItemClass={menuItemClass}
                           setOpenMenuKey={setOpenMenuKey}
-                        >
-                          {row.kind === 'word' ? (
-                            <>
-                              <Link
-                                href={`/admin/documents/preparation/${row._id}`}
-                                className={`${menuItemClass} text-primary font-medium`}
-                                onClick={() => setOpenMenuKey(null)}
-                              >
-                                Éditer
-                              </Link>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={menuItemClass}
-                                onClick={() => handleDownloadWord(row._id, row.title)}
-                              >
-                                Télécharger (.docx)
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={`${menuItemClass} text-red-700`}
-                                onClick={() => handleDeleteWord(row._id)}
-                              >
-                                Supprimer
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={menuItemClass}
-                                onClick={() => handleSetCompleted(row, !completed)}
-                              >
-                                {completed ? 'Rouvrir (non terminé)' : 'Marquer terminé'}
-                              </button>
-                            </>
-                          ) : collabEditHref ? (
-                            <>
-                              <Link
-                                href={collabEditHref}
-                                className={`${menuItemClass} text-primary font-medium`}
-                                onClick={() => setOpenMenuKey(null)}
-                              >
-                                Éditer
-                              </Link>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={menuItemClass}
-                                disabled
-                                title="Export .docx réservé aux documents Ada Papers"
-                              >
-                                Télécharger (.docx)
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={`${menuItemClass} text-red-700`}
-                                onClick={() => handleDeleteCollab(row._id)}
-                              >
-                                Supprimer
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={menuItemClass}
-                                onClick={() => handleSetCompleted(row, !completed)}
-                              >
-                                {completed ? 'Rouvrir (non terminé)' : 'Marquer terminé'}
-                              </button>
-                            </>
+                          onDownloadWord={handleDownloadWord}
+                          onDeleteWord={handleDeleteWord}
+                          onDeleteCollab={handleDeleteCollab}
+                          onSetCompleted={handleSetCompleted}
+                        />
+                      </PreparationActionsMenu>
+                    </div>
+                    <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                      <div className="min-w-0">
+                        <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Dossier</dt>
+                        <dd className="mt-0.5 text-gray-800 min-w-0">
+                          {dossierId ? (
+                            <Link
+                              href={`/admin/dossiers/${dossierId}`}
+                              className="inline-flex items-center gap-1.5 text-primary hover:underline break-all"
+                            >
+                              <FolderOpen className="w-4 h-4 shrink-0" />
+                              <span>{row.dossier?.numero || dossierId}</span>
+                            </Link>
                           ) : (
-                            <span className="block px-3 py-2 text-xs text-muted-foreground">Lien dossier manquant</span>
+                            '—'
                           )}
-                        </PreparationActionsMenu>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Client</dt>
+                        <dd className="mt-0.5 text-gray-800 break-words">{row.clientName || '—'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Échéance</dt>
+                        <dd className="mt-0.5">
+                          {row.dueDate ? (
+                            <span className={overdue ? 'text-red-700 font-medium' : 'text-gray-800'}>
+                              {formatEcheance(row.dueDate)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Mise à jour
+                        </dt>
+                        <dd className="mt-0.5 text-gray-600 text-xs sm:text-sm">{updated}</dd>
+                      </div>
+                    </dl>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Tableau : md et plus */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left font-semibold text-gray-700 px-4 py-3">Document</th>
+                    <th className="text-left font-semibold text-gray-700 px-4 py-3">Dossier</th>
+                    <th className="text-left font-semibold text-gray-700 px-4 py-3">Client</th>
+                    <th className="text-left font-semibold text-gray-700 px-4 py-3 whitespace-nowrap">Échéance</th>
+                    <th className="text-left font-semibold text-gray-700 px-4 py-3 whitespace-nowrap">Mise à jour</th>
+                    <th className="text-right font-semibold text-gray-700 px-4 py-3 w-[1%]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => {
+                    const dossierId = row.dossier?._id?.toString();
+                    const updated = row.updatedAt ? new Date(row.updatedAt).toLocaleString('fr-FR') : '—';
+                    const completed = Boolean(row.completedAt);
+                    const overdue = isEcheanceDepassee(row.dueDate) && !completed;
+                    const collabEditHref = dossierId
+                      ? `/admin/dossiers/${dossierId}/documents-en-preparation?draft=${encodeURIComponent(row._id)}`
+                      : false;
+                    const rowMenuKey = `${row.kind}-${row._id}`;
+                    return (
+                      <tr key={rowMenuKey} className="border-b border-gray-100 hover:bg-gray-50/80">
+                        <td className="px-4 py-3 max-w-[240px]">
+                          <div className="font-medium text-gray-900 truncate" title={row.title}>
+                            {row.title}
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {completed ? (
+                              <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
+                                Terminé
+                              </span>
+                            ) : null}
+                            {overdue ? (
+                              <span className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-800 border border-red-200">
+                                Échéance dépassée
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {dossierId ? (
+                            <Link
+                              href={`/admin/dossiers/${dossierId}`}
+                              className="inline-flex items-center gap-1 text-primary hover:underline"
+                            >
+                              <FolderOpen className="w-4 h-4 shrink-0" />
+                              <span className="truncate max-w-[180px]">{row.dossier?.numero || dossierId}</span>
+                            </Link>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 max-w-[160px] truncate">{row.clientName || '—'}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {row.dueDate ? (
+                            <span className={overdue ? 'text-red-700 font-medium' : 'text-gray-700'}>
+                              {formatEcheance(row.dueDate)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{updated}</td>
+                        <td className="px-4 py-3 text-right align-top">
+                          <PreparationActionsMenu
+                            rowKey={rowMenuKey}
+                            openMenuKey={openMenuKey}
+                            setOpenMenuKey={setOpenMenuKey}
+                          >
+                            <PreparationRowMenuItems
+                              row={row}
+                              collabEditHref={collabEditHref}
+                              completed={completed}
+                              menuItemClass={menuItemClass}
+                              setOpenMenuKey={setOpenMenuKey}
+                              onDownloadWord={handleDownloadWord}
+                              onDeleteWord={handleDeleteWord}
+                              onDeleteCollab={handleDeleteCollab}
+                              onSetCompleted={handleSetCompleted}
+                            />
+                          </PreparationActionsMenu>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

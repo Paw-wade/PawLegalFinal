@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { documentsAPI, getApiBaseUrl, getAuthToken } from '@/lib/api';
 import { PDFViewer } from './PDFViewer';
 
@@ -162,7 +163,19 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
     };
   }, [isOpen, documentId, document.nom, document.typeMime]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const doc = globalThis.document;
+    if (!doc?.body) return;
+    const prev = doc.body.style.overflow;
+    doc.body.style.overflow = 'hidden';
+    return () => {
+      doc.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
+  if (typeof window === 'undefined') return null;
 
   const isPDF = isPdfDoc(document);
   const isImage = isImageDoc(document);
@@ -175,28 +188,35 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
+  const modal = (
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/80 p-0 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] pt-[max(0.5rem,env(safe-area-inset-top,0px))] sm:items-center sm:p-4"
+      onClick={onClose}
+      role="presentation"
+    >
       <div
-        className="bg-white rounded-lg shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col"
+        className="flex h-[min(100dvh,100%)] w-full max-h-[100dvh] flex-col rounded-t-xl border border-gray-200 bg-white shadow-2xl sm:h-auto sm:max-h-[min(92dvh,56rem)] sm:max-w-[min(calc(100vw-2rem),72rem)] sm:rounded-lg"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="document-preview-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-2xl flex-shrink-0">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b px-3 py-3 sm:px-4">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+            <span className="shrink-0 text-xl sm:text-2xl" aria-hidden>
               {isPDF ? '📄' : isImage ? '🖼️' : isWord ? '📝' : '📎'}
             </span>
             <div className="min-w-0">
-              <h3 className="font-semibold text-lg truncate">{document.nom}</h3>
-              <p className="text-xs text-muted-foreground truncate">
-                {document.typeMime || 'Type inconnu'}
-              </p>
+              <h3 id="document-preview-title" className="truncate text-base font-semibold sm:text-lg">
+                {document.nom}
+              </h3>
+              <p className="truncate text-xs text-muted-foreground">{document.typeMime || 'Type inconnu'}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors text-2xl font-bold flex-shrink-0"
+            className="shrink-0 rounded-md p-2 text-2xl leading-none text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             type="button"
             aria-label="Fermer"
           >
@@ -204,20 +224,20 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-4 bg-gray-100">
+        {/* Content — hauteur flexible, évite de dépasser sous la sidebar (z-index au-dessus) */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-100">
           {isLoading ? (
-            <div className="flex items-center justify-center h-full min-h-[200px]">
+            <div className="flex min-h-[12rem] flex-1 items-center justify-center px-4 py-8">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-                <p className="text-muted-foreground">Chargement de la prévisualisation…</p>
+                <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-primary" />
+                <p className="text-sm text-muted-foreground">Chargement de la prévisualisation…</p>
               </div>
             </div>
           ) : error ? (
-            <div className="flex items-center justify-center h-full min-h-[200px]">
-              <div className="text-center max-w-md px-4">
-                <div className="text-6xl mb-4">⚠️</div>
-                <p className="text-muted-foreground mb-4">{error}</p>
+            <div className="flex min-h-[12rem] flex-1 items-center justify-center overflow-y-auto px-4 py-8">
+              <div className="max-w-md px-4 text-center">
+                <div className="mb-4 text-5xl sm:text-6xl">⚠️</div>
+                <p className="mb-4 text-sm text-muted-foreground">{error}</p>
                 <button
                   type="button"
                   onClick={async () => {
@@ -229,16 +249,17 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
                       setError(e instanceof Error ? e.message : 'Échec de la nouvelle tentative.');
                     }
                   }}
-                  className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
+                  className="rounded-md bg-primary px-4 py-2 text-sm text-white hover:bg-primary/90"
                 >
                   Réessayer dans un nouvel onglet
                 </button>
               </div>
             </div>
           ) : canPreview && previewUrl ? (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {isPDF ? (
                 <PDFViewer
+                  variant="modal"
                   src={previewUrl}
                   title={document.nom}
                   documentId={documentId || ''}
@@ -263,49 +284,53 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
                 <iframe
                   src={previewUrl}
                   title={document.nom}
-                  className="w-full h-[75vh] rounded-lg border border-gray-300 bg-white"
+                  className="min-h-0 w-full flex-1 rounded-none border-0 border-gray-300 bg-white sm:min-h-[min(70vh,520px)] sm:rounded-lg sm:border"
                   allow="fullscreen"
                 />
               ) : isImage ? (
-                <img
-                  src={previewUrl}
-                  alt={document.nom}
-                  className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
-                />
+                <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-3 sm:p-4">
+                  <img
+                    src={previewUrl}
+                    alt={document.nom}
+                    className="max-h-[min(75dvh,calc(100dvh-10rem))] max-w-full object-contain rounded-lg shadow-lg"
+                  />
+                </div>
               ) : null}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full min-h-[200px]">
+            <div className="flex min-h-[12rem] flex-1 items-center justify-center px-4 py-8">
               <div className="text-center">
-                <div className="text-6xl mb-4">📎</div>
-                <p className="text-muted-foreground mb-4">
+                <div className="mb-4 text-5xl sm:text-6xl">📎</div>
+                <p className="mb-4 text-sm text-muted-foreground">
                   La prévisualisation n&apos;est pas disponible pour ce type de fichier.
                 </p>
-                <p className="text-sm text-muted-foreground">Veuillez télécharger le fichier pour l&apos;ouvrir.</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">
+                  Veuillez télécharger le fichier pour l&apos;ouvrir.
+                </p>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t bg-white gap-2 flex-wrap">
-          <p className="text-xs text-muted-foreground">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-white px-3 py-3 sm:px-4">
+          <p className="min-w-0 text-xs text-muted-foreground">
             {canPreview ? 'Prévisualisation sécurisée (fichier chargé en mémoire)' : 'Téléchargement requis'}
           </p>
-          <div className="flex gap-2">
+          <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:justify-end">
             {previewUrl?.startsWith('blob:') && (
               <button
                 type="button"
                 onClick={openBlobInNewTab}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm transition-colors"
+                className="flex-1 rounded-md bg-gray-100 px-3 py-2 text-sm transition-colors hover:bg-gray-200 sm:flex-none sm:px-4"
               >
-                Ouvrir dans un nouvel onglet
+                Nouvel onglet
               </button>
             )}
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 text-sm transition-colors"
+              className="flex-1 rounded-md bg-primary px-3 py-2 text-sm text-white transition-colors hover:bg-primary/90 sm:flex-none sm:px-4"
             >
               Fermer
             </button>
@@ -314,4 +339,6 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
       </div>
     </div>
   );
+
+  return createPortal(modal, globalThis.document.body);
 }

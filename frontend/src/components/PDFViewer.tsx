@@ -8,9 +8,11 @@ interface PDFViewerProps {
   title: string;
   documentId: string;
   onDownload?: () => void;
+  /** Mode modal : hauteurs fluides (mobile / overlay). */
+  variant?: 'default' | 'modal';
 }
 
-export function PDFViewer({ src, title, documentId, onDownload }: PDFViewerProps) {
+export function PDFViewer({ src, title, documentId, onDownload, variant = 'default' }: PDFViewerProps) {
   const [zoom, setZoom] = useState(100);
   const [error, setError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -71,12 +73,14 @@ export function PDFViewer({ src, title, documentId, onDownload }: PDFViewerProps
     }
   };
 
+  const isModal = variant === 'modal';
+
   return (
-    <div className="flex flex-col h-full">
+    <div className={`flex flex-col ${isModal ? 'min-h-0 flex-1 overflow-hidden' : 'h-full'}`}>
       {/* Barre d'outils */}
-      <div className="flex items-center justify-between p-3 bg-gray-50 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Zoom:</span>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 p-2 sm:p-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground sm:text-sm">Zoom:</span>
           <button
             onClick={handleZoomOut}
             className="px-3 py-1.5 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium"
@@ -104,17 +108,17 @@ export function PDFViewer({ src, title, documentId, onDownload }: PDFViewerProps
             ⟲
           </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <button
             onClick={handleOpenInNewTab}
-            className="px-4 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm font-medium"
+            className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-600 sm:px-4 sm:text-sm"
             title="Ouvrir dans un nouvel onglet"
           >
             🔗 Ouvrir
           </button>
           <button
             onClick={handleDownload}
-            className="px-4 py-1.5 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors text-sm font-medium"
+            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary/90 sm:px-4 sm:text-sm"
             title="Télécharger le document"
           >
             📥 Télécharger
@@ -123,10 +127,10 @@ export function PDFViewer({ src, title, documentId, onDownload }: PDFViewerProps
       </div>
 
       {/* Viewer PDF */}
-      <div 
+      <div
         ref={containerRef}
-        className="flex-1 overflow-auto bg-gray-200 p-4"
-        style={{ minHeight: '600px' }}
+        className={`min-h-0 flex-1 overflow-auto bg-gray-200 p-2 sm:p-4`}
+        style={isModal ? undefined : { minHeight: '600px' }}
       >
         {error ? (
           <div className="flex items-center justify-center h-full">
@@ -155,13 +159,23 @@ export function PDFViewer({ src, title, documentId, onDownload }: PDFViewerProps
             <iframe
               ref={iframeRef}
               src={src}
-              className="border border-gray-300 rounded-lg shadow-lg bg-white"
-              style={{
-                width: `${zoom}%`,
-                height: '800px',
-                minHeight: '600px',
-                transition: 'width 0.3s ease',
-              }}
+              className="rounded-lg border border-gray-300 bg-white shadow-lg"
+              style={
+                isModal
+                  ? {
+                      width: `${zoom}%`,
+                      height: 'min(65dvh, 560px)',
+                      minHeight: '240px',
+                      maxHeight: 'min(70dvh, calc(100dvh - 14rem))',
+                      transition: 'width 0.3s ease',
+                    }
+                  : {
+                      width: `${zoom}%`,
+                      height: '800px',
+                      minHeight: '600px',
+                      transition: 'width 0.3s ease',
+                    }
+              }
               title={title}
               allow="fullscreen"
             />

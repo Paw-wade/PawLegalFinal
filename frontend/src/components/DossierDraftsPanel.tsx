@@ -40,6 +40,8 @@ type Draft = {
   visibleToAdmins?: boolean;
   excludedAdminIds?: string[];
   partnerAccess?: PartnerAccessEntry[];
+  visibleToClient?: boolean;
+  clientCanEdit?: boolean;
 };
 
 function isDraftOverdue(due?: string | Date | null, completed?: boolean) {
@@ -71,11 +73,16 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
   const [permsVisibleToAdmins, setPermsVisibleToAdmins] = useState(true);
   const [permsExcludedAdminIds, setPermsExcludedAdminIds] = useState<string[]>([]);
   const [permsPartnerAccess, setPermsPartnerAccess] = useState<{ partner: string; canEdit: boolean }[]>([]);
+  const [permsVisibleToClient, setPermsVisibleToClient] = useState(false);
+  const [permsClientCanEdit, setPermsClientCanEdit] = useState(false);
+  const [dossierClientUserId, setDossierClientUserId] = useState<string | null>(null);
+  const [dossierClientDisplayName, setDossierClientDisplayName] = useState('');
   const [allUsers, setAllUsers] = useState<{ _id: string; firstName?: string; lastName?: string; email?: string; role?: string }[]>([]);
   const [dossierTransmittedTo, setDossierTransmittedTo] = useState<{ partenaire: { _id: string; firstName?: string; lastName?: string } }[]>([]);
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [permissionsError, setPermissionsError] = useState<string | null>(null);
   const [currentUserIsAdmin, setCurrentUserIsAdmin] = useState(false);
+  const [currentUserIsClient, setCurrentUserIsClient] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [statusToggling, setStatusToggling] = useState(false);
 
@@ -91,6 +98,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
           const list: Draft[] = response.data.drafts || [];
           setDrafts(list);
           setCurrentUserIsAdmin(!!response.data.currentUserIsAdmin);
+          setCurrentUserIsClient(!!response.data.currentUserIsClient);
           if (list.length > 0) {
             const preferred =
               initialDraftId && list.some((d) => String(d._id) === String(initialDraftId))
@@ -265,6 +273,8 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
         canEdit: !!pa.canEdit,
       }))
     );
+    setPermsVisibleToClient(!!selectedDraft.visibleToClient);
+    setPermsClientCanEdit(!!selectedDraft.clientCanEdit);
     try {
       const [usersRes, dossierRes] = await Promise.all([
         userAPI.getAllUsers().catch(() => ({ data: { users: [] } })),
@@ -273,6 +283,26 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
       setAllUsers(usersRes.data?.users || []);
       const dossier = dossierRes.data?.dossier || dossierRes.data;
       setDossierTransmittedTo(dossier?.transmittedTo || []);
+      const rawUser = dossier?.user;
+      const cid =
+        rawUser != null
+          ? typeof rawUser === 'object' && rawUser !== null && '_id' in rawUser
+            ? String((rawUser as { _id: string })._id)
+            : String(rawUser)
+          : null;
+      setDossierClientUserId(cid);
+      let displayName = '';
+      if (rawUser && typeof rawUser === 'object' && rawUser !== null && 'firstName' in rawUser) {
+        const ru = rawUser as { firstName?: string; lastName?: string; email?: string };
+        displayName = [ru.firstName, ru.lastName].filter(Boolean).join(' ').trim() || ru.email || '';
+      }
+      if (!displayName && cid) {
+        const u = (usersRes.data?.users || []).find((x: { _id: string }) => x._id === cid);
+        if (u) {
+          displayName = [u.firstName, u.lastName].filter(Boolean).join(' ').trim() || u.email || '';
+        }
+      }
+      setDossierClientDisplayName(displayName || (cid ? `Compte ${cid}` : ''));
     } catch (e) {
       setPermissionsError('Impossible de charger les utilisateurs ou le dossier.');
     }
@@ -292,11 +322,15 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
         visibleToAdmins: permsVisibleToAdmins,
         excludedAdminIds: permsExcludedAdminIds,
         partnerAccess: permsPartnerAccess,
+        visibleToClient: permsVisibleToClient,
+        clientCanEdit: permsClientCanEdit,
       });
       const response = await collaborativeDraftsAPI.getDossierDrafts(dossierId);
       if (response.data.success) {
         const list: Draft[] = response.data.drafts || [];
         setDrafts(list);
+        setCurrentUserIsAdmin(!!response.data.currentUserIsAdmin);
+        setCurrentUserIsClient(!!response.data.currentUserIsClient);
         const updated = list.find((d) => d._id === selectedDraft._id);
         if (updated) {
           setCurrentTitle(updated.title || '');
@@ -366,7 +400,9 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
         <div className="min-w-0 flex-1">
           <h2 className="text-lg sm:text-xl font-semibold text-gray-900">📝 Documents en préparation</h2>
           <p className="text-xs text-gray-500">
-            Zone de travail interne pour les admins et partenaires. Non visible par le client.
+            {currentUserIsClient
+              ? 'Espace de rédaction partagé par votre cabinet sur ce dossier. Chaque document peut être en lecture seule ou modifiable selon les droits accordés.'
+              : 'Zone de travail liée au dossier. Vous pouvez partager avec des partenaires ou, si un compte client est rattaché au dossier, avec ce client uniquement (lecture ou édition).'}
           </p>
         </div>
         <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">
@@ -494,6 +530,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
                     <span aria-hidden>📝</span>
                     Word
                   </button>
+                  {(selectedDraft.canManagePermissions ?? false) && !currentUserIsClient && (
                   <button
                     type="button"
                     onClick={handleOpenPermissionsModal}
@@ -502,6 +539,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
                     <span aria-hidden>🔐</span>
                     Autorisations
                   </button>
+                  )}
                   {selectedDraft.canEdit && (
                     <button
                       type="button"
@@ -563,6 +601,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
                   </span>
                 </div>
                 <RichTextEditor
+                  key={selectedDraft._id}
                   value={currentContent}
                   onChange={(val) => {
                     if (!selectedDraft.canEdit) return;
@@ -701,6 +740,50 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
                   </div>
                 </div>
               )}
+
+              <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3">
+                <p className="text-sm font-semibold text-gray-800 mb-2">Client du dossier</p>
+                {!dossierClientUserId ? (
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    Aucun compte utilisateur n’est lié à ce dossier en tant que client. Associez le client au dossier
+                    pour pouvoir lui donner accès à ce document (toujours ce seul compte).
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-700 mb-2">
+                      Compte concerné :{' '}
+                      <span className="font-medium text-gray-900">{dossierClientDisplayName || dossierClientUserId}</span>
+                    </p>
+                    <label className={`flex items-center gap-2 mb-2 ${canManage ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}>
+                      <input
+                        type="checkbox"
+                        checked={permsVisibleToClient}
+                        onChange={(e) => {
+                          if (!canManage) return;
+                          const v = e.target.checked;
+                          setPermsVisibleToClient(v);
+                          if (!v) setPermsClientCanEdit(false);
+                        }}
+                        disabled={!canManage}
+                        className="rounded border-gray-300 text-orange-500 focus:ring-orange-500 h-4 w-4"
+                      />
+                      <span className="text-sm font-medium text-gray-900">Document visible pour ce client</span>
+                    </label>
+                    {permsVisibleToClient ? (
+                      <label className={`flex items-center gap-2 ml-6 ${canManage ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}>
+                        <input
+                          type="checkbox"
+                          checked={permsClientCanEdit}
+                          onChange={(e) => canManage && setPermsClientCanEdit(e.target.checked)}
+                          disabled={!canManage}
+                          className="rounded border-gray-300 text-orange-500 focus:ring-orange-500 h-4 w-4"
+                        />
+                        <span className="text-sm text-gray-800">Le client peut modifier le document</span>
+                      </label>
+                    ) : null}
+                  </>
+                )}
+              </div>
 
               {currentUserIsAdmin ? (
                 <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3">

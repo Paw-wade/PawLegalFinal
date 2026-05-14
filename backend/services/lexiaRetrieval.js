@@ -338,9 +338,15 @@ Données récupérées automatiquement : index Paw AI, API Judilibre / Légifran
 - **N’invente pas** de numéros de pourvoi, ECLI ou articles absents du bloc ; si tu dois signaler une incertitude majeure, un **court** <span class="lexia-caution">…</span> suffit (pas de surlignage systématique).
 - Les URL vers des domaines **non autorisés** n’ont **pas** été chargées : ne prétends pas en avoir lu le contenu.`;
 
-async function prepareLlmContext(messages) {
+async function prepareLlmContext(messages, options = {}) {
   if (isRetrievalDisabled()) {
-    return { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
+    const threadOnly = String(options.threadAttachmentAppendix || '').trim();
+    return {
+      systemAppendix: threadOnly,
+      sources: [],
+      searched: Boolean(threadOnly),
+      totalToolUses: threadOnly ? 1 : 0,
+    };
   }
 
   const dir = getKnowledgeDir();
@@ -361,7 +367,21 @@ async function prepareLlmContext(messages) {
     ? `### Index documentaire Paw AI\n\n_Erreur : ${sk.error}_\n`
     : `### Index documentaire Paw AI (extraits)\n\n${formatIndexHitsForPrompt(hits)}`;
 
-  const appendix = [RETRIEVAL_INSTRUCTION, '', indexMd, '', jud.md, '', leg.md, '', web.md].join('\n');
+  const appendix = [
+    RETRIEVAL_INSTRUCTION,
+    '',
+    indexMd,
+    '',
+    jud.md,
+    '',
+    leg.md,
+    '',
+    web.md,
+    String(options.threadAttachmentAppendix || '').trim() ? '' : null,
+    String(options.threadAttachmentAppendix || '').trim() || null,
+  ]
+    .filter((part) => part != null && String(part).trim())
+    .join('\n');
 
   const sources = [];
   for (const h of hits) {

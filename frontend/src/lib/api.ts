@@ -229,7 +229,16 @@ api.interceptors.request.use(
   async (config) => {
     // Si la requête contient un FormData, supprimer le Content-Type pour que le navigateur le définisse avec le boundary
     if (config.data instanceof FormData) {
-      delete config.headers['Content-Type'];
+      const headers = config.headers as Record<string, unknown> & {
+        set?: (name: string, value: unknown) => void;
+        delete?: (name: string) => void;
+      };
+      if (headers && typeof headers.set === 'function') {
+        headers.set('Content-Type', false);
+      } else if (headers) {
+        delete headers['Content-Type'];
+        delete headers['content-type'];
+      }
       if (IS_DEV) {
         console.log('📤 FormData détecté, Content-Type supprimé pour laisser le navigateur le définir');
       }
@@ -674,6 +683,84 @@ export const lexiaAPI = {
     api.put<{ success: boolean; saved?: number; error?: string }>('/lexia/chat-state', body, {
       timeout: 120000,
     }),
+
+  listThreadAttachments: (threadId: string) =>
+    api.get<{
+      success: boolean;
+      attachments?: Array<{
+        id: string;
+        threadId: string;
+        originalName: string;
+        mimeType?: string;
+        size: number;
+        empty?: boolean;
+        extractionNote?: string;
+        preview?: string;
+        transcript?: string;
+        createdAt?: string;
+      }>;
+      error?: string;
+    }>('/lexia/thread-attachments', { params: { threadId }, timeout: 60000 }),
+
+  uploadThreadAttachment: async (threadId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('threadId', threadId);
+    formData.append('file', file, file.name || 'piece-jointe.bin');
+
+    const token = typeof window !== 'undefined' ? await getAuthToken() : null;
+    const controller = new AbortController();
+    const timeoutMs = 180000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    type UploadResponse = {
+      success: boolean;
+      attachment?: {
+        id: string;
+        threadId: string;
+        originalName: string;
+        mimeType?: string;
+        size: number;
+        empty?: boolean;
+        extractionNote?: string;
+        preview?: string;
+        transcript?: string;
+      };
+      error?: string;
+      message?: string;
+      code?: string;
+    };
+
+    try {
+      const response = await fetch(
+        `${getApiBaseUrl()}/lexia/thread-attachments?threadId=${encodeURIComponent(threadId)}`,
+        {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          body: formData,
+          signal: controller.signal,
+          credentials: 'omit',
+        }
+      );
+
+      const data = (await response.json().catch(() => null)) as UploadResponse | null;
+      if (!response.ok || !data || data.success === false) {
+        const message = data?.error || data?.message || `Erreur import (${response.status})`;
+        const err = new Error(message) as Error & { response?: { status: number; data?: UploadResponse | null } };
+        err.response = { status: response.status, data };
+        throw err;
+      }
+
+      return { data };
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+
+  deleteThreadAttachment: (attachmentId: string) =>
+    api.delete<{ success: boolean; id?: string; error?: string }>(
+      `/lexia/thread-attachments/${encodeURIComponent(attachmentId)}`,
+      { timeout: 60000 }
+    ),
 };
 
 export const pawSearchAPI = {
@@ -1286,8 +1373,16 @@ export const collaborativeDraftsAPI = {
     draftId: string,
     data: { title?: string; content?: any; dueDate?: string | null; completed?: boolean | null }
   ) => api.patch(`/drafts/${draftId}`, data),
-  updatePermissions: (draftId: string, data: { visibleToAdmins?: boolean; excludedAdminIds?: string[]; partnerAccess?: { partner: string; canEdit: boolean }[] }) =>
-    api.patch(`/drafts/${draftId}/permissions`, data),
+  updatePermissions: (
+    draftId: string,
+    data: {
+      visibleToAdmins?: boolean;
+      excludedAdminIds?: string[];
+      partnerAccess?: { partner: string; canEdit: boolean }[];
+      visibleToClient?: boolean;
+      clientCanEdit?: boolean;
+    }
+  ) => api.patch(`/drafts/${draftId}/permissions`, data),
   archiveDraft: (draftId: string) =>
     api.delete(`/drafts/${draftId}`),
 };
