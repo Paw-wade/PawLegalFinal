@@ -20,6 +20,13 @@ function buildCabinetMessageVariables(message) {
   };
 }
 
+function buildEmailCtaButton(url, label = 'Ouvrir') {
+  const safeUrl = String(url || '').trim();
+  if (!safeUrl) return '';
+  const safeLabel = escapeHtml(String(label || 'Ouvrir').trim() || 'Ouvrir');
+  return `<p style="margin:24px 0;"><a href="${escapeHtml(safeUrl)}" style="display:inline-block;padding:12px 20px;background:#ea580c;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">${safeLabel}</a></p>`;
+}
+
 async function sendTemplatedTransactionalEmail({
   templateCode,
   eventKey = '',
@@ -33,6 +40,12 @@ async function sendTemplatedTransactionalEmail({
   let textContent = fallback?.textContent || '';
   let templateCodeUsed = templateCode;
 
+  if (templateCode === 'document_download_share' && variables.downloadUrl) {
+    variables.downloadButtonBlock =
+      variables.downloadButtonBlock ||
+      buildEmailCtaButton(variables.downloadUrl, 'Télécharger le document');
+  }
+
   try {
     const tpl = await EmailTemplate.findOne({ code: templateCode, isActive: true })
       .sort({ version: -1, updatedAt: -1 })
@@ -42,6 +55,14 @@ async function sendTemplatedTransactionalEmail({
       htmlContent = tpl.htmlContent;
       textContent = tpl.textContent || '';
       templateCodeUsed = tpl.code;
+      if (
+        templateCode === 'document_download_share' &&
+        htmlContent.includes('>{{downloadUrl}}</a>') &&
+        fallback?.htmlContent
+      ) {
+        htmlContent = fallback.htmlContent;
+        if (fallback.textContent) textContent = fallback.textContent;
+      }
     }
   } catch (error) {
     console.warn(`⚠️ Lecture template ${templateCode} impossible, fallback inline:`, error.message || error);
@@ -85,5 +106,6 @@ async function sendTemplatedTransactionalEmail({
 module.exports = {
   renderTemplateWithVariables,
   buildCabinetMessageVariables,
+  buildEmailCtaButton,
   sendTemplatedTransactionalEmail,
 };

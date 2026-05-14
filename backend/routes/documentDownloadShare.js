@@ -8,10 +8,15 @@ const RecoursTemplate = require('../models/RecoursTemplate');
 const { protect, authorize } = require('../middleware/auth');
 const {
   buildCabinetMessageVariables,
+  buildEmailCtaButton,
   sendTemplatedTransactionalEmail,
 } = require('../utils/emailTemplateMailer');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
-const { deliverDocumentFileResponse, resolveDocumentDownloadFileName } = require('./documents');
+const {
+  deliverDocumentFileResponse,
+  resolveDocumentDownloadFileName,
+  resolveDocumentDisplayTitle,
+} = require('./documents');
 
 const router = express.Router();
 const SHARE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -44,7 +49,7 @@ async function resolveSharePayload(share) {
     const doc = await Document.findById(share.resourceId).lean();
     if (!doc) return null;
     return {
-      title: doc.nom || 'Document',
+      title: resolveDocumentDisplayTitle(doc),
       fileName: resolveDocumentDownloadFileName(doc),
       mimeType: doc.typeMime || 'application/octet-stream',
       document: doc,
@@ -59,7 +64,7 @@ async function resolveSharePayload(share) {
     const doc = await Document.findById(docId).lean();
     if (doc) {
       return {
-        title: tpl.title || doc.nom || 'Document',
+        title: tpl.title || resolveDocumentDisplayTitle(doc),
         fileName: resolveDocumentDownloadFileName(doc) || tpl.fileName || 'document',
         mimeType: tpl.mimeType || doc.typeMime || 'application/octet-stream',
         document: doc,
@@ -161,9 +166,9 @@ router.post(
 
       let title = 'Document';
       if (resourceType === 'document') {
-        const doc = await Document.findById(rid).select('nom').lean();
+        const doc = await Document.findById(rid).lean();
         if (!doc) return res.status(404).json({ success: false, message: 'Document introuvable.' });
-        title = doc.nom || title;
+        title = resolveDocumentDisplayTitle(doc);
       } else {
         const tpl = await RecoursTemplate.findById(rid).select('title fileName').lean();
         if (!tpl) return res.status(404).json({ success: false, message: 'Modèle introuvable.' });
@@ -195,6 +200,7 @@ router.post(
           title,
           downloadUrl,
           expiryLabel,
+          downloadButtonBlock: buildEmailCtaButton(downloadUrl, 'Télécharger le document'),
           ...buildCabinetMessageVariables(share.message),
         };
 
@@ -206,7 +212,7 @@ router.post(
           fallback: {
             subject: 'Téléchargement de document — Ada Papers',
             htmlContent:
-              '<p>Bonjour,</p><p>Ada Papers vous transmet un lien pour télécharger le document <strong>{{title}}</strong>.</p>{{cabinetMessageBlock}}<p>Utilisez le lien ci-dessous (valable 7 jours, plusieurs téléchargements possibles) :</p><p><a href="{{downloadUrl}}">{{downloadUrl}}</a></p><p>Ce lien expire le {{expiryLabel}}.</p>',
+              '<p>Bonjour,</p><p>Ada Papers vous transmet un lien pour télécharger le document <strong>{{title}}</strong>.</p>{{cabinetMessageBlock}}<p>Le lien est valable 7 jours et permet plusieurs téléchargements.</p>{{downloadButtonBlock}}<p>Ce lien expire le {{expiryLabel}}.</p>',
             textContent:
               'Bonjour,\n\nAda Papers vous transmet un lien pour télécharger le document « {{title}} ».\n{{cabinetMessageText}}Lien de téléchargement (7 jours, usage multiple) :\n{{downloadUrl}}\n\nExpiration : {{expiryLabel}}',
           },

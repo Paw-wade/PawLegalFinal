@@ -507,7 +507,7 @@ const DEFAULT_TEMPLATES = [
     description: 'Lien public pour telecharger un document ou un modele',
     subject: 'Téléchargement de document — Ada Papers',
     htmlContent:
-      '<p>Bonjour,</p><p>Ada Papers vous transmet un lien pour telecharger le document <strong>{{title}}</strong>.</p>{{cabinetMessageBlock}}<p>Utilisez le lien ci-dessous (valable 7 jours, plusieurs telechargements possibles) :</p><p><a href="{{downloadUrl}}">{{downloadUrl}}</a></p><p>Ce lien expire le {{expiryLabel}}.</p>',
+      '<p>Bonjour,</p><p>Ada Papers vous transmet un lien pour telecharger le document <strong>{{title}}</strong>.</p>{{cabinetMessageBlock}}<p>Le lien est valable 7 jours et permet plusieurs telechargements.</p>{{downloadButtonBlock}}<p>Ce lien expire le {{expiryLabel}}.</p>',
     textContent:
       'Bonjour,\n\nAda Papers vous transmet un lien pour telecharger le document « {{title}} ».\n{{cabinetMessageText}}Lien de telechargement (7 jours, usage multiple) :\n{{downloadUrl}}\n\nExpiration : {{expiryLabel}}',
     category: 'dossier',
@@ -515,6 +515,7 @@ const DEFAULT_TEMPLATES = [
     variables: [
       { name: 'title', description: 'Titre du document', example: 'Document scanne.pdf' },
       { name: 'downloadUrl', description: 'Lien public de telechargement', example: 'https://adapapers.fr/telechargement/abc123' },
+      { name: 'downloadButtonBlock', description: 'Bouton HTML de telechargement', example: '' },
       { name: 'expiryLabel', description: 'Date d expiration du lien', example: 'mardi 20 mai 2026' },
       { name: 'cabinetMessageBlock', description: 'Bloc HTML message optionnel du cabinet', example: '' },
       { name: 'cabinetMessageText', description: 'Bloc texte message optionnel du cabinet', example: '' },
@@ -631,6 +632,24 @@ router.post('/init-defaults', async (req, res) => {
           (found.subject === 'Bienvenue sur Ada Papers' ||
             String(found.description || '').includes('creation de compte') ||
             String(found.description || '').includes('création de compte'))
+        ) {
+          found.name = tpl.name;
+          found.description = tpl.description;
+          found.subject = tpl.subject;
+          found.htmlContent = tpl.htmlContent;
+          found.textContent = tpl.textContent;
+          found.category = tpl.category;
+          found.variables = tpl.variables || [];
+          found.isActive = true;
+          found.updatedBy = userId;
+          await found.save();
+          updated.push(tpl.code);
+          continue;
+        }
+        if (
+          tpl.code === 'document_download_share' &&
+          found.isSystem &&
+          String(found.htmlContent || '').includes('>{{downloadUrl}}</a>')
         ) {
           found.name = tpl.name;
           found.description = tpl.description;
