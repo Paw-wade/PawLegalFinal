@@ -8,6 +8,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { searchAndCompose, getKnowledgeDir } = require('./lexiaInternal');
 const { getPawAiLegalSystemPrompt } = require('./lexiaLegalCharter');
 const { prepareLlmContext, gatherExternalOnlyForInternal, mergeSystemPrompt } = require('./lexiaRetrieval');
+const { prependAttachmentsToLastUserMessage } = require('./lexiaThreadAttachments');
 
 const VALID = new Set(['auto', 'internal', 'anthropic', 'gemini', 'all']);
 
@@ -156,7 +157,7 @@ function mapAnthropicSdkError(e, model) {
  * Anthropic en SSE : garde la connexion ouverte (évite les abandons navigateur sur réponses longues).
  * Le client doit envoyer `stream: true` et accepter `text/event-stream`.
  */
-async function streamAnthropicLexia(res, req, messages) {
+async function streamAnthropicLexia(res, req, messages, lexiaOpts = {}) {
   const writeSse = (obj) => {
     if (!res.writableEnded) {
       res.write(`data: ${JSON.stringify(obj)}\n\n`);
@@ -176,7 +177,11 @@ async function streamAnthropicLexia(res, req, messages) {
       `[lexia] ANTHROPIC_MODEL « ${requested} » n’est plus disponible ; utilisation de « ${model} ». Mettez à jour backend/.env.`
     );
   }
-  const msgs = normalizeMessagesForAnthropic(messages);
+  const attachmentAppendix = String(lexiaOpts.threadAttachmentAppendix || '').trim();
+  const messagesForProvider = attachmentAppendix
+    ? prependAttachmentsToLastUserMessage(messages, attachmentAppendix)
+    : messages;
+  const msgs = normalizeMessagesForAnthropic(messagesForProvider);
   if (!msgs.length) {
     const err = new Error('Aucun message utilisateur valide');
     err.code = 'EMPTY_MESSAGES';
@@ -186,7 +191,9 @@ async function streamAnthropicLexia(res, req, messages) {
 
   let retrievalCtx;
   try {
-    retrievalCtx = await prepareLlmContext(messages);
+    retrievalCtx = await prepareLlmContext(messages, {
+      threadAttachmentAppendix: lexiaOpts.threadAttachmentAppendix,
+    });
   } catch (prepErr) {
     console.warn('[lexia] Récupération documentaire (stream) — non bloquant:', prepErr?.message || prepErr);
     retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
@@ -470,25 +477,30 @@ function buildLexiaChatSuccessPayload(result) {
 /**
  * Mode « tout » : interne + Anthropic + Gemini en parallèle, puis synthèse (LLM si clé dispo).
  */
-async function runAllAndMerge(messages) {
+async function runAllAndMerge(messages, lexiaOpts = {}) {
   const dir = getKnowledgeDir();
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  const attachmentAppendix = String(lexiaOpts.threadAttachmentAppendix || '').trim();
+  const internalMessages = attachmentAppendix
+    ? prependAttachmentsToLastUserMessage(messages, attachmentAppendix)
+    : messages;
+  const ctxOptions = { threadAttachmentAppendix: attachmentAppendix };
+  const lastUser = [...internalMessages].reverse().find((m) => m.role === 'user');
   const lastUserSnippet = String(lastUser?.content || '').slice(0, 2000);
 
   let retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
   try {
-    retrievalCtx = await prepareLlmContext(messages);
+    retrievalCtx = await prepareLlmContext(messages, ctxOptions);
   } catch (prepErr) {
     console.warn('[lexia] Mode « all » — récupération documentaire non bloquante:', prepErr?.message || prepErr);
   }
 
-  const internalP = searchAndCompose(messages, dir).catch((e) => ({
+  const internalP = searchAndCompose(internalMessages, dir).catch((e) => ({
     text: `## Base interne — erreur\n\n${String(e.message || e)}`,
     sources: [],
   }));
 
   const anthropicP = process.env.ANTHROPIC_API_KEY
-    ? callAnthropic(messages, retrievalCtx).catch((e) => ({
+    ? callAnthropic(internalMessages, retrievalCtx).catch((e) => ({
         text: `_(Analyse externe indisponible : ${String(e.message || e)})_`,
         failed: true,
       }))
@@ -500,10 +512,10 @@ async function runAllAndMerge(messages) {
   } else if (isGeminiDisabled()) {
     geminiP = Promise.resolve({ text: '_(Gemini désactivé sur ce serveur (LEXIA_DISABLE_GEMINI).)_', skipped: true });
   } else {
-    geminiP = callGemini(messages, retrievalCtx).catch((e) => ({
-      text: `_(Seconde analyse externe indisponible : ${String(e.message || e)})_`,
-      failed: true,
-    }));
+    geminiP = callGemini(internalMessages, retrievalCtx).catch((e) => ({
+        text: `_(Seconde analyse externe indisponible : ${String(e.message || e)})_`,
+        failed: true,
+      }));
   }
 
   const [internalR, antR, gemR] = await Promise.all([internalP, anthropicP, geminiP]);
@@ -602,14 +614,19 @@ async function runAllAndMerge(messages) {
 /**
  * Point d’entrée principal pour POST /api/lexia
  */
-async function runLexiaWithProvider(messages, providerRequested) {
+async function runLexiaWithProvider(messages, providerRequested, lexiaOpts = {}) {
   const resolved = resolveLexiaProvider(providerRequested);
   const dir = getKnowledgeDir();
+  const attachmentAppendix = String(lexiaOpts.threadAttachmentAppendix || '').trim();
+  const internalMessages = attachmentAppendix
+    ? prependAttachmentsToLastUserMessage(messages, attachmentAppendix)
+    : messages;
+  const ctxOptions = { threadAttachmentAppendix: attachmentAppendix };
 
   if (resolved === 'internal') {
     const [result, ext] = await Promise.all([
-      searchAndCompose(messages, dir),
-      gatherExternalOnlyForInternal(messages),
+      searchAndCompose(internalMessages, dir),
+      gatherExternalOnlyForInternal(internalMessages),
     ]);
     const text = ext.markdown?.trim() ? `${result.text}\n\n${ext.markdown}` : result.text;
     return {
@@ -626,11 +643,11 @@ async function runLexiaWithProvider(messages, providerRequested) {
     try {
       let retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
       try {
-        retrievalCtx = await prepareLlmContext(messages);
+        retrievalCtx = await prepareLlmContext(messages, ctxOptions);
       } catch (prepErr) {
         console.warn('[lexia] Récupération (Anthropic) — non bloquant:', prepErr?.message || prepErr);
       }
-      const out = await callAnthropic(messages, retrievalCtx);
+      const out = await callAnthropic(internalMessages, retrievalCtx);
       const ctx = out.retrievalCtx || retrievalCtx;
       const sources = [
         ...(Array.isArray(ctx.sources) ? ctx.sources : []),
@@ -648,8 +665,8 @@ async function runLexiaWithProvider(messages, providerRequested) {
       if (isAutoRequested(providerRequested)) {
         console.warn('[lexia] Anthropic échoué, repli base interne (mode auto):', e.message || e);
         const [result, ext] = await Promise.all([
-          searchAndCompose(messages, dir),
-          gatherExternalOnlyForInternal(messages),
+          searchAndCompose(internalMessages, dir),
+          gatherExternalOnlyForInternal(internalMessages),
         ]);
         const text =
           String(result.text || '') +
@@ -672,11 +689,11 @@ async function runLexiaWithProvider(messages, providerRequested) {
     try {
       let retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
       try {
-        retrievalCtx = await prepareLlmContext(messages);
+        retrievalCtx = await prepareLlmContext(messages, ctxOptions);
       } catch (prepErr) {
         console.warn('[lexia] Récupération (Gemini) — non bloquant:', prepErr?.message || prepErr);
       }
-      const out = await callGemini(messages, retrievalCtx);
+      const out = await callGemini(internalMessages, retrievalCtx);
       const ctx = out.retrievalCtx || retrievalCtx;
       const sources = [
         ...(Array.isArray(ctx.sources) ? ctx.sources : []),
@@ -694,8 +711,8 @@ async function runLexiaWithProvider(messages, providerRequested) {
       if (isAutoRequested(providerRequested)) {
         console.warn('[lexia] Gemini échoué, repli base interne (mode auto):', e.message || e);
         const [result, ext] = await Promise.all([
-          searchAndCompose(messages, dir),
-          gatherExternalOnlyForInternal(messages),
+          searchAndCompose(internalMessages, dir),
+          gatherExternalOnlyForInternal(internalMessages),
         ]);
         const text =
           String(result.text || '') +
@@ -715,7 +732,7 @@ async function runLexiaWithProvider(messages, providerRequested) {
   }
 
   if (resolved === 'all') {
-    const result = await runAllAndMerge(messages);
+    const result = await runAllAndMerge(messages, lexiaOpts);
     return {
       text: result.text,
       sources: result.sources || [],
@@ -728,8 +745,8 @@ async function runLexiaWithProvider(messages, providerRequested) {
 
   // auto (ne devrait pas arriver ici — resolveLexiaProvider renvoie déjà un mode concret)
   const [fallback, ext] = await Promise.all([
-    searchAndCompose(messages, dir),
-    gatherExternalOnlyForInternal(messages),
+    searchAndCompose(internalMessages, dir),
+    gatherExternalOnlyForInternal(internalMessages),
   ]);
   const text = ext.markdown?.trim() ? `${fallback.text}\n\n${ext.markdown}` : fallback.text;
   return {

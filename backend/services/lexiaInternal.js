@@ -1,6 +1,7 @@
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
+const os = require('os');
 const { getInternalModeLegalFooter } = require('./lexiaLegalCharter');
 
 /** VPS Linux — sans résolution win32 pour éviter `/root/…` → `C:\\root\\…`. */
@@ -340,6 +341,53 @@ function collectKnowledgeFilesForIndex(dir) {
 /**
  * Extrait le texte utile selon le type de fichier (UTF-8, XML aplati, PDF, Word).
  */
+async function extractPlainTextFromKnowledgeBuffer(buf, extRaw) {
+  const ext = String(extRaw || '').toLowerCase();
+  if (!Buffer.isBuffer(buf) || !buf.length) return '';
+  try {
+    switch (ext) {
+      case '.pdf': {
+        const pdfParse = require('pdf-parse');
+        const res = await pdfParse(buf);
+        return String(res.text || '')
+          .replace(/\u0000/g, ' ')
+          .trim();
+      }
+      case '.docx': {
+        const mammoth = require('mammoth');
+        const r = await mammoth.extractRawText({ buffer: buf });
+        return String(r.value || '').trim();
+      }
+      case '.doc': {
+        const WordExtractor = require('word-extractor');
+        const extractor = new WordExtractor();
+        const tmp = path.join(os.tmpdir(), `lexia-${Date.now()}-${Math.random().toString(36).slice(2)}.doc`);
+        await fsp.writeFile(tmp, buf);
+        try {
+          const doc = await extractor.extract(tmp);
+          return String(doc.getBody() || '').trim();
+        } finally {
+          await fsp.unlink(tmp).catch(() => {});
+        }
+      }
+      case '.xml': {
+        const raw = buf.toString('utf8');
+        return stripXmlToText(raw);
+      }
+      case '.md':
+      case '.txt': {
+        const raw = buf.toString('utf8');
+        return String(raw || '').trim();
+      }
+      default:
+        return '';
+    }
+  } catch (err) {
+    console.warn(`[lexia] Extraction impossible (${ext || 'sans extension'}): ${err.message}`);
+    return '';
+  }
+}
+
 async function extractPlainTextFromKnowledgeFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   let statSize = 0;
@@ -354,38 +402,8 @@ async function extractPlainTextFromKnowledgeFile(filePath) {
     return '';
   }
   try {
-    switch (ext) {
-      case '.pdf': {
-        const pdfParse = require('pdf-parse');
-        const buf = await fsp.readFile(filePath);
-        const res = await pdfParse(buf);
-        return String(res.text || '')
-          .replace(/\u0000/g, ' ')
-          .trim();
-      }
-      case '.docx': {
-        const mammoth = require('mammoth');
-        const r = await mammoth.extractRawText({ path: filePath });
-        return String(r.value || '').trim();
-      }
-      case '.doc': {
-        const WordExtractor = require('word-extractor');
-        const extractor = new WordExtractor();
-        const doc = await extractor.extract(filePath);
-        return String(doc.getBody() || '').trim();
-      }
-      case '.xml': {
-        const raw = await fsp.readFile(filePath, 'utf8');
-        return stripXmlToText(raw);
-      }
-      case '.md':
-      case '.txt': {
-        const raw = await fsp.readFile(filePath, 'utf8');
-        return String(raw || '').trim();
-      }
-      default:
-        return '';
-    }
+    const buf = await fsp.readFile(filePath);
+    return extractPlainTextFromKnowledgeBuffer(buf, ext);
   } catch (err) {
     console.warn(`[lexia] Fichier ignoré (${path.basename(filePath)}): ${err.message}`);
     return '';
@@ -911,4 +929,5 @@ module.exports = {
     truncationFilesWarned = false;
     truncationChunksWarned = false;
   },
+  extractPlainTextFromKnowledgeBuffer,
 };

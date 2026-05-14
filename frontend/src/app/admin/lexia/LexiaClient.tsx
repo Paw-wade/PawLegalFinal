@@ -6,7 +6,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { ArrowUp, ChevronLeft, ChevronRight, Copy, MessageSquare, Search, Share2 } from 'lucide-react';
+import { ArrowUp, ChevronLeft, ChevronRight, Copy, MessageSquare, Mic, Paperclip, Search, Share2, Square, X } from 'lucide-react';
 import { FORUM_THEMES, type ForumThemeValue } from '@/app/forum/forum-utils';
 import { forumAPI, getApiBaseUrl, getAuthToken, lexiaAPI, pawSearchAPI } from '@/lib/api';
 import { LexiaMarkdown } from '@/components/lexia/LexiaMarkdown';
@@ -63,6 +63,19 @@ type ChatMessage = {
   totalToolUses?: number;
   /** Fichiers corpus (base interne) renvoyés par l’API — ouverture lecture intégrale. */
   lexiaKnowledgeSources?: LexiaKnowledgeSourceRow[];
+  attachmentNames?: string[];
+};
+
+type PawAiThreadAttachment = {
+  id: string;
+  threadId: string;
+  originalName: string;
+  mimeType?: string;
+  size: number;
+  empty?: boolean;
+  extractionNote?: string;
+  preview?: string;
+  transcript?: string;
 };
 
 type PawAiPublicLinkScope = 'full' | 'since_last_user' | 'this_exchange';
@@ -72,8 +85,72 @@ const PAW_AI_THREADS_KEY = 'pawlegal-paw-ai-threads-v1';
 const LEGACY_ADA_AI_THREADS_KEY = 'pawlegal-ada-ai-threads-v1';
 const LEXIA_SIDEBAR_RAIL_COLLAPSED_KEY = 'pawlegal-lexia-sidebar-rail-collapsed';
 const MAX_STORED_THREADS = 40;
+const PAW_AI_ATTACHMENT_ACCEPT =
+  '.md,.txt,.xml,.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.gif,.webm,.ogg,.mp3,.wav,.m4a,.aac,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain,application/xml,text/xml,image/png,image/jpeg,image/webp,image/gif,audio/webm,audio/ogg,audio/mpeg,audio/wav,audio/mp4,audio/aac';
+const MAX_AUDIO_RECORDING_MS = 5 * 60 * 1000;
 /** Texte affiché lettre par lettre sur l’accueil Paw AI. */
 const LEXIA_ACCUEIL_HELLO = 'Hello';
+
+function pickAudioRecordingMimeType(): string | undefined {
+  if (typeof MediaRecorder === 'undefined') return undefined;
+  if (typeof MediaRecorder.isTypeSupported !== 'function') return undefined;
+  return ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/ogg'].find((type) =>
+    MediaRecorder.isTypeSupported(type)
+  );
+}
+
+function extensionForAudioMimeType(mimeType: string): string {
+  const normalized = String(mimeType || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if (normalized.includes('ogg')) return '.ogg';
+  if (normalized === 'audio/mp4') return '.m4a';
+  if (normalized === 'audio/wav') return '.wav';
+  if (normalized === 'audio/mpeg') return '.mp3';
+  return '.webm';
+}
+
+function formatAudioRecordingSeconds(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function isVoiceAttachment(attachment: Pick<PawAiThreadAttachment, 'originalName' | 'mimeType'>): boolean {
+  const name = String(attachment.originalName || '').toLowerCase();
+  const mime = String(attachment.mimeType || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  return name.startsWith('note-vocale-') || mime.startsWith('audio/') || mime === 'video/webm';
+}
+
+function getVoiceAttachmentTranscript(attachment: Pick<PawAiThreadAttachment, 'transcript' | 'preview'>): string {
+  return String(attachment.transcript || attachment.preview || '').trim();
+}
+
+function mergeVoiceTranscriptIntoInput(current: string, transcript: string): string {
+  const next = transcript.trim();
+  if (!next) return current;
+  const base = current.trim();
+  if (!base) return next;
+  if (base.includes(next)) return base;
+  return `${base}\n\n${next}`;
+}
+
+function getLexiaApiErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object') {
+    const response = (error as { response?: { data?: { error?: unknown; message?: unknown } } }).response;
+    const data = response?.data;
+    if (typeof data?.error === 'string' && data.error.trim()) return data.error;
+    if (typeof data?.message === 'string' && data.message.trim()) return data.message;
+    if ('message' in error && typeof (error as Error).message === 'string' && (error as Error).message.trim()) {
+      return (error as Error).message;
+    }
+  }
+  return fallback;
+}
 
 
 type ChatThread = {
@@ -260,7 +337,11 @@ function applyLexiaSseEvents(
 
 async function postLexiaAnthropicSse(
   url: string,
-  body: { messages: { role: string; content: string }[]; provider: LexiaProviderMode },
+  body: {
+    messages: { role: string; content: string }[];
+    provider: LexiaProviderMode;
+    threadId?: string;
+  },
   token: string | null,
   onDelta: (chunk: string) => void
 ): Promise<LexiaSseCompletePayload> {
@@ -732,6 +813,11 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   /** Nombre de caractères de « Hello » visibles (accueil, animation typewriter). */
   const [helloCharIndex, setHelloCharIndex] = useState(0);
   const [input, setInput] = useState('');
+  const [threadAttachments, setThreadAttachments] = useState<PawAiThreadAttachment[]>([]);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [audioRecordingSeconds, setAudioRecordingSeconds] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [agentStatus, setAgentStatus] = useState<'idle' | 'analyzing' | 'searching'>('idle');
   const [searchStep, setSearchStep] = useState('');
@@ -794,6 +880,12 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   /** Après une réponse API, faire défiler vers le début de ce message assistant (pas la fin). */
   const scrollNewAssistantToTopRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const audioRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const audioStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioTickTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const threadsRef = useRef<ChatThread[]>([]);
   const sessionUserIdOrNull =
@@ -1118,6 +1210,215 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
   }, [threads, activeThreadId, threadsReady]);
 
   useEffect(() => {
+    if (!activeThreadId) {
+      setThreadAttachments([]);
+      setAttachmentError(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await lexiaAPI.listThreadAttachments(activeThreadId);
+        if (cancelled) return;
+        setThreadAttachments(Array.isArray(data?.attachments) ? data.attachments : []);
+        setAttachmentError(null);
+      } catch {
+        if (!cancelled) setThreadAttachments([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeThreadId, status]);
+
+  const ensureActiveThread = useCallback((): string => {
+    let tid = activeThreadId;
+    if (tid && threads.some((t) => t.id === tid)) return tid;
+    const newThread = makeThread();
+    setThreads((prev) => [newThread, ...prev].slice(0, MAX_STORED_THREADS));
+    setActiveThreadId(newThread.id);
+    return newThread.id;
+  }, [activeThreadId, threads]);
+
+  const uploadPawAttachments = useCallback(
+    async (files: FileList | File[] | null) => {
+      const list = files ? Array.from(files) : [];
+      if (!list.length) return;
+      const threadId = ensureActiveThread();
+      setAttachmentUploading(true);
+      setAttachmentError(null);
+      try {
+        for (const file of list) {
+          const { data } = await lexiaAPI.uploadThreadAttachment(threadId, file);
+          if (data?.success === false) {
+            throw new Error(data?.error || 'Import impossible');
+          }
+          if (data?.attachment) {
+            const row = data.attachment;
+            setThreadAttachments((prev) => [...prev, row]);
+            const transcript = isVoiceAttachment(row) ? getVoiceAttachmentTranscript(row) : '';
+            if (transcript) {
+              setInput((prev) => mergeVoiceTranscriptIntoInput(prev, transcript));
+              requestAnimationFrame(() => {
+                const el = inputRef.current;
+                if (!el) return;
+                el.style.height = 'auto';
+                el.style.height = `${Math.min(el.scrollHeight, 130)}px`;
+              });
+            } else if (isVoiceAttachment(row)) {
+              setAttachmentError(row.extractionNote || 'Transcription vocale impossible.');
+            }
+          }
+        }
+      } catch (e: unknown) {
+        setAttachmentError(getLexiaApiErrorMessage(e, 'Import impossible'));
+      } finally {
+        setAttachmentUploading(false);
+        if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+      }
+    },
+    [ensureActiveThread]
+  );
+
+  const removePawAttachment = useCallback(async (attachmentId: string) => {
+    setAttachmentError(null);
+    try {
+      const { data } = await lexiaAPI.deleteThreadAttachment(attachmentId);
+      if (data?.success === false) throw new Error(data?.error || 'Suppression impossible');
+      setThreadAttachments((prev) => prev.filter((row) => row.id !== attachmentId));
+    } catch (e: unknown) {
+      setAttachmentError(getLexiaApiErrorMessage(e, 'Suppression impossible'));
+    }
+  }, []);
+
+  const clearAudioRecordingTimers = useCallback(() => {
+    if (audioStopTimerRef.current) {
+      clearTimeout(audioStopTimerRef.current);
+      audioStopTimerRef.current = null;
+    }
+    if (audioTickTimerRef.current) {
+      clearInterval(audioTickTimerRef.current);
+      audioTickTimerRef.current = null;
+    }
+  }, []);
+
+  const releaseAudioRecordingResources = useCallback(() => {
+    clearAudioRecordingTimers();
+    audioRecorderRef.current = null;
+    audioChunksRef.current = [];
+    const stream = audioStreamRef.current;
+    audioStreamRef.current = null;
+    if (stream) {
+      for (const track of stream.getTracks()) track.stop();
+    }
+  }, [clearAudioRecordingTimers]);
+
+  const stopAudioRecording = useCallback(() => {
+    const recorder = audioRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+    try {
+      if (typeof recorder.requestData === 'function' && recorder.state === 'recording') {
+        recorder.requestData();
+      }
+      recorder.stop();
+    } catch {
+      releaseAudioRecordingResources();
+      setIsRecordingAudio(false);
+      setAudioRecordingSeconds(0);
+    }
+  }, [releaseAudioRecordingResources]);
+
+  const startAudioRecording = useCallback(async () => {
+    if (isRecordingAudio || attachmentUploading || isLoading) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setAttachmentError('Microphone indisponible dans ce navigateur.');
+      return;
+    }
+    const mimeType = pickAudioRecordingMimeType();
+    if (!mimeType) {
+      setAttachmentError('Enregistrement audio non pris en charge sur cet appareil.');
+      return;
+    }
+    setAttachmentError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) audioChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        void (async () => {
+          const chunks = audioChunksRef.current;
+          const resolvedMime = recorder.mimeType || mimeType;
+          releaseAudioRecordingResources();
+          setIsRecordingAudio(false);
+          setAudioRecordingSeconds(0);
+          if (!chunks.length) {
+            setAttachmentError('Enregistrement vide.');
+            return;
+          }
+          const blob = new Blob(chunks, { type: resolvedMime });
+          if (!blob.size || blob.size < 128) {
+            setAttachmentError('Enregistrement trop court ou vide.');
+            return;
+          }
+          const ext = extensionForAudioMimeType(resolvedMime);
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const file = new File([blob], `note-vocale-${stamp}${ext}`, { type: resolvedMime });
+          await uploadPawAttachments([file]);
+        })();
+      };
+      recorder.onerror = () => {
+        setAttachmentError('Erreur pendant l’enregistrement audio.');
+        try {
+          if (recorder.state !== 'inactive') recorder.stop();
+        } catch {
+          releaseAudioRecordingResources();
+          setIsRecordingAudio(false);
+          setAudioRecordingSeconds(0);
+        }
+      };
+      recorder.start(250);
+      setIsRecordingAudio(true);
+      setAudioRecordingSeconds(0);
+      audioTickTimerRef.current = setInterval(() => {
+        setAudioRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+      audioStopTimerRef.current = setTimeout(() => {
+        stopAudioRecording();
+      }, MAX_AUDIO_RECORDING_MS);
+    } catch (e: unknown) {
+      releaseAudioRecordingResources();
+      setIsRecordingAudio(false);
+      setAudioRecordingSeconds(0);
+      const msg = e instanceof Error ? e.message : String(e);
+      setAttachmentError(msg || 'Accès micro refusé.');
+    }
+  }, [
+    isRecordingAudio,
+    attachmentUploading,
+    isLoading,
+    releaseAudioRecordingResources,
+    stopAudioRecording,
+    uploadPawAttachments,
+  ]);
+
+  const toggleAudioRecording = useCallback(() => {
+    if (isRecordingAudio) stopAudioRecording();
+    else void startAudioRecording();
+  }, [isRecordingAudio, startAudioRecording, stopAudioRecording]);
+
+  useEffect(() => {
+    return () => {
+      stopAudioRecording();
+      releaseAudioRecordingResources();
+    };
+  }, [releaseAudioRecordingResources, stopAudioRecording]);
+
+  useEffect(() => {
     if (!knowledgeReader) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setKnowledgeReader(null);
@@ -1291,16 +1592,43 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
 
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!text.trim() || isLoading) return;
+      const trimmed = text.trim();
+      if ((!trimmed && threadAttachments.length === 0) || isLoading || attachmentUploading || isRecordingAudio) return;
+
+      const attachmentNames = threadAttachments.map((row) => row.originalName);
+      const attachmentNote = attachmentNames.length
+        ? `[Pièces jointes : ${attachmentNames.join(', ')}]`
+        : '';
+      const outgoingText =
+        trimmed || (attachmentNames.length ? 'Merci d’analyser les pièces jointes de cette discussion.' : '');
+      const userContent = attachmentNote
+        ? trimmed
+          ? `${trimmed}\n\n${attachmentNote}`
+          : attachmentNote
+        : outgoingText;
 
       setInput('');
       setIsLoading(true);
       setAgentStatus('analyzing');
       setSearchStep('Analyse de la requête…');
 
-      const userMsg: ChatMessage = { role: 'user', content: text, id: Date.now() };
+      const userMsg: ChatMessage = {
+        role: 'user',
+        content: userContent,
+        id: Date.now(),
+        attachmentNames: attachmentNames.length ? attachmentNames : undefined,
+      };
 
       let tid = activeThreadId;
+      if (threadAttachments.length > 0) {
+        const attachmentThreadId = String(threadAttachments[0]?.threadId || '').trim();
+        if (attachmentThreadId && threads.some((t) => t.id === attachmentThreadId)) {
+          tid = attachmentThreadId;
+          if (activeThreadId !== attachmentThreadId) {
+            setActiveThreadId(attachmentThreadId);
+          }
+        }
+      }
       let history: { role: 'user' | 'assistant'; content: string }[];
 
       const sorted = [...threads].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -1318,7 +1646,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                 ? th
                 : {
                     ...th,
-                    title: clipTitle(text),
+                    title: clipTitle(outgoingText),
                     messages: [userMsg],
                     updatedAt: Date.now(),
                   }
@@ -1330,7 +1658,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           history = [];
           setActiveThreadId(tid);
           setThreads((prev) =>
-            [{ ...newT, title: clipTitle(text), messages: [userMsg], updatedAt: Date.now() }, ...prev]
+            [{ ...newT, title: clipTitle(outgoingText), messages: [userMsg], updatedAt: Date.now() }, ...prev]
               .filter((th, i, arr) => i === 0 || th.id !== newT.id)
               .slice(0, MAX_STORED_THREADS)
           );
@@ -1350,13 +1678,16 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
               ? th
               : {
                   ...th,
-                  title: th.messages.length === 0 ? clipTitle(text) : th.title,
+                  title: th.messages.length === 0 ? clipTitle(outgoingText) : th.title,
                   messages: [...th.messages, userMsg],
                   updatedAt: Date.now(),
                 }
           )
         );
       }
+
+      const threadIdForApi =
+        String(threadAttachments[0]?.threadId || '').trim() || tid || ensureActiveThread();
 
       let streamingAssistantId: number | null = null;
       try {
@@ -1390,8 +1721,9 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           const streamResult = await postLexiaAnthropicSse(
             url,
             {
-              messages: [...history, { role: 'user', content: text }],
+              messages: [...history, { role: 'user', content: userContent }],
               provider: lexiaProvider,
+              threadId: threadIdForApi,
             },
             token,
             (delta) => {
@@ -1464,8 +1796,9 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify({
-              messages: [...history, { role: 'user', content: text }],
+              messages: [...history, { role: 'user', content: userContent }],
               provider: lexiaProvider,
+              threadId: threadIdForApi,
             }),
           });
           const data = await res.json().catch(() => ({}));
@@ -1572,7 +1905,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         inputRef.current?.focus();
       }
     },
-    [isLoading, activeThreadId, threads, lexiaProvider, lexiaConfig]
+    [isLoading, attachmentUploading, isRecordingAudio, threadAttachments, activeThreadId, threads, lexiaProvider, lexiaConfig, ensureActiveThread]
   );
 
   const startNewThread = useCallback(() => {
@@ -4006,16 +4339,84 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         }
         .lexia-input-wrap {
           display: flex;
-          align-items: flex-end;
+          align-items: center;
           gap: 10px;
           background: hsl(var(--background));
           border: 1px solid #f97316;
           border-radius: var(--radius);
-          padding: 10px 10px 10px 16px;
+          padding: 10px 10px 10px 12px;
           max-width: none;
           width: 100%;
           margin: 0;
           box-sizing: border-box;
+        }
+        .lexia-attach-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 34px;
+          height: 34px;
+          border-radius: calc(var(--radius) - 2px);
+          border: 1px solid hsl(var(--border));
+          background: hsl(var(--muted) / 0.45);
+          color: hsl(var(--foreground));
+          flex-shrink: 0;
+          cursor: pointer;
+        }
+        .lexia-attach-btn:hover:not(:disabled) {
+          background: hsl(var(--accent));
+        }
+        .lexia-attach-btn:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+        .lexia-attach-btn--recording {
+          background: hsl(0 78% 96%);
+          border-color: hsl(0 72% 65%);
+          color: hsl(0 72% 42%);
+          box-shadow: 0 0 0 3px rgb(239 68 68 / 0.18);
+        }
+        .lexia-attachment-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin: 0 0 8px;
+        }
+        .lexia-attachment-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          max-width: 100%;
+          border: 1px solid hsl(var(--border));
+          border-radius: 999px;
+          background: hsl(var(--muted) / 0.35);
+          padding: 4px 8px 4px 10px;
+          font-size: 11px;
+          color: hsl(var(--foreground));
+        }
+        .lexia-attachment-chip--voice {
+          border-radius: calc(var(--radius) - 2px);
+          align-items: flex-start;
+          max-width: min(100%, 42rem);
+        }
+        .lexia-attachment-chip--voice .lexia-attachment-chip-label {
+          white-space: pre-wrap;
+          line-height: 1.45;
+        }
+        .lexia-attachment-chip button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: none;
+          background: transparent;
+          color: hsl(var(--muted-foreground));
+          cursor: pointer;
+          padding: 0;
+        }
+        .lexia-attachment-error {
+          margin: 0 0 8px;
+          font-size: 11px;
+          color: hsl(0 72% 45%);
         }
         @media (max-width: 639px) {
           .lexia-input-wrap {
@@ -4030,6 +4431,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         }
         .lexia-input-area textarea {
           flex: 1;
+          align-self: center;
           background: none;
           border: none;
           outline: none;
@@ -4041,6 +4443,8 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           line-height: 1.55;
           text-align: left;
           direction: ltr;
+          margin: 0;
+          padding: 0;
         }
         @media (max-width: 639px) {
           .lexia-input-area textarea {
@@ -4658,7 +5062,89 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
           </div>
 
           <div className="lexia-input-area">
+            {lexiaSurface === 'assistant' && threadAttachments.length > 0 ? (
+              <div className="lexia-attachment-list" aria-label="Pièces jointes de la discussion">
+                {threadAttachments.map((attachment) => {
+                  const voice = isVoiceAttachment(attachment);
+                  const transcript = voice ? getVoiceAttachmentTranscript(attachment) : '';
+                  const chipLabel = voice
+                    ? transcript || attachment.extractionNote || 'Transcription vocale en cours…'
+                    : attachment.originalName;
+                  const chipTitle = voice
+                    ? `${attachment.originalName}${transcript ? `\n\n${transcript}` : ''}`
+                    : attachment.originalName;
+                  return (
+                  <span
+                    key={attachment.id}
+                    className={`lexia-attachment-chip${voice ? ' lexia-attachment-chip--voice' : ''}`}
+                    title={chipTitle}
+                  >
+                    {voice ? (
+                      <Mic aria-hidden width={12} height={12} strokeWidth={2.25} />
+                    ) : (
+                      <Paperclip aria-hidden width={12} height={12} strokeWidth={2.25} />
+                    )}
+                    <span className={`truncate${voice ? ' lexia-attachment-chip-label' : ''}`}>{chipLabel}</span>
+                    <button
+                      type="button"
+                      aria-label={`Retirer ${attachment.originalName}`}
+                      onClick={() => void removePawAttachment(attachment.id)}
+                      disabled={attachmentUploading || isLoading}
+                    >
+                      <X aria-hidden width={12} height={12} strokeWidth={2.25} />
+                    </button>
+                  </span>
+                  );
+                })}
+              </div>
+            ) : null}
+            {lexiaSurface === 'assistant' && attachmentError ? (
+              <p className="lexia-attachment-error" role="alert">
+                {attachmentError}
+              </p>
+            ) : null}
             <div className="lexia-input-wrap">
+              {lexiaSurface === 'assistant' ? (
+                <>
+                  <input
+                    ref={attachmentInputRef}
+                    type="file"
+                    className="sr-only"
+                    multiple
+                    accept={PAW_AI_ATTACHMENT_ACCEPT}
+                    onChange={(event) => void uploadPawAttachments(event.target.files)}
+                  />
+                  <button
+                    type="button"
+                    className="lexia-attach-btn"
+                    title="Joindre PDF, Word, images, audio, XML ou Markdown"
+                    aria-label="Joindre un fichier à la discussion"
+                    disabled={isLoading || attachmentUploading || isRecordingAudio}
+                    onClick={() => attachmentInputRef.current?.click()}
+                  >
+                    <Paperclip aria-hidden width={16} height={16} strokeWidth={2.25} />
+                  </button>
+                  <button
+                    type="button"
+                    className={`lexia-attach-btn${isRecordingAudio ? ' lexia-attach-btn--recording' : ''}`}
+                    title={
+                      isRecordingAudio
+                        ? `Enregistrement… ${formatAudioRecordingSeconds(audioRecordingSeconds)} — cliquer pour arrêter`
+                        : 'Enregistrer une note vocale'
+                    }
+                    aria-label={isRecordingAudio ? 'Arrêter l’enregistrement audio' : 'Enregistrer une note vocale'}
+                    aria-pressed={isRecordingAudio}
+                    disabled={isLoading || attachmentUploading}
+                    onClick={() => toggleAudioRecording()}
+                  >
+                    {isRecordingAudio ? (
+                      <Square aria-hidden width={16} height={16} strokeWidth={2.25} />
+                    ) : (
+                      <Mic aria-hidden width={16} height={16} strokeWidth={2.25} />
+                    )}
+                  </button>
+                </>
+              ) : null}
               <textarea
                 ref={inputRef}
                 value={lexiaSurface === 'pawSearch' ? pawSearchInput : input}
@@ -4681,7 +5167,11 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                     : 'Recherchez des informations fiables relatives à votre situation...'
                 }
                 rows={1}
-                disabled={lexiaSurface === 'pawSearch' ? pawSearchLoading : isLoading}
+                disabled={
+                  lexiaSurface === 'pawSearch'
+                    ? pawSearchLoading
+                    : isLoading || attachmentUploading || isRecordingAudio
+                }
               />
               <button
                 type="button"
@@ -4693,7 +5183,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                 disabled={
                   lexiaSurface === 'pawSearch'
                     ? !pawSearchInput.trim() || pawSearchLoading
-                    : !input.trim() || isLoading
+                    : (!input.trim() && threadAttachments.length === 0) || isLoading || attachmentUploading || isRecordingAudio
                 }
                 title={lexiaSurface === 'pawSearch' ? 'Lancer Paw Search' : 'Envoyer'}
                 aria-label={lexiaSurface === 'pawSearch' ? 'Lancer Paw Search' : 'Envoyer'}
@@ -4715,7 +5205,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
             <div className="lexia-input-hint">
               {lexiaSurface === 'pawSearch'
                 ? 'Entrée pour rechercher dans le corpus serveur · Shift+Entrée pour nouvelle ligne'
-                : 'Entrée pour envoyer · Shift+Entrée pour nouvelle ligne'}
+                : 'PDF, Word, images, XML ou Markdown · les pièces jointes restent en mémoire dans ce fil · Entrée pour envoyer'}
             </div>
           </div>
         </div>
