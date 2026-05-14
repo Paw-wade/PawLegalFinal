@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, Fragment } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -58,7 +58,7 @@ function Label({ htmlFor, children, className = '' }: any) {
 function Textarea({ className = '', ...props }: any) {
   return (
     <textarea
-      className={`flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`flex min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     />
   );
@@ -86,7 +86,7 @@ const categoryMapping: { [key: string]: { categorie: string; type: string } } = 
 
 const clientCategories = {
   accompagnement: {
-    label: 'J\'ai besoin d\'un accompagnement',
+    label: 'Je veux être accompagné',
     options: [
       { value: 'premiere_demande_titre', label: 'Je fais une première demande de titre de séjour' },
       { value: 'renouvellement_titre', label: 'Je demande le renouvellement de mon titre de séjour' },
@@ -121,7 +121,7 @@ const clientCategories = {
 export default function CreateDossierPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('accompagnement');
   const [selectedOption, setSelectedOption] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -533,359 +533,328 @@ export default function CreateDossierPage() {
     }
   };
 
+  const categoryEntries = Object.entries(clientCategories);
+  const activeCategory =
+    clientCategories[selectedCategory as keyof typeof clientCategories] ?? clientCategories.accompagnement;
+  const backHref = session ? '/client/dossiers' : '/';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/10">
-      <header className="border-b bg-white/95 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="text-2xl font-bold text-primary hover:text-primary/80 transition-colors">Ada Papers</Link>
-            <nav className="hidden md:flex items-center gap-6">
-              {session ? (
-                <>
-                  <Link href="/client" className="hover:text-primary transition-colors">Dashboard</Link>
-                  <Link href="/client/dossiers" className="hover:text-primary transition-colors">Mes dossiers</Link>
-                </>
-              ) : (
-                <Link href="/" className="hover:text-primary transition-colors">Accueil</Link>
-              )}
-            </nav>
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
+          <Link href="/" className="text-lg font-bold text-primary hover:text-primary/80 transition-colors">
+            Ada Papers
+          </Link>
+          <nav className="hidden items-center gap-4 text-sm md:flex">
             {session ? (
-              <Link href="/client" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                {session.user?.name || 'Mon compte'}
-              </Link>
+              <>
+                <Link href="/client" className="text-muted-foreground hover:text-primary transition-colors">
+                  Dashboard
+                </Link>
+                <Link href="/client/dossiers" className="text-muted-foreground hover:text-primary transition-colors">
+                  Mes dossiers
+                </Link>
+              </>
             ) : (
-              <div className="flex gap-2">
-                <Link href="/auth/signin" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                  Connexion
-                </Link>
-                <Link href="/auth/signup" className="text-sm text-primary hover:underline font-medium">
-                  Inscription
-                </Link>
-              </div>
+              <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">
+                Accueil
+              </Link>
             )}
-          </div>
+          </nav>
+          {session ? (
+            <Link href="/client" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+              {session.user?.name || 'Mon compte'}
+            </Link>
+          ) : (
+            <div className="flex items-center gap-3 text-sm">
+              <Link href="/auth/signin" className="text-muted-foreground hover:text-primary transition-colors">
+                Connexion
+              </Link>
+              <Link href="/auth/signup" className="font-medium text-primary hover:underline">
+                Inscription
+              </Link>
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-12 max-w-7xl">
-        {/* Hero Section */}
-        <div className="text-center mb-12">
-          <div className="inline-block mb-4 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
-            <span className="text-sm font-medium text-primary">Nouvelle demande</span>
+      <main className="mx-auto max-w-5xl px-4 py-4 sm:py-6">
+        <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <Link
+              href={backHref}
+              className="mb-2 inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80"
+            >
+              <span aria-hidden>←</span>
+              Retour
+            </Link>
+            <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Nouvelle demande</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {session
+                ? 'Choisissez le type de demande puis complétez le formulaire.'
+                : 'Création possible sans compte : type de demande puis formulaire.'}
+            </p>
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-            Créer une demande de dossier
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            {session 
-              ? 'Remplissez le formulaire ci-dessous pour créer votre dossier'
-              : 'Vous pouvez créer une demande de dossier même sans être inscrit. Remplissez le formulaire ci-dessous.'}
-          </p>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+        {error ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
             <p className="text-sm text-red-600">{error}</p>
           </div>
-        )}
+        ) : null}
 
-        {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-md">
+        {success ? (
+          <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2.5">
             <p className="text-sm text-green-600">{success}</p>
           </div>
-        )}
+        ) : null}
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Colonne gauche : Sélection des rubriques */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 space-y-8 border border-border/50">
-            <div>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <span className="text-primary text-xl">📋</span>
-                </div>
-                <Label className="text-xl font-bold text-foreground">Sélectionnez votre besoin</Label>
-              </div>
-              <div className="space-y-4">
-                {Object.entries(clientCategories).map(([key, category]) => (
-                  <Fragment key={key}>
-                    <button
-                      type="button"
-                      onClick={() => handleCategorySelect(key)}
-                      className={`w-full p-6 rounded-xl border-2 transition-all duration-300 text-left group ${
-                        selectedCategory === key
-                          ? 'border-primary bg-primary/10 shadow-lg scale-[1.02]'
-                          : 'border-border hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
-                      }`}
-                    >
-                      <h3
-                        className={`font-semibold text-lg mb-2 transition-colors ${
-                          selectedCategory === key
-                            ? 'text-primary'
-                            : 'text-foreground group-hover:text-primary'
-                        }`}
-                      >
-                        {category.label}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {category.options.length} option{category.options.length > 1 ? 's' : ''} disponible
-                        {category.options.length > 1 ? 's' : ''}
-                      </p>
-                    </button>
-
-                    {/* Afficher le bloc options juste après la catégorie cliquée */}
-                    {selectedCategory === key && (
-                      <div className="border-t pt-6">
-                        <div className="flex items-center gap-3 mb-6">
-                          <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                            <span className="text-primary text-xl">✓</span>
-                          </div>
-                          <Label className="text-xl font-bold text-foreground">
-                            {category.label}
-                          </Label>
-                        </div>
-                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                          {category.options.map((option) => (
-                            <label
-                              key={option.value}
-                              className={`flex items-start p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 group ${
-                                selectedOption === option.value
-                                  ? 'border-primary bg-primary/10 shadow-md'
-                                  : 'border-border hover:border-primary/50 hover:bg-primary/5'
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name="option"
-                                value={option.value}
-                                checked={selectedOption === option.value}
-                                onChange={(e) => handleOptionSelect(e.target.value)}
-                                className="mr-3 h-5 w-5 text-primary mt-0.5 flex-shrink-0 cursor-pointer"
-                              />
-                              <span
-                                className={`text-sm leading-relaxed ${
-                                  selectedOption === option.value
-                                    ? 'text-foreground font-medium'
-                                    : 'text-foreground'
-                                }`}
-                              >
-                                {option.label}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </Fragment>
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="grid lg:grid-cols-[minmax(300px,360px)_1fr] lg:divide-x lg:divide-gray-100">
+            <aside className="border-b border-gray-100 p-4 sm:p-5 lg:sticky lg:top-[57px] lg:self-start lg:max-h-[calc(100dvh-5rem)] lg:overflow-y-auto lg:border-b-0">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Type de demande
+              </p>
+              <div
+                className="mb-4 grid grid-cols-3 gap-1 rounded-lg border border-gray-100 bg-gray-50/80 p-1"
+                role="tablist"
+                aria-label="Rubriques de demande"
+              >
+                {categoryEntries.map(([key, category]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={selectedCategory === key}
+                    onClick={() => handleCategorySelect(key)}
+                    className={`min-w-0 rounded-md px-1.5 py-2 text-center text-[10px] font-semibold leading-tight break-words transition-colors sm:px-2 sm:text-[11px] ${
+                      selectedCategory === key
+                        ? 'bg-white text-primary shadow-sm ring-1 ring-gray-200'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {category.label}
+                  </button>
                 ))}
               </div>
-            </div>
-          </div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Option</p>
+              <div className="max-h-64 space-y-1 overflow-y-auto pr-0.5">
+                {activeCategory.options.map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-sm transition-colors ${
+                      selectedOption === option.value
+                        ? 'border-primary/40 bg-primary/5 text-foreground'
+                        : 'border-transparent hover:border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="option"
+                      value={option.value}
+                      checked={selectedOption === option.value}
+                      onChange={(e) => handleOptionSelect(e.target.value)}
+                      className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer text-primary"
+                    />
+                    <span className="leading-snug">{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </aside>
 
-          {/* Colonne droite : Formulaire */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 border border-border/50">
-            <form onSubmit={handleSubmit} className="space-y-8">
-              {selectedOption ? (
-                <>
-                  <div>
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                        <span className="text-primary text-xl">📝</span>
-                      </div>
-                      <h3 className="text-xl font-bold text-foreground">Informations sur votre demande</h3>
+            <section className="p-4 sm:p-5">
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {selectedOption ? (
+                  <>
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">Détails de la demande</h2>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Les champs utiles à votre situation peuvent rester vides.
+                      </p>
                     </div>
-                    
-                    <div className="space-y-5">
+
+                    <div className="space-y-3">
                       <div>
-                        <Label htmlFor="titre" className="text-base font-semibold mb-2 block">
+                        <Label htmlFor="titre" className="mb-1 block text-sm font-medium">
                           Titre de votre demande
                         </Label>
                         <Input
                           id="titre"
                           value={formData.titre}
                           onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
-                          className="mt-1 h-12 text-base"
-                          placeholder="Ex: Demande de titre de séjour étudiant"
+                          className="h-9 text-sm"
+                          placeholder="Ex. Demande de titre de séjour étudiant"
                         />
                       </div>
 
                       <div>
-                        <Label htmlFor="description" className="text-base font-semibold mb-2 block">
-                          Description détaillée
+                        <Label htmlFor="description" className="mb-1 block text-sm font-medium">
+                          Description
                         </Label>
                         <Textarea
                           id="description"
                           value={formData.description}
                           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                          className="mt-1 min-h-[140px] text-base"
+                          className="min-h-[88px] text-sm"
                           placeholder="Décrivez votre situation et vos besoins..."
                         />
                       </div>
 
-                      {/* Champs spécifiques selon le type de demande */}
-                      {getSpecificFields(selectedOption).map((field) => (
-                        <div key={field.name}>
-                          <Label htmlFor={field.name} className="text-base font-semibold mb-2 block">
-                            {field.label}
-                          </Label>
-                          {field.type === 'textarea' ? (
-                            <Textarea
-                              id={field.name}
-                              value={formData[field.name] || ''}
-                              onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
-                              className="mt-1 min-h-[100px] text-base"
-                              placeholder={field.placeholder}
-                            />
-                          ) : field.type === 'select' ? (
-                            <select
-                              id={field.name}
-                              value={formData[field.name] || ''}
-                              onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
-                              className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      {getSpecificFields(selectedOption).length > 0 ? (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {getSpecificFields(selectedOption).map((field) => (
+                            <div
+                              key={field.name}
+                              className={field.type === 'textarea' ? 'sm:col-span-2' : undefined}
                             >
-                              <option value="">Sélectionnez...</option>
-                              {field.options?.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                          ) : field.type === 'date' ? (
-                            <Input
-                              id={field.name}
-                              type="date"
-                              value={formData[field.name] || ''}
-                              onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
-                              className="mt-1 h-12 text-base"
-                            />
-                          ) : (
-                            <Input
-                              id={field.name}
-                              type={field.type}
-                              value={formData[field.name] || ''}
-                              onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
-                              className="mt-1 h-12 text-base"
-                              placeholder={field.placeholder}
-                            />
-                          )}
+                              <Label htmlFor={field.name} className="mb-1 block text-sm font-medium">
+                                {field.label}
+                              </Label>
+                              {field.type === 'textarea' ? (
+                                <Textarea
+                                  id={field.name}
+                                  value={formData[field.name] || ''}
+                                  onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
+                                  className="min-h-[80px] text-sm"
+                                  placeholder={field.placeholder}
+                                />
+                              ) : field.type === 'select' ? (
+                                <select
+                                  id={field.name}
+                                  value={formData[field.name] || ''}
+                                  onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
+                                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                >
+                                  <option value="">Sélectionnez...</option>
+                                  {field.options?.map((opt) => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : field.type === 'date' ? (
+                                <Input
+                                  id={field.name}
+                                  type="date"
+                                  value={formData[field.name] || ''}
+                                  onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
+                                  className="h-9 text-sm"
+                                />
+                              ) : (
+                                <Input
+                                  id={field.name}
+                                  type={field.type}
+                                  value={formData[field.name] || ''}
+                                  onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
+                                  className="h-9 text-sm"
+                                  placeholder={field.placeholder}
+                                />
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      ) : null}
 
-                      {/* Date d'échéance générale */}
                       <div>
-                        <Label htmlFor="dateEcheance" className="text-base font-semibold mb-2 block">
-                          Date d'échéance (si applicable)
+                        <Label htmlFor="dateEcheance" className="mb-1 block text-sm font-medium">
+                          Date d&apos;échéance (si applicable)
                         </Label>
                         <Input
                           id="dateEcheance"
                           type="date"
                           value={formData.dateEcheance || ''}
                           onChange={(e) => setFormData({ ...formData, dateEcheance: e.target.value })}
-                          className="mt-1 h-12 text-base"
+                          className="h-9 text-sm"
                         />
                       </div>
                     </div>
-                  </div>
 
-                  {/* Informations du visiteur (si non connecté) */}
-                  {!session && (
-                    <div className="border-t pt-8">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                          <span className="text-primary text-xl">👤</span>
-                        </div>
-                        <h3 className="text-xl font-bold text-foreground">Vos coordonnées</h3>
-                      </div>
-                      <div className="grid md:grid-cols-2 gap-5">
-                        <div>
-                          <Label htmlFor="nom" className="text-base font-semibold mb-2 block">
-                            Nom
-                          </Label>
-                          <Input
-                            id="nom"
-                            value={formData.nom}
-                            onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
-                            className="mt-1 h-12 text-base"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="prenom" className="text-base font-semibold mb-2 block">
-                            Prénom
-                          </Label>
-                          <Input
-                            id="prenom"
-                            value={formData.prenom}
-                            onChange={(e) => setFormData({ ...formData, prenom: e.target.value })}
-                            className="mt-1 h-12 text-base"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="email" className="text-base font-semibold mb-2 block">
-                            Email
-                          </Label>
-                          <Input
-                            id="email"
-                            type="email"
-                            value={formData.email}
-                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            className="mt-1 h-12 text-base"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="telephone" className="text-base font-semibold mb-2 block">
-                            Téléphone
-                          </Label>
-                          <Input
-                            id="telephone"
-                            type="tel"
-                            value={formData.telephone}
-                            onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
-                            className="mt-1 h-12 text-base"
-                          />
+                    {!session ? (
+                      <div className="border-t border-gray-100 pt-4">
+                        <h3 className="mb-3 text-sm font-semibold text-foreground">Vos coordonnées</h3>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <Label htmlFor="nom" className="mb-1 block text-sm font-medium">
+                              Nom
+                            </Label>
+                            <Input
+                              id="nom"
+                              value={formData.nom}
+                              onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="prenom" className="mb-1 block text-sm font-medium">
+                              Prénom
+                            </Label>
+                            <Input
+                              id="prenom"
+                              value={formData.prenom}
+                              onChange={(e) => setFormData({ ...formData, prenom: e.target.value })}
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="email" className="mb-1 block text-sm font-medium">
+                              Email
+                            </Label>
+                            <Input
+                              id="email"
+                              type="email"
+                              value={formData.email}
+                              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                              className="h-9 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="telephone" className="mb-1 block text-sm font-medium">
+                              Téléphone
+                            </Label>
+                            <Input
+                              id="telephone"
+                              type="tel"
+                              value={formData.telephone}
+                              onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
+                              className="h-9 text-sm"
+                            />
+                          </div>
                         </div>
                       </div>
+                    ) : null}
+
+                    <div className="sticky bottom-0 -mx-4 flex flex-col-reverse gap-2 border-t border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-sm sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:px-0 sm:pt-2 sm:backdrop-blur-none">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => router.back()}
+                        disabled={isSubmitting}
+                        className="h-9 px-4"
+                      >
+                        Annuler
+                      </Button>
+                      <Button type="submit" disabled={isSubmitting} className="h-9 px-5">
+                        {isSubmitting ? (
+                          <span className="flex items-center gap-2">
+                            <span className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+                            Création...
+                          </span>
+                        ) : (
+                          'Créer la demande'
+                        )}
+                      </Button>
                     </div>
-                  )}
-
-                  <div className="flex justify-end gap-4 pt-6 border-t">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => router.back()}
-                      disabled={isSubmitting}
-                      className="px-6 h-11"
-                    >
-                      Annuler
-                    </Button>
-                    <Button 
-                      type="submit" 
-                      disabled={isSubmitting}
-                      className="px-8 h-11 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all"
-                    >
-                      {isSubmitting ? (
-                        <span className="flex items-center gap-2">
-                          <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                          Création en cours...
-                        </span>
-                      ) : (
-                        'Créer la demande'
-                      )}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-16">
-                  <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <span className="text-4xl">📋</span>
-                  </div>
-                  <p className="text-lg text-muted-foreground font-medium">
-                    Sélectionnez une catégorie et une option à gauche pour commencer
+                  </>
+                ) : (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    Sélectionnez une option à gauche pour afficher le formulaire.
                   </p>
-                </div>
-              )}
-            </form>
+                )}
+              </form>
+            </section>
           </div>
         </div>
       </main>
     </div>
   );
 }
-
-

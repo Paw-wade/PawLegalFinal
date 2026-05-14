@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -120,7 +120,7 @@ function Button({ children, variant = 'default', size = 'default', className = '
   return <button className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`} {...props}>{children}</button>;
 }
 
-export default function DossiersPage() {
+function DossiersContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1410,6 +1410,14 @@ export default function DossiersPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function DossiersPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Chargement...</div>}>
+      <DossiersContent />
+    </Suspense>
   );
 }
 
