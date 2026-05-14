@@ -399,12 +399,15 @@ export default function PartenaireDossierDetailPage() {
 
         {/* En-tête amélioré */}
         <div className="mb-6">
-          <Link href="/partenaire/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
+          <Link href={`/partenaire/dossiers?dossierId=${encodeURIComponent(dossierId)}`} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-        Retour aux dossiers
-      </Link>
+            Retour à la vue simplifiée
+          </Link>
+          <Link href="/partenaire/dossiers" className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-4">
+            Vue liste complète
+          </Link>
       
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -12,7 +12,9 @@ import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import { SUGGESTED_STEPS_BY_CATEGORY, DossierCategorie } from '@/lib/dossierStepsConfig';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { AdminBookingModal, buildAdminBookingFromDossier } from '@/components/AdminBookingModal';
+import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
+import { isDossierStaffRole } from '@/lib/dossierAccess';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -71,7 +73,19 @@ export default function AdminDossierDetailPage() {
   const [titreEditValue, setTitreEditValue] = useState('');
   const [savingTitre, setSavingTitre] = useState(false);
   const [titreEditError, setTitreEditError] = useState<string | null>(null);
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionEditValue, setDescriptionEditValue] = useState('');
+  const [savingDescription, setSavingDescription] = useState(false);
+  const [descriptionEditError, setDescriptionEditError] = useState<string | null>(null);
   const [strictPrivacyMode, setStrictPrivacyMode] = useState(false);
+  const [detailSection, setDetailSection] = useState<'synthese' | 'documents' | 'messages' | 'client'>('synthese');
+  const [showAdminBookingModal, setShowAdminBookingModal] = useState(false);
+  const [bookingFeedbackMessage, setBookingFeedbackMessage] = useState<string | null>(null);
+
+  const adminBookingSeed = useMemo(
+    () => (dossier ? buildAdminBookingFromDossier(dossier) : null),
+    [dossier]
+  );
 
   const maskStrict = (value: string, fallback: string = 'N/A') => {
     if (!strictPrivacyMode) return value || fallback;
@@ -92,7 +106,7 @@ export default function AdminDossierDetailPage() {
 
     if (status === 'authenticated' && session) {
       const userRole = (session.user as any)?.role;
-      const isAuthorized = userRole === 'admin' || userRole === 'superadmin';
+      const isAuthorized = isDossierStaffRole(userRole);
       if (!isAuthorized) {
         router.push('/client');
         return;
@@ -373,6 +387,17 @@ export default function AdminDossierDetailPage() {
     );
     return customStep?.label || getStatutLabel(rawStatut);
   })();
+
+  const pendingDocumentRequestsCount = documentRequests.filter((request: any) => request.status === 'pending').length;
+  const unreadNotificationsCount = notifications.filter((notif: any) => !notif.lu).length;
+  const deadlineDays = dossier?.dateEcheance ? calculateDaysUntil(dossier.dateEcheance) : null;
+  const nextAction = getNextAction(dossier?.statut);
+  const detailTabs = [
+    { id: 'synthese' as const, label: 'Synthèse' },
+    { id: 'documents' as const, label: 'Documents', count: documents.length + pendingDocumentRequestsCount },
+    { id: 'messages' as const, label: 'Messages', count: messages.length + unreadNotificationsCount },
+    { id: 'client' as const, label: 'Client' },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10">
@@ -685,6 +710,15 @@ export default function AdminDossierDetailPage() {
           </div>
           
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
+            {deadlineDays !== null && deadlineDays < 0 ? (
+              <div className="-mx-4 -mt-4 mb-4 rounded-t-xl border-b border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 sm:-mx-6 sm:-mt-6 sm:px-6">
+                Échéance dépassée depuis {Math.abs(deadlineDays)} jour{Math.abs(deadlineDays) > 1 ? 's' : ''}
+              </div>
+            ) : deadlineDays !== null && isDeadlineApproaching(dossier.dateEcheance) ? (
+              <div className="-mx-4 -mt-4 mb-4 rounded-t-xl border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 sm:-mx-6 sm:-mt-6 sm:px-6">
+                Échéance dans {deadlineDays} jour{deadlineDays > 1 ? 's' : ''}
+              </div>
+            ) : null}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
@@ -781,8 +815,90 @@ export default function AdminDossierDetailPage() {
                     </span>
                   )}
                 </div>
-                {dossier.description && (
-                  <p className="text-muted-foreground text-sm mb-3 break-words">{dossier.description}</p>
+                {editingDescription ? (
+                  <div className="mb-3 flex flex-col gap-2 w-full min-w-0 sm:max-w-3xl">
+                    <textarea
+                      value={descriptionEditValue}
+                      onChange={(e) => {
+                        setDescriptionEditValue(e.target.value);
+                        setDescriptionEditError(null);
+                      }}
+                      className="min-h-[6rem] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-foreground focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                      placeholder="Description du dossier"
+                      disabled={savingDescription}
+                      maxLength={5000}
+                      autoFocus
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="default"
+                        className="shrink-0"
+                        disabled={savingDescription}
+                        onClick={async () => {
+                          setSavingDescription(true);
+                          setDescriptionEditError(null);
+                          try {
+                            const res = await dossiersAPI.updateDossier(dossierId, {
+                              description: descriptionEditValue.trim(),
+                            });
+                            if (res.data?.success && res.data?.dossier) {
+                              setDossier(res.data.dossier);
+                              setLocalSteps(res.data.dossier.etapesSupplementaires || []);
+                              setEditingDescription(false);
+                            } else {
+                              setDescriptionEditError(res.data?.message || 'Erreur lors de l’enregistrement');
+                            }
+                          } catch (err: any) {
+                            setDescriptionEditError(err.response?.data?.message || 'Erreur lors de l’enregistrement');
+                          } finally {
+                            setSavingDescription(false);
+                          }
+                        }}
+                      >
+                        {savingDescription ? 'Enregistrement…' : 'Enregistrer'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="shrink-0"
+                        disabled={savingDescription}
+                        onClick={() => {
+                          setEditingDescription(false);
+                          setDescriptionEditError(null);
+                          setDescriptionEditValue(dossier.description || '');
+                        }}
+                      >
+                        Annuler
+                      </Button>
+                    </div>
+                    {descriptionEditError && (
+                      <p className="text-sm text-red-600">{descriptionEditError}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+                    <p className="text-muted-foreground text-sm break-words flex-1 min-w-0">
+                      {strictPrivacyMode
+                        ? 'Description masquée'
+                        : (dossier.description?.trim() || 'Aucune description pour ce dossier.')}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDescriptionEditValue(dossier.description || '');
+                        setDescriptionEditError(null);
+                        setEditingDescription(true);
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-orange-300 hover:bg-gray-50"
+                      title="Modifier la description"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                      Modifier
+                    </button>
+                  </div>
                 )}
                 
                 {/* Barre de progression basée sur les étapes définies pour ce dossier */}
@@ -869,23 +985,6 @@ export default function AdminDossierDetailPage() {
                       {dossier.priorite}
                     </span>
                   )}
-                  {/* Indication de transmission */}
-                  {dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-blue-100 text-blue-800 border border-blue-300">
-                        📤 Dossier transmis
-                      </span>
-                      {dossier.transmittedTo.map((trans: any, idx: number) => (
-                        <span
-                          key={idx}
-                          className="inline-block max-w-full break-words rounded-lg border border-purple-300 bg-purple-100 px-3 py-1.5 text-sm font-semibold text-purple-800"
-                        >
-                          {trans.quality || 'Professionnel'}: {trans.user?.firstName} {trans.user?.lastName}
-                          {trans.user?.organisationName && ` (${trans.user.organisationName})`}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                   {dossier.createdAt && (
                     <span className="text-xs text-muted-foreground">
                       ⏱️ Ouvert il y a {calculateDaysSince(dossier.createdAt)} jour{calculateDaysSince(dossier.createdAt) > 1 ? 's' : ''}
@@ -896,6 +995,25 @@ export default function AdminDossierDetailPage() {
                       🔄 {formatRelativeTime(dossier.updatedAt)}
                     </span>
                   )}
+                </div>
+
+                <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Documents</p>
+                    <p className="text-sm font-semibold text-foreground">{documents.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Demandes</p>
+                    <p className="text-sm font-semibold text-foreground">{pendingDocumentRequestsCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Messages</p>
+                    <p className="text-sm font-semibold text-foreground">{messages.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Notifications</p>
+                    <p className="text-sm font-semibold text-foreground">{unreadNotificationsCount}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -935,26 +1053,52 @@ export default function AdminDossierDetailPage() {
             )}
 
             {/* Prochaine action */}
-            {(() => {
-              const nextAction = getNextAction(dossier.statut);
-              if (nextAction) {
-                return (
-                  <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
-                    <div className="flex items-start gap-3">
-                      <span className="text-blue-600 text-xl">📋</span>
-                      <div>
-                        <p className="text-sm font-semibold text-blue-900 mb-1">Prochaine action requise</p>
-                        <p className="text-sm text-blue-700">{nextAction}</p>
-                      </div>
-                    </div>
+            {nextAction && (
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                <div className="flex items-start gap-3">
+                  <span className="text-blue-600 text-xl">📋</span>
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900 mb-1">Prochaine action requise</p>
+                    <p className="text-sm text-blue-700">{nextAction}</p>
                   </div>
-                );
-              }
-              return null;
-            })()}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
+        <div className="sticky top-0 z-20 -mx-3 mb-6 border-b border-gray-200 bg-background/95 px-3 backdrop-blur sm:-mx-4 sm:px-4">
+          <div
+            className="-mb-px flex flex-nowrap items-stretch justify-between gap-0 sm:min-w-0 sm:justify-start sm:gap-1 sm:overflow-x-auto"
+            role="tablist"
+            aria-label="Sections du dossier"
+          >
+            {detailTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={detailSection === tab.id}
+                onClick={() => setDetailSection(tab.id)}
+                className={`inline-flex min-w-0 flex-1 items-center justify-center gap-0.5 whitespace-nowrap px-0.5 py-2.5 text-[11px] font-semibold transition-colors sm:flex-none sm:shrink-0 sm:px-4 sm:py-3 sm:text-sm ${
+                  detailSection === tab.id
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <span className="truncate">{tab.label}</span>
+                {typeof tab.count === 'number' && tab.count > 0 ? (
+                  <span className="shrink-0 rounded-full bg-gray-100 px-1 py-0.5 text-[10px] font-semibold text-foreground sm:px-1.5 sm:text-xs">
+                    {tab.count}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {detailSection === 'synthese' && (
+          <>
         {/* Vue détaillée du dossier */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-8 mb-6 min-w-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
@@ -975,7 +1119,11 @@ export default function AdminDossierDetailPage() {
         {((session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin' || (session?.user as any)?.role === 'secretaire') && (
           <TransmissionSection dossier={dossier} onUpdate={loadDossier} />
         )}
+          </>
+        )}
 
+        {detailSection === 'client' && (
+          <>
         {/* Informations complètes du dossier - Section visible */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
           <h2 className="text-xl font-bold mb-4 break-words">📋 Informations Complètes du Dossier</h2>
@@ -1104,13 +1252,22 @@ export default function AdminDossierDetailPage() {
             ) : (
               <h2 className="text-xl font-bold">👤 Coordonnées Client</h2>
             )}
-            <Link
-              href={`/admin/rendez-vous?dossierId=${encodeURIComponent(dossierId)}&openBooking=1`}
+            <button
+              type="button"
+              onClick={() => {
+                setBookingFeedbackMessage(null);
+                setShowAdminBookingModal(true);
+              }}
               className="inline-flex items-center justify-center shrink-0 px-4 py-2 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors w-full sm:w-auto"
             >
               📅 Prendre un rendez-vous
-            </Link>
+            </button>
           </div>
+          {bookingFeedbackMessage && (
+            <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {bookingFeedbackMessage}
+            </p>
+          )}
           {dossier.user ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
@@ -1255,7 +1412,11 @@ export default function AdminDossierDetailPage() {
             </div>
           )}
         </div>
+          </>
+        )}
 
+        {detailSection === 'synthese' && (
+          <>
         {/* Motif et catégorie */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
           <h2 className="text-xl font-bold mb-4">📑 Motif et Nature du Dossier</h2>
@@ -1340,6 +1501,11 @@ export default function AdminDossierDetailPage() {
           </div>
         )}
 
+          </>
+        )}
+
+        {detailSection === 'documents' && (
+          <>
         {/* Sections supplémentaires */}
         <div className="grid md:grid-cols-2 gap-6 mb-6">
           {/* Documents demandés */}
@@ -1502,7 +1668,11 @@ export default function AdminDossierDetailPage() {
 
         {/* Documents en préparation (brouillons collaboratifs internes) */}
         <DossierDraftsPanel dossierId={dossier._id || (dossier as any).id} />
+          </>
+        )}
 
+        {detailSection === 'messages' && (
+          <>
         {/* Messages du dossier */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
           <h2 className="text-xl font-bold mb-4 break-words">💬 Messagerie du dossier</h2>
@@ -1580,6 +1750,8 @@ export default function AdminDossierDetailPage() {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
 
       {/* Modal de demande de document */}
@@ -1610,6 +1782,17 @@ export default function AdminDossierDetailPage() {
           }}
         />
       )}
+
+      <AdminBookingModal
+        open={showAdminBookingModal}
+        onClose={() => setShowAdminBookingModal(false)}
+        onSuccess={(message) => {
+          setBookingFeedbackMessage(message || 'Rendez-vous enregistré.');
+          void loadDossier();
+        }}
+        linkedDossierId={dossierId}
+        linkedDossierBooking={adminBookingSeed}
+      />
     </div>
   );
 }

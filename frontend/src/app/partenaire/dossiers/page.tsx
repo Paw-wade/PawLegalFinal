@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI, collaborativeDraftsAPI } from '@/lib/api';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, PARTENAIRE_FORM_STATUT_VALUES, isPartenaireFormStatutValue } from '@/lib/dossierUtils';
@@ -11,6 +11,15 @@ import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { Toast } from '@/components/Toast';
 import { QuickComplementTabsForm } from '@/components/dossiers/QuickComplementTabsForm';
+import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
+import { normalizeDossierId, dossierListCardId, isDossierStaffRole } from '@/lib/dossierAccess';
+import {
+  getDossierClientDisplayName,
+  getDossierCustomStatutLabel,
+  getDossierDisplayTitle,
+  getDossierTransmittedPartners,
+  getDossierTransmissionSummary,
+} from '@/lib/dossierListPresentation';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -259,6 +268,7 @@ const categoryLabels: Record<string, string> = {
 export default function PartenaireDossiersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -346,8 +356,8 @@ export default function PartenaireDossiersPage() {
       // Autoriser uniquement les partenaires sur cette page
       if (userRole !== 'partenaire') {
         // Rediriger les admins vers leur dashboard
-        if (userRole === 'admin' || userRole === 'superadmin') {
-          router.push('/admin');
+        if (isDossierStaffRole(userRole)) {
+          router.push('/admin/dossiers');
         } else {
           router.push('/client');
         }
@@ -364,6 +374,71 @@ export default function PartenaireDossiersPage() {
       loadDossierDocuments().catch(err => console.log('⚠️ Documents non chargés:', err));
     }
   }, [session, status]);
+
+  useEffect(() => {
+    const dossierIdToOpen = searchParams?.get('dossierId');
+    if (!dossierIdToOpen) return;
+
+    const normalizedId = normalizeDossierId(dossierIdToOpen);
+    if (!normalizedId) return;
+
+    setStatusFilter('all');
+    setUserFilter('all');
+    setExpandedDossiers((prev) => {
+      const next = new Set(Array.from(prev, normalizeDossierId));
+      next.add(normalizedId);
+      return next;
+    });
+  }, [searchParams]);
+
+  useEffect(() => {
+    const dossierIdToOpen = searchParams?.get('dossierId');
+    if (!dossierIdToOpen) return;
+
+    const normalizedId = normalizeDossierId(dossierIdToOpen);
+    if (!normalizedId || dossiers.length === 0) return;
+    if (dossiers.some((dossier: any) => normalizeDossierId(dossier._id || dossier.id) === normalizedId)) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await dossiersAPI.getDossierById(normalizedId);
+        if (cancelled || !response.data?.success || !response.data.dossier) return;
+        setDossiers((prev) => {
+          if (prev.some((dossier: any) => normalizeDossierId(dossier._id || dossier.id) === normalizedId)) {
+            return prev;
+          }
+          return [response.data.dossier, ...prev];
+        });
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, dossiers]);
+
+  useEffect(() => {
+    const dossierIdToOpen = searchParams?.get('dossierId');
+    if (!dossierIdToOpen) return;
+
+    const normalizedId = normalizeDossierId(dossierIdToOpen);
+    if (!normalizedId) return;
+    if (!expandedDossiers.has(normalizedId)) return;
+    if (!dossiers.some((dossier: any) => normalizeDossierId(dossier._id || dossier.id) === normalizedId)) return;
+
+    const timer = window.setTimeout(() => {
+      document.getElementById(dossierListCardId('partenaire', normalizedId))?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+      router.replace('/partenaire/dossiers', { scroll: false });
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [searchParams, dossiers, expandedDossiers, router]);
 
   const loadNotifications = async () => {
     try {
@@ -1683,11 +1758,25 @@ export default function PartenaireDossiersPage() {
             
             return (
                   <div className="space-y-4">
-                    {filteredDossiers.map((dossier) => (
+                    {filteredDossiers.map((dossier) => {
+                  const dossierId = normalizeDossierId(dossier._id || dossier.id);
+                  const isExpanded = expandedDossiers.has(dossierId);
+                  const totalDocuments = dossierDocuments[dossierId]?.length || dossier.documents?.length || 0;
+                  const tasksCount = (dossierTasks[dossierId] || []).length;
+                  const draftsCount = dossierDrafts[dossierId]?.length ?? 0;
+                  const transmittedPartners = getDossierTransmittedPartners(dossier);
+                  const transmissionSummary = getDossierTransmissionSummary(transmittedPartners);
+                  const hasDeadline = !!dossier.dateEcheance;
+                  const deadlineDays = hasDeadline ? calculateDaysUntil(dossier.dateEcheance) : null;
+                  const detailHref = `/partenaire/dossiers/${dossierId}`;
+                  return (
                   <div
-                    key={dossier._id || dossier.id}
+                    key={dossierId}
+                    id={dossierListCardId('partenaire', dossierId)}
                     className={`relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 bg-gradient-to-r shadow-sm w-full min-w-0 ${
-                      dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
+                      dossier.isStandby
+                        ? 'from-violet-200/70 via-fuchsia-200/70 to-violet-200/70 group-hover:from-violet-400/70 group-hover:via-fuchsia-400/70 group-hover:to-violet-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(168,85,247,0.5)]'
+                        : dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
                         ? 'from-yellow-200/70 via-amber-200/70 to-yellow-200/70 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(234,179,8,0.5)]'
                         : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
                         ? 'from-green-200/70 via-emerald-200/70 to-green-200/70 group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(34,197,94,0.5)]'
@@ -1696,14 +1785,36 @@ export default function PartenaireDossiersPage() {
                         : 'from-blue-200/70 via-indigo-200/70 to-blue-200/70 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(59,130,246,0.5)]'
                     }`}
                   >
-                    <div className="bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer">
+                    <div
+                      className="relative bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer"
+                      onClick={() => router.push(detailHref)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          router.push(detailHref);
+                        }
+                      }}
+                      role="link"
+                      tabIndex={0}
+                    >
+                      {hasDeadline && deadlineDays !== null && deadlineDays < 0 ? (
+                        <div className="-mx-4 -mt-4 mb-3 rounded-t-xl border-b border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-800 sm:-mx-5 sm:-mt-5 sm:px-5">
+                          Échéance dépassée depuis {Math.abs(deadlineDays)} jour{Math.abs(deadlineDays) > 1 ? 's' : ''}
+                        </div>
+                      ) : hasDeadline && deadlineDays !== null && isDeadlineApproaching(dossier.dateEcheance) ? (
+                        <div className="-mx-4 -mt-4 mb-3 rounded-t-xl border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-900 sm:-mx-5 sm:-mt-5 sm:px-5">
+                          Échéance dans {deadlineDays} jour{deadlineDays > 1 ? 's' : ''}
+                        </div>
+                      ) : null}
                       {/* En-tête de la carte : vue compacte, identique à l’espace admin */}
                       <div className="flex flex-col gap-2 mb-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <button
-                            onClick={() => {
-                              const dossierId = dossier._id || dossier.id;
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                               const newExpanded = new Set(expandedDossiers);
                               if (newExpanded.has(dossierId)) {
                                 newExpanded.delete(dossierId);
@@ -1713,105 +1824,96 @@ export default function PartenaireDossiersPage() {
                               setExpandedDossiers(newExpanded);
                             }}
                             className="p-2 -m-1 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary flex-shrink-0"
-                            title={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
-                            aria-label={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
+                            title={isExpanded ? 'Plier le dossier' : 'Déplier le dossier'}
+                            aria-label={isExpanded ? 'Plier le dossier' : 'Déplier le dossier'}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d={expandedDossiers.has(dossier._id || dossier.id) ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                              <path strokeLinecap="round" strokeLinejoin="round" d={isExpanded ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
                             </svg>
                           </button>
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-base text-foreground line-clamp-1 leading-snug truncate">
-                              {typeof dossier.titre === 'string' && dossier.titre ? dossier.titre : 'Sans titre'}
+                              {getDossierDisplayTitle(dossier)}
                             </h3>
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getStatutColor(dossier.statut)}`}>
+                                {getDossierCustomStatutLabel(dossier)}
+                              </span>
+                              {dossier.priorite ? (
+                                <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getPrioriteColor(dossier.priorite)}`}>
+                                  {dossier.priorite}
+                                </span>
+                              ) : null}
+                              {dossier.isStandby ? (
+                                <span
+                                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-violet-100 text-violet-900 border border-violet-200"
+                                  title={dossier.standbyReason ? String(dossier.standbyReason) : 'Dossier temporairement en attente de traitement'}
+                                >
+                                  Stand-by
+                                </span>
+                              ) : null}
+                            </div>
                             {(dossier.numero || dossier.numeroDossier) && (
-                              <p className="text-xs text-primary font-mono font-semibold">
+                              <p className="mt-1 text-xs font-mono font-semibold text-muted-foreground">
                                 Réf. {dossier.numero || dossier.numeroDossier}
                               </p>
                             )}
-                            {/* Client — toujours visible, même plié */}
-                            <p className="text-xs text-primary font-medium">
-                              Client : {dossier.user && typeof dossier.user === 'object'
-                                ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '—'
-                                : [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ') || dossier.clientEmail || 'Non renseigné'}
-                            </p>
-                            {/* Résumé compact des infos clés du dossier (plié) */}
-                            {!expandedDossiers.has(dossier._id || dossier.id) && (
-                              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                                {(() => {
-                                  const dossierId = dossier._id || dossier.id;
-                                  const totalDocuments = dossierDocuments[dossierId]?.length || dossier.documents?.length || 0;
-                                  const dossierRequests = documentRequests[dossierId] || [];
-                                  const pendingRequests = dossierRequests.filter((r: any) => r.status === 'pending');
-                                  const tasks = dossierTasks[dossierId] || [];
-                                  const pendingTasks = tasks.filter((task: any) => task.statut !== 'termine' && task.statut !== 'annule' && !task.effectue);
-                                  const draftsCount = dossierDrafts[dossierId]?.length ?? 0;
-                                  const transmissions = (dossier.transmittedTo && dossier.transmittedTo.length) || 0;
-                                  const hasDeadline = !!dossier.dateEcheance;
-                                  const deadlineDays = hasDeadline ? calculateDaysUntil(dossier.dateEcheance) : null;
-
-                                  return (
-                                    <>
-                                      <span>📄 Documents : <span className="font-semibold text-foreground">{totalDocuments}</span></span>
-                                      <span>
-                                        📝 En préparation :{' '}
-                                        <span className="font-semibold text-foreground">
-                                          {draftsCount} document{draftsCount > 1 ? 's' : ''}
-                                        </span>
-                                      </span>
-                                      {dossierRequests.length > 0 && (
-                                        <span>📨 Demandes : <span className="font-semibold text-foreground">{pendingRequests.length}</span></span>
-                                      )}
-                                      {tasks.length > 0 && (
-                                        <span>✅ Tâches : <span className="font-semibold text-foreground">{pendingTasks.length}</span></span>
-                                      )}
-                                      {transmissions > 0 && (
-                                        <span>
-                                          📤 Transmissions :{' '}
-                                          <span className="font-semibold text-foreground">{transmissions}</span>
-                                        </span>
-                                      )}
-                                      {hasDeadline && (
-                                        <span>
-                                          ⏰ Échéance :{' '}
-                                          <span className={deadlineDays !== null && deadlineDays < 0 ? 'text-red-600 font-semibold' : 'text-foreground font-semibold'}>
-                                            {deadlineDays !== null && deadlineDays < 0
-                                              ? `dépassée (${Math.abs(deadlineDays)} j)`
-                                              : `${deadlineDays} j`}
-                                          </span>
-                                        </span>
-                                      )}
-                                    </>
-                                  );
-                                })()}
+                            <div className="flex items-center gap-2 mt-1 min-w-0 rounded-md px-1 py-0.5 -ml-1 text-left">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-primary/10 border border-primary/20">
+                                <UserAvatarDisplay
+                                  user={dossier.user && typeof dossier.user === 'object' ? dossier.user : null}
+                                  alt=""
+                                  fallback={
+                                    <span className="text-[10px] font-bold text-primary leading-none">
+                                      {dossier.user && typeof dossier.user === 'object'
+                                        ? `${dossier.user.firstName?.[0] || ''}${dossier.user.lastName?.[0] || ''}`.trim() || '👤'
+                                        : `${dossier.clientPrenom?.[0] || ''}${dossier.clientNom?.[0] || ''}`.trim() || '👤'}
+                                    </span>
+                                  }
+                                />
                               </div>
-                            )}
+                              <p className="text-xs text-primary font-medium min-w-0 flex-1">
+                                {getDossierClientDisplayName(dossier)}
+                              </p>
+                            </div>
+                            {!isExpanded ? (
+                              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Documents</p>
+                                  <p className="text-sm font-semibold text-foreground">{totalDocuments}</p>
+                                </div>
+                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Brouillons</p>
+                                  <p className="text-sm font-semibold text-foreground">{draftsCount}</p>
+                                </div>
+                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tâches</p>
+                                  <p className="text-sm font-semibold text-foreground">{tasksCount > 0 ? tasksCount : '—'}</p>
+                                </div>
+                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Transmission</p>
+                                  <p className="truncate text-sm font-semibold text-foreground" title={transmissionSummary}>
+                                    {transmissionSummary}
+                                  </p>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </div>
-                      <div className="flex flex-col sm:items-end gap-2 flex-shrink-0 w-full sm:max-w-none">
-                        <div className="flex flex-wrap items-center gap-2 justify-end">
-                          <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getStatutColor(dossier.statut)}`}>
-                            {getStatutLabel(dossier.statut)}
-                          </span>
-                          {dossier.priorite && (
-                            <span className={`px-2.5 py-1 rounded-md text-[11px] font-semibold ${getPrioriteColor(dossier.priorite)}`}>
-                              {dossier.priorite}
-                            </span>
-                          )}
-                        </div>
+                      <div className="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3 sm:flex-row sm:items-center sm:justify-end">
                         <Link
-                          href={`/partenaire/dossiers/${dossier._id || dossier.id}`}
+                          href={detailHref}
                           onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center justify-center px-3 py-2.5 min-h-[44px] rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors w-full sm:w-auto"
+                          className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors"
                         >
-                          Voir les détails
+                          Ouvrir
                         </Link>
                       </div>
                     </div>
 
                     {/* Contenu détaillé (affiché uniquement si le dossier est déplié) */}
-                    {expandedDossiers.has(dossier._id || dossier.id) && (
+                    {isExpanded && (
                       <>
                     {/* Client */}
                     <div className="mb-4 pb-4 border-b border-gray-200">
@@ -2862,7 +2964,8 @@ export default function PartenaireDossiersPage() {
                     )}
                       </div>
                   </div>
-                ))}
+                );
+                })}
                   </div>
                 );
               })()}

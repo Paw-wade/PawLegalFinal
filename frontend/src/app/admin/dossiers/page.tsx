@@ -32,6 +32,7 @@ import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { Toast } from '@/components/Toast';
 import { QuickComplementTabsForm } from '@/components/dossiers/QuickComplementTabsForm';
+import { isDossierStaffRole, normalizeDossierId, dossierListCardId } from '@/lib/dossierAccess';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -564,7 +565,7 @@ export default function AdminDossiersPage() {
       router.push('/auth/signin');
     } else if (session) {
       const userRole = (session.user as any)?.role;
-      const isAuthorized = userRole === 'admin' || userRole === 'superadmin';
+      const isAuthorized = isDossierStaffRole(userRole);
       if (!isAuthorized) {
         router.push('/client');
       }
@@ -572,7 +573,7 @@ export default function AdminDossiersPage() {
   }, [session, status, router]);
 
   useEffect(() => {
-    if (status === 'authenticated' && ((session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin')) {
+    if (status === 'authenticated' && isDossierStaffRole((session?.user as any)?.role)) {
       loadDossiers();
       loadUsers();
       loadTeamMembers();
@@ -607,17 +608,72 @@ export default function AdminDossiersPage() {
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, []);
 
-  // Ouvrir automatiquement le badge du dossier passé en paramètre (depuis la vue détail)
+  // Ouvrir automatiquement le dossier passé en paramètre (depuis la vue détail)
   useEffect(() => {
     const dossierIdToOpen = searchParams?.get('dossierId');
-    if (dossierIdToOpen && dossiers.length > 0) {
-      setExpandedDossiers((prev) => {
-        const next = new Set(prev);
-        next.add(dossierIdToOpen);
-        return next;
-      });
-    }
+    if (!dossierIdToOpen) return;
+
+    const normalizedId = normalizeDossierId(dossierIdToOpen);
+    if (!normalizedId) return;
+
+    setStatusFilter('all');
+    setUserFilter('all');
+    setDossierSortEtapes('default');
+    setExpandedDossiers((prev) => {
+      const next = new Set(Array.from(prev, normalizeDossierId));
+      next.add(normalizedId);
+      return next;
+    });
+  }, [searchParams]);
+
+  useEffect(() => {
+    const dossierIdToOpen = searchParams?.get('dossierId');
+    if (!dossierIdToOpen) return;
+
+    const normalizedId = normalizeDossierId(dossierIdToOpen);
+    if (!normalizedId || dossiers.length === 0) return;
+    if (dossiers.some((dossier: any) => normalizeDossierId(dossier._id || dossier.id) === normalizedId)) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await dossiersAPI.getDossierById(normalizedId);
+        if (cancelled || !response.data?.success || !response.data.dossier) return;
+        setDossiers((prev) => {
+          if (prev.some((dossier: any) => normalizeDossierId(dossier._id || dossier.id) === normalizedId)) {
+            return prev;
+          }
+          return [response.data.dossier, ...prev];
+        });
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, dossiers]);
+
+  useEffect(() => {
+    const dossierIdToOpen = searchParams?.get('dossierId');
+    if (!dossierIdToOpen) return;
+
+    const normalizedId = normalizeDossierId(dossierIdToOpen);
+    if (!normalizedId) return;
+    if (!expandedDossiers.has(normalizedId)) return;
+    if (!dossiers.some((dossier: any) => normalizeDossierId(dossier._id || dossier.id) === normalizedId)) return;
+
+    const timer = window.setTimeout(() => {
+      document.getElementById(dossierListCardId('admin', normalizedId))?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+      router.replace('/admin/dossiers', { scroll: false });
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [searchParams, dossiers, expandedDossiers, router]);
 
   const loadNotifications = async () => {
     try {
@@ -1802,7 +1858,7 @@ export default function AdminDossiersPage() {
     );
   }
 
-  if (!session || ((session.user as any)?.role !== 'admin' && (session.user as any)?.role !== 'superadmin')) {
+  if (!session || !isDossierStaffRole((session.user as any)?.role)) {
     return null;
   }
 
@@ -2703,7 +2759,7 @@ export default function AdminDossiersPage() {
                 return (
                   <div className="space-y-4">
                     {sortedDossiers.map((dossier) => {
-                  const dossierId = dossier._id || dossier.id;
+                  const dossierId = normalizeDossierId(dossier._id || dossier.id);
                   const isExpanded = expandedDossiers.has(dossierId);
                   const totalDocuments = dossierDocuments[dossierId]?.length || dossier.documents?.length || 0;
                   const tasksCount = (dossierTasks[dossierId] || []).length;
@@ -2716,6 +2772,7 @@ export default function AdminDossiersPage() {
                   return (
                   <div
                     key={dossierId}
+                    id={dossierListCardId('admin', dossierId)}
                     className={`relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 bg-gradient-to-r shadow-sm w-full min-w-0 ${
                       dossier.isStandby
                         ? 'from-violet-200/70 via-fuchsia-200/70 to-violet-200/70 group-hover:from-violet-400/70 group-hover:via-fuchsia-400/70 group-hover:to-violet-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(168,85,247,0.5)]'
@@ -2766,11 +2823,11 @@ export default function AdminDossiersPage() {
                               setExpandedDossiers(newExpanded);
                             }}
                             className="p-2 -m-1 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors text-gray-600 hover:text-primary flex-shrink-0"
-                            title={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
-                            aria-label={expandedDossiers.has(dossier._id || dossier.id) ? 'Plier le dossier' : 'Déplier le dossier'}
+                            title={isExpanded ? 'Plier le dossier' : 'Déplier le dossier'}
+                            aria-label={isExpanded ? 'Plier le dossier' : 'Déplier le dossier'}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d={expandedDossiers.has(dossier._id || dossier.id) ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                              <path strokeLinecap="round" strokeLinejoin="round" d={isExpanded ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
                             </svg>
                           </button>
                           <div className="flex-1 min-w-0">
@@ -2994,7 +3051,7 @@ export default function AdminDossiersPage() {
                     </div>
 
                     {/* Contenu détaillé (affiché uniquement si le dossier est déplié) */}
-                    {expandedDossiers.has(dossier._id || dossier.id) && (
+                    {isExpanded && (
                       <>
                     {/* Client — informations affichées dans la vue simplifiée (sans redirection vers Utilisateurs) */}
                     <div className="mb-4 pb-4 border-b border-gray-200 rounded-md">

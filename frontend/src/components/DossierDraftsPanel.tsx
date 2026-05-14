@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { ExternalLink } from 'lucide-react';
 import { collaborativeDraftsAPI, userAPI, dossiersAPI } from '@/lib/api';
 import { RichTextEditor } from './RichTextEditor';
 import { exportDraftAsPdf, exportDraftAsWord } from '@/utils/exportDraft';
@@ -360,36 +361,42 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mt-6">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">📝 Documents en préparation</h2>
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-6 mt-6 min-w-0 max-w-full overflow-hidden">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">📝 Documents en préparation</h2>
           <p className="text-xs text-gray-500">
             Zone de travail interne pour les admins et partenaires. Non visible par le client.
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">
           <button
             type="button"
             onClick={() => setIsCollapsed((prev) => !prev)}
-            className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+            className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white px-2.5 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
           >
-            {isCollapsed ? 'Afficher les documents' : 'Masquer les documents'}
+            {isCollapsed ? 'Afficher' : 'Masquer'}
           </button>
           {linkToDedicatedPageHref && (
             <Link
               href={linkToDedicatedPageHref}
-              className="inline-flex items-center rounded-md border border-orange-500 bg-white px-3 py-1.5 text-xs font-medium text-orange-600 shadow-sm hover:bg-orange-50"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Ouvrir la page dédiée dans un nouvel onglet"
+              title="Ouvrir la page dédiée dans un nouvel onglet"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-orange-500 bg-white text-orange-600 shadow-sm hover:bg-orange-50"
             >
-              Ouvrir la page dédiée →
+              <ExternalLink size={16} strokeWidth={2.25} aria-hidden />
             </Link>
           )}
           <button
             type="button"
             onClick={handleOpenCreateModal}
-            className="inline-flex items-center rounded-md bg-orange-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-orange-600"
+            aria-label="Nouveau document"
+            title="Nouveau document"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-orange-500 text-lg font-semibold leading-none text-white shadow-sm hover:bg-orange-600"
           >
-            + Nouveau document
+            +
           </button>
         </div>
       </div>
@@ -424,7 +431,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
                   key={draft._id}
                   type="button"
                   onClick={() => handleSelectDraft(draft)}
-                  className={`text-left rounded-lg px-3 py-2 text-xs transition-colors whitespace-nowrap ${
+                  className={`text-left rounded-lg px-3 py-2 text-xs transition-colors max-w-full ${
                     selectedId === draft._id
                       ? 'bg-orange-50 border border-orange-300 shadow-sm font-semibold'
                       : 'bg-gray-50/80 border border-gray-200 hover:bg-white'
