@@ -21,6 +21,16 @@ function isPartenaire(user) {
   return user.role === 'partenaire';
 }
 
+function isClient(user) {
+  return user.role === 'client';
+}
+
+/** Le compte connecté est le client propriétaire du dossier (dossier.user). */
+function isClientOwnerOfDossier(user, dossier) {
+  if (!isClient(user) || !dossier || !dossier.user) return false;
+  return dossier.user.toString() === user._id.toString();
+}
+
 /** Résout l'entrée partnerAccess pour l'utilisateur (partner peut être un ObjectId ou un objet peuplé). */
 function getPartnerAccessEntry(draft, userId) {
   const uid = userId.toString();
@@ -56,7 +66,7 @@ function parseDueDateField(value) {
   return d;
 }
 
-function buildGlobalCollaborativeQuery(user, qTrim) {
+async function buildGlobalCollaborativeQuery(user, qTrim) {
   const parts = [];
   if (isAdmin(user)) {
     parts.push({
@@ -69,6 +79,13 @@ function buildGlobalCollaborativeQuery(user, qTrim) {
     parts.push({
       $or: [{ 'partnerAccess.partner': user._id }, { createdBy: user._id }],
     });
+  } else if (isClient(user)) {
+    const dossierIds = await Dossier.distinct('_id', { user: user._id });
+    const or = [{ createdBy: user._id }];
+    if (dossierIds.length) {
+      or.push({ visibleToClient: true, dossier: { $in: dossierIds } });
+    }
+    parts.push({ $or: or });
   } else {
     return null;
   }
@@ -80,6 +97,26 @@ function buildGlobalCollaborativeQuery(user, qTrim) {
   return { isArchived: false, $and: parts };
 }
 
+/** Droit d’édition du contenu (titre, corps, échéance, statut terminé). */
+function computeDraftContentCanEdit(draft, user, dossier) {
+  const isCreator = draft.createdBy && draft.createdBy._id.toString() === user._id.toString();
+  const partnerAccessEntry = getPartnerAccessEntry(draft, user._id);
+  const adminCanSee =
+    isAdmin(user) &&
+    (isCreator ||
+      (draft.visibleToAdmins === true &&
+        !(draft.excludedAdminIds || []).some((id) => id.toString() === user._id.toString())));
+  if (adminCanSee) return true;
+  if (isPartenaire(user) && (isCreator || (partnerAccessEntry && partnerAccessEntry.canEdit === true))) {
+    return true;
+  }
+  if (isClient(user) && dossier && isClientOwnerOfDossier(user, dossier)) {
+    if (isCreator) return true;
+    if (draft.visibleToClient && draft.clientCanEdit) return true;
+  }
+  return false;
+}
+
 // GET /collaborative-drafts/count — tous les brouillons visibles (liste globale)
 router.get('/collaborative-drafts/count', async (req, res) => {
   try {
@@ -87,7 +124,7 @@ router.get('/collaborative-drafts/count', async (req, res) => {
     if (!user) {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
-    const query = buildGlobalCollaborativeQuery(user, '');
+    const query = await buildGlobalCollaborativeQuery(user, '');
     if (!query) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -107,7 +144,7 @@ router.get('/collaborative-drafts', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
     const q = (req.query.q || '').toString().trim();
-    const query = buildGlobalCollaborativeQuery(user, q);
+    const query = await buildGlobalCollaborativeQuery(user, q);
     if (!query) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -127,20 +164,10 @@ router.get('/collaborative-drafts', async (req, res) => {
       .filter((draft) => draft.dossier)
       .map((draft) => {
         const isCreator = draft.createdBy && draft.createdBy._id?.toString() === user._id.toString();
-        const partnerAccessEntry = getPartnerAccessEntry(draft, user._id);
+        const canEdit = computeDraftContentCanEdit(draft, user, draft.dossier);
 
-        const adminCanSee =
-          isAdmin(user) &&
-          (isCreator ||
-            (draft.visibleToAdmins === true &&
-              !(draft.excludedAdminIds || []).some((id) => id.toString() === user._id.toString())));
-
-        const canEdit =
-          adminCanSee ||
-          (isPartenaire(user) &&
-            (isCreator || (partnerAccessEntry && partnerAccessEntry.canEdit === true)));
-
-        const canManagePermissions = isCreator || isAdmin(user);
+        const canManagePermissions =
+          (isCreator || isAdmin(user)) && !isClient(user);
 
         return {
           ...draft,
@@ -154,6 +181,7 @@ router.get('/collaborative-drafts', async (req, res) => {
       success: true,
       drafts: enhancedDrafts,
       currentUserIsAdmin: isAdmin(user),
+      currentUserIsClient: isClient(user),
     });
   } catch (error) {
     console.error('collaborative-drafts list:', error);
@@ -179,7 +207,6 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
 
     const query = { dossier: dossierId, isArchived: false };
 
-    // Filtrer selon le rôle
     if (isAdmin(user)) {
       query.$or = [
         { visibleToAdmins: true, excludedAdminIds: { $ne: user._id } },
@@ -190,8 +217,12 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
         { 'partnerAccess.partner': user._id },
         { createdBy: user._id },
       ];
+    } else if (isClient(user)) {
+      if (!isClientOwnerOfDossier(user, dossier)) {
+        return res.status(403).json({ success: false, message: 'Accès refusé' });
+      }
+      query.$or = [{ visibleToClient: true }, { createdBy: user._id }];
     } else {
-      // Client ou autre rôle: pas d'accès
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
 
@@ -203,21 +234,8 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
 
     const enhancedDrafts = drafts.map((draft) => {
       const isCreator = draft.createdBy && draft.createdBy._id?.toString() === user._id.toString();
-      const partnerAccessEntry = getPartnerAccessEntry(draft, user._id);
-
-      const adminCanSee =
-        isAdmin(user) &&
-        (isCreator ||
-          (draft.visibleToAdmins === true &&
-            !(draft.excludedAdminIds || []).some((id) => id.toString() === user._id.toString())));
-
-      // Admin : toujours éditable dès qu’il voit le document. Partenaire : édition si créateur ou canEdit explicite.
-      const canEdit =
-        adminCanSee ||
-        (isPartenaire(user) &&
-          (isCreator || (partnerAccessEntry && partnerAccessEntry.canEdit === true)));
-
-      const canManagePermissions = isCreator || isAdmin(user);
+      const canEdit = computeDraftContentCanEdit(draft, user, dossier);
+      const canManagePermissions = (isCreator || isAdmin(user)) && !isClient(user);
 
       return {
         ...draft,
@@ -230,6 +248,7 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
       success: true,
       drafts: enhancedDrafts,
       currentUserIsAdmin: isAdmin(user),
+      currentUserIsClient: isClient(user),
     });
   } catch (error) {
     console.error('Erreur lors de la récupération des brouillons collaboratifs:', error);
@@ -259,7 +278,9 @@ router.post('/dossiers/:dossierId/drafts', async (req, res) => {
     }
 
     if (!isAdmin(user) && !isPartenaire(user)) {
-      return res.status(403).json({ success: false, message: 'Accès refusé' });
+      if (!isClient(user) || !isClientOwnerOfDossier(user, dossier)) {
+        return res.status(403).json({ success: false, message: 'Accès refusé' });
+      }
     }
 
     const dueParsed = parseDueDateField(dueDateRaw);
@@ -296,19 +317,8 @@ router.patch('/drafts/:draftId', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
 
-    const isCreator = draft.createdBy && draft.createdBy._id.toString() === user._id.toString();
-    const partnerAccessEntry = getPartnerAccessEntry(draft, user._id);
-
-    const adminCanSee =
-      isAdmin(user) &&
-      (isCreator ||
-        (draft.visibleToAdmins === true &&
-          !(draft.excludedAdminIds || []).some((id) => id.toString() === user._id.toString())));
-
-    const canEdit =
-      adminCanSee ||
-      (isPartenaire(user) &&
-        (isCreator || (partnerAccessEntry && partnerAccessEntry.canEdit === true)));
+    const dossier = await Dossier.findById(draft.dossier);
+    const canEdit = computeDraftContentCanEdit(draft, user, dossier);
 
     if (!canEdit) {
       return res.status(403).json({ success: false, message: 'Vous ne pouvez pas modifier ce brouillon' });
@@ -350,7 +360,7 @@ router.patch('/drafts/:draftId', async (req, res) => {
 router.patch('/drafts/:draftId/permissions', async (req, res) => {
   try {
     const { draftId } = req.params;
-    const { visibleToAdmins, excludedAdminIds, partnerAccess } = req.body;
+    const { visibleToAdmins, excludedAdminIds, partnerAccess, visibleToClient, clientCanEdit } = req.body;
     const userId = req.user.id;
 
     const draft = await CollaborativeDraft.findById(draftId).populate('createdBy');
@@ -363,11 +373,22 @@ router.patch('/drafts/:draftId/permissions', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
 
+    if (isClient(user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Les comptes client ne peuvent pas modifier les autorisations des documents en préparation.',
+      });
+    }
+
     const isCreator = draft.createdBy && draft.createdBy._id.toString() === user._id.toString();
 
     if (!isCreator && !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Seul le créateur du document ou un administrateur peut modifier les autorisations' });
     }
+
+    const dossierDoc = await Dossier.findById(draft.dossier);
+    const prevVisibleToClient = !!draft.visibleToClient;
+    const prevClientCanEdit = !!draft.clientCanEdit;
 
     if (typeof visibleToAdmins === 'boolean') {
       draft.visibleToAdmins = visibleToAdmins;
@@ -389,10 +410,61 @@ router.patch('/drafts/:draftId/permissions', async (req, res) => {
       draft.partnerAccess = partnerAccess;
     }
 
+    if (typeof visibleToClient === 'boolean') {
+      if (visibleToClient === true && (!dossierDoc || !dossierDoc.user)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Impossible de partager avec le client : aucun compte utilisateur n’est lié à ce dossier. Liez d’abord le client au dossier.',
+        });
+      }
+      draft.visibleToClient = visibleToClient;
+      if (!visibleToClient) {
+        draft.clientCanEdit = false;
+      }
+    }
+
+    if (typeof clientCanEdit === 'boolean') {
+      draft.clientCanEdit = draft.visibleToClient ? !!clientCanEdit : false;
+    }
+
     await draft.save();
 
     const dossierId = draft.dossier.toString();
     const draftTitle = draft.title || 'Document en préparation';
+    const newV = !!draft.visibleToClient;
+    const newE = !!draft.clientCanEdit;
+
+    const notifyClient =
+      dossierDoc &&
+      dossierDoc.user &&
+      (newV !== prevVisibleToClient || newE !== prevClientCanEdit) &&
+      newV &&
+      (!prevVisibleToClient || (prevVisibleToClient && newE && !prevClientCanEdit));
+
+    if (notifyClient && dossierDoc.user) {
+      const clientUid = dossierDoc.user.toString();
+      try {
+        await Notification.create({
+          user: clientUid,
+          type: 'draft_access_granted',
+          titre: 'Accès à un document en préparation',
+          message: newE
+            ? `Vous pouvez consulter et modifier le document « ${draftTitle} » depuis votre dossier (Documents en préparation).`
+            : `Vous pouvez consulter le document « ${draftTitle} » depuis votre dossier (Documents en préparation).`,
+          lien: `/client/dossiers/${dossierId}/documents-en-preparation`,
+          metadata: {
+            dossierId,
+            draftId: draft._id.toString(),
+            draftTitle,
+            canEdit: newE,
+            audience: 'client',
+          },
+        });
+      } catch (notifErr) {
+        console.error('Erreur création notification accès draft (client):', notifErr);
+      }
+    }
 
     for (const entry of draft.partnerAccess || []) {
       const partnerId = entry.partner.toString();

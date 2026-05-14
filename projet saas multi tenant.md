@@ -1,155 +1,247 @@
-# Projet SaaS multi-tenant — Ada Papers
+# Ada Papers — Prompt Cursor : architecture multi-tenant
 
-Document de cadrage pour permettre à d’autres cabinets d’utiliser le système de gestion Ada Papers en autonomie.
+## Contexte du projet
 
-## Situation actuelle
+Tu travailles sur **Ada Papers**, une application SaaS de gestion de dossiers juridiques (recours, documents, messagerie, rendez-vous, tarification).
 
-Ada Papers est conçu comme **une seule instance métier** : un cabinet, une base de données partagée, une marque unique.
+L'objectif est de transformer l'application en **plateforme multi-tenant** : un seul déploiement (Vercel + Coolify) qui sert plusieurs cabinets, chacun avec sa propre base de données MongoDB isolée, son propre domaine, son branding et ses intégrations.
 
-- Pas de notion de **tenant** ou d’**organisation** sur les utilisateurs et les dossiers.
-- Les rôles (`admin`, `client`, `partenaire`, etc.) gèrent les droits, pas l’appartenance à un cabinet distinct.
-- Les administrateurs peuvent voir l’ensemble des dossiers selon les règles de rôle.
-- L’identité produit (marque, e-mails, domaines) est celle d’Ada Papers.
-- Les intégrations (messagerie, agenda, SMS) sont en pratique **globales** à l’instance.
+**Stack technique actuelle :**
+- Backend : Node.js / Express (ou Next.js API routes)
+- Base de données : MongoDB avec Mongoose
+- Frontend : Next.js
+- Déploiement : Coolify (backend) + Vercel (frontend)
+- Email : Brevo (Sendinblue)
+- Auth : JWT
 
-Pour qu’**d’autres cabinets** utilisent la plateforme **en autonomie**, il faut d’abord choisir le modèle produit, puis l’isolation des données.
+---
 
-## Trois modèles possibles
+## Modèle d'architecture cible
 
-### 1. Une instance par cabinet (recommandé pour démarrer)
+### Principe fondamental
 
-Chaque cabinet dispose de **son propre déploiement** : base MongoDB, stockage fichiers, variables d’environnement (Brevo, Google Agenda, domaine), branding.
+Quand une requête arrive, l'app lit le `hostname` entrant, interroge la **base maître** pour charger la config du bon cabinet, puis connecte toutes les requêtes suivantes à la **base MongoDB dédiée** de ce cabinet.
 
-**Avantages**
+Aucune donnée ne traverse entre cabinets. Zéro redéploiement pour ajouter un nouveau cabinet.
 
-- Isolation forte par défaut.
-- Peu de refonte du code existant.
-- Conformité et facturation plus simples.
-- Un incident ou une fuite reste limité à un client.
+### Base maître (collection `organizations`)
 
-**Inconvénients**
+```ts
+interface Organization {
+  _id: ObjectId
+  slug: string                    // ex: "cabinet-dupont"
+  domain: string                  // ex: "app.cabinetdupont.fr"
+  mongoUri: string                // URI Atlas dédiée à ce cabinet
+  status: "trial" | "active" | "suspended"
+  branding: {
+    name: string                  // ex: "Cabinet Dupont"
+    logo: string                  // URL CDN
+    primaryColor: string          // ex: "#2A4DD0"
+    favicon?: string
+  }
+  email: {
+    from: string                  // ex: "contact@cabinetdupont.fr"
+    brevoApiKey: string
+    replyTo?: string
+  }
+  landingPage: {
+    headline: string
+    subheadline?: string
+    cta: string
+  }
+  limits: {
+    maxUsers: number
+    maxStorageGb: number
+    modules: string[]             // ex: ["dossiers", "messagerie", "lexia"]
+  }
+  createdAt: Date
+}
+```
 
-- Déploiements et mises à jour à répéter.
-- Coût d’exploitation qui augmente avec le nombre de cabinets.
+### Middleware de routage tenant (à créer)
 
-**Autonomie**
+Fichier : `middleware/tenant.ts`
 
-- Un super-admin local par instance.
-- Ada Papers peut rester l’éditeur sans accéder aux dossiers des autres cabinets.
+```ts
+import { NextRequest, NextResponse } from 'next/server'
+import { getMasterDb } from '@/lib/db/master'
+import { getTenantConnection } from '@/lib/db/tenants'
 
-### 2. SaaS multi-tenant (une application, plusieurs cabinets)
+export async function tenantMiddleware(req: NextRequest) {
+  const hostname = req.headers.get('host') ?? ''
+  const masterDb = await getMasterDb()
+  
+  const org = await masterDb
+    .collection('organizations')
+    .findOne({ domain: hostname, status: 'active' })
 
-Un seul produit avec un **`organizationId` / `tenantId`** sur les entités métier (utilisateurs, dossiers, documents, messages, rendez-vous, tarification, modèles d’e-mails, etc.) et un **filtre systématique** sur chaque requête.
+  if (!org) {
+    return NextResponse.json({ error: 'Cabinet introuvable' }, { status: 404 })
+  }
 
-**Avantages**
+  // Injecter l'org dans les headers pour les route handlers
+  const res = NextResponse.next()
+  res.headers.set('x-org-id', org._id.toString())
+  res.headers.set('x-org-slug', org.slug)
+  return res
+}
+```
 
-- Une codebase, un déploiement.
-- Onboarding et évolutions centralisés.
+### Gestionnaire de connexions MongoDB (pool par tenant)
 
-**Inconvénients**
+Fichier : `lib/db/tenants.ts`
 
-- Refonte large du backend et du frontend.
-- Risque de fuite inter-cabinets si une requête oublie le filtre tenant.
-- Paramétrage par tenant (tarifs, workflows, Lexia, SMS).
+```ts
+import mongoose from 'mongoose'
 
-**Rôles typiques**
+const connections: Map<string, mongoose.Connection> = new Map()
 
-- Super-admin plateforme (Ada Papers).
-- Admin cabinet.
-- Équipe du cabinet.
-- Clients rattachés uniquement à leur cabinet.
+export async function getTenantConnection(mongoUri: string, orgId: string) {
+  if (connections.has(orgId)) {
+    return connections.get(orgId)!
+  }
+  const conn = await mongoose.createConnection(mongoUri).asPromise()
+  connections.set(orgId, conn)
+  return conn
+}
+```
 
-### 3. Hybride
+---
 
-**Cœur multi-tenant** pour dossiers, messagerie, documents, rendez-vous, tarification ; **modules sensibles** (Lexia, certains connecteurs) en option par cabinet ou en instance dédiée.
+## Règles absolues à respecter
 
-Souvent le bon compromis si l’on vend le **socle gestion** à plusieurs cabinets tout en gardant des options « premium » isolées.
+1. **Jamais de requête sans filtre tenant.** Toute lecture/écriture en base doit passer par la connexion du tenant actif, jamais par une connexion globale.
 
-## Socle technique à prévoir (surtout en multi-tenant)
+2. **La base maître ne contient que la config des organisations.** Aucune donnée métier (dossiers, clients, documents) ne doit s'y trouver.
 
-### Modèle Organisation
+3. **Un pool de connexions par cabinet.** Ne pas ouvrir une nouvelle connexion Mongoose à chaque requête — réutiliser les connexions en cache.
 
-- Nom, slug, domaine ou sous-domaine.
-- Logo, fuseau horaire, langue.
-- Statut : essai, actif, suspendu.
-- Limites : utilisateurs, stockage, modules activés.
+4. **Les fichiers uploadés sont préfixés par orgId.** Format : `uploads/{orgId}/{filename}`. Jamais de fichier partagé entre cabinets.
 
-### Utilisateurs
+5. **Les clés API (Brevo, Google) sont par cabinet.** Jamais une clé globale pour tous.
 
-- Rattachement à une ou plusieurs organisations.
-- Règle à trancher : e-mail unique **par organisation** ou global sur toute la plateforme.
+6. **Les emails transactionnels utilisent le `from` du cabinet.** Ne jamais envoyer depuis une adresse Ada Papers à un client d'un autre cabinet.
 
-### Données
+7. **Les tokens JWT incluent l'orgId.** Un token ne peut pas être réutilisé sur le domaine d'un autre cabinet.
 
-- `organizationId` sur dossiers, documents, notifications, rendez-vous, partages publics, logs.
-- Index composés pour les listes et recherches.
+---
 
-### Authentification
+## Structure des dossiers à créer/modifier
 
-- JWT ou session avec **organisation active**.
-- Refus de toute lecture ou écriture hors périmètre tenant.
+```
+lib/
+  db/
+    master.ts          ← connexion à la base maître
+    tenants.ts         ← pool de connexions par cabinet
+  tenant.ts            ← helper pour lire l'org depuis req headers
+  branding.ts          ← charger le branding du cabinet actif
 
-### Fichiers
+middleware/
+  tenant.ts            ← middleware Next.js de routage
 
-- Préfixes par organisation (`uploads/{orgId}/...`).
-- Liens publics (dépôt tiers, téléchargement) liés au tenant.
+models/
+  organization.ts      ← schéma Mongoose pour la base maître
 
-### Intégrations
+app/
+  api/
+    [tous les endpoints existants]  ← ajouter getTenantDb() en tête
 
-- Brevo, Google Agenda, SMS, OAuth : **par cabinet**, pas un seul compte global.
+components/
+  TenantProvider.tsx   ← context React avec branding + config cabinet
+```
 
-### CMS et e-mails
+---
 
-- Templates et contenus par organisation.
-- Textes Ada Papers en défaut seulement.
+## Tâches à implémenter dans l'ordre
 
-### Lexia / Paw AI
+### Étape 1 — Base maître et connexion
+- [ ] Créer `lib/db/master.ts` avec connexion singleton à la base maître
+- [ ] Créer le schéma `Organization` dans `models/organization.ts`
+- [ ] Créer `lib/db/tenants.ts` avec pool de connexions par `orgId`
 
-- Corpus, prompts et quotas **par cabinet**.
-- Éviter le mélange de données et la facturation croisée.
+### Étape 2 — Middleware de routage
+- [ ] Créer `middleware/tenant.ts` qui lit le hostname et charge l'org
+- [ ] Injecter `x-org-id` dans les headers de chaque requête
+- [ ] Retourner 404 si le domaine n'est pas dans la base maître
 
-### Audit
+### Étape 3 — Adapter les route handlers
+- [ ] Créer helper `lib/tenant.ts` → `getTenantDb(req)` qui retourne la connexion du bon cabinet
+- [ ] Remplacer tous les `await mongoose.connect(...)` par `await getTenantDb(req)`
+- [ ] Vérifier que chaque endpoint utilise bien la connexion tenant
 
-- Qui a fait quoi, dans quel cabinet.
-- Utile en cas de litige, contrôle ou support.
+### Étape 4 — Branding dynamique
+- [ ] Créer `components/TenantProvider.tsx` avec un context React
+- [ ] Charger `branding`, `landingPage`, `email` depuis l'API au démarrage
+- [ ] Injecter les CSS variables (`--primary-color`, etc.) dans le `<head>`
+- [ ] Landing page dynamique : lire `org.landingPage` pour afficher headline/CTA
 
-## Autonomie fonctionnelle (au-delà de la technique)
+### Étape 5 — Fichiers et emails
+- [ ] Préfixer tous les uploads par `orgId` : `uploads/${orgId}/...`
+- [ ] Adapter l'envoi Brevo pour utiliser `org.email.brevoApiKey` et `org.email.from`
 
-Les cabinets autonomes attendent en général :
+### Étape 6 — Auth
+- [ ] Ajouter `orgId` dans le payload JWT à la connexion
+- [ ] Vérifier que `orgId` dans le token correspond au domaine de la requête
 
-- invitation et gestion de l’équipe ;
-- paramètres cabinet (tarification, statuts de dossier, modèles recours, e-mails/SMS) ;
-- espace client à leur marque (nom, couleurs, URL) ;
-- export, sauvegarde, suppression sur demande ;
-- support sans accès aux dossiers, sauf accord explicite.
+### Étape 7 — Console admin Ada Papers
+- [ ] Route `/admin` protégée par un superadmin Ada Papers
+- [ ] CRUD sur la collection `organizations`
+- [ ] Formulaire : créer un nouveau cabinet (slug, domain, mongoUri, branding, email)
 
-Sans **panneau d’administration cabinet**, une instance technique isolée reste dépendante d’Ada Papers pour chaque réglage.
+---
 
-## Produit, juridique, exploitation
+## Comportement attendu pour chaque nouvelle requête
 
-- **Contrat** : rôles hébergeur (éditeur) vs responsable des données (souvent le cabinet) ; DPA, conservation, export, résiliation.
-- **Facturation** : par siège, par dossier actif, ou forfait + options (SMS, stockage, IA).
-- **Onboarding** : création organisation, premier admin, import clients/dossiers, checklist (domaine, e-mail, agenda).
-- **Mises à jour** : fenêtre de maintenance, notes de version ; version figée possible pour les gros clients.
+```
+1. Requête → hostname lu par le middleware
+2. Middleware → cherche l'org dans la base maître
+3. Org trouvée → connexion tenant chargée depuis le pool
+4. Route handler → toutes les queries tapent dans la base du cabinet
+5. Réponse → données du bon cabinet, jamais mélangées
+```
 
-## Recommandation pragmatique
+---
 
-| Horizon | Piste |
-|--------|--------|
-| **1 à 3 cabinets pilotes** | Instance dédiée par cabinet + charte d’exploitation et paramètres externalisés (`.env`, branding, modèles). |
-| **5 à 20 cabinets** | Extraire un **noyau « organisation »** sur les modules critiques, puis généraliser `organizationId`. |
-| **Produit éditeur** | Console Ada Papers (tenants, abonnements, suspension) + admin cabinet + isolation testée en continu. |
+## Pour ajouter un nouveau cabinet (zéro déploiement)
 
-Éviter d’empiler des modules transverses (ex. suivi financier global) **avant** la règle « à qui appartiennent les montants » : en multi-tenant, la compta est **par organisation**, pas globale.
+Insérer un document dans la collection `organizations` de la base maître :
 
-## Risques à anticiper
+```js
+await masterDb.collection('organizations').insertOne({
+  slug: 'nouveau-cabinet',
+  domain: 'app.nouveau-cabinet.fr',
+  mongoUri: 'mongodb+srv://user:pass@cluster.mongodb.net/nouveau-cabinet',
+  status: 'active',
+  branding: {
+    name: 'Nouveau Cabinet',
+    logo: 'https://cdn.example.com/logo.png',
+    primaryColor: '#1A3D8F'
+  },
+  email: {
+    from: 'contact@nouveau-cabinet.fr',
+    brevoApiKey: 'xkeysib-...'
+  },
+  landingPage: {
+    headline: 'Votre recours, simplifié.',
+    cta: 'Déposer mon dossier'
+  },
+  limits: {
+    maxUsers: 10,
+    maxStorageGb: 20,
+    modules: ['dossiers', 'messagerie', 'documents']
+  },
+  createdAt: new Date()
+})
+```
 
-- Requêtes admin sans filtre tenant → fuite de dossiers entre cabinets.
-- URLs et tokens publics sans lien organisation.
-- Comptes `superadmin` globaux trop permissifs.
-- Une seule clé API (mail, agenda) pour tous les tenants.
-- Marque et mentions juridiques Ada Papers imposées à des cabinets qui veulent leur propre identité.
+Puis ajouter le domaine dans les settings Vercel. C'est tout.
 
-## Synthèse
+---
 
-Pour une **autonomie réelle**, le levier principal est une **frontière d’organisation** (instance dédiée ou multi-tenant strict), complétée par **paramétrage et gouvernance par cabinet**. Le reste (tarification, messagerie, documents) peut suivre une fois cette frontière posée.
+## Ce que tu ne dois jamais faire
+
+- Utiliser `process.env.MONGODB_URI` directement dans les route handlers (c'est la base maître, pas la base du cabinet)
+- Faire une requête Mongoose sans avoir appelé `getTenantDb(req)` d'abord
+- Stocker des données métier dans la base maître
+- Utiliser une seule clé Brevo pour tous les cabinets
+- Créer une nouvelle connexion Mongoose à chaque requête (utiliser le pool)

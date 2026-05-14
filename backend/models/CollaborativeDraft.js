@@ -49,6 +49,16 @@ const collaborativeDraftSchema = new mongoose.Schema(
         },
       },
     ],
+    /** Partage avec le compte client rattaché au dossier (dossier.user), accordé par admin / partenaire. */
+    visibleToClient: {
+      type: Boolean,
+      default: false,
+    },
+    /** Si visibleToClient : le client peut modifier (sinon consultation seule). */
+    clientCanEdit: {
+      type: Boolean,
+      default: false,
+    },
     isArchived: {
       type: Boolean,
       default: false,

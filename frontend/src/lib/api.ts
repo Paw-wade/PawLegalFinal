@@ -1373,8 +1373,16 @@ export const collaborativeDraftsAPI = {
     draftId: string,
     data: { title?: string; content?: any; dueDate?: string | null; completed?: boolean | null }
   ) => api.patch(`/drafts/${draftId}`, data),
-  updatePermissions: (draftId: string, data: { visibleToAdmins?: boolean; excludedAdminIds?: string[]; partnerAccess?: { partner: string; canEdit: boolean }[] }) =>
-    api.patch(`/drafts/${draftId}/permissions`, data),
+  updatePermissions: (
+    draftId: string,
+    data: {
+      visibleToAdmins?: boolean;
+      excludedAdminIds?: string[];
+      partnerAccess?: { partner: string; canEdit: boolean }[];
+      visibleToClient?: boolean;
+      clientCanEdit?: boolean;
+    }
+  ) => api.patch(`/drafts/${draftId}/permissions`, data),
   archiveDraft: (draftId: string) =>
     api.delete(`/drafts/${draftId}`),
 };

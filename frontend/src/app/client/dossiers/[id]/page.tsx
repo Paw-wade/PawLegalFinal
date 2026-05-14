@@ -587,6 +587,11 @@ export default function DossierDetailPage() {
                   </svg>
                   Actualiser
                 </Button>
+                <Link href={`/client/dossiers/${dossierId}/documents-en-preparation`} className="min-h-[44px] flex-1 sm:flex-none">
+                  <Button variant="outline" className="w-full min-h-[44px]">
+                    Documents en préparation
+                  </Button>
+                </Link>
                 {dossier && !['annule', 'decision_favorable', 'decision_defavorable', 'rejet', 'gain_cause'].includes(dossier.statut) && (
                   <Button variant="outline" className="min-h-[44px] flex-1 sm:flex-none border-red-500 text-red-600 hover:bg-red-50" onClick={handleCancelDossier}>
                     Annuler le dossier
