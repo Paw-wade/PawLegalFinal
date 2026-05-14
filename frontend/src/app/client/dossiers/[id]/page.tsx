@@ -8,7 +8,13 @@ import { DossierDetailView } from '@/components/DossierDetailView';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
+import {
+  getDossierCustomStatutLabel,
+  getDossierDisplayTitle,
+  getDossierTransmittedPartners,
+  getDossierTransmissionSummary,
+} from '@/lib/dossierListPresentation';
 import { History, Clock } from 'lucide-react';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
@@ -377,12 +383,21 @@ export default function DossierDetailPage() {
     );
   }
 
+  const displayStatutLabel = getDossierCustomStatutLabel(dossier);
+  const pendingDocumentRequestsCount = documentRequests.filter((request) => request.status === 'pending').length;
+  const unreadNotificationsCount = notifications.filter((notification) => !notification.lu).length;
+  const transmittedPartners = getDossierTransmittedPartners(dossier);
+  const transmissionSummary = getDossierTransmissionSummary(transmittedPartners);
+  const hasDeadline = !!dossier.dateEcheance;
+  const deadlineDays = hasDeadline ? calculateDaysUntil(dossier.dateEcheance) : null;
+  const nextAction = getNextAction(dossier.statut);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 max-w-[100vw]">
       <div className="w-full max-w-[100vw] min-w-0 px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
         {/* En-tête — sur mobile: colonne, boutons en bas */}
         <div className="mb-4 sm:mb-6">
-          <Link href="/client/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-3 sm:mb-4 transition-colors min-h-[44px] items-center">
+          <Link href={`/client/dossiers?dossierId=${encodeURIComponent(dossierId)}`} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-3 sm:mb-4 transition-colors min-h-[44px] items-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -390,19 +405,28 @@ export default function DossierDetailPage() {
           </Link>
           
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
+            {deadlineDays !== null && deadlineDays < 0 ? (
+              <div className="-mx-4 -mt-4 mb-4 rounded-t-xl border-b border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 sm:-mx-6 sm:-mt-6 sm:px-6">
+                Échéance dépassée depuis {Math.abs(deadlineDays)} jour{Math.abs(deadlineDays) > 1 ? 's' : ''}
+              </div>
+            ) : deadlineDays !== null && isDeadlineApproaching(dossier.dateEcheance) ? (
+              <div className="-mx-4 -mt-4 mb-4 rounded-t-xl border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 sm:-mx-6 sm:-mt-6 sm:px-6">
+                Échéance dans {deadlineDays} jour{deadlineDays > 1 ? 's' : ''}
+              </div>
+            ) : null}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                  <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">{dossier.titre || 'Sans titre'}</h1>
+                  <h1 className="text-xl sm:text-3xl font-bold text-foreground break-words">{getDossierDisplayTitle(dossier)}</h1>
                   {(dossier.numero || dossier.numeroDossier) && (
                     <span className="px-2.5 sm:px-3 py-1 bg-primary/10 text-primary rounded-lg text-xs sm:text-sm font-semibold">
                       N° {dossier.numero || dossier.numeroDossier}
                     </span>
                   )}
                 </div>
-                {dossier.description && (
-                  <p className="text-muted-foreground text-sm mb-3 break-words">{dossier.description}</p>
-                )}
+                <p className="text-muted-foreground text-sm mb-3 break-words">
+                  {dossier.description?.trim() || 'Aucune description pour ce dossier.'}
+                </p>
                 
                 {/* Barre de progression basée uniquement sur les étapes choisies par l'équipe */}
                 {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (() => {
@@ -515,7 +539,7 @@ export default function DossierDetailPage() {
                 {/* Statuts et informations rapides */}
                 <div className="flex flex-wrap items-center gap-3">
                   <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getStatutColor(dossier.statut)}`}>
-                    {getStatutLabel(dossier.statut)}
+                    {displayStatutLabel}
                   </span>
                   {dossier.priorite && (
                     <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getPrioriteColor(dossier.priorite)}`}>
@@ -532,6 +556,27 @@ export default function DossierDetailPage() {
                       🔄 {formatRelativeTime(dossier.updatedAt)}
                     </span>
                   )}
+                </div>
+
+                <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Documents</p>
+                    <p className="text-sm font-semibold text-foreground">{documents.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Demandes</p>
+                    <p className="text-sm font-semibold text-foreground">{pendingDocumentRequestsCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Notifications</p>
+                    <p className="text-sm font-semibold text-foreground">{unreadNotificationsCount > 0 ? unreadNotificationsCount : '—'}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Intervenants</p>
+                    <p className="truncate text-sm font-semibold text-foreground" title={transmissionSummary}>
+                      {transmissionSummary}
+                    </p>
+                  </div>
                 </div>
               </div>
               
@@ -550,24 +595,17 @@ export default function DossierDetailPage() {
               </div>
             </div>
             
-            {/* Prochaine action */}
-            {(() => {
-              const nextAction = getNextAction(dossier.statut);
-              if (nextAction) {
-                return (
-                  <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
-                    <div className="flex items-start gap-3">
-                      <span className="text-blue-600 text-xl">📋</span>
-                      <div>
-                        <p className="text-sm font-semibold text-blue-900 mb-1">Prochaine action requise</p>
-                        <p className="text-sm text-blue-700">{nextAction}</p>
-                      </div>
-                    </div>
+            {nextAction ? (
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                <div className="flex items-start gap-3">
+                  <span className="text-blue-600 text-xl">📋</span>
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900 mb-1">Prochaine action requise</p>
+                    <p className="text-sm text-blue-700">{nextAction}</p>
                   </div>
-                );
-              }
-              return null;
-            })()}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -582,7 +620,7 @@ export default function DossierDetailPage() {
               <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statut actuel</h2>
               <div className="flex flex-wrap items-center gap-3">
                 <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatutColor(dossier.statut)}`}>
-                  {getStatutLabel(dossier.statut)}
+                  {displayStatutLabel}
                 </span>
                 {dossier.priorite && (
                   <span className={`px-4 py-2 rounded-full text-sm font-medium ${getPrioriteColor(dossier.priorite)}`}>

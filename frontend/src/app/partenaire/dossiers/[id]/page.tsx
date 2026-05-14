@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { DossierDetailView } from '@/components/DossierDetailView';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
+import { PartenaireDossierDetailSections } from '@/components/partenaire/PartenaireDossierDetailSections';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, tasksAPI } from '@/lib/api';
 import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, formatRelativeTime, getNextAction } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { History, Clock, CheckCircle, XCircle } from 'lucide-react';
 
@@ -368,6 +368,20 @@ export default function PartenaireDossierDetailPage() {
     loadNotifications();
   };
 
+  const pendingDocumentRequestsCount = documentRequests.length;
+  const unreadNotificationsCount = notifications.filter((notif: any) => !notif.lu).length;
+  const activeTasksCount = tasks.filter(
+    (task: any) => task.statut !== 'termine' && task.statut !== 'annule' && !task.effectue
+  ).length;
+  const deadlineDays = dossier?.dateEcheance ? calculateDaysUntil(dossier.dateEcheance) : null;
+  const nextAction = getNextAction(dossier.statut);
+  const displayStatutLabel = (() => {
+    const customStep = (dossier?.etapesSupplementaires || []).find(
+      (step: any) => step?.id === dossier.statut || step?.label === dossier.statut
+    );
+    return customStep?.label || getStatutLabel(dossier.statut);
+  })();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 max-w-[100vw]">
       <div className="w-full max-w-[100vw] min-w-0 px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
@@ -399,14 +413,26 @@ export default function PartenaireDossierDetailPage() {
 
         {/* En-tête amélioré */}
         <div className="mb-6">
-          <Link href="/partenaire/dossiers" className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
+          <Link href={`/partenaire/dossiers?dossierId=${encodeURIComponent(dossierId)}`} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-        Retour aux dossiers
-      </Link>
+            Retour à la vue simplifiée
+          </Link>
+          <Link href="/partenaire/dossiers" className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 transition-colors mb-4">
+            Vue liste complète
+          </Link>
       
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6 overflow-hidden">
+            {deadlineDays !== null && deadlineDays < 0 ? (
+              <div className="-mx-4 -mt-4 mb-4 rounded-t-xl border-b border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 sm:-mx-6 sm:-mt-6 sm:px-6">
+                Échéance dépassée depuis {Math.abs(deadlineDays)} jour{Math.abs(deadlineDays) > 1 ? 's' : ''}
+              </div>
+            ) : deadlineDays !== null && isDeadlineApproaching(dossier.dateEcheance) ? (
+              <div className="-mx-4 -mt-4 mb-4 rounded-t-xl border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 sm:-mx-6 sm:-mt-6 sm:px-6">
+                Échéance dans {deadlineDays} jour{deadlineDays > 1 ? 's' : ''}
+              </div>
+            ) : null}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-4">
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
@@ -428,9 +454,9 @@ export default function PartenaireDossierDetailPage() {
             </span>
           )}
         </div>
-                {dossier.description && (
-                  <p className="text-muted-foreground text-sm mb-3 break-words">{dossier.description}</p>
-                )}
+                <p className="text-muted-foreground text-sm mb-3 break-words">
+                  {dossier.description?.trim() || 'Aucune description pour ce dossier.'}
+                </p>
         
                 {/* Barre de progression basée uniquement sur les étapes choisies pour ce dossier */}
                 {Array.isArray(dossier.etapesSupplementaires) && dossier.etapesSupplementaires.length > 0 && (() => {
@@ -541,7 +567,7 @@ export default function PartenaireDossierDetailPage() {
                 {/* Statuts et informations rapides */}
                 <div className="flex flex-wrap items-center gap-3">
                   <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getStatutColor(dossier.statut)}`}>
-                    {getStatutLabel(dossier.statut)}
+                    {displayStatutLabel}
                   </span>
                   {dossier.priorite && (
                     <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${getPrioriteColor(dossier.priorite)}`}>
@@ -559,7 +585,26 @@ export default function PartenaireDossierDetailPage() {
                     </span>
                   )}
                 </div>
-          </div>
+
+                <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Documents</p>
+                    <p className="text-sm font-semibold text-foreground">{documents.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Demandes</p>
+                    <p className="text-sm font-semibold text-foreground">{pendingDocumentRequestsCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Messages</p>
+                    <p className="text-sm font-semibold text-foreground">{messages.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tâches</p>
+                    <p className="text-sm font-semibold text-foreground">{activeTasksCount > 0 ? activeTasksCount : '—'}</p>
+                  </div>
+                </div>
+              </div>
               
               <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:flex-wrap sm:items-start shrink-0">
                 <Button variant="outline" onClick={() => { loadDossier(); loadNotifications(); }} className="min-h-[44px] w-full sm:w-auto justify-center">
@@ -617,498 +662,45 @@ export default function PartenaireDossierDetailPage() {
           </div>
         )}
             
-            {/* Prochaine action */}
-            {(() => {
-              const nextAction = getNextAction(dossier.statut);
-              if (nextAction) {
-                return (
-                  <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg mt-4">
-                    <div className="flex items-start gap-3">
-                      <span className="text-blue-600 text-xl">📋</span>
-                      <div>
-                        <p className="text-sm font-semibold text-blue-900 mb-1">Prochaine action requise</p>
-                        <p className="text-sm text-blue-700">{nextAction}</p>
-                      </div>
-                    </div>
+            {nextAction ? (
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg mt-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-blue-600 text-xl">📋</span>
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900 mb-1">Prochaine action requise</p>
+                    <p className="text-sm text-blue-700">{nextAction}</p>
                   </div>
-                );
-              }
-              return null;
-            })()}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
-        {/* Vue détaillée avec téléchargement et impression */}
-        <DossierDetailView dossier={dossier} variant="partenaire" />
-
-        <div className="grid grid-cols-1 gap-4 sm:gap-6 mt-6 sm:mt-8">
-          {/* Informations principales */}
-          <div className="space-y-4 sm:space-y-6 min-w-0">
-            {/* Statut actuel */}
-            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
-              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Statut actuel</h2>
-              <div className="flex flex-wrap items-center gap-3">
-                <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatutColor(dossier.statut)}`}>
-                  {getStatutLabel(dossier.statut)}
-                </span>
-                {dossier.priorite && (
-                  <span className={`px-4 py-2 rounded-full text-sm font-medium ${getPrioriteColor(dossier.priorite)}`}>
-                    Priorité: {dossier.priorite}
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground mt-4">
-                Dernière mise à jour : {new Date(dossier.updatedAt || dossier.createdAt).toLocaleDateString('fr-FR', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </p>
-            </div>
-
-            {/* Description */}
-            {dossier.description && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">Description</h2>
-                <p className="text-muted-foreground whitespace-pre-wrap">{dossier.description}</p>
-              </div>
-            )}
-
-            {/* Informations complètes du dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">📋 Informations Complètes du Dossier</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
-                <div>
-                  <p className="text-sm text-muted-foreground font-semibold">Numéro de dossier</p>
-                  <p className="font-bold text-lg text-primary">{dossier.numero || dossier._id}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground font-semibold">Titre</p>
-                  <p className="font-medium">{dossier.titre || 'Sans titre'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground font-semibold">Catégorie</p>
-                  <p className="font-medium">{dossier.categorie?.replace(/_/g, ' ') || 'Non spécifiée'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground font-semibold">Type de demande</p>
-                  <p className="font-medium">{dossier.type || 'Non spécifié'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground font-semibold">Date de création</p>
-                  <p className="font-medium">
-                    {new Date(dossier.createdAt).toLocaleDateString('fr-FR', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground font-semibold">Dernière mise à jour</p>
-                  <p className="font-medium">
-                    {new Date(dossier.updatedAt || dossier.createdAt).toLocaleDateString('fr-FR', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-                {dossier.dateEcheance && (
-                  <div>
-                    <p className="text-sm text-muted-foreground font-semibold">Date d'échéance</p>
-                    <p className="font-medium text-orange-600">
-                      {new Date(dossier.dateEcheance).toLocaleDateString('fr-FR', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
-                    </p>
-                  </div>
-                )}
-                {dossier.createdBy && (
-                  <div>
-                    <p className="text-sm text-muted-foreground font-semibold">Créé par</p>
-                    <p className="font-medium">
-                      {dossier.createdBy.firstName} {dossier.createdBy.lastName}
-                      {dossier.createdBy.email && ` (${dossier.createdBy.email})`}
-                    </p>
-                  </div>
-                )}
-              </div>
-      </div>
-      
-            {/* Coordonnées client */}
-            {dossier.user && typeof dossier.user === 'object' && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">👤 Informations Client</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground font-semibold">Prénom</p>
-                    <p className="font-medium">{dossier.user.firstName || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground font-semibold">Nom</p>
-                    <p className="font-medium">{dossier.user.lastName || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground font-semibold">Email</p>
-                    <p className="font-medium">{dossier.user.email || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground font-semibold">Téléphone</p>
-                    <p className="font-medium">{dossier.user.phone || 'N/A'}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Demandes de documents en attente */}
-            {documentRequests.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">📄 Demandes de documents en attente</h2>
-                <div className="space-y-3">
-                  {documentRequests.map((request: any) => (
-                    <div
-                      key={request._id || request.id}
-                      className={`border-l-4 rounded-lg p-4 ${
-                        request.isUrgent
-                          ? 'bg-red-50 border-red-500'
-                          : 'bg-blue-50 border-blue-500'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg">{request.isUrgent ? '🔴' : '📄'}</span>
-                            <h3 className="font-semibold text-base">
-                              {request.documentTypeLabel}
-                            </h3>
-                            {request.isUrgent && (
-                              <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs font-semibold">
-                                URGENT
-                              </span>
-                            )}
-                          </div>
-                          {request.message && (
-                            <p className="text-sm text-muted-foreground mt-1">{request.message}</p>
-                          )}
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Demandé le {new Date(request.createdAt).toLocaleDateString('fr-FR', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Historique et Timeline du dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <History className="w-6 h-6" />
-                  Historique et Timeline du dossier
-                </h2>
-                <button
-                  onClick={() => {
-                    setShowHistory(!showHistory);
-                    if (!showHistory && history.length === 0) {
-                      loadHistory();
-                    }
-                  }}
-                  className="text-primary hover:text-primary/80 text-sm font-medium"
-                >
-                  {showHistory ? 'Masquer' : 'Afficher'}
-                </button>
-              </div>
-              
-              {showHistory && (
-                <>
-                  {loadingHistory ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                    </div>
-                  ) : history.length === 0 ? (
-                    <p className="text-gray-500 text-center py-8">Aucun historique disponible</p>
-                  ) : (
-                    <div className="space-y-4">
-                      {history.map((item: any, index: number) => (
-                        <div key={index} className="border-l-4 border-primary pl-4 py-3 bg-gray-50/50 rounded-r-lg">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="text-2xl">{getHistoryTypeIcon(item.type)}</span>
-                                <span className="font-semibold text-foreground">{getHistoryTypeLabel(item.type)}</span>
-                              </div>
-                              <p className="text-gray-700 mb-2">{item.description}</p>
-                              {item.details && Object.keys(item.details).length > 0 && (
-                                <div className="mt-2 text-sm text-gray-600 space-y-1">
-                                  {item.details.newStatut && item.details.oldStatut && (
-                                    <p>
-                                      <span className="font-medium">Ancien statut:</span> {getStatutLabel(item.details.oldStatut)} → 
-                                      <span className="font-medium"> Nouveau statut:</span> {getStatutLabel(item.details.newStatut)}
-                                    </p>
-                                  )}
-                                  {item.details.partenaire && (
-                                    <p>
-                                      <span className="font-medium">Partenaire:</span> {
-                                        item.details.partenaire?.partenaireInfo?.nomOrganisme || 
-                                        item.details.partenaire?.email || 
-                                        'Partenaire'
-                                      }
-                                    </p>
-                                  )}
-                                  {item.details.status && (
-                                    <p>
-                                      <span className="font-medium">Statut:</span> {item.details.status}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            <div className="text-right text-sm text-gray-500 ml-4">
-                              <div className="flex items-center gap-1">
-                                <Clock className="w-4 h-4" />
-                                {new Date(item.date).toLocaleDateString('fr-FR', {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </div>
-                              {item.user && typeof item.user === 'object' && (
-                                <p className="text-xs mt-1">
-                                  {item.user.firstName} {item.user.lastName}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Historique des notifications (repliable, plié par défaut) */}
-            {notifications.length > 0 && (
-              <details className="bg-white rounded-lg shadow-lg">
-                <summary className="list-none cursor-pointer p-4 sm:p-6 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold mb-1">Notifications récentes</h2>
-                    <p className="text-xs text-muted-foreground">
-                      {notifications.length} notification{notifications.length > 1 ? 's' : ''} pour ce dossier
-                    </p>
-                  </div>
-                  <span className="ml-4 text-gray-500 text-sm select-none">
-                    Afficher / masquer
-                  </span>
-                </summary>
-                <div className="px-4 sm:px-6 pb-4 sm:pb-6">
-                  <div className="space-y-3">
-                    {notifications.slice(0, 5).map((notif) => (
-                      <div key={notif._id || notif.id} className="border-l-4 border-primary pl-4 py-2">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <h3 className="font-semibold">{notif.titre}</h3>
-                            <p className="text-sm text-muted-foreground mt-1">{notif.message}</p>
-                          </div>
-                          <span className="text-xs text-muted-foreground ml-4">
-                            {new Date(notif.createdAt).toLocaleDateString('fr-FR', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </details>
-            )}
-          </div>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Actions rapides */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">Actions</h2>
-              <div className="space-y-2">
-                <Link href={`/partenaire/dossiers/${dossierId}/documents`} className="block">
-                  <Button variant="outline" className="w-full">Voir les documents</Button>
-                </Link>
-                <Link href={`/partenaire/dossiers/${dossierId}/messages`} className="block">
-                  <Button variant="outline" className="w-full">Voir les messages</Button>
-                </Link>
-                <Link href="/partenaire/notifications" className="block">
-                  <Button variant="outline" className="w-full">Voir les notifications</Button>
-        </Link>
-              </div>
-            </div>
-
-            {/* Documents du dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">📁 Documents du dossier</h2>
-              {isLoadingDocuments ? (
-                <p className="text-sm text-muted-foreground">Chargement...</p>
-              ) : documents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Aucun document</p>
-              ) : (
-                <div className="space-y-2">
-                  {documents.map((doc: any) => (
-                    <div
-                      key={doc._id || doc.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
-                    >
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="text-lg">📄</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{doc.nom}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          className="text-xs h-8"
-                          onClick={() => {
-                            setSelectedDocumentForPreview(doc);
-                            setShowDocumentPreviewModal(true);
-                          }}
-                        >
-                          👁️ Voir
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="text-xs h-8"
-                          onClick={async () => {
-                            try {
-                              const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                              const blob = new Blob([response.data]);
-                              const url = window.URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.href = url;
-                              link.download = doc.nom;
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                              window.URL.revokeObjectURL(url);
-                            } catch (error) {
-                              console.error('Erreur lors du téléchargement:', error);
-                              alert('Erreur lors du téléchargement du document');
-                            }
-                          }}
-                        >
-                          ⬇️ Télécharger
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Tâches du dossier */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4">✅ Tâches du dossier</h2>
-              {isLoadingTasks ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                  <p className="text-sm text-muted-foreground">Chargement des tâches...</p>
-                </div>
-              ) : tasks.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">Aucune tâche pour ce dossier</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {tasks.map((task: any) => (
-                    <div
-                      key={task._id || task.id}
-                      className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow"
-        >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <h3 className="font-semibold text-foreground">{task.titre}</h3>
-                            <span className={`text-xs px-2 py-1 rounded ${getTaskStatutColor(task.statut)}`}>
-                              {getTaskStatutLabel(task.statut)}
-                            </span>
-                            {task.priorite && (
-                              <span className={`text-xs px-2 py-1 rounded ${getTaskPrioriteColor(task.priorite)}`}>
-                                {getTaskPrioriteLabel(task.priorite)}
-                              </span>
-                            )}
-                          </div>
-                          {task.description && (
-                            <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{task.description}</p>
-                          )}
-                          <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-                            {task.createdBy && (
-                              <span>
-                                Créé par: {task.createdBy.firstName} {task.createdBy.lastName}
-                              </span>
-                            )}
-                            {task.dateEcheance && (
-                              <span>
-                                Échéance: {new Date(task.dateEcheance).toLocaleDateString('fr-FR')}
-                              </span>
-                            )}
-                            {task.dateDebut && (
-                              <span>
-                                Début: {new Date(task.dateDebut).toLocaleDateString('fr-FR')}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-            {/* Messages récents */}
-            {messages.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h2 className="text-xl font-bold mb-4">💬 Messages récents</h2>
-                <div className="space-y-2">
-                  {messages.slice(0, 3).map((message: any) => (
-        <Link
-                      key={message._id || message.id}
-                      href={`/partenaire/dossiers/${dossierId}/messages`}
-                      className="block p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
-                    >
-                      <p className="font-semibold text-sm truncate">{message.sujet || 'Sans sujet'}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{message.contenu}</p>
-                    </Link>
-                  ))}
-                </div>
-                <Link href={`/partenaire/dossiers/${dossierId}/messages`} className="block mt-3">
-                  <Button variant="outline" className="w-full text-xs">Voir tous les messages</Button>
-        </Link>
-      </div>
-            )}
-          </div>
-        </div>
+        <PartenaireDossierDetailSections
+          dossier={dossier}
+          dossierId={dossierId}
+          documents={documents}
+          documentRequests={documentRequests}
+          messages={messages}
+          notifications={notifications}
+          tasks={tasks}
+          history={history}
+          isLoadingDocuments={isLoadingDocuments}
+          isLoadingRequests={isLoadingRequests}
+          isLoadingMessages={isLoadingMessages}
+          isLoadingTasks={isLoadingTasks}
+          loadingHistory={loadingHistory}
+          messagesError={messagesError}
+          showHistory={showHistory}
+          setShowHistory={setShowHistory}
+          onLoadHistory={loadHistory}
+          onPreviewDocument={(doc) => {
+            setSelectedDocumentForPreview(doc);
+            setShowDocumentPreviewModal(true);
+          }}
+          getHistoryTypeIcon={getHistoryTypeIcon}
+          getHistoryTypeLabel={getHistoryTypeLabel}
+        />
 
         {/* Documents en préparation (brouillons collaboratifs internes) — même affichage que l'admin */}
         <DossierDraftsPanel

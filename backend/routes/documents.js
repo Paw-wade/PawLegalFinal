@@ -219,11 +219,54 @@ const resolveDocumentPhysicalPath = async (document) => {
   return filePath;
 };
 
+const isHttpLikeStoragePath = (value) => /^https?:\/\//i.test(String(value || '').trim());
+
+function extractStoredFileLabel(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  if (isHttpLikeStoragePath(value)) {
+    try {
+      const segments = new URL(value).pathname.split('/').filter(Boolean);
+      let last = segments[segments.length - 1] || '';
+      if (/^v\d+$/.test(last) && segments.length > 1) {
+        last = segments[segments.length - 2];
+      }
+      return last;
+    } catch {
+      // fall through
+    }
+  }
+  return path.basename(value.replace(/\\/g, '/'));
+}
+
 const sanitizeDownloadName = (raw) => {
   const value = String(raw || '').trim();
   if (!value) return '';
-  return path.basename(value.replace(/[\\/]/g, '_'));
+  return extractStoredFileLabel(value);
 };
+
+function isInternalStorageFileName(name) {
+  const value = String(name || '').trim();
+  if (!value) return false;
+  if (isHttpLikeStoragePath(value)) return true;
+  const normalized = value.toLowerCase();
+  if (normalized.includes('cloudinary.com')) return true;
+  if (
+    normalized.includes('raw_upload') ||
+    normalized.includes('pawlegal_documents') ||
+    normalized.includes('pawlegal/')
+  ) {
+    return true;
+  }
+  if (/^\d{10,}-/.test(value)) return true;
+  return false;
+}
+
+function stripLeadingStorageTimestamp(name) {
+  const base = sanitizeDownloadName(name);
+  const matched = base.match(/^\d{10,}-(.+)$/);
+  return matched ? matched[1] : base;
+}
 
 const pickFileExtension = (...names) => {
   for (const name of names) {
@@ -233,13 +276,36 @@ const pickFileExtension = (...names) => {
   return '';
 };
 
+const pickMimeExtension = (mimeType) => {
+  const map = {
+    'application/pdf': '.pdf',
+    'application/msword': '.doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+  };
+  return map[String(mimeType || '').toLowerCase()] || '';
+};
+
 function resolveDocumentDownloadFileName(document, localPath) {
-  const displayName = sanitizeDownloadName(document?.nom);
+  let displayName = sanitizeDownloadName(document?.nom);
+  if (isInternalStorageFileName(displayName)) displayName = '';
+
   const storedName = sanitizeDownloadName(document?.nomFichier);
   const pathName = sanitizeDownloadName(
     localPath ? path.basename(localPath) : document?.cheminFichier
   );
-  const extension = pickFileExtension(storedName, pathName, displayName);
+  const extension =
+    pickFileExtension(storedName, pathName, displayName) ||
+    pickMimeExtension(document?.typeMime);
+
+  if (!displayName) {
+    const fallbackRaw = [storedName, pathName]
+      .map((name) => (isInternalStorageFileName(name) ? stripLeadingStorageTimestamp(name) : name))
+      .find((name) => name && !isInternalStorageFileName(name));
+    displayName = fallbackRaw ? stripLeadingStorageTimestamp(fallbackRaw) : '';
+    if (isInternalStorageFileName(displayName)) displayName = '';
+  }
 
   if (displayName) {
     const displayExt = path.extname(displayName).toLowerCase();
@@ -251,9 +317,32 @@ function resolveDocumentDownloadFileName(document, localPath) {
     return displayName;
   }
 
-  if (storedName) return storedName;
-  if (pathName) return pathName;
+  const storedFallback = [storedName, pathName]
+    .map((name) => stripLeadingStorageTimestamp(name))
+    .find((name) => name && !isInternalStorageFileName(name));
+  if (storedFallback) {
+    const storedExt = path.extname(storedFallback).toLowerCase();
+    if (!storedExt && extension) return `${storedFallback}${extension}`;
+    return storedFallback;
+  }
+
   return extension ? `document${extension}` : 'document';
+}
+
+function resolveDocumentDisplayTitle(document, localPath) {
+  const displayName = sanitizeDownloadName(document?.nom);
+  if (displayName && !isInternalStorageFileName(displayName)) {
+    return displayName;
+  }
+
+  const fileName = resolveDocumentDownloadFileName(document, localPath);
+  if (!fileName || fileName === 'document') return 'Document';
+  const ext = path.extname(fileName);
+  if (ext) {
+    const base = fileName.slice(0, -ext.length);
+    return base || fileName;
+  }
+  return fileName;
 }
 
 // Normaliser la catégorie pour éviter les erreurs de validation Mongoose
@@ -1275,4 +1364,5 @@ async function deliverDocumentFileResponse(document, res) {
 module.exports = router;
 module.exports.deliverDocumentFileResponse = deliverDocumentFileResponse;
 module.exports.resolveDocumentDownloadFileName = resolveDocumentDownloadFileName;
+module.exports.resolveDocumentDisplayTitle = resolveDocumentDisplayTitle;
 
