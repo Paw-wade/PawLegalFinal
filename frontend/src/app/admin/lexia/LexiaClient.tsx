@@ -4560,7 +4560,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                       <div className="lexia-msg-body">
                         {!m.isError && <div className="lexia-internal-tag">Analyse de la requête</div>}
                         <div className={`lexia-bubble lexia-bubble-ai ${m.isError ? 'lexia-bubble-error' : ''}`}>
-                          {!m.isError && !m.streaming && String(m.content || '').trim().length > 0 ? (
+                          {!m.isError ? (
                             <div className="lexia-assistant-actions" role="toolbar" aria-label="Partager la réponse">
                               <button
                                 type="button"

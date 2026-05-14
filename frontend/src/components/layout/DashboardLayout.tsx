@@ -8,8 +8,6 @@ import { Sidebar } from './Sidebar';
 import { AdminSidebar } from './AdminSidebar';
 import { PartenaireSidebar } from './PartenaireSidebar';
 import { NotificationBanner } from '@/components/NotificationBanner';
-import { TaskNotificationBanner } from '@/components/TaskNotificationBanner';
-import { DossierTransmissionBanner } from '@/components/DossierTransmissionBanner';
 import { Toast } from '@/components/Toast';
 
 interface DashboardLayoutProps {
@@ -75,14 +73,6 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
         {session && (
           <>
             <NotificationBanner 
-              userRole={isAdmin ? 'admin' : isPartenaire ? 'partenaire' : 'client'} 
-              userId={(session.user as any)?.id}
-            />
-            <TaskNotificationBanner 
-              userRole={isAdmin ? 'admin' : isPartenaire ? 'partenaire' : 'client'} 
-              userId={(session.user as any)?._id || (session.user as any)?.id}
-            />
-            <DossierTransmissionBanner 
               userRole={isAdmin ? 'admin' : isPartenaire ? 'partenaire' : 'client'} 
               userId={(session.user as any)?._id || (session.user as any)?.id}
             />

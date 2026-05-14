@@ -6,9 +6,26 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, notificationsAPI } from '@/lib/api';
 import { normalizeMontantTarificationFixe } from '@/lib/montantTarification';
+import { isTarificationInstallmentAuthorized, getTarificationEcheances } from '@/lib/tarificationInstallments';
 import { tarificationFormules } from '@/data/tarificationConfig';
 import type { TarifFormuleId } from '@/data/tarificationConfig';
 import { Button } from '@/components/ui/Button';
+
+const TARIFICATION_DOSSIER_NOTIFICATION_TYPES = new Set([
+  'tarification_choice_requested',
+  'tarification_choice_retracted',
+  'tarification_payment_reminder',
+  'tarification_installment_reminder',
+  'tarification_installment_plan',
+]);
+
+function isDossierTarificationNotification(notif: any): boolean {
+  const md = notif?.metadata || notif?.data || {};
+  const dossierId = md?.dossierId;
+  if (!dossierId) return false;
+  if (Boolean(md?.standalone)) return false;
+  return TARIFICATION_DOSSIER_NOTIFICATION_TYPES.has(String(notif?.type || ''));
+}
 
 export default function ClientTarificationPage() {
   const { status } = useSession();
@@ -20,6 +37,7 @@ export default function ClientTarificationPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [standaloneTarifNotifications, setStandaloneTarifNotifications] = useState<any[]>([]);
+  const [dossierTarifNotifications, setDossierTarifNotifications] = useState<any[]>([]);
   const [standaloneActionLoading, setStandaloneActionLoading] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
@@ -27,7 +45,7 @@ export default function ClientTarificationPage() {
     try {
       const [res, notifRes] = await Promise.all([
         dossiersAPI.getMyDossiers(),
-        notificationsAPI.getNotifications({ type: 'tarification_choice_requested', limit: 100 }),
+        notificationsAPI.getNotifications({ limit: 100 }),
       ]);
       const list = res.data?.dossiers || res.data?.data || [];
       setDossiers(Array.isArray(list) ? list : []);
@@ -43,7 +61,11 @@ export default function ClientTarificationPage() {
             return (Number.isFinite(amount) && amount > 0) || msg.includes('montant à régler') || msg.includes('montant a regler');
           })
         : [];
+      const dossierTarif = Array.isArray(notifList)
+        ? notifList.filter((n: any) => isDossierTarificationNotification(n))
+        : [];
       setStandaloneTarifNotifications(standalone);
+      setDossierTarifNotifications(dossierTarif);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('tarificationUpdated'));
       }
@@ -51,6 +73,7 @@ export default function ClientTarificationPage() {
       console.error(e);
       setDossiers([]);
       setStandaloneTarifNotifications([]);
+      setDossierTarifNotifications([]);
     } finally {
       setLoading(false);
     }
@@ -90,6 +113,12 @@ export default function ClientTarificationPage() {
   const montantTarificationFixe = normalizeMontantTarificationFixe(selectedDossier?.montantTarificationFixe);
   const hasMontantFixe = montantTarificationFixe > 0;
   const paiementTarifEffectue = !!selectedDossier?.paiementTarificationEffectue;
+  const paiementEnPlusieursFoisAutorise = isTarificationInstallmentAuthorized(selectedDossier);
+  const tarificationEcheances = getTarificationEcheances(selectedDossier);
+  const selectedDossierTarifNotifications = dossierTarifNotifications.filter((notif: any) => {
+    const md = notif?.metadata || notif?.data || {};
+    return String(md?.dossierId || '') === String(selectedDossierId || '');
+  });
   const tarificationPrestations = Array.isArray(selectedDossier?.tarificationPrestations)
     ? selectedDossier.tarificationPrestations
     : [];
@@ -395,6 +424,37 @@ export default function ClientTarificationPage() {
               )}
             </div>
 
+            {selectedDossier && selectedDossierTarifNotifications.length > 0 ? (
+              <div className="mb-6 rounded-xl border border-orange-200 bg-orange-50/70 p-4 sm:p-5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-orange-700 mb-2">
+                  Notifications tarification
+                </p>
+                <div className="space-y-2">
+                  {selectedDossierTarifNotifications.slice(0, 8).map((notif: any) => {
+                    const createdAt = notif?.createdAt ? new Date(notif.createdAt) : null;
+                    return (
+                      <div
+                        key={notif?._id || `${notif?.titre}-${notif?.createdAt}`}
+                        className="rounded-lg border border-orange-200 bg-white px-3 py-2.5"
+                      >
+                        <p className="text-sm font-semibold text-orange-900">
+                          {notif?.titre || 'Information tarification'}
+                        </p>
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap mt-1">
+                          {notif?.message || 'Consultez les modalités de paiement ci-dessous.'}
+                        </p>
+                        {createdAt ? (
+                          <p className="text-[11px] text-gray-500 mt-1">
+                            Reçu le {createdAt.toLocaleString('fr-FR')}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
             {selectedDossier && !fraisExoneresPourDossier && (
               <div className="relative mb-6 overflow-hidden rounded-xl p-[1px] shadow-sm bg-gradient-to-r from-orange-200/80 via-orange-300/60 to-orange-200/80">
                 <div className="rounded-[11px] border border-gray-100 bg-white px-4 py-3.5 sm:px-5 sm:py-4">
@@ -419,6 +479,38 @@ export default function ClientTarificationPage() {
                   <p className="text-xs text-gray-600 mb-3 leading-snug">
                     Règlement par WERO, PayPal ou virement — indiquez la référence du dossier sur le libellé ou le message.
                   </p>
+                  {paiementEnPlusieursFoisAutorise ? (
+                    <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
+                      Ada Papers vous autorise un règlement en plusieurs fois pour ce dossier.
+                    </p>
+                  ) : null}
+                  {tarificationEcheances.length > 0 ? (
+                    <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900">
+                      <p className="font-semibold">Échéances convenues</p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        Les rappels avant chaque échéance sont publiés dans cette rubrique Tarification.
+                      </p>
+                      <ul className="mt-2 space-y-1 text-sm">
+                        {tarificationEcheances.map((echeance, index) => (
+                          <li key={echeance._id || `${echeance.label}-${index}`}>
+                            {echeance.label || `Échéance ${index + 1}`} ·{' '}
+                            {new Date(echeance.dateEcheance).toLocaleDateString('fr-FR', {
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                            })}{' '}
+                            ·{' '}
+                            {echeance.montant.toLocaleString('fr-FR', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{' '}
+                            EUR
+                            {echeance.statut === 'reglee' ? ' · réglée' : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   <div className="grid gap-2 sm:grid-cols-3 sm:gap-3">
                     <div className="rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2.5">
                       <p className="text-[10px] font-bold uppercase tracking-wide text-orange-600 mb-1">WERO</p>
