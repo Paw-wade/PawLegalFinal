@@ -1786,16 +1786,7 @@ export default function PartenaireDossiersPage() {
                     }`}
                   >
                     <div
-                      className="relative bg-white rounded-xl border border-white/70 p-4 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer"
-                      onClick={() => router.push(detailHref)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          router.push(detailHref);
-                        }
-                      }}
-                      role="link"
-                      tabIndex={0}
+                      className="relative bg-white rounded-xl border border-white/70 p-4 sm:p-5 transition-all duration-300"
                     >
                       {hasDeadline && deadlineDays !== null && deadlineDays < 0 ? (
                         <div className="-mx-4 -mt-4 mb-3 rounded-t-xl border-b border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-800 sm:-mx-5 sm:-mt-5 sm:px-5">
@@ -1904,10 +1895,9 @@ export default function PartenaireDossiersPage() {
                       <div className="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3 sm:flex-row sm:items-center sm:justify-end">
                         <Link
                           href={detailHref}
-                          onClick={(e) => e.stopPropagation()}
                           className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors"
                         >
-                          Ouvrir
+                          Détails
                         </Link>
                       </div>
                     </div>
