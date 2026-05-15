@@ -1762,6 +1762,9 @@ export default function PartenaireDossiersPage() {
                   const dossierId = normalizeDossierId(dossier._id || dossier.id);
                   const isExpanded = expandedDossiers.has(dossierId);
                   const totalDocuments = dossierDocuments[dossierId]?.length || dossier.documents?.length || 0;
+                  const pendingDocumentRequestsCount = (documentRequests[dossierId] || []).filter(
+                    (r: any) => r.status === 'pending'
+                  ).length;
                   const tasksCount = (dossierTasks[dossierId] || []).length;
                   const draftsCount = dossierDrafts[dossierId]?.length ?? 0;
                   const transmittedPartners = getDossierTransmittedPartners(dossier);
@@ -1872,6 +1875,16 @@ export default function PartenaireDossiersPage() {
                                 <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Documents</p>
                                   <p className="text-sm font-semibold text-foreground">{totalDocuments}</p>
+                                  <p
+                                    className={`text-[10px] mt-0.5 leading-tight ${
+                                      pendingDocumentRequestsCount > 0 ? 'font-semibold text-amber-800' : 'text-muted-foreground'
+                                    }`}
+                                    title="Nombre de demandes de documents encore en attente de réception"
+                                  >
+                                    {pendingDocumentRequestsCount === 0
+                                      ? '0 en attente'
+                                      : `${pendingDocumentRequestsCount} en attente`}
+                                  </p>
                                 </div>
                                 <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Brouillons</p>

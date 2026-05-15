@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -33,6 +33,7 @@ import { DocumentPreview } from '@/components/DocumentPreview';
 import { Toast } from '@/components/Toast';
 import { QuickComplementTabsForm } from '@/components/dossiers/QuickComplementTabsForm';
 import { isDossierStaffRole, normalizeDossierId, dossierListCardId } from '@/lib/dossierAccess';
+import { Pin } from 'lucide-react';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -509,6 +510,35 @@ export default function AdminDossiersPage() {
   const [newEtapeDate, setNewEtapeDate] = useState('');
   const [isAddingEtape, setIsAddingEtape] = useState(false);
   const searchParams = useSearchParams();
+
+  const openAdminDossierQuickSection = useCallback(
+    (dossierId: string, section: 'documents' | 'drafts' | 'tasks' | 'transmission') => {
+      setExpandedDossiers((prev) => {
+        const next = new Set(prev);
+        next.add(dossierId);
+        return next;
+      });
+      if (section === 'documents') {
+        setExpandedDocumentSections((prev) => {
+          const next = new Set(prev);
+          next.add(dossierId);
+          return next;
+        });
+      }
+      if (section === 'tasks') {
+        setExpandedTaskSections((prev) => {
+          const next = new Set(prev);
+          next.add(dossierId);
+          return next;
+        });
+      }
+      const anchorId = `admin-dossier-${dossierId}-section-${section}`;
+      window.setTimeout(() => {
+        document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+    },
+    []
+  );
 
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [clientPopover, setClientPopover] = useState<{ dossierId: string; x: number; y: number } | null>(null);
@@ -2762,6 +2792,9 @@ export default function AdminDossiersPage() {
                   const dossierId = normalizeDossierId(dossier._id || dossier.id);
                   const isExpanded = expandedDossiers.has(dossierId);
                   const totalDocuments = dossierDocuments[dossierId]?.length || dossier.documents?.length || 0;
+                  const pendingDocumentRequestsCount = (documentRequests[dossierId] || []).filter(
+                    (r: any) => r.status === 'pending'
+                  ).length;
                   const tasksCount = (dossierTasks[dossierId] || []).length;
                   const draftsCount = dossierDrafts[dossierId]?.length ?? 0;
                   const transmittedPartners = getDossierTransmittedPartners(dossier);
@@ -2851,7 +2884,9 @@ export default function AdminDossiersPage() {
                                 }}
                                 disabled={pinningDossierId === String(dossierId) || !canManagePinnedDossiers}
                                 className={`p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-md border border-transparent transition-colors ${
-                                  dossier?.isPinned ? 'text-emerald-600 hover:text-emerald-700' : 'text-gray-500 hover:text-gray-700'
+                                  dossier?.isPinned
+                                    ? 'text-emerald-600 hover:text-emerald-700'
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                                 title={
                                   !canManagePinnedDossiers
@@ -2867,7 +2902,12 @@ export default function AdminDossiersPage() {
                                 {pinningDossierId === String(dossierId) ? (
                                   <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                                 ) : (
-                                  <span className="text-sm leading-none">📌</span>
+                                  <Pin
+                                    className={`h-4 w-4 shrink-0 ${dossier?.isPinned ? 'text-emerald-600' : 'text-gray-500'}`}
+                                    strokeWidth={2.25}
+                                    fill={dossier?.isPinned ? 'currentColor' : 'none'}
+                                    aria-hidden
+                                  />
                                 )}
                               </button>
                             </div>
@@ -2917,24 +2957,70 @@ export default function AdminDossiersPage() {
                             </button>
                             {!isExpanded ? (
                               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                <button
+                                  type="button"
+                                  className="w-full min-h-0 text-left rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2 transition-colors hover:border-primary/35 hover:bg-gray-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    openAdminDossierQuickSection(dossierId, 'documents');
+                                  }}
+                                  aria-label="Déplier le dossier et afficher les documents demandés"
+                                >
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Documents</p>
                                   <p className="text-sm font-semibold text-foreground">{totalDocuments}</p>
-                                </div>
-                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                  <p
+                                    className={`text-[10px] mt-0.5 leading-tight ${
+                                      pendingDocumentRequestsCount > 0 ? 'font-semibold text-amber-800' : 'text-muted-foreground'
+                                    }`}
+                                    title="Nombre de demandes de documents encore en attente de réception"
+                                  >
+                                    {pendingDocumentRequestsCount === 0
+                                      ? '0 en attente'
+                                      : `${pendingDocumentRequestsCount} en attente`}
+                                  </p>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-full min-h-0 text-left rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2 transition-colors hover:border-primary/35 hover:bg-gray-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    openAdminDossierQuickSection(dossierId, 'drafts');
+                                  }}
+                                  aria-label="Déplier le dossier et afficher les brouillons en préparation"
+                                >
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Brouillons</p>
                                   <p className="text-sm font-semibold text-foreground">{draftsCount}</p>
-                                </div>
-                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-full min-h-0 text-left rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2 transition-colors hover:border-primary/35 hover:bg-gray-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    openAdminDossierQuickSection(dossierId, 'tasks');
+                                  }}
+                                  aria-label="Déplier le dossier et afficher les tâches"
+                                >
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tâches</p>
                                   <p className="text-sm font-semibold text-foreground">{tasksCount > 0 ? tasksCount : '—'}</p>
-                                </div>
-                                <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-full min-h-0 text-left rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2 transition-colors hover:border-primary/35 hover:bg-gray-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    openAdminDossierQuickSection(dossierId, 'transmission');
+                                  }}
+                                  aria-label="Déplier le dossier et afficher la transmission aux partenaires"
+                                >
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Transmission</p>
                                   <p className="truncate text-sm font-semibold text-foreground" title={transmissionSummary}>
                                     {transmissionSummary}
                                   </p>
-                                </div>
+                                </button>
                               </div>
                             ) : null}
                           </div>
@@ -2951,7 +3037,11 @@ export default function AdminDossiersPage() {
                             </span>
                           ) : Array.isArray(dossier.tarificationPrestations) && dossier.tarificationPrestations.length > 0 ? (
                             <span
-                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-100 text-blue-900 border border-blue-200 max-w-[min(100%,20rem)] truncate"
+                              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold max-w-[min(100%,20rem)] truncate border ${
+                                dossier.tarificationPrestations.every((p: any) => p.statut === 'reglee')
+                                  ? 'bg-emerald-100 text-emerald-900 border-emerald-200'
+                                  : 'bg-blue-100 text-blue-900 border-blue-200'
+                              }`}
                               title={dossier.tarificationPrestations
                                 .slice(0, 10)
                                 .map((p: any) => `${p?.label || 'Prestation'}: ${formatTarifMontantFr(Number(p?.montant || 0))} EUR`)
@@ -2961,11 +3051,18 @@ export default function AdminDossiersPage() {
                             </span>
                           ) : normalizeMontantTarifField(dossier.montantTarificationFixe) > 0 ? (
                             <span
-                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-100 text-blue-900 border border-blue-200 max-w-[min(100%,18rem)] truncate"
+                              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold max-w-[min(100%,18rem)] truncate border ${
+                                dossier.paiementTarificationEffectue
+                                  ? 'bg-emerald-100 text-emerald-900 border-emerald-200'
+                                  : 'bg-blue-100 text-blue-900 border-blue-200'
+                              }`}
                               title={[
                                 "Montant fixé par Ada Papers — le client n'a pas à choisir Standard / Premium.",
                                 dossier.montantTarificationFixeAt
                                   ? `Dernière fixation / modification : ${new Date(dossier.montantTarificationFixeAt).toLocaleString('fr-FR')}.`
+                                  : '',
+                                dossier.paiementTarificationEffectue && dossier.paiementTarificationEffectueAt
+                                  ? `Marqué payé le ${new Date(dossier.paiementTarificationEffectueAt).toLocaleString('fr-FR')}.`
                                   : '',
                               ]
                                 .filter(Boolean)
@@ -3185,15 +3282,16 @@ export default function AdminDossiersPage() {
                     })()}
 
                     {/* Documents en préparation — brouillons collaboratifs + brouillons Ada Papers (éditeur riche, export .docx) */}
-                    {(dossierDrafts[dossier._id || dossier.id]?.length || 0) > 0 && (
-                      <div className="mb-3">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                          Documents en préparation
-                        </p>
+                    <div id={`admin-dossier-${dossierId}-section-drafts`} className="mb-3 scroll-mt-24">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                        Documents en préparation
+                      </p>
+                      {(dossierDrafts[dossierId]?.length || 0) > 0 ? (
+                        <>
                         <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 space-y-2">
-                          {(dossierDrafts[dossier._id || dossier.id] || []).map((d: any) => {
+                          {(dossierDrafts[dossierId] || []).map((d: any) => {
                             const isWord = d.prepKind === 'word';
-                            const dossierIdStr = String(dossier._id || dossier.id);
+                            const dossierIdStr = String(dossierId);
                             const href = isWord
                               ? `/admin/documents/preparation/${d._id}`
                               : `/admin/dossiers/${dossierIdStr}/documents-en-preparation?draft=${encodeURIComponent(d._id)}`;
@@ -3278,7 +3376,7 @@ export default function AdminDossiersPage() {
                         </div>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
                           <Link
-                            href={`/admin/dossiers/${dossier._id || dossier.id}/documents-en-preparation`}
+                            href={`/admin/dossiers/${dossierId}/documents-en-preparation`}
                             onClick={(e) => e.stopPropagation()}
                             className="text-xs text-primary font-medium hover:underline"
                           >
@@ -3292,8 +3390,13 @@ export default function AdminDossiersPage() {
                             Tous les documents en préparation →
                           </Link>
                         </div>
-                      </div>
-                    )}
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground rounded-lg border border-dashed border-gray-200 bg-gray-50/30 px-3 py-2">
+                          Aucun brouillon en cours pour ce dossier.
+                        </p>
+                      )}
+                    </div>
 
                     {/* Informations du dossier — version compacte */}
                     <div className="mb-3 pb-3 border-b border-gray-200">
@@ -3352,17 +3455,46 @@ export default function AdminDossiersPage() {
                       </div>
                     </div>
 
+                    <div
+                      id={`admin-dossier-${dossierId}-section-transmission`}
+                      className="mb-3 pb-3 border-b border-gray-200 scroll-mt-24"
+                    >
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                        Transmission aux partenaires
+                      </p>
+                      {transmittedPartners.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Aucune transmission enregistrée.</p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {transmittedPartners.map((p: { typeLabel: string; fullName: string; nomOrganisme?: string }, idx: number) => (
+                            <li
+                              key={idx}
+                              className="text-xs text-foreground rounded-md border border-gray-100 bg-gray-50/50 px-2 py-1.5"
+                            >
+                              <span className="font-medium">{p.fullName}</span>
+                              {p.nomOrganisme ? (
+                                <span className="text-muted-foreground"> · {p.nomOrganisme}</span>
+                              ) : null}
+                              <span className="ml-1 text-[10px] text-muted-foreground">({p.typeLabel})</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
                     {/* Synthèse supprimée pour alléger la vue détaillée */}
 
                     {/* Section Tâches */}
                     {(() => {
-                      const dossierId = dossier._id || dossier.id;
                       const tasks = dossierTasks[dossierId] || [];
                       const isTaskSectionExpanded = expandedTaskSections.has(dossierId);
                       const showForm = showTaskFormForDossier === dossierId;
 
                       return (
-                        <div className="mb-3 pb-2 border-b border-gray-100">
+                        <div
+                          id={`admin-dossier-${dossierId}-section-tasks`}
+                          className="mb-3 pb-2 border-b border-gray-100 scroll-mt-24"
+                        >
                           <div 
                             className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-md p-1.5 -m-1.5 transition-colors"
                             onClick={() => {
@@ -3600,7 +3732,6 @@ export default function AdminDossiersPage() {
 
                     {/* Section Documents demandés + pièces envoyées spontanément par le client (sans demande préalable) */}
                     {(() => {
-                      const dossierId = dossier._id || dossier.id;
                       const dossierRequests = documentRequests[dossierId] || [];
                       const dossierDocsList = dossierDocuments[dossierId] || [];
                       const linkedDocIds = new Set(
@@ -3628,7 +3759,7 @@ export default function AdminDossiersPage() {
                       };
 
                       return (
-                        <div className="pt-3 border-t border-gray-200 mb-3">
+                        <div id={`admin-dossier-${dossierId}-section-documents`} className="pt-3 border-t border-gray-200 mb-3 scroll-mt-24">
                           <div 
                             className="flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-md p-2 -m-2 transition-colors"
                             onClick={() => {
