@@ -6,15 +6,13 @@ const { body, validationResult } = require('express-validator');
 const { protect, authorize } = require('../middleware/auth');
 
 const M = require('../tenantModels');
+const { ensureTenantUploadDir, toPublicUploadUrl, getOrgIdFromRequest } = require('../lib/tenant/uploads');
 const router = express.Router();
 
-const avatarDir = path.join(__dirname, '../uploads/avatars');
-if (!fs.existsSync(avatarDir)) {
-  fs.mkdirSync(avatarDir, { recursive: true });
-}
-
 const avatarStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, avatarDir),
+  destination: (req, file, cb) => {
+    cb(null, ensureTenantUploadDir('avatars', getOrgIdFromRequest(req)));
+  },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname || '') || '.jpg';
     const safe = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext.toLowerCase())
@@ -217,7 +215,7 @@ router.put(
       }
 
       if (req.file && req.file.filename) {
-        user.profilePhoto = `/uploads/avatars/${req.file.filename}`;
+        user.profilePhoto = toPublicUploadUrl('avatars', req.file.filename, getOrgIdFromRequest(req));
       }
 
       // Champs optionnels texte : autoriser la mise à jour et la suppression (chaîne vide)

@@ -9,6 +9,7 @@ const { protect } = require('../middleware/auth');
 const { signAuthToken, signSignupActivationToken } = require('../lib/tenant/jwt');
 const { getTenantDb } = require('../lib/tenant/getTenantDb');
 const { getUserModel } = require('../lib/tenant/getUserModel');
+const { findUserByEmailAcrossTenants } = require('../lib/tenant/findUserByEmailAcrossTenants');
 const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const {
@@ -503,16 +504,32 @@ router.post(
         .trim()
         .toLowerCase();
 
+      let resolved = null;
       const User = getUserModel(req);
-      const user = await User.findOne({ email }).select('+password');
+      const localUser = await User.findOne({ email }).select('+password');
+      if (localUser && req.tenant?.orgId) {
+        resolved = {
+          user: localUser,
+          orgId: req.tenant.orgId,
+          slug: req.tenant.slug,
+        };
+      }
+      if (!resolved) {
+        resolved = await findUserByEmailAcrossTenants(email, {
+          preferredOrgId: req.tenant?.orgId,
+          selectPassword: true,
+        });
+      }
 
-      if (!user) {
+      if (!resolved?.user) {
         return res.status(401).json({
           success: false,
           message: 'Identifiants invalides',
           ...loginDebugPayload(req, 'user_not_found', email),
         });
       }
+
+      const { user, orgId: userOrgId, slug: tenantSlug } = resolved;
 
       if (!user.isActive) {
         return res.status(401).json({
@@ -531,7 +548,7 @@ router.post(
         });
       }
 
-      const token = signAuthToken(user._id, { orgId: tokenOrgId(req) });
+      const token = signAuthToken(user._id, { orgId: userOrgId || tokenOrgId(req) });
 
       // Logger la connexion en non-bloquant pour ne pas ralentir la réponse login.
       try {
@@ -557,6 +574,7 @@ router.post(
         success: true,
         message: 'Connexion réussie',
         token,
+        tenant: userOrgId ? { orgId: userOrgId, slug: tenantSlug || null } : null,
         user: {
           id: user._id,
           firstName: user.firstName,
@@ -648,14 +666,30 @@ router.post('/google-login', async (req, res) => {
         });
       }
 
-      const user = await M.User.findOne({ email });
+      let resolved = null;
+      const User = getUserModel(req);
+      const localUser = await User.findOne({ email });
+      if (localUser && req.tenant?.orgId) {
+        resolved = {
+          user: localUser,
+          orgId: req.tenant.orgId,
+          slug: req.tenant.slug,
+        };
+      }
+      if (!resolved) {
+        resolved = await findUserByEmailAcrossTenants(email, {
+          preferredOrgId: req.tenant?.orgId,
+        });
+      }
 
-      if (!user) {
+      if (!resolved?.user) {
         return res.status(404).json({
           success: false,
           message: 'Aucun compte Ada Papers n’est associé à cet email Google.',
         });
       }
+
+      const { user, orgId: userOrgId, slug: tenantSlug } = resolved;
 
       if (!user.isActive) {
         return res.status(401).json({
@@ -664,13 +698,14 @@ router.post('/google-login', async (req, res) => {
         });
       }
 
-      const token = signAuthToken(user._id, { orgId: tokenOrgId(req) });
+      const token = signAuthToken(user._id, { orgId: userOrgId || tokenOrgId(req) });
       const daysRemaining = getDaysRemainingForUser(user);
 
       return res.json({
         success: true,
         message: 'Connexion Google réussie',
         token,
+        tenant: userOrgId ? { orgId: userOrgId, slug: tenantSlug || null } : null,
         user: {
           id: user._id,
           firstName: user.firstName,

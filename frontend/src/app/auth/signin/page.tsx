@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { signIn, getSession, getProviders } from 'next-auth/react';
+import { persistTenantSlug } from '@/lib/tenantSlug';
+import { getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 // Composants simplifiés
 function Button({ children, variant = 'default', size = 'default', className = '', disabled = false, type = 'button', ...props }: any) {
@@ -127,6 +129,10 @@ export default function SignInPage() {
               console.error('Erreur lors du stockage du token:', storageError);
             }
           }
+          const sessionTenantSlug =
+            (sessionData as { tenantSlug?: string })?.tenantSlug ||
+            (sessionUser as { tenantSlug?: string })?.tenantSlug;
+          persistTenantSlug(sessionTenantSlug);
 
           isRedirecting.current = true;
 
@@ -136,13 +142,13 @@ export default function SignInPage() {
           }
 
           const userRole = sessionUser?.role;
-          if (userRole === 'admin' || userRole === 'superadmin') {
-            window.location.href = '/admin';
+          if (userRole === 'partenaire') {
+            window.location.href = '/partenaire';
             return;
           }
 
-          if (userRole === 'partenaire') {
-            window.location.href = '/partenaire';
+          if (isCabinetStaffRole(userRole)) {
+            window.location.href = getStaffLandingPath(userRole);
             return;
           }
 

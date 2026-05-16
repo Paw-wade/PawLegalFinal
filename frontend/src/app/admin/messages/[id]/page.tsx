@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { messagesAPI, notificationsAPI, contactAPI, dossiersAPI } from '@/lib/api';
+import { canViewAdminDomain, getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 function Button({ children, variant = 'default', className = '', size = 'sm', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -86,9 +87,12 @@ export default function AdminMessageDetailPage() {
       router.push('/auth/signin');
     } else if (status === 'authenticated') {
       const userRole = (session?.user as any)?.role;
-      const isAuthorized = userRole === 'admin' || userRole === 'superadmin';
-      if (!isAuthorized) {
+      if (!isCabinetStaffRole(userRole)) {
         router.push('/client');
+        return;
+      }
+      if (!canViewAdminDomain(userRole, 'messages')) {
+        router.replace(getStaffLandingPath(userRole));
         return;
       }
       if (messageId) {

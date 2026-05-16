@@ -16,43 +16,31 @@ const router = express.Router();
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TOKEN_BYTES = 24;
 
-const BACKEND_ROOT = path.resolve(__dirname, '..');
-const UPLOADS_ROOT = path.resolve(BACKEND_ROOT, 'uploads');
-const localDocumentsDir = path.join(UPLOADS_ROOT, 'documents');
-if (!fs.existsSync(localDocumentsDir)) {
-  fs.mkdirSync(localDocumentsDir, { recursive: true });
-}
+const {
+  ensureTenantUploadDir,
+  getCloudinaryFolder,
+  getOrgIdFromRequest,
+} = require('../lib/tenant/uploads');
 
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const createCloudinaryStorage = require('multer-storage-cloudinary');
+const { cloudinary, isCloudinaryConfigured } = require('../lib/cloudinaryMulter');
 
-const hasCloudinaryConfig =
-  !!process.env.CLOUDINARY_CLOUD_NAME &&
-  !!process.env.CLOUDINARY_API_KEY &&
-  !!process.env.CLOUDINARY_API_SECRET;
-
-if (hasCloudinaryConfig) {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-  });
-}
-
-const cloudinaryStorage = hasCloudinaryConfig
-  ? new CloudinaryStorage({
+const uploadStorage = isCloudinaryConfigured()
+  ? createCloudinaryStorage({
       cloudinary,
       params: async (req, file) => {
         const isImage = (file.mimetype || '').startsWith('image/');
+        const orgId = getOrgIdFromRequest(req);
         return {
-          folder: 'pawlegal/documents',
+          folder: getCloudinaryFolder('documents', orgId),
           resource_type: isImage ? 'image' : 'raw',
           public_id: `${Date.now()}-${(file.originalname || 'document').replace(/[^a-zA-Z0-9]/g, '_')}`,
         };
       },
     })
   : multer.diskStorage({
-      destination: (req, file, cb) => cb(null, localDocumentsDir),
+      destination: (req, file, cb) =>
+        cb(null, ensureTenantUploadDir('documents', getOrgIdFromRequest(req))),
       filename: (req, file, cb) => {
         const safeName = (file.originalname || 'document')
           .replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -62,7 +50,7 @@ const cloudinaryStorage = hasCloudinaryConfig
     });
 
 const upload = multer({
-  storage: cloudinaryStorage,
+  storage: uploadStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => cb(null, true),
 });

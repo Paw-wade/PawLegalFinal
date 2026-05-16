@@ -8,15 +8,12 @@ const { body, validationResult } = require('express-validator');
 const { protect, authorize } = require('../middleware/auth');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
+const { ensureTenantUploadDir, getOrgIdFromRequest } = require('../lib/tenant/uploads');
 
 // Configuration de multer pour les pièces jointes
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../uploads/messages');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
+    cb(null, ensureTenantUploadDir('messages', getOrgIdFromRequest(req)));
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);

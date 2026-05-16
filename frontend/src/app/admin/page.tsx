@@ -10,6 +10,12 @@ import { userAPI, appointmentsAPI, documentsAPI, tasksAPI, messagesAPI, dossiers
 import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
+import {
+  canViewAdminDomain,
+  getStaffLandingPath,
+  isCabinetStaffRole,
+  isFullAdminRole,
+} from '@/lib/staffAccess';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -131,10 +137,14 @@ export default function AdminDashboardPage() {
     }
 
     const userRole = (session.user as any)?.role;
-    // Autoriser admin et superadmin
-    if (userRole !== 'admin' && userRole !== 'superadmin') {
+    if (!isCabinetStaffRole(userRole)) {
       hasChecked.current = true;
       window.location.href = '/client';
+      return;
+    }
+    if (!canViewAdminDomain(userRole, 'tableau_de_bord')) {
+      hasChecked.current = true;
+      window.location.href = getStaffLandingPath(userRole);
       return;
     }
 
@@ -143,7 +153,7 @@ export default function AdminDashboardPage() {
     loadStats();
     loadTasks();
     // Charger les membres de l'équipe seulement pour les admins
-    if (userRole === 'admin' || userRole === 'superadmin') {
+    if (isFullAdminRole(userRole)) {
       loadTeamMembers();
     }
     checkUnreadMessages();
@@ -375,7 +385,7 @@ export default function AdminDashboardPage() {
   const loadStats = async () => {
     try {
       const userRole = (session?.user as any)?.role;
-      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+      const isAdmin = isFullAdminRole(userRole);
       
       // Charger les utilisateurs (seulement pour les admins)
       if (isAdmin) {
@@ -880,8 +890,9 @@ export default function AdminDashboardPage() {
 
   // Si pas de session ou pas admin, ne rien afficher (la redirection est gérée dans useEffect)
   const userRole = session ? (session.user as any)?.role : null;
-  const isAuthorized = userRole === 'admin' || userRole === 'superadmin';
-  
+  const isAuthorized =
+    isCabinetStaffRole(userRole) && canViewAdminDomain(userRole, 'tableau_de_bord');
+
   if (!session || !isAuthorized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -893,7 +904,7 @@ export default function AdminDashboardPage() {
     );
   }
   
-  const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+  const isAdmin = isFullAdminRole(userRole);
 
   return (
     <div className="min-h-screen bg-background">

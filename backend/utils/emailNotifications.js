@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const { sendEmail: sendBrevoEmail } = require('../services/brevoService');
+const { getTenantEmailConfig } = require('../lib/tenant/tenantEmail');
 const EMAIL_PROVIDER_TIMEOUT_MS = Number(process.env.EMAIL_PROVIDER_TIMEOUT_MS || 12000);
 
 function escapeHtml(s) {
@@ -10,8 +11,12 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-function hasBrevoConfigured() {
-  return Boolean(process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY);
+function hasBrevoConfigured(tenantConfig) {
+  return Boolean(
+    tenantConfig?.brevoApiKey ||
+      process.env.BREVO_API_KEY ||
+      process.env.SENDINBLUE_API_KEY
+  );
 }
 
 function hasSmtpConfigured() {
@@ -30,12 +35,18 @@ function toPlainTextFromHtml(html = '') {
     .trim();
 }
 
-function ensureProfessionalEmailContent({ toName = '', htmlContent = '', textContent = '' }) {
+function ensureProfessionalEmailContent({
+  toName = '',
+  htmlContent = '',
+  textContent = '',
+  teamName = 'Ada Papers',
+}) {
   const fallbackName = toName && String(toName).trim() ? String(toName).trim() : 'Madame, Monsieur';
+  const team = String(teamName || 'Ada Papers').trim() || 'Ada Papers';
   const hello = `Bonjour ${escapeHtml(fallbackName)},`;
   const helloText = `Bonjour ${fallbackName},`;
-  const closingHtml = '<p>Cordialement,<br/>L’équipe Ada Papers</p>';
-  const closingText = 'Cordialement,\nL’équipe Ada Papers';
+  const closingHtml = `<p>Cordialement,<br/>L’équipe ${escapeHtml(team)}</p>`;
+  const closingText = `Cordialement,\nL’équipe ${team}`;
 
   let html = String(htmlContent || '').trim();
   let text = String(textContent || '').trim();
@@ -78,11 +89,19 @@ async function withTimeout(promise, timeoutMs, label) {
   }
 }
 
-async function sendEmailViaSmtp({ to, toName = '', subject, htmlContent, textContent = '' }) {
+async function sendEmailViaSmtp({
+  to,
+  toName = '',
+  subject,
+  htmlContent,
+  textContent = '',
+  fromAddress,
+}) {
   if (!hasSmtpConfigured()) {
     throw new Error('SMTP non configuré (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM)');
   }
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM } = process.env;
+  const from = fromAddress || EMAIL_FROM;
   const transporter = nodemailer.createTransport({
     host: SMTP_HOST,
     port: Number(SMTP_PORT),
@@ -96,7 +115,7 @@ async function sendEmailViaSmtp({ to, toName = '', subject, htmlContent, textCon
     },
   });
   await transporter.sendMail({
-    from: EMAIL_FROM,
+    from,
     to: toName ? `${toName} <${to}>` : to,
     subject,
     text: textContent || undefined,
@@ -108,25 +127,42 @@ async function sendEmailViaSmtp({ to, toName = '', subject, htmlContent, textCon
  * Brevo si clé présente, sinon ou en échec → SMTP (mêmes variables que l’ancien reset password).
  * @returns {{ ok: boolean, provider?: string, error?: string }}
  */
-async function sendTransactionalEmailDetailed({ to, toName = '', subject, htmlContent, textContent = '' }) {
+async function sendTransactionalEmailDetailed({
+  to,
+  toName = '',
+  subject,
+  htmlContent,
+  textContent = '',
+  req,
+}) {
   const addr = to && String(to).trim();
   if (!addr) {
     return { ok: false, error: 'no_recipient' };
   }
 
-  const normalizedContent = ensureProfessionalEmailContent({ toName, htmlContent, textContent });
+  const tenantEmail = getTenantEmailConfig(req);
+  const normalizedContent = ensureProfessionalEmailContent({
+    toName,
+    htmlContent,
+    textContent,
+    teamName: tenantEmail.teamName,
+  });
   const payload = {
     to: addr,
     toName,
     subject,
     htmlContent: normalizedContent.htmlContent,
     textContent: normalizedContent.textContent || '',
+    sender: { email: tenantEmail.from, name: tenantEmail.senderName },
+    apiKey: tenantEmail.brevoApiKey,
+    replyTo: tenantEmail.replyTo,
+    fromAddress: tenantEmail.from,
   };
 
-  if (hasBrevoConfigured()) {
+  if (hasBrevoConfigured(tenantEmail)) {
     try {
       await withTimeout(sendBrevoEmail(payload), EMAIL_PROVIDER_TIMEOUT_MS, 'brevo');
-      return { ok: true, provider: 'brevo' };
+      return { ok: true, provider: 'brevo', sender: tenantEmail.from };
     } catch (e) {
       console.warn('⚠️ Brevo indisponible ou refusé, tentative SMTP:', e.message || e);
     }
@@ -136,7 +172,7 @@ async function sendTransactionalEmailDetailed({ to, toName = '', subject, htmlCo
 
   try {
     await withTimeout(sendEmailViaSmtp(payload), EMAIL_PROVIDER_TIMEOUT_MS, 'smtp');
-    return { ok: true, provider: 'smtp' };
+    return { ok: true, provider: 'smtp', sender: tenantEmail.from };
   } catch (e) {
     console.error('❌ Email non envoyé (Brevo + SMTP):', e.message || e);
     return { ok: false, error: e.message || String(e) };

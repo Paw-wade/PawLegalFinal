@@ -538,6 +538,49 @@ router.get('/roles/presets', async (req, res) => {
           { domaine: 'rendez_vous', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false }
         ]
       },
+      juriste: {
+        roles: ['juriste'],
+        permissions: [
+          { domaine: 'tableau_de_bord', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
+          { domaine: 'dossiers', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'documents', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'taches', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'rendez_vous', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'messages', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'notifications', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false }
+        ]
+      },
+      comptable: {
+        roles: ['comptable'],
+        permissions: [
+          { domaine: 'tableau_de_bord', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
+          { domaine: 'dossiers', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
+          { domaine: 'documents', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false }
+        ]
+      },
+      secretaire: {
+        roles: ['secretaire'],
+        permissions: [
+          { domaine: 'tableau_de_bord', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
+          { domaine: 'dossiers', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'taches', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'rendez_vous', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'creneaux', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'messages', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'documents', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
+          { domaine: 'notifications', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
+          { domaine: 'sms', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false }
+        ]
+      },
+      stagiaire: {
+        roles: ['stagiaire'],
+        permissions: [
+          { domaine: 'tableau_de_bord', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
+          { domaine: 'dossiers', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
+          { domaine: 'documents', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
+          { domaine: 'taches', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false }
+        ]
+      },
       collaborateur: {
         roles: ['collaborateur'],
         permissions: [

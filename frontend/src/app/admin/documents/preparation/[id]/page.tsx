@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { dossierDocumentDraftsAPI } from '@/lib/api';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { ArrowLeft, FileDown, Trash2 } from 'lucide-react';
+import { canViewAdminDomain, isCabinetStaffRole } from '@/lib/staffAccess';
 
 function isEcheanceDepassee(iso?: string | null) {
   if (!iso) return false;
@@ -18,10 +19,8 @@ function isEcheanceDepassee(iso?: string | null) {
   return d < today;
 }
 
-const STAFF_ROLES = ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'] as const;
-
 function isStaffRole(role: string | undefined) {
-  return !!role && (STAFF_ROLES as readonly string[]).includes(role);
+  return isCabinetStaffRole(role) && canViewAdminDomain(role, 'documents');
 }
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {

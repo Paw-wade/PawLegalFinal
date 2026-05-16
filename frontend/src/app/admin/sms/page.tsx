@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { smsTemplatesAPI, smsHistoryAPI, smsAPI, userAPI } from '@/lib/api';
+import { canViewAdminDomain, getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 type SmsTemplate = {
   _id: string;
@@ -126,9 +127,12 @@ export default function AdminSmsPage() {
       return;
     }
     const role = (session?.user as any)?.role;
-    const isAuthorized = role === 'admin' || role === 'superadmin';
-    if (!isAuthorized) {
+    if (!isCabinetStaffRole(role)) {
       router.push('/client');
+      return;
+    }
+    if (!canViewAdminDomain(role, 'sms')) {
+      router.replace(getStaffLandingPath(role));
       return;
     }
     if (activeTab === 'templates') {

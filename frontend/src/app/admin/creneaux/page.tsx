@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { creneauxAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
+import { canViewAdminDomain, getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -113,9 +114,10 @@ export default function AdminCreneauxPage() {
       router.push('/auth/signin');
     } else if (session) {
       const userRole = (session.user as any)?.role;
-      const isAuthorized = userRole === 'admin' || userRole === 'superadmin';
-      if (!isAuthorized) {
+      if (!isCabinetStaffRole(userRole)) {
         router.push('/client');
+      } else if (!canViewAdminDomain(userRole, 'creneaux')) {
+        router.replace(getStaffLandingPath(userRole));
       } else if (status === 'authenticated') {
         loadCreneaux();
       }

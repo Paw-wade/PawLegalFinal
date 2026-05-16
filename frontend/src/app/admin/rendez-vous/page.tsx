@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { appointmentsAPI, dossiersAPI, userAPI, creneauxAPI } from '@/lib/api';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
+import { canViewAdminDomain, getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -243,9 +244,10 @@ export default function AdminRendezVousPage() {
       router.push('/auth/signin');
     } else if (session) {
       const userRole = (session.user as any)?.role;
-      const isAuthorized = userRole === 'admin' || userRole === 'superadmin';
-      if (!isAuthorized) {
+      if (!isCabinetStaffRole(userRole)) {
         router.push('/client');
+      } else if (!canViewAdminDomain(userRole, 'rendez_vous')) {
+        router.replace(getStaffLandingPath(userRole));
       } else if (status === 'authenticated') {
         loadAppointments();
       }

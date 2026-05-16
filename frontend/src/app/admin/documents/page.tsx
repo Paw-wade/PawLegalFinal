@@ -7,6 +7,7 @@ import { documentsAPI, dossiersAPI, documentDownloadShareAPI } from '@/lib/api';
 import Link from 'next/link';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { FileText, Download, Folder, Upload, Search, Filter, User, Eye, Trash2, Link2 } from 'lucide-react';
+import { canViewAdminDomain, getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 function Button({ children, variant = 'default', className = '', disabled, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
@@ -72,9 +73,10 @@ export default function AdminDocumentsPage() {
       router.push('/auth/signin');
     } else if (session) {
       const userRole = (session.user as any)?.role;
-      const isAuthorized = userRole === 'admin' || userRole === 'superadmin';
-      if (!isAuthorized) {
+      if (!isCabinetStaffRole(userRole)) {
         router.push('/client');
+      } else if (!canViewAdminDomain(userRole, 'documents')) {
+        router.replace(getStaffLandingPath(userRole));
       } else if (status === 'authenticated') {
         loadDocuments();
         loadDossiers();

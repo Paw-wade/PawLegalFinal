@@ -6,9 +6,18 @@ const mongoose = require('mongoose');
 const M = require('../tenantModels');
 const { protect, authorize } = require('../middleware/auth');
 
+const {
+  UPLOADS_ROOT,
+  ensureTenantUploadDir,
+  getCloudinaryFolder,
+  getOrgIdFromRequest,
+  getOrgIdFromStore,
+  getUploadScanDirs,
+  resolveTenantUploadFile,
+} = require('../lib/tenant/uploads');
+
 const router = express.Router();
 const BACKEND_ROOT = path.resolve(__dirname, '..');
-const UPLOADS_ROOT = path.resolve(BACKEND_ROOT, 'uploads');
 
 const isExistingFile = (p) => {
   try {
@@ -41,6 +50,11 @@ const searchFileInUploads = (targetNames = []) => {
   };
 
   // 1) Dossier standard des documents
+  const orgId = getOrgIdFromStore();
+  for (const dir of getUploadScanDirs('documents', orgId)) {
+    const hit = tryDir(dir);
+    if (hit) return hit;
+  }
   const flat = tryDir(path.join(UPLOADS_ROOT, 'documents'));
   if (flat) return flat;
 
@@ -124,7 +138,11 @@ const resolveExistingDocumentPath = (storedPath, fileName) => {
   const foundByName = searchFileInUploads([fileName, filenameOnly, rawPath ? path.basename(normalized) : '']);
   if (foundByName) return foundByName;
 
-  return null;
+  return resolveTenantUploadFile(storedPath, {
+    subdir: 'documents',
+    fileName: filenameOnly || fileName,
+    orgId: getOrgIdFromStore(),
+  });
 };
 
 /**
@@ -135,14 +153,9 @@ const findFileByTailleAndCreatedAt = (document) => {
   if (!Number.isFinite(size) || size <= 0) return null;
   const t0 = document.createdAt ? new Date(document.createdAt).getTime() : null;
 
-  const scanDirs = new Set([
-    path.join(UPLOADS_ROOT, 'documents'),
-    path.join(process.cwd(), 'uploads', 'documents'),
-    path.join(process.cwd(), 'backend', 'uploads', 'documents'),
-  ]);
-  if (process.env.UPLOADS_DOCUMENTS_DIR) {
-    scanDirs.add(path.resolve(process.env.UPLOADS_DOCUMENTS_DIR));
-  }
+  const scanDirs = new Set(getUploadScanDirs('documents', getOrgIdFromStore()));
+  scanDirs.add(path.join(process.cwd(), 'uploads', 'documents'));
+  scanDirs.add(path.join(process.cwd(), 'backend', 'uploads', 'documents'));
 
   const matches = [];
   for (const dir of scanDirs) {
@@ -377,26 +390,17 @@ const normalizeCategorie = (rawCategorie) => {
   return mapping[normalized] || 'autre';
 };
 
-// Configuration du stockage Multer
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+// Configuration du stockage Multer (Cloudinary ou disque)
+const createCloudinaryStorage = require('multer-storage-cloudinary');
+const {
+  cloudinary,
+  isCloudinaryConfigured,
+} = require('../lib/cloudinaryMulter');
 
-const hasCloudinaryConfig =
-  !!process.env.CLOUDINARY_CLOUD_NAME &&
-  !!process.env.CLOUDINARY_API_KEY &&
-  !!process.env.CLOUDINARY_API_SECRET;
+const hasCloudinaryConfig = isCloudinaryConfigured();
 
-if (hasCloudinaryConfig) {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-  });
-}
-
-const localDocumentsDir = path.join(UPLOADS_ROOT, 'documents');
-if (!fs.existsSync(localDocumentsDir)) {
-  fs.mkdirSync(localDocumentsDir, { recursive: true });
+if (!fs.existsSync(UPLOADS_ROOT)) {
+  fs.mkdirSync(UPLOADS_ROOT, { recursive: true });
 }
 
 /** public_id Cloudinary depuis une URL res.cloudinary.com (évite slice(-2) qui coupe le dossier racine) */
@@ -417,20 +421,22 @@ function cloudinaryPublicIdFromUrl(fileUrl) {
   return withoutExt || null;
 }
 
-const cloudinaryStorage = hasCloudinaryConfig
-  ? new CloudinaryStorage({
+const uploadStorage = hasCloudinaryConfig
+  ? createCloudinaryStorage({
       cloudinary,
       params: async (req, file) => {
         const isImage = (file.mimetype || '').startsWith('image/');
+        const orgId = getOrgIdFromRequest(req);
         return {
-          folder: 'pawlegal/documents',
+          folder: getCloudinaryFolder('documents', orgId),
           resource_type: isImage ? 'image' : 'raw',
           public_id: `${Date.now()}-${(file.originalname || 'document').replace(/[^a-zA-Z0-9]/g, '_')}`,
         };
       },
     })
   : multer.diskStorage({
-      destination: (req, file, cb) => cb(null, localDocumentsDir),
+      destination: (req, file, cb) =>
+        cb(null, ensureTenantUploadDir('documents', getOrgIdFromRequest(req))),
       filename: (req, file, cb) => {
         const safeName = (file.originalname || 'document')
           .replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -445,7 +451,7 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage: cloudinaryStorage,
+  storage: uploadStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: fileFilter
 });

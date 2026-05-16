@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getPublicApiBaseUrl } from './publicApiUrl';
+import { getStoredTenantSlug, tenantSlugFromHost } from './tenantSlug';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -245,6 +246,13 @@ api.interceptors.request.use(
     }
     
     if (typeof window !== 'undefined') {
+      const slug =
+        getStoredTenantSlug() ||
+        tenantSlugFromHost(window.location.host) ||
+        undefined;
+      if (slug) {
+        config.headers['X-Tenant-Slug'] = slug;
+      }
       const token = await getToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;

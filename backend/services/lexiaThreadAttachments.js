@@ -35,8 +35,10 @@ const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const AUDIO_EXTENSIONS = new Set(['.webm', '.ogg', '.mp3', '.wav', '.m4a', '.aac']);
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
 
+const { ensureTenantUploadDir, getOrgIdFromStore } = require('../lib/tenant/uploads');
+
 function getAttachmentsRootDir() {
-  return path.join(__dirname, '..', 'uploads', 'lexia-attachments');
+  return ensureTenantUploadDir('lexia-attachments', getOrgIdFromStore());
 }
 
 function sanitizeThreadId(threadId) {

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { collaborativeDraftsAPI, dossierDocumentDraftsAPI, forumAPI } from '@/lib/api';
+import { canAccessAdminPath, isCabinetStaffRole, isFullAdminRole } from '@/lib/staffAccess';
 import {
   LayoutDashboard,
   Users,
@@ -35,7 +36,6 @@ interface MenuItem {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  roles?: string[];
   badge?: string;
 }
 
@@ -53,7 +53,6 @@ const adminMenuItems: MenuItem[] = [
     href: '/admin/documents/preparation',
     label: 'Docs en préparation',
     icon: PenLine,
-    roles: ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'],
   },
   { href: '/admin/temoignages', label: 'Témoignages', icon: Star },
   { href: '/admin/notifications', label: 'Notifications', icon: Bell },
@@ -61,8 +60,8 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/emails', label: 'Emails', icon: Mail },
   { href: '/admin/carousel', label: 'Carrousel home', icon: Image },
   { href: '/admin/cms', label: 'CMS', icon: FileEdit },
-  { href: '/admin/recours', label: 'Documentation', icon: FolderOpen, roles: ['admin', 'superadmin'] },
-  { href: '/admin/lexia', label: 'Paw AI', icon: Scale, roles: ['admin', 'superadmin'] },
+  { href: '/admin/recours', label: 'Documentation', icon: FolderOpen },
+  { href: '/admin/lexia', label: 'Paw AI', icon: Scale },
   { href: '/admin/corbeille', label: 'Corbeille', icon: Trash2 },
   { href: '/forum', label: 'Forum', icon: MessageSquare },
   { href: '/admin/compte', label: 'Mon compte', icon: User },
@@ -99,8 +98,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
 
   const loadPrepDraftCount = useCallback(async () => {
     const role = (session?.user as any)?.role as string | undefined;
-    const staff = ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'];
-    if (!role || !staff.includes(role)) {
+    if (!role || !canAccessAdminPath(role, '/admin/documents/preparation')) {
       setPrepDraftCount(0);
       return;
     }
@@ -190,7 +188,13 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
               Ada Papers
             </Link>
             <span className="hidden md:inline ml-2 text-[10px] text-gray-500">
-              {userRole === 'superadmin' ? 'Super administration' : 'Panneau d&apos;administration'}
+              {userRole === 'superadmin'
+                ? 'Super administration'
+                : isFullAdminRole(userRole)
+                  ? 'Panneau d&apos;administration'
+                  : isCabinetStaffRole(userRole)
+                    ? 'Espace équipe'
+                    : 'Panneau d&apos;administration'}
             </span>
           </div>
           {onClose && (

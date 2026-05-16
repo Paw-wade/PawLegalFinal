@@ -235,12 +235,39 @@ Ou : `const { getModel } = require('../lib/tenant/asyncContext');` → `getModel
 
 ---
 
-## Phase 3 — Fichiers & emails (1–2 semaines)
+## Phase 3 — Fichiers & emails ✅ (implémentée)
 
-- [ ] Uploads : `uploads/{orgId}/...` (`documents.js`, avatars, lexia attachments, guest upload)
-- [ ] Cloudinary : dossier `orgs/{orgId}/` ou credentials par org
-- [ ] Brevo : `brevoService` lit `req.tenant.email` (clé + `from` par cabinet)
-- [ ] Script migration fichiers existants
+| Fichier | Rôle |
+|---------|------|
+| `backend/lib/tenant/uploads.js` | Chemins `uploads/{orgId}/{subdir}`, Cloudinary `orgs/{orgId}/…`, résolution legacy |
+| `backend/lib/tenant/tenantEmail.js` | Expéditeur / clé Brevo par cabinet (ALS + `req.tenant`) |
+| `backend/services/brevoService.js` | Pool API par clé + `sender` / `replyTo` par appel |
+| `backend/utils/emailNotifications.js` | Signature « L’équipe {branding.name} », config tenant |
+| `backend/scripts/migrateUploadsToOrgPrefix.js` | Migration fichiers legacy → `uploads/{orgId}/` |
+
+### Livrables
+
+- [x] Uploads : `uploads/{orgId}/...` — `documents`, `avatars`, `messages`, `contact`, `lexia-attachments`, guest upload
+- [x] Cloudinary : dossier `orgs/{orgId}/{subdir}` (fallback `pawlegal/{subdir}`)
+- [x] Brevo : clé + `from` / nom d’équipe depuis `organizations.email` + `branding.name` (fallback `.env`)
+- [x] Script : `npm run migrate:uploads -- cabinet-dupont`
+
+### Commandes
+
+```bash
+cd backend
+npm run migrate:uploads -- cabinet-dupont   # une fois, si fichiers déjà en uploads/documents/ etc.
+```
+
+Configurer un cabinet en base maître :
+
+```js
+email: {
+  from: 'contact@cabinet-dupont.fr',
+  brevoApiKey: 'xkeysib-...',  // vide = clé globale BREVO_API_KEY
+  replyTo: 'contact@cabinet-dupont.fr',
+}
+```
 
 ---
 
@@ -295,6 +322,8 @@ backend/
     tenant/
       resolveOrganization.js   ✅
       getTenantDb.js             ✅
+      uploads.js                 ✅ Phase 3
+      tenantEmail.js             ✅ Phase 3
   middleware/
     tenant.js            ✅
   models/
@@ -351,7 +380,7 @@ await Organization.create({
 |-------|--------------------------|
 | 1 Fondations | ✅ fait |
 | 2 Routes / auth | 2–4 sem. |
-| 3 Fichiers / mail | 1–2 sem. |
+| 3 Fichiers / mail | ✅ fait |
 | 4 Front / domaines | 2–3 sem. |
 | 5 Console | 1–2 sem. |
 | 6 Migration prod | 1–3 sem. |

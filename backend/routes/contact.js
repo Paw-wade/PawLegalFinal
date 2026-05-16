@@ -6,16 +6,13 @@ const { body, validationResult } = require('express-validator');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 
 const M = require('../tenantModels');
+const { ensureTenantUploadDir, getOrgIdFromRequest } = require('../lib/tenant/uploads');
 const router = express.Router();
 
 // Configuration du stockage Multer pour les documents de contact
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads/contact');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
+  destination(req, file, cb) {
+    cb(null, ensureTenantUploadDir('contact', getOrgIdFromRequest(req)));
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);

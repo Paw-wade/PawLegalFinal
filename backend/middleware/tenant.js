@@ -84,6 +84,8 @@ async function tenantMiddleware(req, res, next) {
       connection: conn,
       orgId,
       slug: org.slug,
+      email: org.email,
+      branding: org.branding,
     });
   } catch (err) {
     console.error('tenantMiddleware:', err);

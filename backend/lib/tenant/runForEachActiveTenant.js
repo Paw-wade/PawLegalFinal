@@ -29,7 +29,13 @@ async function runForEachActiveTenant(fn) {
     const orgId = org._id.toString();
     const conn = await getTenantConnection(org.mongoUri, orgId);
     await runWithTenantStore(
-      { connection: conn, orgId, slug: org.slug },
+      {
+        connection: conn,
+        orgId,
+        slug: org.slug,
+        email: org.email,
+        branding: org.branding,
+      },
       async () => {
         await fn({ org, orgId, slug: org.slug });
       }
