@@ -2,14 +2,11 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 
-const ForumThread = require('../models/ForumThread');
-const ForumPost = require('../models/ForumPost');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
 const { sendTransactionalEmailDetailed } = require('../utils/emailNotifications');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const { protect, authorize } = require('../middleware/auth');
 
+const M = require('../tenantModels');
 const router = express.Router();
 
 const optionalProtect = (req, res, next) => {
@@ -21,7 +18,7 @@ const optionalProtect = (req, res, next) => {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-here');
         if (decoded?.id) {
-          return User.findById(decoded.id)
+          return M.User.findById(decoded.id)
             .select('-password')
             .lean()
             .then((dbUser) => {
@@ -172,7 +169,7 @@ router.get('/threads', optionalProtect, async (req, res) => {
         // D'abord, trouver les discussions qui ont au moins une réponse contenant un des mots-clés
         let threadIdsFromPosts = [];
         try {
-          threadIdsFromPosts = await ForumPost.distinct('thread', {
+          threadIdsFromPosts = await M.ForumPost.distinct('thread', {
             isDeleted: false,
             body: regex,
           });
@@ -193,12 +190,12 @@ router.get('/threads', optionalProtect, async (req, res) => {
     }
 
     const [threads, total] = await Promise.all([
-      ForumThread.find(filter)
+      M.ForumThread.find(filter)
         .sort({ isPinned: -1, lastReplyAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .populate('createdBy', 'prenom nom role'),
-      ForumThread.countDocuments(filter),
+      M.ForumThread.countDocuments(filter),
     ]);
 
     const actorKey = getForumLikeKey(req);
@@ -236,7 +233,7 @@ router.post(
       const guestName = (req.body.guestName || '').toString().trim();
       const authorId = req.user?.id || null;
 
-      const thread = await ForumThread.create({
+      const thread = await M.ForumThread.create({
         title,
         body: content,
         createdBy: authorId,
@@ -249,13 +246,13 @@ router.post(
 
       // Notifier les admins d'une nouvelle question forum
       try {
-        const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: true }).select('_id');
+        const admins = await M.User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: true }).select('_id');
         const adminIds = admins
           .map((a) => a._id?.toString())
           .filter((id) => id && id !== (authorId ? authorId.toString() : ''));
         if (adminIds.length > 0) {
           const authorLabel = authorId ? 'Un utilisateur' : `Un visiteur${guestName ? ` (${guestName})` : ''}`;
-          await Notification.insertManyWithPush(
+          await M.Notification.insertManyWithPush(
             adminIds.map((userId) => ({
               user: userId,
               type: 'forum_thread_created',
@@ -276,13 +273,13 @@ router.post(
       // Envoyer un email aux admins + au créateur (si connecté)
       try {
         const [adminsWithEmail, authorUser] = await Promise.all([
-          User.find({
+          M.User.find({
             role: { $in: ['admin', 'superadmin'] },
             isActive: true,
             email: { $exists: true, $ne: '' },
           }).select('email firstName lastName'),
           authorId
-            ? User.findOne({
+            ? M.User.findOne({
                 _id: authorId,
                 isActive: true,
                 email: { $exists: true, $ne: '' },
@@ -329,7 +326,7 @@ router.get('/threads/:id', optionalProtect, async (req, res) => {
   try {
     const threadId = req.params.id;
 
-    const thread = await ForumThread.findByIdAndUpdate(
+    const thread = await M.ForumThread.findByIdAndUpdate(
       threadId,
       { $inc: { viewsCount: 1 } },
       { new: true }
@@ -339,7 +336,7 @@ router.get('/threads/:id', optionalProtect, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Discussion introuvable' });
     }
 
-    const posts = await ForumPost.find({ thread: threadId, isDeleted: false })
+    const posts = await M.ForumPost.find({ thread: threadId, isDeleted: false })
       .sort({ createdAt: 1 })
       .limit(50)
       .populate('createdBy', 'prenom nom role')
@@ -382,7 +379,7 @@ router.post(
       const parentPostIdRaw = req.body.parentPostId;
       const parentPostId = typeof parentPostIdRaw === 'string' && parentPostIdRaw.trim() ? parentPostIdRaw.trim() : null;
 
-      const thread = await ForumThread.findById(threadId);
+      const thread = await M.ForumThread.findById(threadId);
       if (!thread) {
         return res.status(404).json({ success: false, message: 'Discussion introuvable' });
       }
@@ -397,7 +394,7 @@ router.post(
 
       let parentPost = null;
       if (parentPostId) {
-        parentPost = await ForumPost.findOne({
+        parentPost = await M.ForumPost.findOne({
           _id: parentPostId,
           thread: threadId,
           isDeleted: false,
@@ -410,7 +407,7 @@ router.post(
         }
       }
 
-      const post = await ForumPost.create({
+      const post = await M.ForumPost.create({
         thread: threadId,
         parentPost: parentPost ? parentPost._id : null,
         body: content,
@@ -432,7 +429,7 @@ router.post(
           recipientIds.add(threadCreatorId);
         }
 
-        const participantIds = await ForumPost.distinct('createdBy', {
+        const participantIds = await M.ForumPost.distinct('createdBy', {
           thread: threadId,
           isDeleted: false,
         });
@@ -444,7 +441,7 @@ router.post(
         }
 
         if (recipientIds.size > 0) {
-          await Notification.insertManyWithPush(
+          await M.Notification.insertManyWithPush(
             Array.from(recipientIds).map((userId) => ({
               user: userId,
               type: 'forum_reply_created',
@@ -474,7 +471,7 @@ router.post(
         }
 
         // Participants de la discussion
-        const participantIds = await ForumPost.distinct('createdBy', {
+        const participantIds = await M.ForumPost.distinct('createdBy', {
           thread: threadId,
           isDeleted: false,
         });
@@ -486,7 +483,7 @@ router.post(
         }
 
         // Admins
-        const admins = await User.find({
+        const admins = await M.User.find({
           role: { $in: ['admin', 'superadmin'] },
           isActive: true,
         }).select('_id');
@@ -498,7 +495,7 @@ router.post(
         }
 
         if (emailRecipientIds.size > 0) {
-          const users = await User.find({
+          const users = await M.User.find({
             _id: { $in: Array.from(emailRecipientIds) },
             isActive: true,
             email: { $exists: true, $ne: '' },
@@ -555,7 +552,7 @@ router.patch(
         updates.isPinned = req.body.isPinned;
       }
 
-      const thread = await ForumThread.findByIdAndUpdate(
+      const thread = await M.ForumThread.findByIdAndUpdate(
         threadId,
         { $set: updates },
         { new: true }
@@ -582,7 +579,7 @@ router.delete(
     try {
       const postId = req.params.id;
 
-      const post = await ForumPost.findById(postId);
+      const post = await M.ForumPost.findById(postId);
       if (!post) {
         return res.status(404).json({ success: false, message: 'Réponse introuvable' });
       }
@@ -597,7 +594,7 @@ router.delete(
       await post.save();
 
       // Décrémenter le compteur de réponses du thread associé
-      await ForumThread.findByIdAndUpdate(post.thread, {
+      await M.ForumThread.findByIdAndUpdate(post.thread, {
         $inc: { repliesCount: -1 },
       });
 
@@ -627,7 +624,7 @@ router.patch(
       const currentUserId = req.user?.id?.toString?.() || req.user?._id?.toString?.() || '';
       const currentUserRole = req.user?.role || '';
 
-      const post = await ForumPost.findById(postId);
+      const post = await M.ForumPost.findById(postId);
       if (!post || post.isDeleted) {
         return res.status(404).json({ success: false, message: 'Réponse introuvable' });
       }
@@ -693,7 +690,7 @@ router.patch(
         });
       }
 
-      const post = await ForumPost.findById(postId);
+      const post = await M.ForumPost.findById(postId);
       if (!post || post.isDeleted) {
         return res.status(404).json({ success: false, message: 'Réponse introuvable' });
       }
@@ -768,7 +765,7 @@ router.post('/posts/:id/like', optionalProtect, async (req, res) => {
       });
     }
 
-    const post = await ForumPost.findById(postId);
+    const post = await M.ForumPost.findById(postId);
     if (!post || post.isDeleted) {
       return res.status(404).json({ success: false, message: 'Réponse introuvable' });
     }
@@ -821,7 +818,7 @@ router.post('/threads/:id/like', optionalProtect, async (req, res) => {
       });
     }
 
-    const thread = await ForumThread.findById(threadId);
+    const thread = await M.ForumThread.findById(threadId);
     if (!thread) {
       return res.status(404).json({ success: false, message: 'Discussion introuvable' });
     }
@@ -853,12 +850,12 @@ router.post('/threads/:id/bookmark', protect, async (req, res) => {
     const threadId = req.params.id;
     const userId = req.user.id;
 
-    const thread = await ForumThread.findById(threadId);
+    const thread = await M.ForumThread.findById(threadId);
     if (!thread) {
       return res.status(404).json({ success: false, message: 'Discussion introuvable' });
     }
 
-    const user = await User.findById(userId);
+    const user = await M.User.findById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
@@ -897,7 +894,7 @@ router.post('/threads/:id/bookmark', protect, async (req, res) => {
 // GET /api/forum/bookmarks - Récupérer les discussions mises en signet par l'utilisateur courant
 router.get('/bookmarks', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).populate({
+    const user = await M.User.findById(req.user.id).populate({
       path: 'forumBookmarks.thread',
       select: 'title theme status isPinned lastReplyAt repliesCount',
     });
@@ -914,7 +911,7 @@ router.get('/bookmarks', protect, async (req, res) => {
         let newRepliesCount = 0;
         try {
           // Compter les posts non supprimés créés après la date d'ajout du signet
-          newRepliesCount = await ForumPost.countDocuments({
+          newRepliesCount = await M.ForumPost.countDocuments({
             thread: b.thread._id,
             isDeleted: false,
             createdAt: { $gt: b.addedAt || new Date(0) },
@@ -945,12 +942,12 @@ router.get('/bookmarks', protect, async (req, res) => {
 router.post('/threads/:id/mark-read', protect, async (req, res) => {
   try {
     const threadId = req.params.id;
-    const thread = await ForumThread.findById(threadId).select('_id');
+    const thread = await M.ForumThread.findById(threadId).select('_id');
     if (!thread) {
       return res.status(404).json({ success: false, message: 'Discussion introuvable' });
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
@@ -979,7 +976,7 @@ router.post('/threads/:id/mark-read', protect, async (req, res) => {
 router.get('/unread-count', protect, async (req, res) => {
   try {
     const userId = req.user.id;
-    const user = await User.findById(userId).select('forumThreadReads forumBookmarks');
+    const user = await M.User.findById(userId).select('forumThreadReads forumBookmarks');
     if (!user) {
       return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
@@ -989,7 +986,7 @@ router.get('/unread-count', protect, async (req, res) => {
     );
 
     // Orange : fils que j'ai créés, avec au moins une réponse, et activité après ma dernière lecture
-    const myThreads = await ForumThread.find({
+    const myThreads = await M.ForumThread.find({
       createdBy: userId,
       repliesCount: { $gt: 0 },
     })
@@ -1017,7 +1014,7 @@ router.get('/unread-count', protect, async (req, res) => {
             ? raw.toString()
             : '';
       if (!tid) continue;
-      const thread = await ForumThread.findById(tid).select('lastReplyAt lastReplyBy').lean();
+      const thread = await M.ForumThread.findById(tid).select('lastReplyAt lastReplyBy').lean();
       if (!thread || !thread.lastReplyAt) continue;
       const readAt = readsMap.get(tid) || new Date(0);
       const baseline = new Date(

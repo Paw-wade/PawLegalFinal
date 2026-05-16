@@ -2,9 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
-const DocumentDownloadShare = require('../models/DocumentDownloadShare');
-const Document = require('../models/Document');
-const RecoursTemplate = require('../models/RecoursTemplate');
+const M = require('../tenantModels');
 const { protect, authorize } = require('../middleware/auth');
 const {
   buildCabinetMessageVariables,
@@ -37,7 +35,7 @@ async function findActiveShare(token) {
     .trim()
     .replace(/[^a-f0-9]/gi, '');
   if (clean.length < 32 || clean.length > 80) return null;
-  const share = await DocumentDownloadShare.findOne({ token: clean }).lean();
+  const share = await M.DocumentDownloadShare.findOne({ token: clean }).lean();
   if (!share) return null;
   if (share.revokedAt) return null;
   if (share.expiresAt && new Date(share.expiresAt).getTime() < Date.now()) return null;
@@ -46,7 +44,7 @@ async function findActiveShare(token) {
 
 async function resolveSharePayload(share) {
   if (share.resourceType === 'document') {
-    const doc = await Document.findById(share.resourceId).lean();
+    const doc = await M.Document.findById(share.resourceId).lean();
     if (!doc) return null;
     return {
       title: resolveDocumentDisplayTitle(doc),
@@ -56,12 +54,12 @@ async function resolveSharePayload(share) {
     };
   }
 
-  const tpl = await RecoursTemplate.findById(share.resourceId).lean();
+  const tpl = await M.RecoursTemplate.findById(share.resourceId).lean();
   if (!tpl) return null;
 
   const docId = extractDocumentIdFromUrl(tpl.fileUrl);
   if (docId) {
-    const doc = await Document.findById(docId).lean();
+    const doc = await M.Document.findById(docId).lean();
     if (doc) {
       return {
         title: tpl.title || resolveDocumentDisplayTitle(doc),
@@ -122,7 +120,7 @@ router.get('/public/:token/file', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Fichier introuvable.' });
     }
 
-    await DocumentDownloadShare.updateOne({ _id: share._id }, { $inc: { downloadCount: 1 } });
+    await M.DocumentDownloadShare.updateOne({ _id: share._id }, { $inc: { downloadCount: 1 } });
 
     if (payload.document) {
       return deliverDocumentFileResponse(payload.document, res);
@@ -166,18 +164,18 @@ router.post(
 
       let title = 'Document';
       if (resourceType === 'document') {
-        const doc = await Document.findById(rid).lean();
+        const doc = await M.Document.findById(rid).lean();
         if (!doc) return res.status(404).json({ success: false, message: 'Document introuvable.' });
         title = resolveDocumentDisplayTitle(doc);
       } else {
-        const tpl = await RecoursTemplate.findById(rid).select('title fileName').lean();
+        const tpl = await M.RecoursTemplate.findById(rid).select('title fileName').lean();
         if (!tpl) return res.status(404).json({ success: false, message: 'Modèle introuvable.' });
         title = tpl.title || tpl.fileName || title;
       }
 
       const token = crypto.randomBytes(TOKEN_BYTES).toString('hex');
       const expiresAt = new Date(Date.now() + SHARE_TTL_MS);
-      const share = await DocumentDownloadShare.create({
+      const share = await M.DocumentDownloadShare.create({
         token,
         resourceType,
         resourceId: rid,

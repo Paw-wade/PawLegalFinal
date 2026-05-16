@@ -1,13 +1,10 @@
 const express = require('express');
+const M = require('../tenantModels');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { body, validationResult } = require('express-validator');
-const MessageInterne = require('../models/MessageInterne');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
-const Dossier = require('../models/Dossier');
 const { protect, authorize } = require('../middleware/auth');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
@@ -60,7 +57,7 @@ router.get('/unread-count', async (req, res) => {
   try {
     const userId = req.user.id;
     
-    const count = await MessageInterne.countDocuments({
+    const count = await M.MessageInterne.countDocuments({
       $or: [
         { destinataires: userId },
         { copie: userId }
@@ -106,7 +103,7 @@ router.get('/users', async (req, res) => {
     }
     // Les admins peuvent voir tout le monde (pas de filtre)
 
-    const users = await User.find(query)
+    const users = await M.User.find(query)
       .select(selectFields)
       .sort({ role: 1, lastName: 1, firstName: 1 }); // Trier par rôle puis par nom
 
@@ -189,8 +186,7 @@ router.get('/', async (req, res) => {
       
       // Si partenaire et dossierId fourni, vérifier l'accès au dossier
       if (req.user.role === 'partenaire') {
-        const Dossier = require('../models/Dossier');
-        const dossier = await Dossier.findById(dossierIdObj)
+                const dossier = await M.Dossier.findById(dossierIdObj)
           .populate('transmittedTo.partenaire', '_id');
         
         if (dossier && dossier.transmittedTo && Array.isArray(dossier.transmittedTo)) {
@@ -260,7 +256,7 @@ router.get('/', async (req, res) => {
       }
     }
 
-    let messages = await MessageInterne.find(query)
+    let messages = await M.MessageInterne.find(query)
       .populate('expediteur', 'firstName lastName email role')
       .populate('destinataires', 'firstName lastName email role')
       .populate('copie', 'firstName lastName email role')
@@ -270,14 +266,13 @@ router.get('/', async (req, res) => {
       .limit(1000); // Augmenter la limite pour avoir tous les messages des threads
 
     // Peupler manuellement le champ lu.user car Mongoose a des difficultés avec les populates sur tableaux imbriqués
-    const User = require('../models/User');
-    for (const message of messages) {
+        for (const message of messages) {
       if (message.lu && Array.isArray(message.lu) && message.lu.length > 0) {
         for (const luEntry of message.lu) {
           if (luEntry.user && !luEntry.user._id && typeof luEntry.user === 'object') {
             // Si user est un ObjectId, le peupler
             try {
-              luEntry.user = await User.findById(luEntry.user).select('_id email');
+              luEntry.user = await M.User.findById(luEntry.user).select('_id email');
             } catch (err) {
               console.error('Erreur lors du populate de lu.user:', err);
             }
@@ -489,7 +484,7 @@ router.post(
         }
 
         // Vérifier que le destinataire existe
-        const destinataireUser = await User.findOne({
+        const destinataireUser = await M.User.findOne({
           _id: destinataireId,
           isActive: { $ne: false }
         });
@@ -527,7 +522,7 @@ router.post(
 
             // Vérifier que tous les destinataires en copie existent
             if (copieIds.length > 0) {
-              const copieValides = await User.find({
+              const copieValides = await M.User.find({
                 _id: { $in: copieIds },
                 isActive: { $ne: false }
               });
@@ -550,7 +545,7 @@ router.post(
 
         // Vérifier la copie pour bloquer communication directe client-professionnel
         if (copie && Array.isArray(copie) && copie.length > 0) {
-          const copieUsers = await User.find({
+          const copieUsers = await M.User.find({
             _id: { $in: copie.map(id => typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id) },
             isActive: { $ne: false }
           });
@@ -564,12 +559,11 @@ router.post(
         
         // Si dossierId est fourni, vérifier que le dossier est transmis au partenaire
         if (dossierId) {
-          const Dossier = require('../models/Dossier');
-          const dossierIdObj = typeof dossierId === 'string' && mongoose.Types.ObjectId.isValid(dossierId)
+                    const dossierIdObj = typeof dossierId === 'string' && mongoose.Types.ObjectId.isValid(dossierId)
             ? new mongoose.Types.ObjectId(dossierId)
             : dossierId;
           
-          const dossier = await Dossier.findById(dossierIdObj)
+          const dossier = await M.Dossier.findById(dossierIdObj)
             .populate('transmittedTo.partenaire', '_id');
           
           if (!dossier) {
@@ -608,7 +602,7 @@ router.post(
               destinataireId = destinataire;
             }
             
-            const destinataireUser = await User.findOne({
+            const destinataireUser = await M.User.findOne({
               _id: destinataireId,
               isActive: { $ne: false }
             });
@@ -633,7 +627,7 @@ router.post(
           } catch (idError) {
             console.error('❌ Erreur lors de la conversion de l\'ID destinataire:', idError);
             // En cas d'erreur, envoyer à tous les admins
-            const admins = await User.find({
+            const admins = await M.User.find({
               role: { $in: ['admin', 'superadmin'] },
               isActive: { $ne: false }
             });
@@ -642,7 +636,7 @@ router.post(
           }
         } else {
           // Pas de destinataire spécifique, envoyer à tous les administrateurs
-          const admins = await User.find({
+          const admins = await M.User.find({
             role: { $in: ['admin', 'superadmin'] },
             isActive: { $ne: false }
           });
@@ -676,7 +670,7 @@ router.post(
               destinataireId = destinataire;
             }
 
-            const destinataireUser = await User.findOne({
+            const destinataireUser = await M.User.findOne({
               _id: destinataireId,
               isActive: { $ne: false }
             });
@@ -701,7 +695,7 @@ router.post(
               typeMessage = 'professional_to_admin';
             } else {
               // Par défaut, envoyer à tous les admins
-              const admins = await User.find({
+              const admins = await M.User.find({
                 role: { $in: ['admin', 'superadmin'] },
                 isActive: { $ne: false }
               });
@@ -711,7 +705,7 @@ router.post(
           } catch (idError) {
             console.error('❌ Erreur lors de la conversion de l\'ID destinataire:', idError);
             // En cas d'erreur, envoyer à tous les admins
-            const admins = await User.find({
+            const admins = await M.User.find({
               role: { $in: ['admin', 'superadmin'] },
               isActive: { $ne: false }
             });
@@ -720,7 +714,7 @@ router.post(
           }
         } else {
           // Pas de destinataire spécifique, envoyer à tous les admins
-          const admins = await User.find({
+          const admins = await M.User.find({
             role: { $in: ['admin', 'superadmin'] },
             isActive: { $ne: false }
           });
@@ -769,7 +763,7 @@ router.post(
       if (messageParent && mongoose.Types.ObjectId.isValid(messageParent)) {
         // Vérifier que le message parent existe
         // Populate dossierId pour s'assurer qu'il est accessible
-        const parentMessage = await MessageInterne.findById(messageParent)
+        const parentMessage = await M.MessageInterne.findById(messageParent)
           .populate('dossierId', '_id numero titre');
         
         if (parentMessage) {
@@ -863,7 +857,7 @@ router.post(
         piecesJointesCount: piecesJointes.length
       });
       
-      const nouveauMessage = await MessageInterne.create(messageData);
+      const nouveauMessage = await M.MessageInterne.create(messageData);
       console.log('✅ Message créé avec succès:', nouveauMessage._id);
 
       // Populate pour la réponse
@@ -878,7 +872,7 @@ router.post(
         // Notification pour tous les administrateurs
         for (const adminId of destinatairesIds) {
           try {
-            await Notification.create({
+            await M.Notification.create({
               user: adminId.toString(),
               type: 'message_received',
               titre: 'Nouveau message utilisateur',
@@ -897,11 +891,11 @@ router.post(
         }
       } else if (typeMessage === 'admin_to_user' || typeMessage === 'admin_to_admin' || typeMessage === 'professional_to_admin') {
         // Notification pour le destinataire principal
-        const destinatairePrincipal = await User.findById(destinatairesIds[0]);
+        const destinatairePrincipal = await M.User.findById(destinatairesIds[0]);
         
         if (destinatairePrincipal) {
           try {
-            await Notification.create({
+            await M.Notification.create({
               user: destinatairesIds[0].toString(),
               type: 'message_received',
               titre: 'Nouveau message',
@@ -967,9 +961,9 @@ ${conversationUrl}`,
         // Notifications pour les destinataires en copie
         for (const copieId of copieIds) {
           try {
-            const copieUser = await User.findById(copieId);
+            const copieUser = await M.User.findById(copieId);
             if (copieUser) {
-              await Notification.create({
+              await M.Notification.create({
                 user: copieId.toString(),
                 type: 'message_received',
                 titre: 'Message en copie',
@@ -993,13 +987,13 @@ ${conversationUrl}`,
 
         // Notification pour tous les autres administrateurs (sauf l'expéditeur)
         try {
-          const autresAdmins = await User.find({
+          const autresAdmins = await M.User.find({
             role: { $in: ['admin', 'superadmin'] },
             _id: { $ne: userIdObj },
             isActive: { $ne: false }
           });
 
-          const destinataireInfo = await User.findById(destinatairesIds[0]);
+          const destinataireInfo = await M.User.findById(destinatairesIds[0]);
           const destinataireLabel = destinataireInfo 
             ? `${destinataireInfo.firstName} ${destinataireInfo.lastName}`.trim() || destinataireInfo.email
             : 'Destinataire inconnu';
@@ -1011,7 +1005,7 @@ ${conversationUrl}`,
               continue;
             }
 
-            await Notification.create({
+            await M.Notification.create({
               user: admin._id.toString(),
               type: 'message_sent',
               titre: 'Message envoyé par un administrateur',
@@ -1100,7 +1094,7 @@ router.post('/batch/read', async (req, res) => {
     );
 
     // Récupérer les messages où l'utilisateur est destinataire ou en copie
-    const messages = await MessageInterne.find({
+    const messages = await M.MessageInterne.find({
       _id: { $in: messageIdsObj },
       $or: [
         { destinataires: userIdObj },
@@ -1158,7 +1152,7 @@ router.post('/batch/unread', async (req, res) => {
     );
 
     // Récupérer les messages où l'utilisateur est destinataire ou en copie
-    const messages = await MessageInterne.find({
+    const messages = await M.MessageInterne.find({
       _id: { $in: messageIdsObj },
       $or: [
         { destinataires: userIdObj },
@@ -1227,16 +1221,15 @@ router.post('/batch/delete', async (req, res) => {
       };
     }
 
-    const messages = await MessageInterne.find(query)
+    const messages = await M.MessageInterne.find(query)
       .populate('expediteur', 'firstName lastName email')
       .populate('dossierId', 'titre numero');
 
     // Ajouter les messages à la corbeille avant suppression
     try {
-      const Trash = require('../models/Trash');
-      for (const message of messages) {
+            for (const message of messages) {
         const messageData = message.toObject();
-        await Trash.create({
+        await M.Trash.create({
           itemType: 'message',
           originalId: message._id,
           itemData: messageData,
@@ -1270,7 +1263,7 @@ router.post('/batch/delete', async (req, res) => {
       }
     }
 
-    const result = await MessageInterne.deleteMany(query);
+    const result = await M.MessageInterne.deleteMany(query);
 
     res.json({
       success: true,
@@ -1296,7 +1289,7 @@ router.get('/thread/:threadId', async (req, res) => {
     const threadId = req.params.threadId;
 
     // Récupérer tous les messages du thread
-    const messages = await MessageInterne.find({
+    const messages = await M.MessageInterne.find({
       threadId: threadId,
       $or: [
         { expediteur: userId },
@@ -1367,7 +1360,7 @@ router.get('/:id', async (req, res) => {
     const userId = req.user.id;
     const messageId = req.params.id;
 
-    const message = await MessageInterne.findOne({
+    const message = await M.MessageInterne.findOne({
       _id: messageId,
       $or: [
         { expediteur: userId },
@@ -1391,7 +1384,7 @@ router.get('/:id', async (req, res) => {
 
     // Récupérer tous les messages du thread pour affichage complet
     const threadId = message.threadId || message._id.toString();
-    const threadMessages = await MessageInterne.find({
+    const threadMessages = await M.MessageInterne.find({
       threadId: threadId,
       $or: [
         { expediteur: userId },
@@ -1462,7 +1455,7 @@ router.put('/:id/read', async (req, res) => {
     const userIdObj = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
 
     // Récupérer le message (peut être destinataire principal ou en copie)
-    const message = await MessageInterne.findOne({
+    const message = await M.MessageInterne.findOne({
       _id: messageId,
       $or: [
         { destinataires: userIdObj },
@@ -1502,7 +1495,7 @@ router.put('/:id/read', async (req, res) => {
 
         // Notifier l'expéditeur si ce n'est pas lui qui lit
         if (expediteurId && expediteurId.toString() !== userIdObj.toString()) {
-          await Notification.create({
+          await M.Notification.create({
             user: expediteurId.toString(),
             type: 'message_read',
             titre: 'Message lu',
@@ -1523,7 +1516,7 @@ router.put('/:id/read', async (req, res) => {
         // Si c'est un message d'utilisateur vers admins et qu'un admin le lit
         // Notifier tous les autres admins
         if (message.typeMessage === 'user_to_admins' && (lecteurRole === 'admin' || lecteurRole === 'superadmin')) {
-          const autresAdmins = await User.find({
+          const autresAdmins = await M.User.find({
             role: { $in: ['admin', 'superadmin'] },
             _id: { $ne: userIdObj },
             isActive: { $ne: false }
@@ -1532,7 +1525,7 @@ router.put('/:id/read', async (req, res) => {
           for (const admin of autresAdmins) {
             const adminALu = message.lu.some(l => l.user && l.user.toString() === admin._id.toString());
             if (!adminALu) {
-              await Notification.create({
+              await M.Notification.create({
                 user: admin._id.toString(),
                 type: 'message_read',
                 titre: 'Message lu par un administrateur',
@@ -1564,7 +1557,7 @@ router.put('/:id/read', async (req, res) => {
       }
     }
 
-    const updatedMessage = await MessageInterne.findById(messageId)
+    const updatedMessage = await M.MessageInterne.findById(messageId)
       .populate('expediteur', 'firstName lastName email role')
       .populate('destinataires', 'firstName lastName email role');
 
@@ -1595,7 +1588,7 @@ router.put('/:id/unread', async (req, res) => {
     const userIdObj = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
 
     // Récupérer le message
-    const message = await MessageInterne.findOne({
+    const message = await M.MessageInterne.findOne({
       _id: messageId,
       $or: [
         { destinataires: userIdObj },
@@ -1641,7 +1634,7 @@ router.put('/:id/archive', async (req, res) => {
     const userId = req.user.id;
     const messageId = req.params.id;
 
-    const message = await MessageInterne.findOne({
+    const message = await M.MessageInterne.findOne({
       _id: messageId,
       $or: [
         { expediteur: userId },
@@ -1707,7 +1700,7 @@ router.delete('/:id', async (req, res) => {
       query = { _id: messageId, expediteur: userId };
     }
 
-    const message = await MessageInterne.findOne(query)
+    const message = await M.MessageInterne.findOne(query)
       .populate('expediteur', '_id')
       .populate('dossierId', '_id');
 
@@ -1720,8 +1713,7 @@ router.delete('/:id', async (req, res) => {
 
     // Ajouter le message à la corbeille avant suppression
     try {
-      const Trash = require('../models/Trash');
-      const messageData = message.toObject();
+            const messageData = message.toObject();
       
       // Extraire l'ID de l'expéditeur (peut être un ObjectId ou un objet peuplé)
       const expediteurId = message.expediteur?._id || message.expediteur || null;
@@ -1729,7 +1721,7 @@ router.delete('/:id', async (req, res) => {
       // Extraire l'ID du dossier (peut être un ObjectId ou un objet peuplé)
       const dossierIdValue = message.dossierId?._id || message.dossierId || null;
       
-      await Trash.create({
+      await M.Trash.create({
         itemType: 'message',
         originalId: message._id,
         itemData: messageData,
@@ -1760,7 +1752,7 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    await MessageInterne.findByIdAndDelete(messageId);
+    await M.MessageInterne.findByIdAndDelete(messageId);
 
     res.json({
       success: true,
@@ -1785,7 +1777,7 @@ router.get('/:id/download/:fileIndex', async (req, res) => {
     const messageId = req.params.id;
     const fileIndex = parseInt(req.params.fileIndex);
 
-    const message = await MessageInterne.findOne({
+    const message = await M.MessageInterne.findOne({
       _id: messageId,
       $or: [
         { expediteur: userId },

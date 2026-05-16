@@ -14,7 +14,11 @@
     "init-cms": "node scripts/initCmsContent.js",
     "email:test-forum": "node scripts/sendForumTestEmail.js",
     "test:lexia-sse": "node scripts/testLexiaSseStream.js",
-    "sync:google-calendar": "node scripts/backfillGoogleCalendarRdv.js"
+    "sync:google-calendar": "node scripts/backfillGoogleCalendarRdv.js",
+    "seed:master-orgs": "node scripts/seedMasterOrganizations.js",
+    "seed:tenants": "node scripts/seedTenants.js",
+    "verify:tenant-login": "node scripts/verifyTenantLogin.js",
+    "fix:demo-login": "node scripts/fixDemoLogin.js"
   },
   "keywords": [],
   "author": "",

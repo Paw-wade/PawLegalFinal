@@ -1,11 +1,9 @@
 const express = require('express');
+const M = require('../tenantModels');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { protect, authorize } = require('../middleware/auth');
 const { sendSMS, sendNotificationSMS, formatPhoneNumber, recordOutboundSms } = require('../sendSMS');
-const User = require('../models/User');
-const Log = require('../models/Log');
-
 // @route   POST /api/sms/send
 // @desc    Envoyer un SMS (admin seulement)
 // @access  Private/Admin
@@ -53,7 +51,7 @@ router.post(
 
       // Logger l'action
       try {
-        await Log.create({
+        await M.Log.create({
           user: adminId,
           userEmail: adminEmail,
           action: 'send_sms',
@@ -117,7 +115,7 @@ router.post(
 
       // Logger l'action
       try {
-        await Log.create({
+        await M.Log.create({
           user: adminId,
           userEmail: adminEmail,
           action: 'send_notification_sms',
@@ -232,7 +230,7 @@ router.post(
 
       // Logger l'action
       try {
-        await Log.create({
+        await M.Log.create({
           user: adminId,
           userEmail: adminEmail,
           action: 'send_bulk_sms',

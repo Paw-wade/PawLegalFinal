@@ -1,11 +1,14 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { OAuth2Client } = require('google-auth-library');
 const { body, validationResult } = require('express-validator');
-const User = require('../models/User');
-const EmailTemplate = require('../models/EmailTemplate');
+const M = require('../tenantModels');
 const { protect } = require('../middleware/auth');
+const { signAuthToken, signSignupActivationToken } = require('../lib/tenant/jwt');
+const { getTenantDb } = require('../lib/tenant/getTenantDb');
+const { getUserModel } = require('../lib/tenant/getUserModel');
 const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const {
@@ -15,22 +18,40 @@ const {
 } = require('../utils/emailNotifications');
 
 const router = express.Router();
-// Générer un token JWT
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'your-secret-key-here', {
-    // Session longue configurable (ex: 90d) pour limiter les reconnexions fréquentes.
-    expiresIn: process.env.JWT_EXPIRES_IN || '90d'
-  });
-};
 
-/** JWT court pour le premier clic depuis l’email d’inscription (pas de mot de passe dans le mail). */
-const generateSignupActivationToken = (userId) => {
-  return jwt.sign(
-    { id: userId.toString(), purpose: 'signup_activate' },
-    process.env.JWT_SECRET || 'your-secret-key-here',
-    { expiresIn: process.env.SIGNUP_ACTIVATION_EXPIRES_IN || '48h' }
-  );
-};
+function tokenOrgId(req) {
+  return req.tenant?.orgId;
+}
+
+function isLoginDebugEnabled() {
+  return process.env.AUTH_LOGIN_DEBUG === 'true' || process.env.AUTH_LOGIN_DEBUG === '1';
+}
+
+function loginDebugPayload(req, reason, email) {
+  if (!isLoginDebugEnabled()) return {};
+  let database = null;
+  try {
+    database = getTenantDb(req).name;
+  } catch {
+    database = null;
+  }
+  return {
+    debug: {
+      reason,
+      email,
+      tenantSlug: req.tenant?.slug ?? null,
+      database,
+    },
+  };
+}
+
+async function verifyUserPassword(user, password) {
+  if (typeof user.comparePassword === 'function') {
+    return user.comparePassword(password);
+  }
+  if (!user.password) return false;
+  return bcrypt.compare(password, user.password);
+}
 
 function buildSignupActivationEmailPayload(user, activationUrl) {
   return {
@@ -77,9 +98,9 @@ function renderTemplateWithVariables(template, variables = {}) {
 
 async function ensureWelcomeTemplateExists() {
   try {
-    const existing = await EmailTemplate.findOne({ code: WELCOME_TEMPLATE_CODE }).select('_id').lean();
+    const existing = await M.EmailTemplate.findOne({ code: WELCOME_TEMPLATE_CODE }).select('_id').lean();
     if (existing) return;
-    await EmailTemplate.create(DEFAULT_WELCOME_TEMPLATE);
+    await M.EmailTemplate.create(DEFAULT_WELCOME_TEMPLATE);
     console.log('✅ Template email account_welcome créé automatiquement.');
   } catch (e) {
     // Ne jamais bloquer l'inscription si la base est indisponible ou contrainte unique en concurrence.
@@ -94,7 +115,7 @@ async function sendWelcomeEmailOnAccountCreated(user) {
   let textContent = DEFAULT_WELCOME_TEMPLATE.textContent;
 
   try {
-    const tpl = await EmailTemplate.findOne({
+    const tpl = await M.EmailTemplate.findOne({
       code: WELCOME_TEMPLATE_CODE,
       isActive: true,
     })
@@ -216,7 +237,7 @@ router.post(
       }
 
       // Vérifier l'unicité de l'email et du téléphone
-      const existingUser = await User.findOne({
+      const existingUser = await M.User.findOne({
         $or: [{ email }, { phone: formattedPhone }],
       });
       if (existingUser) {
@@ -228,7 +249,7 @@ router.post(
 
       const provisionalPassword = crypto.randomBytes(32).toString('hex');
 
-      const user = await User.create({
+      const user = await M.User.create({
         firstName,
         lastName,
         email,
@@ -240,7 +261,7 @@ router.post(
         needsPasswordSetup: true,
       });
 
-      const activationToken = generateSignupActivationToken(user._id);
+      const activationToken = signSignupActivationToken(user._id, tokenOrgId(req));
       const activationUrl = `${getPrimaryFrontendUrl()}/auth/activate?token=${encodeURIComponent(activationToken)}`;
       await ensureWelcomeTemplateExists();
 
@@ -309,12 +330,12 @@ router.post(
       const genericMessage =
         'Si cette adresse correspond à un compte en attente d’activation, un email vient de vous être envoyé.';
 
-      const user = await User.findOne({ email });
+      const user = await M.User.findOne({ email });
       if (!user || !user.needsPasswordSetup) {
         return res.json({ success: true, message: genericMessage, emailSent: null });
       }
 
-      const activationToken = generateSignupActivationToken(user._id);
+      const activationToken = signSignupActivationToken(user._id, tokenOrgId(req));
       const activationUrl = `${getPrimaryFrontendUrl()}/auth/activate?token=${encodeURIComponent(activationToken)}`;
       const detail = await sendTransactionalEmailDetailed(
         buildSignupActivationEmailPayload(user, activationUrl)
@@ -378,7 +399,7 @@ router.post(
         });
       }
 
-      const user = await User.findById(decoded.id).select('+password');
+      const user = await M.User.findById(decoded.id).select('+password');
 
       if (!user) {
         return res.status(404).json({
@@ -402,7 +423,7 @@ router.post(
       await sendWelcomeEmailOnAccountCreated(user);
 
       try {
-        const Log = require('../models/Log');
+        const Log = M.Log;
         Log.create({
           action: 'signup_activate',
           user: user._id,
@@ -418,7 +439,7 @@ router.post(
         console.error('Erreur lors de l\'initialisation du log signup_activate:', logError);
       }
 
-      const authToken = generateToken(user._id);
+      const authToken = signAuthToken(user._id, { orgId: tokenOrgId(req) });
 
       let daysRemaining = null;
       if (user.role !== 'admin' && user.role !== 'superadmin' && !user.profilComplete) {
@@ -477,14 +498,19 @@ router.post(
         });
       }
 
-      const { email, password } = req.body;
+      const { password } = req.body;
+      const email = String(req.body.email || '')
+        .trim()
+        .toLowerCase();
 
+      const User = getUserModel(req);
       const user = await User.findOne({ email }).select('+password');
-      
+
       if (!user) {
         return res.status(401).json({
           success: false,
-          message: 'Identifiants invalides'
+          message: 'Identifiants invalides',
+          ...loginDebugPayload(req, 'user_not_found', email),
         });
       }
 
@@ -495,20 +521,21 @@ router.post(
         });
       }
 
-      const isPasswordValid = await user.comparePassword(password);
-      
+      const isPasswordValid = await verifyUserPassword(user, password);
+
       if (!isPasswordValid) {
         return res.status(401).json({
           success: false,
-          message: 'Identifiants invalides'
+          message: 'Identifiants invalides',
+          ...loginDebugPayload(req, 'invalid_password', email),
         });
       }
 
-      const token = generateToken(user._id);
+      const token = signAuthToken(user._id, { orgId: tokenOrgId(req) });
 
       // Logger la connexion en non-bloquant pour ne pas ralentir la réponse login.
       try {
-        const Log = require('../models/Log');
+        const Log = M.Log;
         Log.create({
           action: 'login',
           user: user._id,
@@ -621,7 +648,7 @@ router.post('/google-login', async (req, res) => {
         });
       }
 
-      const user = await User.findOne({ email });
+      const user = await M.User.findOne({ email });
 
       if (!user) {
         return res.status(404).json({
@@ -637,7 +664,7 @@ router.post('/google-login', async (req, res) => {
         });
       }
 
-      const token = generateToken(user._id);
+      const token = signAuthToken(user._id, { orgId: tokenOrgId(req) });
       const daysRemaining = getDaysRemainingForUser(user);
 
       return res.json({
@@ -690,7 +717,7 @@ router.post(
 
       const { email } = req.body;
 
-      const user = await User.findOne({ email });
+      const user = await M.User.findOne({ email });
 
       if (!user) {
         return res.json({
@@ -748,7 +775,7 @@ router.post(
         });
       }
 
-      const user = await User.findOne({ phone: formattedPhone }).select('+resetPasswordToken +resetPasswordExpires');
+      const user = await M.User.findOne({ phone: formattedPhone }).select('+resetPasswordToken +resetPasswordExpires');
 
       if (!user) {
         return res.json({
@@ -896,7 +923,7 @@ router.post(
 
       const hashedToken = crypto.createHash('sha256').update(code).digest('hex');
 
-      const user = await User.findOne({
+      const user = await M.User.findOne({
         phone: formattedPhone,
         resetPasswordToken: hashedToken,
         resetPasswordExpires: { $gt: Date.now() }
@@ -954,7 +981,7 @@ router.post(
       }
 
       const { password, email } = req.body;
-      const user = await User.findById(req.user.id).select('+password');
+      const user = await M.User.findById(req.user.id).select('+password');
 
       if (!user) {
         return res.status(404).json({
@@ -978,7 +1005,7 @@ router.post(
       // Si un email est fourni, l'ajouter au profil
       if (email) {
         // Vérifier si l'email n'est pas déjà utilisé
-        const existingUserWithEmail = await User.findOne({ email, _id: { $ne: user._id } });
+        const existingUserWithEmail = await M.User.findOne({ email, _id: { $ne: user._id } });
         if (existingUserWithEmail) {
           return res.status(400).json({
             success: false,
@@ -992,7 +1019,7 @@ router.post(
 
       // Logger l'action
       try {
-        const Log = require('../models/Log');
+        const Log = M.Log;
         await Log.create({
           action: 'setup_password',
           user: user._id,
@@ -1058,7 +1085,7 @@ router.post(
         .update(token)
         .digest('hex');
 
-      const user = await User.findOne({
+      const user = await M.User.findOne({
         resetPasswordToken: tokenHashed,
         resetPasswordExpires: { $gt: Date.now() },
       }).select('+password');
@@ -1122,7 +1149,7 @@ router.post(
         });
       }
 
-      const user = await User.findOne({ phone: formattedPhone });
+      const user = await M.User.findOne({ phone: formattedPhone });
       
       if (!user) {
         return res.status(401).json({
@@ -1147,7 +1174,7 @@ router.post(
 
       // Si l'utilisateur n'a pas de mot de passe, permettre la connexion
       if (user.needsPasswordSetup || !user.password) {
-        const token = generateToken(user._id);
+        const token = signAuthToken(user._id, { orgId: tokenOrgId(req) });
         
         return res.json({
           success: true,
@@ -1189,7 +1216,7 @@ router.post(
 // @access  Private
 router.get('/me', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     
     res.json({
       success: true,

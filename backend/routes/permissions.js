@@ -1,9 +1,8 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const Permission = require('../models/Permission');
-const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
 
+const M = require('../tenantModels');
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification admin
@@ -15,12 +14,12 @@ router.use(authorize('admin', 'superadmin'));
 // @access  Private/Admin
 router.get('/:userId', async (req, res) => {
   try {
-    const permission = await Permission.findOne({ user: req.params.userId })
+    const permission = await M.Permission.findOne({ user: req.params.userId })
       .populate('user', 'firstName lastName email role');
 
     if (!permission) {
       // Retourner des permissions par défaut basées sur le rôle
-      const user = await User.findById(req.params.userId);
+      const user = await M.User.findById(req.params.userId);
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -76,7 +75,7 @@ router.post(
       const { userId, roles, permissions } = req.body;
 
       // Vérifier que l'utilisateur existe
-      const user = await User.findById(userId);
+      const user = await M.User.findById(userId);
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -158,7 +157,7 @@ router.post(
       }
 
       // Créer ou mettre à jour les permissions
-      let permission = await Permission.findOne({ user: userId });
+      let permission = await M.Permission.findOne({ user: userId });
 
       if (permission) {
         permission.roles = roles;
@@ -174,7 +173,7 @@ router.post(
         }
       } else {
         try {
-          permission = await Permission.create({
+          permission = await M.Permission.create({
             user: userId,
             roles: roles,
             permissions: finalPermissions
@@ -246,7 +245,7 @@ router.put(
 
       const { roles, permissions } = req.body;
 
-      const user = await User.findById(req.params.userId);
+      const user = await M.User.findById(req.params.userId);
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -358,7 +357,7 @@ router.put(
         }
       }
 
-      let permission = await Permission.findOne({ user: req.params.userId });
+      let permission = await M.Permission.findOne({ user: req.params.userId });
 
       if (permission) {
         if (roles) {
@@ -417,7 +416,7 @@ router.put(
         }
         
         try {
-          permission = await Permission.create({
+          permission = await M.Permission.create({
             user: req.params.userId,
             roles: finalRoles,
             permissions: finalPermissions || []

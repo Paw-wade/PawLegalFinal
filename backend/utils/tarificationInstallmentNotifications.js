@@ -1,6 +1,4 @@
-const Dossier = require('../models/Dossier');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
+const M = require('../tenantModels');
 const { sendTransactionalEmail, escapeHtml } = require('./emailNotifications');
 
 function normalizeMontantTarificationFixe(v) {
@@ -26,7 +24,7 @@ function toStartOfDay(value) {
 async function resolveClientUserId(dossier) {
   if (dossier.user) return dossier.user.toString();
   if (!dossier.clientEmail) return null;
-  const userByEmail = await User.findOne({
+  const userByEmail = await M.User.findOne({
     email: String(dossier.clientEmail).toLowerCase(),
   }).select('_id');
   return userByEmail ? userByEmail._id.toString() : null;
@@ -40,7 +38,7 @@ async function checkTarificationInstallmentReminders() {
     const today = toStartOfDay(new Date());
     if (!today) return { success: true, sent: 0 };
 
-    const dossiers = await Dossier.find({
+    const dossiers = await M.Dossier.find({
       fraisExoneres: { $ne: true },
       paiementTarificationEffectue: { $ne: true },
       tarificationEcheances: { $exists: true, $ne: [] },
@@ -84,7 +82,7 @@ async function checkTarificationInstallmentReminders() {
         const titre = 'Échéance de tarification dans 3 jours';
         const message = `Pour le dossier « ${dossierTitle} » (${dossierRef}), l’échéance « ${label} » de ${amountText} EUR arrive le ${dueLabel}.`;
 
-        await Notification.create({
+        await M.Notification.create({
           user: clientUserId,
           type: 'tarification_installment_reminder',
           titre,
@@ -98,13 +96,13 @@ async function checkTarificationInstallmentReminders() {
           },
         });
 
-        const clientUser = await User.findById(clientUserId).select('email firstName lastName');
+        const clientUser = await M.User.findById(clientUserId).select('email firstName lastName');
         if (clientUser?.email) {
           try {
             await sendTransactionalEmail({
-              to: clientUser.email,
+              to: clientM.User.email,
               subject: 'Rappel : échéance de tarification dans 3 jours — Ada Papers',
-              html: `<p>Bonjour ${escapeHtml(clientUser.firstName || '')},</p><p>${escapeHtml(message)}</p><p><a href="${process.env.FRONTEND_URL || 'https://adapapers.fr'}/client/tarification">Voir la tarification</a></p>`,
+              html: `<p>Bonjour ${escapeHtml(clientM.User.firstName || '')},</p><p>${escapeHtml(message)}</p><p><a href="${process.env.FRONTEND_URL || 'https://adapapers.fr'}/client/tarification">Voir la tarification</a></p>`,
             });
           } catch (mailErr) {
             console.error('⚠️ Email rappel échéance tarification:', mailErr);

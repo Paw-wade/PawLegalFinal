@@ -1,7 +1,7 @@
 const express = require('express');
-const SmsHistory = require('../models/SmsHistory');
 const { protect, authorize } = require('../middleware/auth');
 
+const M = require('../tenantModels');
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification admin
@@ -53,17 +53,17 @@ router.get('/', async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [history, total] = await Promise.all([
-      SmsHistory.find(query)
+      M.SmsHistory.find(query)
         .populate('sentBy', 'firstName lastName email')
         .populate('sentToUser', 'firstName lastName email phone')
         .sort({ sentAt: -1 })
         .limit(parseInt(limit))
         .skip(skip),
-      SmsHistory.countDocuments(query)
+      M.SmsHistory.countDocuments(query)
     ]);
 
     // Statistiques
-    const stats = await SmsHistory.aggregate([
+    const stats = await M.SmsHistory.aggregate([
       { $match: query },
       {
         $group: {
@@ -113,7 +113,7 @@ router.get('/stats', async (req, res) => {
       }
     }
 
-    const stats = await SmsHistory.aggregate([
+    const stats = await M.SmsHistory.aggregate([
       { $match: query },
       {
         $group: {
@@ -127,7 +127,7 @@ router.get('/stats', async (req, res) => {
       }
     ]);
 
-    const contextStats = await SmsHistory.aggregate([
+    const contextStats = await M.SmsHistory.aggregate([
       { $match: query },
       {
         $group: {
@@ -158,7 +158,7 @@ router.get('/stats', async (req, res) => {
 // @access  Private/Admin
 router.get('/:id', async (req, res) => {
   try {
-    const sms = await SmsHistory.findById(req.params.id)
+    const sms = await M.SmsHistory.findById(req.params.id)
       .populate('sentBy', 'firstName lastName email')
       .populate('sentToUser', 'firstName lastName email phone');
 

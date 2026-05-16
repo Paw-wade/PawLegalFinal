@@ -1,10 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const CollaborativeDraft = require('../models/CollaborativeDraft');
-const Dossier = require('../models/Dossier');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
+const M = require('../tenantModels');
 const { protect } = require('../middleware/auth');
 
 // Middleware d'auth obligatoire pour toutes les routes
@@ -80,7 +77,7 @@ async function buildGlobalCollaborativeQuery(user, qTrim) {
       $or: [{ 'partnerAccess.partner': user._id }, { createdBy: user._id }],
     });
   } else if (isClient(user)) {
-    const dossierIds = await Dossier.distinct('_id', { user: user._id });
+    const dossierIds = await M.Dossier.distinct('_id', { user: user._id });
     const or = [{ createdBy: user._id }];
     if (dossierIds.length) {
       or.push({ visibleToClient: true, dossier: { $in: dossierIds } });
@@ -120,7 +117,7 @@ function computeDraftContentCanEdit(draft, user, dossier) {
 // GET /collaborative-drafts/count — tous les brouillons visibles (liste globale)
 router.get('/collaborative-drafts/count', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user) {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
@@ -128,7 +125,7 @@ router.get('/collaborative-drafts/count', async (req, res) => {
     if (!query) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
-    const count = await CollaborativeDraft.countDocuments(query);
+    const count = await M.CollaborativeDraft.countDocuments(query);
     return res.json({ success: true, count });
   } catch (error) {
     console.error('collaborative-drafts count:', error);
@@ -139,7 +136,7 @@ router.get('/collaborative-drafts/count', async (req, res) => {
 // GET /collaborative-drafts — liste globale (mêmes règles de visibilité que par dossier)
 router.get('/collaborative-drafts', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user) {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
@@ -149,7 +146,7 @@ router.get('/collaborative-drafts', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
 
-    const drafts = await CollaborativeDraft.find(query)
+    const drafts = await M.CollaborativeDraft.find(query)
       .sort({ updatedAt: -1 })
       .populate('createdBy', 'firstName lastName role email')
       .populate('partnerAccess.partner', 'firstName lastName email')
@@ -195,12 +192,12 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
     const { dossierId } = req.params;
     const userId = req.user.id;
 
-    const dossier = await Dossier.findById(dossierId);
+    const dossier = await M.Dossier.findById(dossierId);
     if (!dossier) {
       return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     }
 
-    const user = await User.findById(userId);
+    const user = await M.User.findById(userId);
     if (!user) {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
@@ -226,7 +223,7 @@ router.get('/dossiers/:dossierId/drafts', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
 
-    const drafts = await CollaborativeDraft.find(query)
+    const drafts = await M.CollaborativeDraft.find(query)
       .sort({ updatedAt: -1 })
       .populate('createdBy', 'firstName lastName role')
       .populate('partnerAccess.partner', 'firstName lastName email')
@@ -267,12 +264,12 @@ router.post('/dossiers/:dossierId/drafts', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Le titre est requis' });
     }
 
-    const dossier = await Dossier.findById(dossierId);
+    const dossier = await M.Dossier.findById(dossierId);
     if (!dossier) {
       return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     }
 
-    const user = await User.findById(userId);
+    const user = await M.User.findById(userId);
     if (!user) {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
@@ -284,7 +281,7 @@ router.post('/dossiers/:dossierId/drafts', async (req, res) => {
     }
 
     const dueParsed = parseDueDateField(dueDateRaw);
-    const draft = await CollaborativeDraft.create({
+    const draft = await M.CollaborativeDraft.create({
       dossier: dossierId,
       title: title.trim(),
       content: content || '',
@@ -307,17 +304,17 @@ router.patch('/drafts/:draftId', async (req, res) => {
     const { title, content, dueDate: dueDateRaw } = req.body;
     const userId = req.user.id;
 
-    const draft = await CollaborativeDraft.findById(draftId).populate('createdBy');
+    const draft = await M.CollaborativeDraft.findById(draftId).populate('createdBy');
     if (!draft || draft.isArchived) {
       return res.status(404).json({ success: false, message: 'Brouillon introuvable' });
     }
 
-    const user = await User.findById(userId);
+    const user = await M.User.findById(userId);
     if (!user) {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
 
-    const dossier = await Dossier.findById(draft.dossier);
+    const dossier = await M.Dossier.findById(draft.dossier);
     const canEdit = computeDraftContentCanEdit(draft, user, dossier);
 
     if (!canEdit) {
@@ -363,12 +360,12 @@ router.patch('/drafts/:draftId/permissions', async (req, res) => {
     const { visibleToAdmins, excludedAdminIds, partnerAccess, visibleToClient, clientCanEdit } = req.body;
     const userId = req.user.id;
 
-    const draft = await CollaborativeDraft.findById(draftId).populate('createdBy');
+    const draft = await M.CollaborativeDraft.findById(draftId).populate('createdBy');
     if (!draft || draft.isArchived) {
       return res.status(404).json({ success: false, message: 'Brouillon introuvable' });
     }
 
-    const user = await User.findById(userId);
+    const user = await M.User.findById(userId);
     if (!user) {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }
@@ -386,7 +383,7 @@ router.patch('/drafts/:draftId/permissions', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Seul le créateur du document ou un administrateur peut modifier les autorisations' });
     }
 
-    const dossierDoc = await Dossier.findById(draft.dossier);
+    const dossierDoc = await M.Dossier.findById(draft.dossier);
     const prevVisibleToClient = !!draft.visibleToClient;
     const prevClientCanEdit = !!draft.clientCanEdit;
 
@@ -445,7 +442,7 @@ router.patch('/drafts/:draftId/permissions', async (req, res) => {
     if (notifyClient && dossierDoc.user) {
       const clientUid = dossierDoc.user.toString();
       try {
-        await Notification.create({
+        await M.Notification.create({
           user: clientUid,
           type: 'draft_access_granted',
           titre: 'Accès à un document en préparation',
@@ -474,7 +471,7 @@ router.patch('/drafts/:draftId/permissions', async (req, res) => {
       const gainedEdit = canEditNow && (!previous || !previous.canEdit);
       if (wasNew || gainedEdit) {
         try {
-          await Notification.create({
+          await M.Notification.create({
             user: partnerId,
             type: 'draft_access_granted',
             titre: 'Accès accordé à un document en préparation',
@@ -508,12 +505,12 @@ router.delete('/drafts/:draftId', async (req, res) => {
     const { draftId } = req.params;
     const userId = req.user.id;
 
-    const draft = await CollaborativeDraft.findById(draftId).populate('createdBy');
+    const draft = await M.CollaborativeDraft.findById(draftId).populate('createdBy');
     if (!draft || draft.isArchived) {
       return res.status(404).json({ success: false, message: 'Brouillon introuvable' });
     }
 
-    const user = await User.findById(userId);
+    const user = await M.User.findById(userId);
     if (!user) {
       return res.status(401).json({ success: false, message: 'Utilisateur non authentifié' });
     }

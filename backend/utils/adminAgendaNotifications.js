@@ -1,8 +1,4 @@
-const Dossier = require('../models/Dossier');
-const Task = require('../models/Task');
-const DossierDocumentDraft = require('../models/DossierDocumentDraft');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
+const M = require('../tenantModels');
 
 const DEFAULT_HORIZON_DAYS = 15;
 
@@ -43,10 +39,10 @@ async function checkAdminAgendaNotifications() {
     const dayEnd = new Date(todayMs + 24 * 60 * 60 * 1000);
 
     const [dossiers, admins] = await Promise.all([
-      Dossier.find({})
+      M.Dossier.find({})
         .select('_id titre numero statut estCloture estArchive dateEcheance etapesSupplementaires')
         .lean(),
-      User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } })
+      M.User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } })
         .select('_id')
         .lean(),
     ]);
@@ -57,10 +53,10 @@ async function checkAdminAgendaNotifications() {
     const ids = active.map((d) => d._id).filter(Boolean);
 
     const [tasks, drafts] = await Promise.all([
-      Task.find({ dossier: { $in: ids }, dateEcheance: { $exists: true, $ne: null } })
+      M.Task.find({ dossier: { $in: ids }, dateEcheance: { $exists: true, $ne: null } })
         .select('dossier titre dateEcheance statut archived effectue')
         .lean(),
-      DossierDocumentDraft.find({ dossier: { $in: ids }, dueDate: { $exists: true, $ne: null }, completedAt: null })
+      M.DossierDocumentDraft.find({ dossier: { $in: ids }, dueDate: { $exists: true, $ne: null }, completedAt: null })
         .select('dossier title dueDate')
         .lean(),
     ]);
@@ -138,7 +134,7 @@ async function checkAdminAgendaNotifications() {
     let sent = 0;
     for (const admin of admins) {
       for (const item of items) {
-        const existing = await Notification.findOne({
+        const existing = await M.Notification.findOne({
           user: admin._id,
           type: 'other',
           'metadata.adminAgendaKey': item.key,
@@ -146,7 +142,7 @@ async function checkAdminAgendaNotifications() {
         }).select('_id').lean();
         if (existing) continue;
 
-        await Notification.create({
+        await M.Notification.create({
           user: admin._id,
           type: 'other',
           titre: item.titre,

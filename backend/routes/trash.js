@@ -1,14 +1,6 @@
 const express = require('express');
+const M = require('../tenantModels');
 const router = express.Router();
-const Trash = require('../models/Trash');
-const MessageInterne = require('../models/MessageInterne');
-const Document = require('../models/Document');
-const Dossier = require('../models/Dossier');
-const RendezVous = require('../models/RendezVous');
-const Temoignage = require('../models/Temoignage');
-const Task = require('../models/Task');
-const Notification = require('../models/Notification');
-const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
 
 // Toutes les routes nécessitent une authentification
@@ -73,7 +65,7 @@ router.get('/', async (req, res) => {
     const skip = (page - 1) * limit;
     
     // Récupérer les éléments
-    const trashItems = await Trash.find(filter)
+    const trashItems = await M.Trash.find(filter)
       .populate('deletedBy', 'firstName lastName email role')
       .populate('originalOwner', 'firstName lastName email role')
       .sort({ deletedAt: -1 })
@@ -81,7 +73,7 @@ router.get('/', async (req, res) => {
       .limit(limit);
     
     // Compter le total
-    const total = await Trash.countDocuments(filter);
+    const total = await M.Trash.countDocuments(filter);
     
     res.json({
       success: true,
@@ -111,7 +103,7 @@ router.post('/restore/:id', async (req, res) => {
     const userRole = req.user.role;
     
     // Récupérer l'élément de la corbeille
-    const trashItem = await Trash.findById(trashId)
+    const trashItem = await M.Trash.findById(trashId)
       .populate('deletedBy', 'role')
       .populate('originalOwner', 'role');
     
@@ -164,7 +156,7 @@ router.post('/restore/:id', async (req, res) => {
     const restoredItem = await Model.create(restoredData);
     
     // Supprimer l'élément de la corbeille
-    await Trash.findByIdAndDelete(trashId);
+    await M.Trash.findByIdAndDelete(trashId);
     
     res.json({
       success: true,
@@ -191,7 +183,7 @@ router.delete('/:id', async (req, res) => {
     const userRole = req.user.role;
     
     // Récupérer l'élément de la corbeille
-    const trashItem = await Trash.findById(trashId)
+    const trashItem = await M.Trash.findById(trashId)
       .populate('deletedBy', 'role')
       .populate('originalOwner', 'role');
     
@@ -217,7 +209,7 @@ router.delete('/:id', async (req, res) => {
     }
     
     // Supprimer définitivement de la corbeille
-    await Trash.findByIdAndDelete(trashId);
+    await M.Trash.findByIdAndDelete(trashId);
     
     res.json({
       success: true,
@@ -238,7 +230,7 @@ router.delete('/:id', async (req, res) => {
 // @access  Private/Admin
 router.post('/empty', authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    const result = await Trash.deleteMany({});
+    const result = await M.Trash.deleteMany({});
     
     res.json({
       success: true,
@@ -283,7 +275,7 @@ router.get('/stats', async (req, res) => {
     }
     
     // Statistiques par type
-    const statsByType = await Trash.aggregate([
+    const statsByType = await M.Trash.aggregate([
       { $match: filter },
       {
         $group: {
@@ -295,7 +287,7 @@ router.get('/stats', async (req, res) => {
     ]);
     
     // Total
-    const total = await Trash.countDocuments(filter);
+    const total = await M.Trash.countDocuments(filter);
     
     // Éléments qui seront supprimés automatiquement bientôt (dans les 7 prochains jours)
     const sevenDaysFromNow = new Date();
@@ -303,7 +295,7 @@ router.get('/stats', async (req, res) => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const expiringSoon = await Trash.countDocuments({
+    const expiringSoon = await M.Trash.countDocuments({
       ...filter,
       deletedAt: {
         $gte: thirtyDaysAgo,

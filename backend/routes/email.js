@@ -3,9 +3,7 @@ const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const { sendTransactionalEmailDetailed } = require('../utils/emailNotifications');
 const { protect, authorize } = require('../middleware/auth');
-const EmailTemplate = require('../models/EmailTemplate');
-const EmailEventSetting = require('../models/EmailEventSetting');
-const EmailLog = require('../models/EmailLog');
+const M = require('../tenantModels');
 
 const router = express.Router();
 
@@ -557,7 +555,7 @@ function renderWithVariables(template, variables = {}) {
 
 async function logEmail(payload) {
   try {
-    await EmailLog.create(payload);
+    await M.EmailLog.create(payload);
   } catch (error) {
     console.error('Erreur log email:', error.message);
   }
@@ -622,7 +620,7 @@ router.post('/init-defaults', async (req, res) => {
     const updated = [];
 
     for (const tpl of DEFAULT_TEMPLATES) {
-      const found = await EmailTemplate.findOne({ code: tpl.code });
+      const found = await M.EmailTemplate.findOne({ code: tpl.code });
       if (found) {
         // Migration douce: si le template systeme est une ancienne version connue,
         // on l'aligne sur le contenu par defaut actuel.
@@ -667,7 +665,7 @@ router.post('/init-defaults', async (req, res) => {
         existing.push(tpl.code);
         continue;
       }
-      const doc = await EmailTemplate.create({ ...tpl, createdBy: userId, updatedBy: userId });
+      const doc = await M.EmailTemplate.create({ ...tpl, createdBy: userId, updatedBy: userId });
       created.push(doc);
     }
 
@@ -703,7 +701,7 @@ router.get('/templates', async (req, res) => {
         { description: { $regex: search, $options: 'i' } },
       ];
     }
-    const templates = await EmailTemplate.find(q).sort({ category: 1, code: 1 });
+    const templates = await M.EmailTemplate.find(q).sort({ category: 1, code: 1 });
     res.json({ success: true, count: templates.length, templates });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
@@ -723,10 +721,10 @@ router.post(
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
-      const existing = await EmailTemplate.findOne({ code: req.body.code });
+      const existing = await M.EmailTemplate.findOne({ code: req.body.code });
       if (existing) return res.status(400).json({ success: false, message: 'Un template avec ce code existe déjà' });
 
-      const doc = await EmailTemplate.create({
+      const doc = await M.EmailTemplate.create({
         ...req.body,
         variables: req.body.variables || [],
         category: req.body.category || 'other',
@@ -743,11 +741,11 @@ router.post(
 
 router.put('/templates/:id', async (req, res) => {
   try {
-    const doc = await EmailTemplate.findById(req.params.id);
+    const doc = await M.EmailTemplate.findById(req.params.id);
     if (!doc) return res.status(404).json({ success: false, message: 'Template non trouvé' });
 
     if (req.body.code && req.body.code !== doc.code) {
-      const exists = await EmailTemplate.findOne({ code: req.body.code });
+      const exists = await M.EmailTemplate.findOne({ code: req.body.code });
       if (exists) return res.status(400).json({ success: false, message: 'Un template avec ce code existe déjà' });
       doc.code = req.body.code;
     }
@@ -766,7 +764,7 @@ router.put('/templates/:id', async (req, res) => {
 
 router.delete('/templates/:id', async (req, res) => {
   try {
-    const doc = await EmailTemplate.findById(req.params.id);
+    const doc = await M.EmailTemplate.findById(req.params.id);
     if (!doc) return res.status(404).json({ success: false, message: 'Template non trouvé' });
     if (doc.isSystem) return res.status(403).json({ success: false, message: 'Les templates système ne peuvent pas être supprimés' });
     await doc.deleteOne();
@@ -778,7 +776,7 @@ router.delete('/templates/:id', async (req, res) => {
 
 router.post('/templates/:id/preview', async (req, res) => {
   try {
-    const doc = await EmailTemplate.findById(req.params.id);
+    const doc = await M.EmailTemplate.findById(req.params.id);
     if (!doc) return res.status(404).json({ success: false, message: 'Template non trouvé' });
     const variables = req.body.variables || {};
     res.json({
@@ -802,7 +800,7 @@ router.post(
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
-      const template = await EmailTemplate.findById(req.params.id);
+      const template = await M.EmailTemplate.findById(req.params.id);
       if (!template) return res.status(404).json({ success: false, message: 'Template non trouvé' });
       if (!template.isActive) return res.status(400).json({ success: false, message: 'Template inactif' });
 
@@ -889,8 +887,8 @@ router.get('/logs', async (req, res) => {
 
     const skip = (Number(page) - 1) * Number(limit);
     const [logs, total] = await Promise.all([
-      EmailLog.find(q).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).populate('sentBy', 'firstName lastName email'),
-      EmailLog.countDocuments(q),
+      M.EmailLog.find(q).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).populate('sentBy', 'firstName lastName email'),
+      M.EmailLog.countDocuments(q),
     ]);
 
     res.json({ success: true, logs, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });

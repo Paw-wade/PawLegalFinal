@@ -1,15 +1,12 @@
 const express = require('express');
+const M = require('../tenantModels');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
-const Note = require('../models/Note');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
-
 // Fonction utilitaire pour créer une notification
 const createNotification = async (userId, type, titre, message, lien, metadata = {}) => {
   try {
-    await Notification.create({
+    await M.Notification.create({
       user: userId,
       type,
       titre,
@@ -33,7 +30,7 @@ router.get('/', protect, async (req, res) => {
     // 1. destinataires est vide (note pour toute l'équipe) ET l'utilisateur est admin/superadmin
     // 2. OU l'utilisateur est dans destinataires
     // 3. OU l'utilisateur est le créateur
-    const notes = await Note.find({
+    const notes = await M.Note.find({
       $or: [
         { destinataires: { $size: 0 }, createdBy: { $exists: true } }, // Notes pour toute l'équipe
         { destinataires: user.id }, // Notes où l'utilisateur est destinataire
@@ -85,7 +82,7 @@ router.get('/', protect, async (req, res) => {
 // @access  Private
 router.get('/:id', protect, async (req, res) => {
   try {
-    const note = await Note.findById(req.params.id)
+    const note = await M.Note.findById(req.params.id)
       .populate('createdBy', 'firstName lastName email role')
       .populate('destinataires', 'firstName lastName email role');
 
@@ -153,7 +150,7 @@ router.post(
 
       const { titre, contenu, destinataires, priorite } = req.body;
 
-      const note = await Note.create({
+      const note = await M.Note.create({
         titre,
         contenu,
         createdBy: req.user.id,
@@ -161,7 +158,7 @@ router.post(
         priorite: priorite || 'normale'
       });
 
-      const notePopulated = await Note.findById(note._id)
+      const notePopulated = await M.Note.findById(note._id)
         .populate('createdBy', 'firstName lastName email role')
         .populate('destinataires', 'firstName lastName email role');
 
@@ -170,13 +167,13 @@ router.post(
 
       if (destinataires && destinataires.length > 0) {
         // Notifier les destinataires spécifiques
-        usersToNotify = await User.find({
+        usersToNotify = await M.User.find({
           _id: { $in: destinataires },
           isActive: true
         });
       } else {
         // Notifier tous les membres de l'équipe
-        usersToNotify = await User.find({
+        usersToNotify = await M.User.find({
           role: { $in: ['admin', 'superadmin', 'avocat', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'] },
           isActive: true,
           _id: { $ne: req.user.id } // Ne pas notifier le créateur
@@ -216,7 +213,7 @@ router.post(
 // @access  Private
 router.put('/:id/read', protect, async (req, res) => {
   try {
-    const note = await Note.findById(req.params.id);
+    const note = await M.Note.findById(req.params.id);
 
     if (!note) {
       return res.status(404).json({
@@ -291,7 +288,7 @@ router.put(
         });
       }
 
-      const note = await Note.findById(req.params.id);
+      const note = await M.Note.findById(req.params.id);
 
       if (!note) {
         return res.status(404).json({
@@ -317,7 +314,7 @@ router.put(
 
       await note.save();
 
-      const notePopulated = await Note.findById(note._id)
+      const notePopulated = await M.Note.findById(note._id)
         .populate('createdBy', 'firstName lastName email role')
         .populate('destinataires', 'firstName lastName email role');
 
@@ -342,7 +339,7 @@ router.put(
 // @access  Private/Admin
 router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    const note = await Note.findById(req.params.id);
+    const note = await M.Note.findById(req.params.id);
 
     if (!note) {
       return res.status(404).json({

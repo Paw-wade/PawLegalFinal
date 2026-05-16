@@ -1,6 +1,4 @@
-const Task = require('../models/Task');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
+const M = require('../tenantModels');
 const { sendTransactionalEmail, escapeHtml } = require('./emailNotifications');
 const { getPrimaryFrontendUrl } = require('./frontendOrigins');
 
@@ -25,7 +23,7 @@ async function checkTaskDeadlines() {
     const today = new Date(now);
     
     // Récupérer toutes les tâches avec échéance qui ne sont pas terminées ou annulées
-    const tasks = await Task.find({
+    const tasks = await M.Task.find({
       dateEcheance: { $exists: true, $ne: null },
       statut: { $nin: ['termine', 'annule'] }
     })
@@ -33,7 +31,7 @@ async function checkTaskDeadlines() {
       .populate('createdBy', 'firstName lastName email role');
 
     // Récupérer tous les admins
-    const admins = await User.find({
+    const admins = await M.User.find({
       role: { $in: ['admin', 'superadmin'] },
       isActive: { $ne: false }
     });
@@ -94,7 +92,7 @@ async function checkTaskDeadlines() {
       for (const recipientId of recipients) {
         try {
           // Vérifier si une notification de ce type a déjà été envoyée aujourd'hui
-          const existingNotification = await Notification.findOne({
+          const existingNotification = await M.Notification.findOne({
             user: recipientId,
             type: 'other',
             'metadata.taskId': task._id.toString(),
@@ -109,7 +107,7 @@ async function checkTaskDeadlines() {
             continue; // Notification déjà envoyée aujourd'hui
           }
 
-          await Notification.create({
+          await M.Notification.create({
             user: recipientId,
             type: 'other',
             titre,
@@ -124,7 +122,7 @@ async function checkTaskDeadlines() {
           });
 
           try {
-            const ru = await User.findById(recipientId).select('email firstName').lean();
+            const ru = await M.User.findById(recipientId).select('email firstName').lean();
             if (ru?.email && String(ru.email).trim()) {
               const appUrl = getPrimaryFrontendUrl();
               await sendTransactionalEmail({
@@ -164,7 +162,7 @@ async function checkOverdueTasks() {
     now.setHours(0, 0, 0, 0);
 
     // Récupérer toutes les tâches en retard (dateEcheance < aujourd'hui) qui ne sont pas terminées ou annulées
-    const overdueTasks = await Task.find({
+    const overdueTasks = await M.Task.find({
       dateEcheance: { $exists: true, $ne: null, $lt: now },
       statut: { $nin: ['termine', 'annule'] },
       effectue: { $ne: true }
@@ -178,7 +176,7 @@ async function checkOverdueTasks() {
     }
 
     // Récupérer tous les administrateurs
-    const admins = await User.find({
+    const admins = await M.User.find({
       role: { $in: ['admin', 'superadmin'] },
       isActive: { $ne: false }
     }).select('email firstName');
@@ -219,7 +217,7 @@ async function checkOverdueTasks() {
       const todayStart = new Date(now);
       const todayEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
       
-      const existingNotifications = await Notification.find({
+      const existingNotifications = await M.Notification.find({
         type: 'other',
         'metadata.taskId': task._id.toString(),
         'metadata.overdueNotification': true,
@@ -252,7 +250,7 @@ async function checkOverdueTasks() {
 
       if (notifications.length > 0) {
         try {
-          await Notification.insertManyWithPush(notifications);
+          await M.Notification.insertManyWithPush(notifications);
           notificationsSent += notifications.length;
           console.log(`✅ ${notifications.length} notifications créées pour la tâche en retard: ${taskTitle}`);
           const notifMsg = `La tâche "${taskTitle}" assignée à ${assignedNames} est en retard de ${daysOverdue} jour${daysOverdue > 1 ? 's' : ''} (échéance: ${deadlineDateFormatted}).`;

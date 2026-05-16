@@ -1,10 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
-const Dossier = require('../models/Dossier');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
-const StandaloneTarificationRequest = require('../models/StandaloneTarificationRequest');
+const M = require('../tenantModels');
 const { protect, authorize } = require('../middleware/auth');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const { sendSMS, formatPhoneNumber } = require('../sendSMS');
@@ -154,7 +151,7 @@ const createNotification = async (userId, type, titre, message, lien = null, met
     
     console.log('📧 Création de notification:', { userId, type, titre, message: message ? message.substring(0, 50) + '...' : 'message vide' });
     
-    const notification = await Notification.create({
+    const notification = await M.Notification.create({
       user: userId,
       type,
       titre,
@@ -211,7 +208,7 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
       const modifierId = modifier._id ? modifier._id.toString() : modifier.id.toString();
       if (assignedId !== modifierId) {
         if (!usersToNotify.find(u => u.userId === assignedId)) {
-          const assignedUser = await User.findById(assignedId);
+          const assignedUser = await M.User.findById(assignedId);
           if (assignedUser) {
             usersToNotify.push({
               userId: assignedId,
@@ -369,7 +366,7 @@ router.post(
       }
       
       if (finalUserId) {
-        user = await User.findById(finalUserId);
+        user = await M.User.findById(finalUserId);
         if (!user) {
           return res.status(404).json({
             success: false,
@@ -390,7 +387,7 @@ router.post(
             message: 'Seuls les administrateurs peuvent assigner des dossiers'
           });
         }
-        assignedUser = await User.findById(assignedTo);
+        assignedUser = await M.User.findById(assignedTo);
         if (!assignedUser) {
           return res.status(404).json({
             success: false,
@@ -398,7 +395,7 @@ router.post(
           });
         }
         // Vérifier que l'utilisateur assigné est un admin ou superadmin
-        if (assignedUser.role !== 'admin' && assignedUser.role !== 'superadmin') {
+        if (assignedM.User.role !== 'admin' && assignedM.User.role !== 'superadmin') {
           return res.status(400).json({
             success: false,
             message: 'Le dossier ne peut être assigné qu\'à un membre de l\'équipe (admin ou superadmin)'
@@ -406,7 +403,7 @@ router.post(
         }
       }
 
-      const dossier = await Dossier.create({
+      const dossier = await M.Dossier.create({
         user: finalUserId || null,
         clientNom: finalUserId ? null : clientNom,
         clientPrenom: finalUserId ? null : clientPrenom,
@@ -433,8 +430,7 @@ router.post(
       // Si le dossier est créé depuis un rendez-vous, lier le rendez-vous au dossier
       if (rendezVousId) {
         try {
-          const RendezVous = require('../models/RendezVous');
-          const rendezVous = await RendezVous.findById(rendezVousId);
+          const rendezVous = await M.RendezVous.findById(rendezVousId);
           
           if (rendezVous) {
             rendezVous.dossierId = dossier._id;
@@ -450,8 +446,7 @@ router.post(
       // Si le dossier est créé depuis un rendez-vous, notifier les admins et le client
       if (rendezVousId) {
         try {
-          const RendezVous = require('../models/RendezVous');
-          const rendezVous = await RendezVous.findById(rendezVousId);
+          const rendezVous = await M.RendezVous.findById(rendezVousId);
           
           if (rendezVous) {
             // Notifier le client (utilisateur connecté ou coordonnées du rendez-vous)
@@ -495,7 +490,7 @@ Votre dossier est désormais pris en charge par notre équipe. Vous serez inform
             } else if (clientEmail) {
               // Client non connecté - chercher par email ou créer une notification pour l'email
               try {
-                const userByEmail = await User.findOne({ email: clientEmail.toLowerCase() });
+                const userByEmail = await M.User.findOne({ email: clientEmail.toLowerCase() });
                 if (userByEmail) {
                   await createNotification(
                     userByEmail._id,
@@ -553,7 +548,7 @@ Nos équipes reviendront vers vous en cas de pièce ou information complémentai
 
             // Notifier tous les admins actifs
             if (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin')) {
-              const admins = await User.find({ 
+              const admins = await M.User.find({ 
                 role: { $in: ['admin', 'superadmin'] },
                 isActive: true,
                 _id: { $ne: req.user._id } // Exclure l'admin qui a créé le dossier
@@ -584,8 +579,7 @@ Nos équipes reviendront vers vous en cas de pièce ou information complémentai
       // Logger l'action (si utilisateur connecté)
       if (req.user) {
         try {
-          const Log = require('../models/Log');
-          await Log.create({
+          await M.Log.create({
             action: 'dossier_created',
             user: req.user.id,
             userEmail: req.user.email,
@@ -683,7 +677,7 @@ router.get('/', async (req, res) => {
     
     console.log('🔍 Filtre de recherche:', JSON.stringify(filter, null, 2));
     
-    const dossiers = await Dossier.find(filter)
+    const dossiers = await M.Dossier.find(filter)
       .populate('user', 'firstName lastName email phone profilePhoto')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedTo', 'firstName lastName email role')
@@ -763,7 +757,7 @@ router.get(
       ];
     }
     
-    const dossiers = await Dossier.find(filter)
+    const dossiers = await M.Dossier.find(filter)
       .populate('user', 'firstName lastName email phone profilePhoto')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedTo', 'firstName lastName email role')
@@ -843,7 +837,7 @@ router.post(
       let user = null;
       let finalUserId = bodyUserId;
       if (finalUserId) {
-        user = await User.findById(finalUserId);
+        user = await M.User.findById(finalUserId);
         if (!user) {
           return res.status(404).json({
             success: false,
@@ -857,13 +851,13 @@ router.post(
       // Si l'utilisateur est connecté mais n'a pas fourni d'ID, utiliser l'ID de l'utilisateur connecté
       if (!finalUserId && req.user && req.user.id) {
         finalUserId = req.user.id;
-        user = await User.findById(finalUserId);
+        user = await M.User.findById(finalUserId);
       }
 
       // Vérifier si un membre de l'équipe est assigné
       let assignedUser = null;
       if (assignedTo) {
-        assignedUser = await User.findById(assignedTo);
+        assignedUser = await M.User.findById(assignedTo);
         if (!assignedUser) {
           return res.status(404).json({
             success: false,
@@ -871,7 +865,7 @@ router.post(
           });
         }
         // Vérifier que l'utilisateur assigné est un admin ou superadmin
-        if (assignedUser.role !== 'admin' && assignedUser.role !== 'superadmin') {
+        if (assignedM.User.role !== 'admin' && assignedM.User.role !== 'superadmin') {
           return res.status(400).json({
             success: false,
             message: 'Le dossier ne peut être assigné qu\'à un membre de l\'équipe (admin ou superadmin)'
@@ -879,7 +873,7 @@ router.post(
         }
       }
 
-      const dossier = await Dossier.create({
+      const dossier = await M.Dossier.create({
         user: finalUserId || null,
         clientNom: finalUserId ? null : clientNom,
         clientPrenom: finalUserId ? null : clientPrenom,
@@ -905,8 +899,7 @@ router.post(
 
       // Logger l'action
       try {
-        const Log = require('../models/Log');
-        await Log.create({
+        await M.Log.create({
           action: 'dossier_created',
           user: req.user.id,
           userEmail: req.user.email,
@@ -927,7 +920,7 @@ router.post(
         console.error('Erreur lors de l\'enregistrement du log:', logError);
       }
 
-      const dossierPopulated = await Dossier.findById(dossier._id)
+      const dossierPopulated = await M.Dossier.findById(dossier._id)
         .populate('user', 'firstName lastName email phone profilePhoto')
         .populate('createdBy', 'firstName lastName email');
 
@@ -943,7 +936,7 @@ router.post(
           const clientDisplayName = `${clientFirstName} ${clientLastName}`.trim() || 'Client';
 
           // Trouver tous les admins et superadmins
-          const admins = await User.find({
+          const admins = await M.User.find({
             role: { $in: ['admin', 'superadmin'] },
             isActive: true
           });
@@ -976,7 +969,7 @@ router.post(
         // Si pas de userId mais on a un clientEmail, chercher l'utilisateur par email
         if (!targetUserId && clientEmail) {
           try {
-            const userByEmail = await User.findOne({ email: clientEmail.toLowerCase() });
+            const userByEmail = await M.User.findOne({ email: clientEmail.toLowerCase() });
             if (userByEmail) {
               targetUserId = userByEmail._id.toString();
             }
@@ -1024,7 +1017,7 @@ router.get('/:id/recap', protect, async (req, res) => {
     const dossierId = req.params.id;
     
     // Récupérer le dossier avec toutes les relations
-    const dossier = await Dossier.findById(dossierId)
+    const dossier = await M.Dossier.findById(dossierId)
       .populate('user', 'firstName lastName email phone profilePhoto createdAt')
       .populate('createdBy', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email role')
@@ -1071,46 +1064,40 @@ router.get('/:id/recap', protect, async (req, res) => {
     }
     
     // Récupérer les données complémentaires
-    const Document = require('../models/Document');
-    const Task = require('../models/Task');
-    const MessageInterne = require('../models/MessageInterne');
-    const RendezVous = require('../models/RendezVous');
-    const DocumentRequest = require('../models/DocumentRequest');
-    const Log = require('../models/Log');
     
     // Documents
-    const documents = await Document.find({ dossierId: dossierId })
+    const documents = await M.Document.find({ dossierId: dossierId })
       .populate('user', 'firstName lastName email profilePhoto')
       .sort({ createdAt: -1 });
     
     // Tâches
-    const tasks = await Task.find({ dossier: dossierId })
+    const tasks = await M.Task.find({ dossier: dossierId })
       .populate('createdBy', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email role')
       .populate('completedBy', 'firstName lastName email role')
       .sort({ createdAt: -1 });
     
     // Messages
-    const messages = await MessageInterne.find({ dossierId: dossierId })
+    const messages = await M.MessageInterne.find({ dossierId: dossierId })
       .populate('expediteur', 'firstName lastName email role')
       .populate('destinataires', 'firstName lastName email role')
       .sort({ createdAt: -1 });
     
     // Rendez-vous
-    const rendezVous = await RendezVous.find({ dossierId: dossierId })
+    const rendezVous = await M.RendezVous.find({ dossierId: dossierId })
       .populate('client', 'firstName lastName email')
       .populate('createdBy', 'firstName lastName email role')
       .sort({ date: -1 });
     
     // Demandes de documents
-    const documentRequests = await DocumentRequest.find({ dossier: dossierId })
+    const documentRequests = await M.DocumentRequest.find({ dossier: dossierId })
       .populate('requestedBy', 'firstName lastName email role')
       .populate('requestedFrom', 'firstName lastName email role')
       .populate('document')
       .sort({ createdAt: -1 });
     
     // Historique (logs)
-    const logs = await Log.find({
+    const logs = await M.Log.find({
       $or: [
         { 'metadata.dossierId': dossierId },
         { description: { $regex: dossierId, $options: 'i' } }
@@ -1317,7 +1304,7 @@ router.post('/:id/recap/complements', protect, async (req, res) => {
     if (!text || !String(text).trim()) {
       return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
     }
-    const dossier = await Dossier.findById(dossierId)
+    const dossier = await M.Dossier.findById(dossierId)
       .populate('user', 'firstName lastName profilePhoto')
       .populate('createdBy', 'firstName lastName role')
       .populate('assignedTo', 'firstName lastName role')
@@ -1433,7 +1420,7 @@ router.patch('/:id/recap/complements/:complementId', protect, async (req, res) =
     if (!text || !String(text).trim()) {
       return res.status(400).json({ success: false, message: 'Le texte du complément est requis.' });
     }
-    const dossier = await Dossier.findById(dossierId)
+    const dossier = await M.Dossier.findById(dossierId)
       .populate('user', 'firstName lastName profilePhoto')
       .populate('createdBy', 'firstName lastName role')
       .populate('assignedTo', 'firstName lastName role')
@@ -1484,7 +1471,7 @@ router.patch('/:id/recap/complements/:complementId', protect, async (req, res) =
 router.delete('/:id/recap/complements/:complementId', protect, async (req, res) => {
   try {
     const { id: dossierId, complementId } = req.params;
-    const dossier = await Dossier.findById(dossierId)
+    const dossier = await M.Dossier.findById(dossierId)
       .populate('user', 'firstName lastName profilePhoto')
       .populate('createdBy', 'firstName lastName role')
       .populate('assignedTo', 'firstName lastName role')
@@ -1524,7 +1511,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     const dossierId = req.params.id;
     
     // Récupérer le dossier avec toutes les relations (même logique que /recap)
-    const dossier = await Dossier.findById(dossierId)
+    const dossier = await M.Dossier.findById(dossierId)
       .populate('user', 'firstName lastName email phone profilePhoto createdAt')
       .populate('createdBy', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email role')
@@ -1571,20 +1558,14 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     }
     
     // Récupérer les données complémentaires
-    const Document = require('../models/Document');
-    const Task = require('../models/Task');
-    const MessageInterne = require('../models/MessageInterne');
-    const RendezVous = require('../models/RendezVous');
-    const DocumentRequest = require('../models/DocumentRequest');
-    const Log = require('../models/Log');
     
     const [documents, tasks, messages, rendezVous, documentRequests, logs] = await Promise.all([
-      Document.find({ dossierId: dossierId }).populate('user', 'firstName lastName email profilePhoto').sort({ createdAt: -1 }),
-      Task.find({ dossier: dossierId }).populate('createdBy', 'firstName lastName email role').populate('assignedTo', 'firstName lastName email role').populate('completedBy', 'firstName lastName email role').sort({ createdAt: -1 }),
-      MessageInterne.find({ dossierId: dossierId }).populate('expediteur', 'firstName lastName email role').populate('destinataires', 'firstName lastName email role').sort({ createdAt: -1 }),
-      RendezVous.find({ dossierId: dossierId }).populate('client', 'firstName lastName email').populate('createdBy', 'firstName lastName email role').sort({ date: -1 }),
-      DocumentRequest.find({ dossier: dossierId }).populate('requestedBy', 'firstName lastName email role').populate('requestedFrom', 'firstName lastName email role').populate('document').sort({ createdAt: -1 }),
-      Log.find({
+      M.Document.find({ dossierId: dossierId }).populate('user', 'firstName lastName email profilePhoto').sort({ createdAt: -1 }),
+      M.Task.find({ dossier: dossierId }).populate('createdBy', 'firstName lastName email role').populate('assignedTo', 'firstName lastName email role').populate('completedBy', 'firstName lastName email role').sort({ createdAt: -1 }),
+      M.MessageInterne.find({ dossierId: dossierId }).populate('expediteur', 'firstName lastName email role').populate('destinataires', 'firstName lastName email role').sort({ createdAt: -1 }),
+      M.RendezVous.find({ dossierId: dossierId }).populate('client', 'firstName lastName email').populate('createdBy', 'firstName lastName email role').sort({ date: -1 }),
+      M.DocumentRequest.find({ dossier: dossierId }).populate('requestedBy', 'firstName lastName email role').populate('requestedFrom', 'firstName lastName email role').populate('document').sort({ createdAt: -1 }),
+      M.Log.find({
         $or: [
           { 'metadata.dossierId': dossierId },
           { description: { $regex: dossierId, $options: 'i' } }
@@ -2061,7 +2042,7 @@ router.post(
         return res.status(400).json({ success: false, message: 'Identifiant de dossier invalide' });
       }
 
-      const dossier = await Dossier.findById(dossierId).lean();
+      const dossier = await M.Dossier.findById(dossierId).lean();
       if (!dossier) {
         return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
       }
@@ -2089,7 +2070,7 @@ router.post(
         });
       }
 
-      const lastReminderNotif = await Notification.findOne({
+      const lastReminderNotif = await M.Notification.findOne({
         type: 'tarification_payment_reminder',
         'metadata.dossierId': dossierId.toString(),
       })
@@ -2114,7 +2095,7 @@ router.post(
       if (dossier.user) {
         clientUserId = dossier.user.toString();
       } else if (dossier.clientEmail) {
-        const userByEmail = await User.findOne({
+        const userByEmail = await M.User.findOne({
           email: String(dossier.clientEmail).toLowerCase()
         }).select('_id');
         if (userByEmail) clientUserId = userByEmail._id.toString();
@@ -2161,16 +2142,16 @@ router.post(
       let emailSent = false;
       let emailSkipped = null;
 
-      const mailUser = await User.findById(clientUserId).select('email firstName');
+      const mailUser = await M.User.findById(clientUserId).select('email firstName');
       if (dossier.isStandby) {
         emailSkipped = 'dossier_standby';
-      } else if (!mailUser?.email || !String(mailUser.email).trim()) {
+      } else if (!mailUser?.email || !String(mailM.User.email).trim()) {
         emailSkipped = 'no_email';
       } else {
         try {
           emailSent = await sendTransactionalEmail({
-            to: mailUser.email,
-            toName: mailUser.firstName || '',
+            to: mailM.User.email,
+            toName: mailM.User.firstName || '',
             subject: 'Rappel : tarification — Ada Papers',
             htmlContent: `<p>Bonjour,</p><p>${escapeHtml(messageInApp)}</p><p>Nous vous invitons à régulariser la situation depuis votre espace client, rubrique Tarification.</p><p>En cas de difficulté, notre équipe reste à votre disposition.</p>`,
             textContent: `${messageInApp}
@@ -2224,7 +2205,7 @@ router.post(
         return res.status(400).json({ success: false, message: 'Identifiant invalide.' });
       }
 
-      const dossier = await Dossier.findById(dossierId);
+      const dossier = await M.Dossier.findById(dossierId);
       if (!dossier) {
         return res.status(404).json({ success: false, message: 'Dossier non trouvé.' });
       }
@@ -2258,7 +2239,7 @@ router.post(
       if (dossier.user) {
         clientUserId = dossier.user.toString();
       } else if (dossier.clientEmail) {
-        const userByEmail = await User.findOne({
+        const userByEmail = await M.User.findOne({
           email: String(dossier.clientEmail).toLowerCase(),
         }).select('_id');
         if (userByEmail) clientUserId = userByEmail._id.toString();
@@ -2293,7 +2274,7 @@ router.post(
         );
       }
 
-      const dossierPopulated = await Dossier.findById(dossier._id)
+      const dossierPopulated = await M.Dossier.findById(dossier._id)
         .populate('user', 'firstName lastName email phone profilePhoto')
         .populate('createdBy', 'firstName lastName email');
 
@@ -2328,7 +2309,7 @@ router.post(
         return res.status(400).json({ success: false, message: 'Identifiant invalide.' });
       }
 
-      const dossier = await Dossier.findById(dossierId);
+      const dossier = await M.Dossier.findById(dossierId);
       if (!dossier) {
         return res.status(404).json({ success: false, message: 'Dossier non trouvé.' });
       }
@@ -2358,7 +2339,7 @@ router.post(
 
       await dossier.save();
 
-      const dossierPopulated = await Dossier.findById(dossier._id)
+      const dossierPopulated = await M.Dossier.findById(dossier._id)
         .populate('user', 'firstName lastName email phone profilePhoto')
         .populate('createdBy', 'firstName lastName email');
 
@@ -2419,12 +2400,12 @@ router.post(
           ? null
           : Number(typeof amountRaw === 'string' ? amountRaw.replace(',', '.').trim() : amountRaw);
 
-      const user = await User.findById(userId).select('firstName lastName email phone role');
+      const user = await M.User.findById(userId).select('firstName lastName email phone role');
       if (!user) {
         return res.status(404).json({ success: false, message: 'Utilisateur introuvable' });
       }
 
-      const existingPending = await StandaloneTarificationRequest.findOne({
+      const existingPending = await M.StandaloneTarificationRequest.findOne({
         user: user._id,
         status: 'pending',
       })
@@ -2454,7 +2435,7 @@ router.post(
             })} EUR.\n\n`
           : '';
 
-      const requestDoc = await StandaloneTarificationRequest.create({
+      const requestDoc = await M.StandaloneTarificationRequest.create({
         user: user._id,
         adminSender: req.user.id,
         motif,
@@ -2570,7 +2551,7 @@ router.post(
       }
 
       const decision = String(req.body.decision);
-      const requestDoc = await StandaloneTarificationRequest.findById(requestId);
+      const requestDoc = await M.StandaloneTarificationRequest.findById(requestId);
       if (!requestDoc) {
         return res.status(404).json({ success: false, message: 'Demande introuvable.' });
       }
@@ -2590,7 +2571,7 @@ router.post(
       requestDoc.respondedAt = new Date();
       requestDoc.respondedBy = req.user.id;
       await requestDoc.save();
-      await Notification.updateMany(
+      await M.Notification.updateMany(
         { user: requestDoc.user, type: 'tarification_choice_requested', 'metadata.requestId': String(requestDoc._id) },
         { $set: { 'metadata.decision': decision, 'metadata.respondedAt': requestDoc.respondedAt } }
       );
@@ -2628,16 +2609,16 @@ router.post(
         }
       );
 
-      const adminUser = await User.findById(requestDoc.adminSender).select('email firstName lastName');
+      const adminUser = await M.User.findById(requestDoc.adminSender).select('email firstName lastName');
       let emailSent = false;
       let emailSkipped = null;
-      if (!adminUser?.email || !String(adminUser.email).trim()) {
+      if (!adminUser?.email || !String(adminM.User.email).trim()) {
         emailSkipped = 'no_email';
       } else {
         try {
           emailSent = await sendTransactionalEmail({
-            to: adminUser.email,
-            toName: `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim(),
+            to: adminM.User.email,
+            toName: `${adminM.User.firstName || ''} ${adminM.User.lastName || ''}`.trim(),
             subject: `${adminTitle} — Ada Papers`,
             htmlContent: `<p>${escapeHtml(adminMessage)}</p>`,
             textContent: adminMessage,
@@ -2679,7 +2660,7 @@ router.get('/tarification-standalone', protect, authorize('admin', 'superadmin')
     const limitRaw = Number(req.query.limit);
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(200, Math.floor(limitRaw)) : 100;
 
-    const requests = await StandaloneTarificationRequest.find({})
+    const requests = await M.StandaloneTarificationRequest.find({})
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate('user', 'firstName lastName email phone role')
@@ -2710,7 +2691,7 @@ router.post('/tarification-standalone/:requestId/remind', protect, authorize('ad
       return res.status(400).json({ success: false, message: 'Demande invalide.' });
     }
 
-    const requestDoc = await StandaloneTarificationRequest.findById(requestId)
+    const requestDoc = await M.StandaloneTarificationRequest.findById(requestId)
       .populate('user', 'firstName lastName email role')
       .populate('adminSender', 'firstName lastName email');
     if (!requestDoc) {
@@ -2825,7 +2806,7 @@ router.post('/tarification-standalone/:requestId/cancel', protect, authorize('ad
       return res.status(400).json({ success: false, message: 'Demande invalide.' });
     }
 
-    const requestDoc = await StandaloneTarificationRequest.findById(requestId).populate(
+    const requestDoc = await M.StandaloneTarificationRequest.findById(requestId).populate(
       'user',
       'firstName lastName email role'
     );
@@ -2845,7 +2826,7 @@ router.post('/tarification-standalone/:requestId/cancel', protect, authorize('ad
     requestDoc.cancelledBy = req.user.id;
     await requestDoc.save();
 
-    await Notification.updateMany(
+    await M.Notification.updateMany(
       {
         user: requestDoc.user?._id || requestDoc.user,
         type: 'tarification_choice_requested',
@@ -2918,7 +2899,7 @@ router.patch(
         return res.status(400).json({ success: false, message: 'Identifiant de dossier invalide' });
       }
 
-      const dossier = await Dossier.findById(dossierId);
+      const dossier = await M.Dossier.findById(dossierId);
       if (!dossier) {
         return res.status(404).json({ success: false, message: 'Dossier non trouvé' });
       }
@@ -2971,7 +2952,7 @@ router.patch(
       dossier.formuleTarifaireReminderSent = true;
       await dossier.save();
 
-      const updated = await Dossier.findById(dossierId)
+      const updated = await M.Dossier.findById(dossierId)
         .populate('user', 'firstName lastName email phone profilePhoto')
         .populate('createdBy', 'firstName lastName email')
         .populate('assignedTo', 'firstName lastName email role');
@@ -2999,7 +2980,7 @@ router.get('/:id', async (req, res) => {
   try {
     console.log('📥 GET /api/user/dossiers/:id - ID:', req.params.id);
     console.log('📥 User:', req.user?.email || req.user?.id);
-    const dossier = await Dossier.findById(req.params.id)
+    const dossier = await M.Dossier.findById(req.params.id)
       .populate('user', 'firstName lastName email phone profilePhoto dateNaissance lieuNaissance nationalite sexe numeroEtranger numeroTitre typeTitre dateDelivrance dateExpiration adressePostale ville codePostal pays')
       .populate('createdBy', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email role')
@@ -3134,7 +3115,7 @@ router.put(
         });
       }
 
-      const dossier = await Dossier.findById(req.params.id)
+      const dossier = await M.Dossier.findById(req.params.id)
         .populate('user', 'firstName lastName email phone profilePhoto');
 
       if (!dossier) {
@@ -3189,7 +3170,7 @@ router.put(
           }));
         }
         await dossier.save();
-        const updated = await Dossier.findById(dossier._id).populate('user', 'firstName lastName email phone profilePhoto');
+        const updated = await M.Dossier.findById(dossier._id).populate('user', 'firstName lastName email phone profilePhoto');
         return res.status(200).json({ success: true, message: 'Dossier mis à jour', dossier: updated });
       }
 
@@ -3635,7 +3616,7 @@ router.put(
         if (assignedTo === '' || assignedTo === null) {
           dossier.assignedTo = null;
         } else {
-          const assignedUser = await User.findById(assignedTo);
+          const assignedUser = await M.User.findById(assignedTo);
           if (!assignedUser) {
             return res.status(404).json({
               success: false,
@@ -3643,7 +3624,7 @@ router.put(
             });
           }
           // Vérifier que l'utilisateur assigné est un admin ou superadmin
-          if (assignedUser.role !== 'admin' && assignedUser.role !== 'superadmin') {
+          if (assignedM.User.role !== 'admin' && assignedM.User.role !== 'superadmin') {
             return res.status(400).json({
               success: false,
               message: 'Le dossier ne peut être assigné qu\'à un membre de l\'équipe (admin ou superadmin)'
@@ -3831,14 +3812,14 @@ router.put(
       await dossier.save();
 
       if (shouldUnsetMontantTarificationFixeFields) {
-        await Dossier.updateOne(
+        await M.Dossier.updateOne(
           { _id: dossier._id },
           { $unset: { montantTarificationFixe: 1, montantTarificationFixeAt: 1, montantTarificationFixeBy: 1 } }
         );
       }
 
       if (shouldRetractTarificationChoiceRequest) {
-        await Dossier.updateOne(
+        await M.Dossier.updateOne(
           { _id: dossier._id },
           { $unset: { tarificationNotificationSentAt: 1, tarificationLastNotifySummary: 1 } }
         );
@@ -3847,7 +3828,7 @@ router.put(
           retractClientUserId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
         } else if (dossier.clientEmail) {
           try {
-            const u = await User.findOne({
+            const u = await M.User.findOne({
               email: String(dossier.clientEmail).trim().toLowerCase(),
             }).select('_id');
             if (u) retractClientUserId = u._id.toString();
@@ -3872,7 +3853,7 @@ router.put(
       }
 
       // Recharger le dossier avec les données peuplées pour les notifications
-      const dossierForNotification = await Dossier.findById(dossier._id)
+      const dossierForNotification = await M.Dossier.findById(dossier._id)
         .populate('user', 'firstName lastName email phone profilePhoto')
         .populate('assignedTo', 'firstName lastName email');
 
@@ -3904,13 +3885,13 @@ router.put(
         let userId = null;
         
         // Si le dossier a un user associé
-        if (dossierForNotification.user) {
-          userId = dossierForNotification.user._id ? dossierForNotification.user._id.toString() : dossierForNotification.user.toString();
+        if (dossierForM.Notification.user) {
+          userId = dossierForM.Notification.user._id ? dossierForM.Notification.user._id.toString() : dossierForM.Notification.user.toString();
         } 
         // Sinon, chercher l'utilisateur par email (clientEmail)
-        else if (dossierForNotification.clientEmail) {
+        else if (dossierForM.Notification.clientEmail) {
           try {
-            const userByEmail = await User.findOne({ email: dossierForNotification.clientEmail.toLowerCase() });
+            const userByEmail = await M.User.findOne({ email: dossierForM.Notification.clientEmail.toLowerCase() });
             if (userByEmail) {
               userId = userByEmail._id.toString();
             }
@@ -3947,7 +3928,7 @@ router.put(
           // Utiliser le message personnalisé si fourni, sinon générer un message par défaut
           const messageNotification = notificationMessage && notificationMessage.trim() 
             ? notificationMessage.trim()
-            : `Le statut de votre dossier "${dossierForNotification.titre}" a été modifié de "${statutLabels[oldStatut] || oldStatut}" à "${statutLabels[statut] || statut}".`;
+            : `Le statut de votre dossier "${dossierForM.Notification.titre}" a été modifié de "${statutLabels[oldStatut] || oldStatut}" à "${statutLabels[statut] || statut}".`;
           
           const titreNotification = `Statut du dossier modifié : ${statutLabels[statut] || statut}`;
           
@@ -3959,7 +3940,7 @@ router.put(
             titreNotification,
             messageNotification,
             `/client/dossiers`,
-            { dossierId: dossierForNotification._id.toString(), oldStatut, newStatut: statut }
+            { dossierId: dossierForM.Notification._id.toString(), oldStatut, newStatut: statut }
           );
           
             console.log('✅ Notification créée avec succès');
@@ -3981,14 +3962,14 @@ router.put(
                 userId,
                 'dossier_updated',
                 'Dossier modifié',
-                `Votre dossier "${dossierForNotification.titre}" a été modifié par l'administrateur.`,
+                `Votre dossier "${dossierForM.Notification.titre}" a été modifié par l'administrateur.`,
                 `/client/dossiers`,
-                { dossierId: dossierForNotification._id.toString() }
+                { dossierId: dossierForM.Notification._id.toString() }
               );
             }
           }
         } else {
-          console.warn('⚠️ Impossible de créer une notification : aucun utilisateur trouvé pour le dossier', dossierForNotification._id);
+          console.warn('⚠️ Impossible de créer une notification : aucun utilisateur trouvé pour le dossier', dossierForM.Notification._id);
         }
       }
 
@@ -4002,24 +3983,24 @@ router.put(
       ) {
         try {
           let userIdExo = null;
-          if (dossierForNotification.user) {
-            userIdExo = dossierForNotification.user._id
-              ? dossierForNotification.user._id.toString()
-              : dossierForNotification.user.toString();
-          } else if (dossierForNotification.clientEmail) {
-            const u = await User.findOne({
-              email: String(dossierForNotification.clientEmail).toLowerCase()
+          if (dossierForM.Notification.user) {
+            userIdExo = dossierForM.Notification.user._id
+              ? dossierForM.Notification.user._id.toString()
+              : dossierForM.Notification.user.toString();
+          } else if (dossierForM.Notification.clientEmail) {
+            const u = await M.User.findOne({
+              email: String(dossierForM.Notification.clientEmail).toLowerCase()
             });
             if (u) userIdExo = u._id.toString();
           }
           if (userIdExo) {
             const dossierTitle =
-              dossierForNotification.titre ||
-              dossierForNotification.numero ||
+              dossierForM.Notification.titre ||
+              dossierForM.Notification.numero ||
               'votre dossier';
             const motif =
-              dossierForNotification.fraisExoneresMotif &&
-              String(dossierForNotification.fraisExoneresMotif).trim();
+              dossierForM.Notification.fraisExoneresMotif &&
+              String(dossierForM.Notification.fraisExoneresMotif).trim();
             const baseMsg =
               `Vous êtes exonéré(e) des frais de prise en charge de votre dossier « ${dossierTitle} ». Aucune formule n’est à sélectionner dans l’espace Tarification. Les éventuelles frais d'envoi postal demeurent à votre charge.`;
             const messageExo = motif
@@ -4032,15 +4013,15 @@ router.put(
               messageExo,
               '/client/tarification',
               {
-                dossierId: dossierForNotification._id.toString(),
+                dossierId: dossierForM.Notification._id.toString(),
                 ...(motif ? { fraisExoneresMotif: motif.slice(0, 200) } : {})
               }
             );
-            const mailUserExo = await User.findById(userIdExo).select('email firstName');
+            const mailUserExo = await M.User.findById(userIdExo).select('email firstName');
             if (
               mailUserExo?.email &&
               String(mailUserExo.email).trim() &&
-              !dossierForNotification.isStandby
+              !dossierForM.Notification.isStandby
             ) {
               await sendTransactionalEmail({
                 to: mailUserExo.email,
@@ -4062,29 +4043,29 @@ Cette information est également consultable dans votre espace client, rubrique 
       if (shouldNotifyTarificationClientNow && isCabinetTarifRole) {
         try {
           let clientUserId = null;
-          if (dossierForNotification.user) {
-            clientUserId = dossierForNotification.user._id
-              ? dossierForNotification.user._id.toString()
-              : dossierForNotification.user.toString();
-          } else if (dossierForNotification.clientEmail) {
-            const userByEmail = await User.findOne({
-              email: String(dossierForNotification.clientEmail).toLowerCase()
+          if (dossierForM.Notification.user) {
+            clientUserId = dossierForM.Notification.user._id
+              ? dossierForM.Notification.user._id.toString()
+              : dossierForM.Notification.user.toString();
+          } else if (dossierForM.Notification.clientEmail) {
+            const userByEmail = await M.User.findOne({
+              email: String(dossierForM.Notification.clientEmail).toLowerCase()
             }).select('_id');
             if (userByEmail) clientUserId = userByEmail._id.toString();
           }
 
           if (clientUserId) {
-            const dossierTitle = dossierForNotification.titre || dossierForNotification.numero || 'votre dossier';
-            const montantFixe = normalizeMontantTarificationFixe(dossierForNotification.montantTarificationFixe);
-            const prestations = Array.isArray(dossierForNotification.tarificationPrestations)
-              ? dossierForNotification.tarificationPrestations
+            const dossierTitle = dossierForM.Notification.titre || dossierForM.Notification.numero || 'votre dossier';
+            const montantFixe = normalizeMontantTarificationFixe(dossierForM.Notification.montantTarificationFixe);
+            const prestations = Array.isArray(dossierForM.Notification.tarificationPrestations)
+              ? dossierForM.Notification.tarificationPrestations
               : [];
             let titreTarif = 'Choisissez votre formule tarifaire';
             let messageTarif = `Une information de tarification est disponible dans votre espace client, rubrique Tarification.`;
 
-            if (dossierForNotification.fraisExoneres) {
-              const motif = dossierForNotification.fraisExoneresMotif
-                ? String(dossierForNotification.fraisExoneresMotif).trim()
+            if (dossierForM.Notification.fraisExoneres) {
+              const motif = dossierForM.Notification.fraisExoneresMotif
+                ? String(dossierForM.Notification.fraisExoneresMotif).trim()
                 : '';
               titreTarif = 'Frais de tarification exonérés';
               messageTarif = motif
@@ -4117,9 +4098,9 @@ Cette information est également consultable dans votre espace client, rubrique 
               messageTarif = `Pour le dossier « ${dossierTitle} », plusieurs prestations de tarification ont été définies :\n${lines.join(
                 '\n'
               )}\n\nTotal: ${totalText} EUR.`;
-            } else if (dossierForNotification.formuleTarifaire) {
+            } else if (dossierForM.Notification.formuleTarifaire) {
               const formuleLabel =
-                dossierForNotification.formuleTarifaire === 'premium'
+                dossierForM.Notification.formuleTarifaire === 'premium'
                   ? 'Tawfekh (Premium)'
                   : 'Standard';
               titreTarif = 'Tarification — formule enregistrée';
@@ -4141,16 +4122,16 @@ Cette information est également consultable dans votre espace client, rubrique 
               messageTarif,
               '/client/tarification',
               {
-                dossierId: dossierForNotification._id.toString(),
+                dossierId: dossierForM.Notification._id.toString(),
                 ...(tarifMsgExtra ? { tarificationClientMessage: tarifMsgExtra.slice(0, 500) } : {})
               }
             );
 
-            const mailUserTarif = await User.findById(clientUserId).select('email firstName');
+            const mailUserTarif = await M.User.findById(clientUserId).select('email firstName');
             if (
               mailUserTarif?.email &&
               String(mailUserTarif.email).trim() &&
-              !dossierForNotification.isStandby
+              !dossierForM.Notification.isStandby
             ) {
               await sendTransactionalEmail({
                 to: mailUserTarif.email,
@@ -4184,28 +4165,28 @@ Nous vous remercions de réaliser les actions demandées depuis votre espace cli
         isCabinetTarifRole &&
         installmentPlanChanged &&
         Array.isArray(dossierForNotification?.tarificationEcheances) &&
-        dossierForNotification.tarificationEcheances.length >= 2;
+        dossierForM.Notification.tarificationEcheances.length >= 2;
 
       if (shouldNotifyTarificationInstallmentPlan) {
         try {
           let clientUserId = null;
-          if (dossierForNotification.user) {
-            clientUserId = dossierForNotification.user._id
-              ? dossierForNotification.user._id.toString()
-              : dossierForNotification.user.toString();
-          } else if (dossierForNotification.clientEmail) {
-            const userByEmail = await User.findOne({
-              email: String(dossierForNotification.clientEmail).toLowerCase(),
+          if (dossierForM.Notification.user) {
+            clientUserId = dossierForM.Notification.user._id
+              ? dossierForM.Notification.user._id.toString()
+              : dossierForM.Notification.user.toString();
+          } else if (dossierForM.Notification.clientEmail) {
+            const userByEmail = await M.User.findOne({
+              email: String(dossierForM.Notification.clientEmail).toLowerCase(),
             }).select('_id');
             if (userByEmail) clientUserId = userByEmail._id.toString();
           }
 
           if (clientUserId) {
             const dossierTitle =
-              dossierForNotification.titre || dossierForNotification.numero || 'votre dossier';
+              dossierForM.Notification.titre || dossierForM.Notification.numero || 'votre dossier';
             const messageInstallments = buildTarificationInstallmentPlanMessage(
               dossierTitle,
-              dossierForNotification.tarificationEcheances
+              dossierForM.Notification.tarificationEcheances
             );
 
             await createNotification(
@@ -4215,16 +4196,16 @@ Nous vous remercions de réaliser les actions demandées depuis votre espace cli
               messageInstallments,
               '/client/tarification',
               {
-                dossierId: dossierForNotification._id.toString(),
-                installmentCount: dossierForNotification.tarificationEcheances.length,
+                dossierId: dossierForM.Notification._id.toString(),
+                installmentCount: dossierForM.Notification.tarificationEcheances.length,
               }
             );
 
-            const mailUserInstallments = await User.findById(clientUserId).select('email firstName');
+            const mailUserInstallments = await M.User.findById(clientUserId).select('email firstName');
             if (
               mailUserInstallments?.email &&
               String(mailUserInstallments.email).trim() &&
-              !dossierForNotification.isStandby
+              !dossierForM.Notification.isStandby
             ) {
               await sendTransactionalEmail({
                 to: mailUserInstallments.email,
@@ -4244,8 +4225,7 @@ Consultez la rubrique Tarification de votre espace client pour le détail et les
 
       // Logger l'action
       try {
-        const Log = require('../models/Log');
-        await Log.create({
+        await M.Log.create({
           action: 'dossier_updated',
           user: req.user.id,
           userEmail: req.user.email,
@@ -4262,7 +4242,7 @@ Consultez la rubrique Tarification de votre espace client pour le détail et les
       }
 
 
-      const dossierPopulated = await Dossier.findById(dossier._id)
+      const dossierPopulated = await M.Dossier.findById(dossier._id)
         .populate('user', 'firstName lastName email phone profilePhoto')
         .populate('createdBy', 'firstName lastName email');
 
@@ -4287,7 +4267,7 @@ Consultez la rubrique Tarification de votre espace client pour le détail et les
 // @access  Private
 router.patch('/:id/cancel', protect, async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id);
+    const dossier = await M.Dossier.findById(req.params.id);
 
     if (!dossier) {
       return res.status(404).json({
@@ -4323,7 +4303,7 @@ router.patch('/:id/cancel', protect, async (req, res) => {
 
     // Notifier les admins
     try {
-      const admins = await User.find({
+      const admins = await M.User.find({
         role: { $in: ['admin', 'superadmin'] },
         isActive: true
       });
@@ -4350,8 +4330,7 @@ router.patch('/:id/cancel', protect, async (req, res) => {
 
     // Logger l'action
     try {
-      const Log = require('../models/Log');
-      await Log.create({
+      await M.Log.create({
         action: 'dossier_cancelled',
         user: userId,
         userEmail: req.user.email,
@@ -4367,7 +4346,7 @@ router.patch('/:id/cancel', protect, async (req, res) => {
       console.error('Erreur lors de l\'enregistrement du log:', logError);
     }
 
-    const dossierPopulated = await Dossier.findById(dossier._id)
+    const dossierPopulated = await M.Dossier.findById(dossier._id)
       .populate('user', 'firstName lastName email phone profilePhoto')
       .populate('createdBy', 'firstName lastName email');
 
@@ -4391,7 +4370,7 @@ router.patch('/:id/cancel', protect, async (req, res) => {
 // @access  Private/Admin
 router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id)
+    const dossier = await M.Dossier.findById(req.params.id)
       .populate('user', 'firstName lastName email profilePhoto')
       .populate('createdBy', 'firstName lastName email');
 
@@ -4404,10 +4383,9 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
 
     // Ajouter le dossier à la corbeille avant suppression
     try {
-      const Trash = require('../models/Trash');
       const dossierData = dossier.toObject();
       
-      await Trash.create({
+      await M.Trash.create({
         itemType: 'dossier',
         originalId: dossier._id,
         itemData: dossierData,
@@ -4429,8 +4407,7 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
 
     // Logger l'action
     try {
-      const Log = require('../models/Log');
-      await Log.create({
+      await M.Log.create({
         action: 'dossier_deleted',
         user: req.user.id,
         userEmail: req.user.email,
@@ -4459,7 +4436,7 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
       );
     }
 
-    await Dossier.findByIdAndDelete(req.params.id);
+    await M.Dossier.findByIdAndDelete(req.params.id);
 
     res.json({
       success: true,
@@ -4488,7 +4465,7 @@ router.post('/:id/open', protect, authorize('admin', 'superadmin'), async (req, 
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const dossier = await Dossier.findById(dossierId)
+    const dossier = await M.Dossier.findById(dossierId)
       .populate('teamMembers', 'firstName lastName email role')
       .populate('teamLeader', 'firstName lastName email role')
       .populate('activeCollaborators.user', 'firstName lastName email role');
@@ -4549,7 +4526,7 @@ router.post('/:id/open', protect, authorize('admin', 'superadmin'), async (req, 
         .filter(collab => (collab.user._id || collab.user).toString() !== userId.toString())
         .map(collab => collab.user._id || collab.user);
 
-      const currentUser = await User.findById(userId);
+      const currentUser = await M.User.findById(userId);
       const dossierTitre = dossier.titre || `Dossier ${dossier.numero || dossier._id}`;
 
       for (const collaboratorId of otherCollaborators) {
@@ -4557,13 +4534,13 @@ router.post('/:id/open', protect, authorize('admin', 'superadmin'), async (req, 
           collaboratorId,
           'dossier_collaborator_active',
           'Collaborateur actif sur le dossier',
-          `L'administrateur ${currentUser.firstName} ${currentUser.lastName} est actuellement collaborateur actif sur le dossier "${dossierTitre}".`,
+          `L'administrateur ${currentM.User.firstName} ${currentM.User.lastName} est actuellement collaborateur actif sur le dossier "${dossierTitre}".`,
           `/admin/dossiers/${dossier._id}`,
           {
             dossierId: dossier._id.toString(),
             titre: dossierTitre,
             activeCollaboratorId: userId.toString(),
-            activeCollaboratorName: `${currentUser.firstName} ${currentUser.lastName}`
+            activeCollaboratorName: `${currentM.User.firstName} ${currentM.User.lastName}`
           }
         );
       }
@@ -4578,21 +4555,21 @@ router.post('/:id/open', protect, authorize('admin', 'superadmin'), async (req, 
           memberId,
           'dossier_collaborator_active',
           'Collaborateur actif sur le dossier',
-          `L'administrateur ${currentUser.firstName} ${currentUser.lastName} est actuellement collaborateur actif sur le dossier "${dossierTitre}".`,
+          `L'administrateur ${currentM.User.firstName} ${currentM.User.lastName} est actuellement collaborateur actif sur le dossier "${dossierTitre}".`,
           `/admin/dossiers/${dossier._id}`,
           {
             dossierId: dossier._id.toString(),
             titre: dossierTitre,
             activeCollaboratorId: userId.toString(),
-            activeCollaboratorName: `${currentUser.firstName} ${currentUser.lastName}`
+            activeCollaboratorName: `${currentM.User.firstName} ${currentM.User.lastName}`
           }
         );
       }
 
-      console.log(`✅ ${currentUser.firstName} ${currentUser.lastName} est maintenant collaborateur actif sur le dossier ${dossier._id}`);
+      console.log(`✅ ${currentM.User.firstName} ${currentM.User.lastName} est maintenant collaborateur actif sur le dossier ${dossier._id}`);
     }
 
-    const updatedDossier = await Dossier.findById(dossierId)
+    const updatedDossier = await M.Dossier.findById(dossierId)
       .populate('teamMembers', 'firstName lastName email role')
       .populate('teamLeader', 'firstName lastName email role')
       .populate('activeCollaborators.user', 'firstName lastName email role');
@@ -4621,7 +4598,7 @@ router.post('/:id/close-collaboration', protect, authorize('admin', 'superadmin'
     const dossierId = req.params.id;
     const userId = req.user.id;
 
-    const dossier = await Dossier.findById(dossierId);
+    const dossier = await M.Dossier.findById(dossierId);
 
     if (!dossier) {
       return res.status(404).json({
@@ -4658,7 +4635,7 @@ router.get('/:id/collaborators', protect, async (req, res) => {
   try {
     const dossierId = req.params.id;
 
-    const dossier = await Dossier.findById(dossierId)
+    const dossier = await M.Dossier.findById(dossierId)
       .populate('activeCollaborators.user', 'firstName lastName email role')
       .populate('teamLeader', 'firstName lastName email role');
 
@@ -4725,7 +4702,7 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
       });
     }
     
-    const dossier = await Dossier.findById(req.params.id);
+    const dossier = await M.Dossier.findById(req.params.id);
     
     if (!dossier) {
       return res.status(404).json({ 
@@ -4735,7 +4712,7 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
     }
     
     // Vérifier que le partenaire existe et a le bon rôle
-    const partenaire = await User.findById(partenaireId);
+    const partenaire = await M.User.findById(partenaireId);
     if (!partenaire || partenaire.role !== 'partenaire') {
       return res.status(400).json({ 
         success: false, 
@@ -4781,7 +4758,7 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
     await dossier.populate('transmittedTo.transmittedBy', 'firstName lastName email');
     
     // Créer une notification pour le partenaire
-    await Notification.create({
+    await M.Notification.create({
       user: partenaireId,
       type: 'dossier_transmitted',
       titre: 'Nouveau dossier transmis',
@@ -4818,7 +4795,7 @@ Nous vous invitons à vous connecter à votre espace partenaire afin de consulte
       // S'assurer que dossier.user est un ObjectId (peut être un objet ou un ObjectId)
       const userId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
       
-      await Notification.create({
+      await M.Notification.create({
         user: userId,
         type: 'dossier_transmitted',
         titre: 'Dossier transmis à un partenaire',
@@ -4830,14 +4807,14 @@ Nous vous invitons à vous connecter à votre espace partenaire afin de consulte
         }
       });
       try {
-        const clientUser = await User.findById(userId).select('email firstName');
+        const clientUser = await M.User.findById(userId).select('email firstName');
         const pn =
           partenaire.partenaireInfo?.nomOrganisme || partenaire.email || 'un partenaire';
-        if (clientUser?.email && String(clientUser.email).trim()) {
+        if (clientUser?.email && String(clientM.User.email).trim()) {
           const titre = dossier.titre || dossier.numero || 'Sans titre';
           await sendTransactionalEmail({
-            to: clientUser.email,
-            toName: clientUser.firstName || '',
+            to: clientM.User.email,
+            toName: clientM.User.firstName || '',
             subject: 'Votre dossier a été transmis — Ada Papers',
             htmlContent: `<p>Bonjour,</p><p>Nous vous informons que votre dossier <strong>${escapeHtml(titre)}</strong> a été transmis à <strong>${escapeHtml(pn)}</strong>.</p><p>Cette transmission vise à permettre le traitement de votre demande dans les meilleures conditions.</p>`,
             textContent: `Bonjour,
@@ -4878,7 +4855,7 @@ Cette transmission vise à permettre le traitement de votre demande dans les mei
 router.delete('/:id/transmit/:partenaireId', authorize('admin', 'superadmin'), async (req, res) => {
   try {
     const { id, partenaireId } = req.params;
-    const dossier = await Dossier.findById(id);
+    const dossier = await M.Dossier.findById(id);
     
     if (!dossier) {
       return res.status(404).json({ 
@@ -4902,8 +4879,7 @@ router.delete('/:id/transmit/:partenaireId', authorize('admin', 'superadmin'), a
     await dossier.save();
     
     // Notifier le partenaire
-    const Notification = require('../models/Notification');
-    await Notification.create({
+    await M.Notification.create({
       user: partenaireId,
       type: 'dossier_updated',
       titre: 'Transmission retirée',
@@ -4935,7 +4911,7 @@ router.delete('/:id/transmit/:partenaireId', authorize('admin', 'superadmin'), a
 router.post('/:id/acknowledge', authorize('partenaire'), async (req, res) => {
   try {
     const { action, notes } = req.body; // action: 'accept' | 'refuse'
-    const dossier = await Dossier.findById(req.params.id);
+    const dossier = await M.Dossier.findById(req.params.id);
     
     if (!dossier) {
       return res.status(404).json({ 
@@ -4981,9 +4957,7 @@ router.post('/:id/acknowledge', authorize('partenaire'), async (req, res) => {
     await dossier.populate('transmittedTo.transmittedBy', 'firstName lastName email');
     
     // Notifier l'admin
-    const User = require('../models/User');
-    const Notification = require('../models/Notification');
-    const admins = await User.find({ 
+    const admins = await M.User.find({ 
       role: { $in: ['admin', 'superadmin'] },
       isActive: { $ne: false }
     });
@@ -4991,7 +4965,7 @@ router.post('/:id/acknowledge', authorize('partenaire'), async (req, res) => {
     const partenaireName = req.user.partenaireInfo?.nomOrganisme || req.user.email || 'Partenaire';
     
     for (const admin of admins) {
-      await Notification.create({
+      await M.Notification.create({
         user: admin._id,
         type: 'dossier_acknowledged',
         titre: `Dossier ${action === 'accept' ? 'accepté' : 'refusé'} par le partenaire`,
@@ -5007,7 +4981,7 @@ router.post('/:id/acknowledge', authorize('partenaire'), async (req, res) => {
     
     // Notifier le client si le dossier a un propriétaire
     if (dossier.user) {
-      await Notification.create({
+      await M.Notification.create({
         user: dossier.user,
         type: 'dossier_acknowledged',
         titre: `Dossier ${action === 'accept' ? 'accepté' : 'refusé'}`,
@@ -5024,14 +4998,12 @@ router.post('/:id/acknowledge', authorize('partenaire'), async (req, res) => {
     // Si le dossier est accepté, s'assurer que tous les documents sont accessibles
     // (Ils le sont déjà via la logique d'accès, mais on log cette action)
     if (action === 'accept') {
-      const Document = require('../models/Document');
-      const documents = await Document.find({ dossierId: dossier._id });
+      const documents = await M.Document.find({ dossierId: dossier._id });
       console.log(`✅ Dossier accepté par le partenaire. ${documents.length} document(s) accessibles.`);
       
       // Logger l'action d'acceptation
       try {
-        const Log = require('../models/Log');
-        await Log.create({
+        await M.Log.create({
           action: 'dossier_updated',
           user: req.user.id,
           userEmail: req.user.email,
@@ -5070,7 +5042,7 @@ router.post('/:id/acknowledge', authorize('partenaire'), async (req, res) => {
 router.post('/:id/discharge', protect, authorize('partenaire'), async (req, res) => {
   try {
     const { notes } = req.body;
-    const dossier = await Dossier.findById(req.params.id);
+    const dossier = await M.Dossier.findById(req.params.id);
     
     if (!dossier) {
       return res.status(404).json({ 
@@ -5109,9 +5081,7 @@ router.post('/:id/discharge', protect, authorize('partenaire'), async (req, res)
     await dossier.populate('transmittedTo.transmittedBy', 'firstName lastName email');
     
     // Notifier les administrateurs
-    const User = require('../models/User');
-    const Notification = require('../models/Notification');
-    const admins = await User.find({ 
+    const admins = await M.User.find({ 
       role: { $in: ['admin', 'superadmin'] },
       isActive: { $ne: false }
     });
@@ -5119,7 +5089,7 @@ router.post('/:id/discharge', protect, authorize('partenaire'), async (req, res)
     const partenaireName = req.user.partenaireInfo?.nomOrganisme || req.user.email || 'Partenaire';
     
     for (const admin of admins) {
-      await Notification.create({
+      await M.Notification.create({
         user: admin._id,
         type: 'dossier_updated',
         titre: 'Partenaire s\'est déchargé du dossier',
@@ -5136,8 +5106,7 @@ router.post('/:id/discharge', protect, authorize('partenaire'), async (req, res)
     
     // Logger l'action
     try {
-      const Log = require('../models/Log');
-      await Log.create({
+      await M.Log.create({
         action: 'dossier_discharged',
         user: req.user.id,
         userEmail: req.user.email,
@@ -5174,7 +5143,7 @@ router.post('/:id/discharge', protect, authorize('partenaire'), async (req, res)
 // @access  Private (Admin, Superadmin, Partenaire avec accès au dossier)
 router.get('/:id/history', async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id);
+    const dossier = await M.Dossier.findById(req.params.id);
     
     if (!dossier) {
       return res.status(404).json({
@@ -5204,8 +5173,7 @@ router.get('/:id/history', async (req, res) => {
     }
     
     // Récupérer tous les logs liés à ce dossier
-    const Log = require('../models/Log');
-    const logs = await Log.find({
+    const logs = await M.Log.find({
       $or: [
         { 'metadata.dossierId': dossier._id.toString() },
         { description: { $regex: dossier._id.toString(), $options: 'i' } }

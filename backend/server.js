@@ -6,6 +6,9 @@ const morgan = require('morgan');
 const path = require('path');
 const { getFrontendOriginsList } = require('./utils/frontendOrigins');
 const { getKnowledgeDir, getKnowledgeStats } = require('./services/lexiaInternal');
+const { isMultiTenantEnabled, connectMaster } = require('./lib/db/master');
+const { preloadDefaultModels } = require('./lib/models/registerTenantModels');
+const { tenantMiddleware } = require('./middleware/tenant');
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -42,6 +45,8 @@ app.use(
       'Pragma',
       'pragma',
       'x-forum-visitor-id',
+      'x-tenant-slug',
+      'X-Tenant-Slug',
     ],
     maxAge: 86400,
   })
@@ -50,6 +55,8 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+app.use(tenantMiddleware);
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -67,9 +74,26 @@ const connectDB = async () => {
       return;
     }
 
+    if (isMultiTenantEnabled()) {
+      await connectMaster();
+      const mtFlag = (process.env.MULTI_TENANT || '').trim();
+      console.log(
+        `🏢 Mode multi-tenant activé${mtFlag ? ` (MULTI_TENANT=${mtFlag})` : ' (détecté via MASTER_MONGODB_URI)'}`
+      );
+      if (!mtFlag && process.env.NODE_ENV !== 'production') {
+        console.warn(
+          '⚠️  Ajoutez MULTI_TENANT=true dans .env pour éviter toute ambiguïté au déploiement.'
+        );
+      }
+    } else {
+      console.log('📦 Mode single-tenant (connexion legacy MONGODB_URI uniquement)');
+    }
+
     const conn = await mongoose.connect(mongoURI);
 
-    console.log(`✅ MongoDB connecté : ${conn.connection.host}`);
+    preloadDefaultModels();
+
+    console.log(`✅ MongoDB connecté : ${conn.connection.host}${isMultiTenantEnabled() ? ' (connexion legacy / migration)' : ''}`);
     isDatabaseConnected = true;
   } catch (error) {
     console.warn(`⚠️ MongoDB indisponible (${error.message}) — démarrage en mode dégradé`);
@@ -85,9 +109,18 @@ app.get('/', (req, res) => {
   res.json({
     success: true,
     message: 'API Ada Papers est en ligne',
-    version: '1.0.0'
+    version: '1.0.0',
+    multiTenant: isMultiTenantEnabled(),
+    tenant: req.tenant ? { slug: req.tenant.slug, orgId: req.tenant.orgId } : null,
   });
 });
+
+try {
+  app.use('/api/tenant', require('./routes/tenant'));
+  console.log('✅ Route /api/tenant enregistrée (config, health)');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/tenant:', e.message);
+}
 
 app.use('/api/auth', require('./routes/auth'));
 // Termine tout /api/auth non géré ci-dessus (NextAuth vit côté Next en dev avec proxy granulaire).
@@ -266,7 +299,22 @@ app.get("/api-status", (req, res) => {
   res.json({
     success: true,
     message: "API active",
-    database: isDatabaseConnected ? "connectée" : "indisponible"
+    database: isDatabaseConnected ? "connectée" : "indisponible",
+    multiTenant: isMultiTenantEnabled(),
+    tenant: req.tenant ? { slug: req.tenant.slug, orgId: req.tenant.orgId } : null,
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  const { getTenantConnectionsCount } = require('./lib/db/tenants');
+  res.json({
+    success: true,
+    database: isDatabaseConnected ? 'connectée' : 'indisponible',
+    multiTenant: isMultiTenantEnabled(),
+    tenant: req.tenant
+      ? { orgId: req.tenant.orgId, slug: req.tenant.slug, status: req.tenant.status }
+      : null,
+    tenantConnectionsPooled: isMultiTenantEnabled() ? getTenantConnectionsCount() : 0,
   });
 });
 
@@ -312,8 +360,13 @@ const startServer = async () => {
 
       if (isDatabaseConnected) {
         const { checkTarificationInstallmentReminders } = require('./utils/tarificationInstallmentNotifications');
+        const { runForEachActiveTenant } = require('./lib/tenant/runForEachActiveTenant');
         const runTarificationInstallmentReminders = () => {
-          void checkTarificationInstallmentReminders();
+          void runForEachActiveTenant(async () => {
+            await checkTarificationInstallmentReminders();
+          }).catch((err) => {
+            console.error('❌ Rappels tarification (multi-tenant):', err.message || err);
+          });
         };
         setTimeout(runTarificationInstallmentReminders, 60_000);
         setInterval(runTarificationInstallmentReminders, 24 * 60 * 60 * 1000);

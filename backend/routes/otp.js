@@ -1,12 +1,9 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const OTP = require('../models/OTP');
-const User = require('../models/User');
-const EmailTemplate = require('../models/EmailTemplate');
 const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 const { sendTransactionalEmailDetailed } = require('../utils/emailNotifications');
-const jwt = require('jsonwebtoken');
-
+const M = require('../tenantModels');
+const { signAuthToken } = require('../lib/tenant/jwt');
 const router = express.Router();
 const WELCOME_TEMPLATE_CODE = 'account_welcome';
 const OTP_WELCOME_FALLBACK = {
@@ -26,9 +23,9 @@ function renderTemplateWithVariables(template, variables = {}) {
 
 async function ensureWelcomeTemplateExistsForOtp() {
   try {
-    const existing = await EmailTemplate.findOne({ code: WELCOME_TEMPLATE_CODE }).select('_id').lean();
+    const existing = await M.EmailTemplate.findOne({ code: WELCOME_TEMPLATE_CODE }).select('_id').lean();
     if (existing) return;
-    await EmailTemplate.create({
+    await M.EmailTemplate.create({
       code: WELCOME_TEMPLATE_CODE,
       name: 'Bienvenue utilisateur',
       description: 'Envoyé après validation du compte (lien d’activation / OTP).',
@@ -56,7 +53,7 @@ async function sendWelcomeEmailAfterOtpValidation(user) {
   let textContent = OTP_WELCOME_FALLBACK.textContent;
 
   try {
-    const tpl = await EmailTemplate.findOne({ code: WELCOME_TEMPLATE_CODE, isActive: true })
+    const tpl = await M.EmailTemplate.findOne({ code: WELCOME_TEMPLATE_CODE, isActive: true })
       .sort({ version: -1, updatedAt: -1 })
       .lean();
     if (tpl?.subject && tpl?.htmlContent) {
@@ -85,13 +82,6 @@ async function sendWelcomeEmailAfterOtpValidation(user) {
     console.warn('⚠️ Email de bienvenue non envoyé après OTP:', detail.error || 'inconnu');
   }
 }
-
-// Générer un token JWT
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'your-secret-key-here', {
-    expiresIn: '30d'
-  });
-};
 
 // Générer un code OTP aléatoire (6 chiffres)
 const generateOTP = () => {
@@ -132,7 +122,7 @@ router.post(
 
       // Vérifier si un utilisateur avec ce numéro existe déjà
       // Permettre la réinscription si l'utilisateur n'a pas encore défini de mot de passe
-      const existingUser = await User.findOne({ phone: formattedPhone });
+      const existingUser = await M.User.findOne({ phone: formattedPhone });
       if (existingUser && existingUser.password && !existingUser.needsPasswordSetup) {
         return res.status(400).json({
           success: false,
@@ -145,7 +135,7 @@ router.post(
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
       // Supprimer les anciens codes OTP pour ce numéro
-      await OTP.deleteMany({ phone: formattedPhone });
+      await M.OTP.deleteMany({ phone: formattedPhone });
 
       // Créer un nouveau code OTP
       const otpData = {
@@ -160,7 +150,7 @@ router.post(
         otpData.email = email.trim().toLowerCase();
       }
 
-      const otp = await OTP.create(otpData);
+      const otp = await M.OTP.create(otpData);
 
       // Envoyer le SMS avec le code OTP (modèle `otp` éditable dans Admin → SMS)
       try {
@@ -223,7 +213,7 @@ router.post(
         }
         
         // Supprimer le code OTP si l'envoi du SMS échoue (en production uniquement)
-        await OTP.findByIdAndDelete(otp._id);
+        await M.OTP.findByIdAndDelete(otp._id);
         
         // Message d'erreur plus détaillé selon le type d'erreur
         let errorMessage = 'Erreur lors de l\'envoi du SMS. Veuillez réessayer.';
@@ -296,7 +286,7 @@ router.post(
       }
 
       // Trouver le code OTP
-      const otp = await OTP.findOne({
+      const otp = await M.OTP.findOne({
         phone: formattedPhone,
         code: code.trim(),
         verified: false
@@ -311,7 +301,7 @@ router.post(
 
       // Vérifier si le code n'a pas expiré
       if (new Date() > otp.expiresAt) {
-        await OTP.findByIdAndDelete(otp._id);
+        await M.OTP.findByIdAndDelete(otp._id);
         return res.status(400).json({
           success: false,
           message: 'Code OTP expiré. Veuillez demander un nouveau code.'
@@ -325,7 +315,7 @@ router.post(
       await otp.save();
 
       // Vérifier si un utilisateur avec ce numéro existe déjà
-      let user = await User.findOne({ phone: formattedPhone });
+      let user = await M.User.findOne({ phone: formattedPhone });
       
       // Rôle par défaut pour une inscription publique via OTP
       const finalRole = 'client';
@@ -349,12 +339,11 @@ router.post(
           userData.organisationName = otp.organisationName.trim();
         }
 
-        user = await User.create(userData);
+        user = await M.User.create(userData);
 
         // Créer les permissions par défaut (toutes refusées pour consulat, avocat et association)
         if (finalRole === 'consulat' || finalRole === 'avocat' || finalRole === 'association') {
-          const Permission = require('../models/Permission');
-          const allDomaines = [
+                    const allDomaines = [
             'tableau_de_bord', 'utilisateurs', 'dossiers', 'taches',
             'rendez_vous', 'creneaux', 'messages', 'documents',
             'temoignages', 'notifications', 'sms', 'cms', 'logs', 'corbeille'
@@ -369,7 +358,7 @@ router.post(
             supprimer: false
           }));
 
-          await Permission.create({
+          await M.Permission.create({
             user: user._id,
             roles: [finalRole],
             permissions: defaultPermissions
@@ -393,12 +382,11 @@ router.post(
       await otp.save();
 
       // Générer un token JWT
-      const token = generateToken(user._id);
+      const token = signAuthToken(user._id, { orgId: req.tenant?.orgId, expiresIn: '30d' });
 
       // Logger la création de compte
       try {
-        const Log = require('../models/Log');
-        await Log.create({
+                await M.Log.create({
           action: 'signup_otp',
           user: user._id,
           userEmail: user.email || `phone:${formattedPhone}`,
@@ -414,7 +402,7 @@ router.post(
         console.error('Erreur lors de l\'enregistrement du log:', logError);
       }
 
-      // Bienvenue uniquement après validation OTP.
+      // Bienvenue uniquement après validation M.OTP.
       await sendWelcomeEmailAfterOtpValidation(user);
 
       res.json({

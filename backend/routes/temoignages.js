@@ -1,7 +1,7 @@
 const express = require('express');
+const M = require('../tenantModels');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const Temoignage = require('../models/Temoignage');
 const { protect, authorize } = require('../middleware/auth');
 
 // @route   GET /api/temoignages
@@ -9,7 +9,7 @@ const { protect, authorize } = require('../middleware/auth');
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const temoignages = await Temoignage.find({ valide: true })
+    const temoignages = await M.Temoignage.find({ valide: true })
       .populate('user', 'firstName lastName')
       .sort({ createdAt: -1 })
       .limit(10);
@@ -68,7 +68,7 @@ router.post(
       const { texte, note, nom, role } = req.body;
 
       // Vérifier si l'utilisateur a déjà soumis un témoignage
-      const existingTemoignage = await Temoignage.findOne({ user: req.user.id });
+      const existingTemoignage = await M.Temoignage.findOne({ user: req.user.id });
       if (existingTemoignage) {
         return res.status(400).json({
           success: false,
@@ -76,7 +76,7 @@ router.post(
         });
       }
 
-      const temoignage = await Temoignage.create({
+      const temoignage = await M.Temoignage.create({
         user: req.user.id,
         nom: nom || `${req.user.firstName} ${req.user.lastName}`,
         role: role || 'Client',
@@ -113,7 +113,7 @@ router.get('/admin', protect, authorize('admin', 'superadmin'), async (req, res)
       query.valide = valide === 'true';
     }
 
-    const temoignages = await Temoignage.find(query)
+    const temoignages = await M.Temoignage.find(query)
       .populate('user', 'firstName lastName email')
       .populate('validePar', 'firstName lastName')
       .sort({ createdAt: -1 });
@@ -155,7 +155,7 @@ router.patch(
       }
 
       const { valide } = req.body;
-      const temoignage = await Temoignage.findById(req.params.id);
+      const temoignage = await M.Temoignage.findById(req.params.id);
 
       if (!temoignage) {
         return res.status(404).json({
@@ -194,7 +194,7 @@ router.patch(
 // @access  Private (Admin)
 router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    const temoignage = await Temoignage.findById(req.params.id);
+    const temoignage = await M.Temoignage.findById(req.params.id);
 
     if (!temoignage) {
       return res.status(404).json({
@@ -223,7 +223,7 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
 // @access  Private (Client)
 router.get('/my', protect, async (req, res) => {
   try {
-    const temoignage = await Temoignage.findOne({ user: req.user.id })
+    const temoignage = await M.Temoignage.findOne({ user: req.user.id })
       .populate('user', 'firstName lastName');
 
     if (!temoignage) {

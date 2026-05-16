@@ -1,8 +1,7 @@
 const express = require('express');
+const M = require('../tenantModels');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const Creneau = require('../models/Creneau');
-const RendezVous = require('../models/RendezVous');
 const { protect, authorize } = require('../middleware/auth');
 
 // @route   GET /api/creneaux/available
@@ -25,13 +24,13 @@ router.get('/available', async (req, res) => {
     endDate.setHours(23, 59, 59, 999);
 
     // Récupérer les créneaux fermés pour cette date
-    const creneauxFermes = await Creneau.find({
+    const creneauxFermes = await M.Creneau.find({
       date: { $gte: targetDate, $lte: endDate },
       ferme: true
     });
 
     // Récupérer les rendez-vous confirmés ou en attente pour cette date
-    const rendezVousPris = await RendezVous.find({
+    const rendezVousPris = await M.RendezVous.find({
       date: { $gte: targetDate, $lte: endDate },
       statut: { $in: ['en_attente', 'confirme'] }
     });
@@ -138,7 +137,7 @@ router.get('/', async (req, res) => {
 
     console.log('🔍 Recherche de créneaux avec query:', JSON.stringify(query, null, 2));
 
-    const creneaux = await Creneau.find(query)
+    const creneaux = await M.Creneau.find(query)
       .sort({ date: 1, heure: 1 })
       .lean(); // Utiliser lean() pour améliorer les performances
 
@@ -238,7 +237,7 @@ router.post(
         for (const heure of heures) {
           try {
             // Vérifier si le créneau existe déjà
-            let creneau = await Creneau.findOne({
+            let creneau = await M.Creneau.findOne({
               date: targetDate,
               heure: heure
             });
@@ -251,7 +250,7 @@ router.post(
               console.log(`✅ Créneau ${heure} mis à jour (fermé) pour ${targetDate.toISOString().split('T')[0]}`);
             } else {
               // Créer un nouveau créneau fermé
-              creneau = await Creneau.create({
+              creneau = await M.Creneau.create({
                 date: targetDate,
                 heure: heure,
                 ferme: true,
@@ -264,7 +263,7 @@ router.post(
           } catch (creneauError) {
             // Si erreur d'unicité (index unique), mettre à jour le créneau existant
             if (creneauError.code === 11000) {
-              const creneau = await Creneau.findOne({
+              const creneau = await M.Creneau.findOne({
                 date: targetDate,
                 heure: heure
               });
@@ -321,7 +320,7 @@ router.post(
 // @access  Private (Admin)
 router.patch('/:id/reopen', async (req, res) => {
   try {
-    const creneau = await Creneau.findById(req.params.id);
+    const creneau = await M.Creneau.findById(req.params.id);
 
     if (!creneau) {
       return res.status(404).json({
@@ -355,7 +354,7 @@ router.patch('/:id/reopen', async (req, res) => {
 // @access  Private (Admin)
 router.delete('/:id', async (req, res) => {
   try {
-    const creneau = await Creneau.findById(req.params.id);
+    const creneau = await M.Creneau.findById(req.params.id);
 
     if (!creneau) {
       return res.status(404).json({

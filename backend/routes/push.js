@@ -1,8 +1,8 @@
 const express = require('express');
 const { protect, authorize } = require('../middleware/auth');
-const User = require('../models/User');
 const { ensureConfigured, sendPushToUser } = require('../utils/pushService');
 
+const M = require('../tenantModels');
 const router = express.Router();
 
 router.get('/public-key', (req, res) => {
@@ -25,7 +25,7 @@ router.get('/health', authorize('admin', 'superadmin'), async (req, res) => {
     const hasPrivateKey = Boolean(process.env.VAPID_PRIVATE_KEY);
     const configured = ensureConfigured();
 
-    const currentUser = await User.findById(req.user.id).select('pushSubscriptions pushPreferences');
+    const currentUser = await M.User.findById(req.user.id).select('pushSubscriptions pushPreferences');
     const subscriptionsCount = Array.isArray(currentUser?.pushSubscriptions)
       ? currentUser.pushSubscriptions.length
       : 0;
@@ -70,13 +70,13 @@ router.post('/subscribe', async (req, res) => {
     }
 
     const userId = req.user.id;
-    const existing = await User.findOne({
+    const existing = await M.User.findOne({
       _id: userId,
       'pushSubscriptions.endpoint': endpoint,
     }).select('_id');
 
     if (existing) {
-      await User.updateOne(
+      await M.User.updateOne(
         { _id: userId, 'pushSubscriptions.endpoint': endpoint },
         {
           $set: {
@@ -89,7 +89,7 @@ router.post('/subscribe', async (req, res) => {
         }
       );
     } else {
-      await User.updateOne(
+      await M.User.updateOne(
         { _id: userId },
         {
           $push: {
@@ -131,7 +131,7 @@ router.post('/unsubscribe', async (req, res) => {
       });
     }
 
-    await User.updateOne(
+    await M.User.updateOne(
       { _id: req.user.id },
       { $pull: { pushSubscriptions: { endpoint } } }
     );

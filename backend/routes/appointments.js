@@ -1,8 +1,7 @@
 const express = require('express');
+const M = require('../tenantModels');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const RendezVous = require('../models/RendezVous');
-const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
@@ -53,8 +52,7 @@ async function resolveRdvClientEmail(rendezVous) {
   if (u && typeof u === 'object' && u.email) return String(u.email).trim();
   const uid = u && (u._id || u);
   if (uid) {
-    const UserModel = require('../models/User');
-    const doc = await UserModel.findById(uid).select('email').lean();
+        const doc = await M.User.findById(uid).select('email').lean();
     if (doc?.email) return String(doc.email).trim();
   }
   return null;
@@ -116,8 +114,7 @@ router.post(
         dossierId: dossierBodyId,
       } = req.body;
 
-      const User = require('../models/User');
-      const mongooseLib = require('mongoose');
+            const mongooseLib = require('mongoose');
 
       // Lier le RDV au bon compte : client connecté, ou client ciblé par un admin (forUserId), jamais le compte admin seul.
       let userId = null;
@@ -128,13 +125,13 @@ router.post(
           const jwt = require('jsonwebtoken');
           const token = req.headers.authorization.split(' ')[1];
           const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-here');
-          const authUser = await User.findById(decoded.id);
+          const authUser = await M.User.findById(decoded.id);
           if (authUser) {
             const isAdmin = authUser.role === 'admin' || authUser.role === 'superadmin';
             requestingAdmin = isAdmin;
             if (isAdmin && forUserId) {
               bookingByAdmin = true;
-              const target = await User.findById(String(forUserId).trim());
+              const target = await M.User.findById(String(forUserId).trim());
               if (!target) {
                 return res.status(400).json({
                   success: false,
@@ -180,8 +177,7 @@ router.post(
             message: 'Identifiant de dossier invalide.',
           });
         }
-        const DossierModel = require('../models/Dossier');
-        const dossierDoc = await DossierModel.findById(did).select('user clientEmail').lean();
+                const dossierDoc = await M.Dossier.findById(did).select('user clientEmail').lean();
         if (!dossierDoc) {
           return res.status(404).json({
             success: false,
@@ -212,13 +208,12 @@ router.post(
       }
 
       // Vérifier si le créneau est fermé
-      const Creneau = require('../models/Creneau');
-      const targetDate = new Date(date);
+            const targetDate = new Date(date);
       targetDate.setHours(0, 0, 0, 0);
       const endDate = new Date(targetDate);
       endDate.setHours(23, 59, 59, 999);
       
-      const creneauFerme = await Creneau.findOne({
+      const creneauFerme = await M.Creneau.findOne({
         date: { $gte: targetDate, $lte: endDate },
         heure: heure,
         ferme: true
@@ -232,7 +227,7 @@ router.post(
       }
 
       // Vérifier les conflits de rendez-vous (même date et heure)
-      const existingAppointment = await RendezVous.findOne({
+      const existingAppointment = await M.RendezVous.findOne({
         date: new Date(date),
         heure: heure,
         statut: { $in: ['en_attente', 'confirme'] }
@@ -245,7 +240,7 @@ router.post(
         });
       }
 
-      const rendezVous = await RendezVous.create({
+      const rendezVous = await M.RendezVous.create({
         user: userId,
         nom,
         prenom,
@@ -274,8 +269,7 @@ router.post(
 
       if (linkedDossierId) {
         try {
-          const DossierModel = require('../models/Dossier');
-          await DossierModel.updateOne(
+                    await M.Dossier.updateOne(
             { _id: linkedDossierId },
             { $addToSet: { rendezVous: rendezVous._id } }
           );
@@ -287,9 +281,7 @@ router.post(
       // Notifier tous les administrateurs (superadmin + admins) d'une nouvelle demande de rendez-vous
       if (informTeam) {
         try {
-          const User = require('../models/User');
-
-          const admins = await User.find({
+                    const admins = await M.User.find({
             role: { $in: ['admin', 'superadmin'] },
             isActive: { $ne: false }
           });
@@ -310,7 +302,7 @@ router.post(
           }
 
           for (const admin of admins) {
-            await Notification.create({
+            await M.Notification.create({
               user: admin._id,
               type: 'appointment_created',
               titre: bookingByAdmin && userId ? 'Proposition de rendez-vous (attente client)' : 'Nouveau rendez-vous demandé',
@@ -377,7 +369,7 @@ Accès à votre espace : ${getPrimaryFrontendUrl()}`,
           }
         }
         if (informTeam) {
-          const adminsMail = await User.find({
+          const adminsMail = await M.User.find({
             role: { $in: ['admin', 'superadmin'] },
             isActive: { $ne: false },
           })
@@ -408,7 +400,7 @@ Merci de traiter cette demande depuis l’espace d’administration.`,
       // Si un admin a créé un rendez-vous pour un client connecté : e-mail + notification in-app (→ push Web) + SMS +33 si numéro français
       if (bookingByAdmin && userId && informClient) {
         try {
-          const client = await User.findById(userId).select('firstName lastName email phone');
+          const client = await M.User.findById(userId).select('firstName lastName email phone');
           const name =
             `${client?.firstName || ''} ${client?.lastName || ''}`.trim() ||
             `${prenom || ''} ${nom || ''}`.trim() ||
@@ -420,7 +412,7 @@ Merci de traiter cette demande depuis l’espace d’administration.`,
           });
           const inAppMsg = `Vous avez reçu une proposition de rendez-vous pour le ${dateLabelSms} à ${rendezVous.heure}. Acceptez ou refusez depuis Mes rendez-vous.`;
 
-          await Notification.create({
+          await M.Notification.create({
             user: userId,
             type: 'appointment_created',
             titre: 'Proposition de rendez-vous',
@@ -582,7 +574,7 @@ router.get('/admin', protect, async (req, res) => {
     // Archiver automatiquement les rendez-vous dépassés qui ne sont pas encore archivés
     // On archive uniquement ceux qui sont passés (date ET heure si disponible)
     const now = new Date();
-    const allAppointments = await RendezVous.find({
+    const allAppointments = await M.RendezVous.find({
       archived: { $ne: true }
     });
     
@@ -607,7 +599,7 @@ router.get('/admin', protect, async (req, res) => {
       }
     }
 
-    const rendezVous = await RendezVous.find(query)
+    const rendezVous = await M.RendezVous.find(query)
       .populate('user', 'firstName lastName email')
       .sort({ date: 1, heure: 1 });
 
@@ -671,7 +663,7 @@ router.get('/', protect, async (req, res) => {
     // Exclure les rendez-vous archivés pour les utilisateurs
     const query = { user: targetUserId, archived: { $ne: true } };
     
-    const rendezVous = await RendezVous.find(query)
+    const rendezVous = await M.RendezVous.find(query)
       .sort({ date: -1, heure: -1 });
 
     console.log('✅ Rendez-vous trouvés:', rendezVous.length);
@@ -696,7 +688,7 @@ router.get('/', protect, async (req, res) => {
 // @access  Private
 router.get('/:id', protect, async (req, res) => {
   try {
-    const rendezVous = await RendezVous.findById(req.params.id)
+    const rendezVous = await M.RendezVous.findById(req.params.id)
       .populate('user', 'firstName lastName email');
 
     if (!rendezVous) {
@@ -739,7 +731,7 @@ router.get('/:id', protect, async (req, res) => {
 router.put('/:id/archive', protect, authorize('admin', 'superadmin'), async (req, res) => {
   try {
     const { archived } = req.body;
-    const rendezVous = await RendezVous.findById(req.params.id);
+    const rendezVous = await M.RendezVous.findById(req.params.id);
 
     if (!rendezVous) {
       return res.status(404).json({
@@ -777,7 +769,7 @@ router.put('/:id/archive', protect, authorize('admin', 'superadmin'), async (req
 // @access  Private (Admin)
 router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    const rendezVous = await RendezVous.findById(req.params.id);
+    const rendezVous = await M.RendezVous.findById(req.params.id);
 
     if (!rendezVous) {
       return res.status(404).json({
@@ -793,7 +785,7 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
       });
     }
 
-    await RendezVous.findByIdAndDelete(req.params.id);
+    await M.RendezVous.findByIdAndDelete(req.params.id);
 
     res.json({
       success: true,
@@ -826,7 +818,7 @@ router.patch(
         userEmail: req.user?.email
       });
 
-      const rendezVous = await RendezVous.findById(req.params.id);
+      const rendezVous = await M.RendezVous.findById(req.params.id);
 
       if (!rendezVous) {
         return res.status(404).json({
@@ -887,8 +879,7 @@ router.patch(
       // Créer une notification pour l'utilisateur
       if (rendezVous.user) {
         try {
-          const Notification = require('../models/Notification');
-          await Notification.create({
+                    await M.Notification.create({
             user: rendezVous.user._id || rendezVous.user,
             type: 'appointment_cancelled',
             titre: 'Rendez-vous annulé',
@@ -935,10 +926,7 @@ Si vous souhaitez reprendre rendez-vous, vous pouvez soumettre une nouvelle dema
 
       // Créer une notification pour tous les administrateurs
       try {
-        const User = require('../models/User');
-        const Notification = require('../models/Notification');
-        
-        const admins = await User.find({ 
+                        const admins = await M.User.find({ 
           role: { $in: ['admin', 'superadmin'] },
           isActive: { $ne: false }
         }).select('_id');
@@ -974,7 +962,7 @@ Si vous souhaitez reprendre rendez-vous, vous pouvez soumettre une nouvelle dema
         }));
 
         if (adminNotifications.length > 0) {
-          await Notification.insertManyWithPush(adminNotifications);
+          await M.Notification.insertManyWithPush(adminNotifications);
           console.log(`✅ Notifications d'annulation envoyées à ${adminNotifications.length} administrateur(s)`);
         }
       } catch (adminNotifError) {
@@ -1018,7 +1006,7 @@ router.patch(
       }
 
       const { decision, motifRefus } = req.body;
-      const rendezVous = await RendezVous.findById(req.params.id);
+      const rendezVous = await M.RendezVous.findById(req.params.id);
 
       if (!rendezVous) {
         return res.status(404).json({
@@ -1097,8 +1085,7 @@ router.patch(
         });
       }
 
-      const User = require('../models/User');
-      const admins = await User.find({
+            const admins = await M.User.find({
         role: { $in: ['admin', 'superadmin'] },
         isActive: { $ne: false },
       }).select('_id');
@@ -1129,7 +1116,7 @@ router.patch(
           },
         }));
         if (adminNotifications.length > 0) {
-          await Notification.insertManyWithPush(adminNotifications);
+          await M.Notification.insertManyWithPush(adminNotifications);
         }
       } else {
         const refus = rendezVous.motifRefusClient ? `\nMotif : ${rendezVous.motifRefusClient}` : '';
@@ -1148,13 +1135,13 @@ router.patch(
           },
         }));
         if (adminNotifications.length > 0) {
-          await Notification.insertManyWithPush(adminNotifications);
+          await M.Notification.insertManyWithPush(adminNotifications);
         }
       }
 
       if (rendezVous.user) {
         try {
-          await Notification.create({
+          await M.Notification.create({
             user: rendezVous.user._id || rendezVous.user,
             type: decision === 'accept' ? 'appointment_created' : 'appointment_cancelled',
             titre: decision === 'accept' ? 'Rendez-vous confirmé' : 'Proposition refusée',
@@ -1213,7 +1200,7 @@ router.put(
       }
 
       const { date, heure, motif, description, effectue } = req.body;
-      const rendezVous = await RendezVous.findById(req.params.id);
+      const rendezVous = await M.RendezVous.findById(req.params.id);
 
       if (!rendezVous) {
         return res.status(404).json({
@@ -1294,8 +1281,7 @@ router.put(
       // Créer une notification pour l'utilisateur si des modifications ont été apportées
       if (rendezVous.user) {
         try {
-          const Notification = require('../models/Notification');
-          let notificationMessage = '';
+                    let notificationMessage = '';
           let hasChanges = false;
 
           // Vérifier les changements
@@ -1314,7 +1300,7 @@ router.put(
           }
 
           if (hasChanges) {
-            await Notification.create({
+            await M.Notification.create({
               user: rendezVous.user._id || rendezVous.user,
               type: 'appointment_updated',
               titre: 'Rendez-vous modifié',
@@ -1406,7 +1392,7 @@ router.patch(
       }
 
       const { statut, date, heure, motif, description, notes, effectue } = req.body;
-      const rendezVous = await RendezVous.findById(req.params.id);
+      const rendezVous = await M.RendezVous.findById(req.params.id);
 
       if (!rendezVous) {
         return res.status(404).json({
@@ -1448,8 +1434,7 @@ router.patch(
       // Créer une notification pour l'utilisateur si des modifications ont été apportées
       if (rendezVous.user) {
         try {
-          const Notification = require('../models/Notification');
-          let notificationType = 'appointment_updated';
+                    let notificationType = 'appointment_updated';
           let notificationTitre = 'Rendez-vous modifié';
           let notificationMessage = '';
           let hasChanges = false;
@@ -1483,7 +1468,7 @@ router.patch(
           }
 
           if (hasChanges) {
-            await Notification.create({
+            await M.Notification.create({
               user: rendezVous.user._id || rendezVous.user,
               type: notificationType,
               titre: notificationTitre,

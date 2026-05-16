@@ -4,11 +4,6 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { body, validationResult } = require('express-validator');
-const DossierGuestUploadInvite = require('../models/DossierGuestUploadInvite');
-const Document = require('../models/Document');
-const Dossier = require('../models/Dossier');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
 const {
   buildCabinetMessageVariables,
@@ -16,6 +11,7 @@ const {
 } = require('../utils/emailTemplateMailer');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 
+const M = require('../tenantModels');
 const router = express.Router();
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TOKEN_BYTES = 24;
@@ -99,7 +95,7 @@ async function resolveDossierOwnerUserId(dossier) {
     return dossier.user._id ? dossier.user._id : dossier.user;
   }
   if (dossier.clientEmail) {
-    const linked = await User.findOne({
+    const linked = await M.User.findOne({
       email: String(dossier.clientEmail).trim().toLowerCase(),
     })
       .select('_id')
@@ -114,7 +110,7 @@ async function findActiveInvite(token) {
     .trim()
     .replace(/[^a-f0-9]/gi, '');
   if (clean.length < 32 || clean.length > 80) return null;
-  const invite = await DossierGuestUploadInvite.findOne({ token: clean }).lean();
+  const invite = await M.DossierGuestUploadInvite.findOne({ token: clean }).lean();
   if (!invite) return null;
   if (invite.revokedAt) return null;
   if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) return null;
@@ -128,7 +124,7 @@ router.get('/public/:token', async (req, res) => {
     if (!invite) {
       return res.status(404).json({ success: false, message: 'Lien introuvable ou expiré.' });
     }
-    const dossier = await Dossier.findById(invite.dossierId).select('titre numero').lean();
+    const dossier = await M.Dossier.findById(invite.dossierId).select('titre numero').lean();
     if (!dossier) {
       return res.status(404).json({ success: false, message: 'Dossier introuvable.' });
     }
@@ -171,7 +167,7 @@ router.post('/public/:token', (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Aucun fichier téléversé.' });
     }
 
-    const dossier = await Dossier.findById(invite.dossierId).select('user clientEmail titre numero').lean();
+    const dossier = await M.Dossier.findById(invite.dossierId).select('user clientEmail titre numero').lean();
     if (!dossier) {
       return res.status(404).json({ success: false, message: 'Dossier introuvable.' });
     }
@@ -185,7 +181,7 @@ router.post('/public/:token', (req, res, next) => {
     const guestName = String(contributorName || '').trim().slice(0, 200);
     const docNom = String(nom || req.file.originalname || 'Document').trim().slice(0, 500);
 
-    const document = await Document.create({
+    const document = await M.Document.create({
       user: ownerUserId,
       nom: docNom,
       nomFichier: req.file.filename,
@@ -202,10 +198,10 @@ router.post('/public/:token', (req, res, next) => {
       guestContributorName: guestName,
     });
 
-    await DossierGuestUploadInvite.updateOne({ _id: invite._id }, { $inc: { uploadsCount: 1 } });
+    await M.DossierGuestUploadInvite.updateOne({ _id: invite._id }, { $inc: { uploadsCount: 1 } });
 
     try {
-      const admins = await User.find({
+      const admins = await M.User.find({
         role: { $in: ['admin', 'superadmin'] },
         isActive: { $ne: false },
       }).select('_id');
@@ -214,7 +210,7 @@ router.post('/public/:token', (req, res, next) => {
         ? `${guestName} a déposé « ${docNom} » sur le dossier « ${dossierTitle} » via un lien d’invitation.`
         : `Un tiers a déposé « ${docNom} » sur le dossier « ${dossierTitle} » via un lien d’invitation.`;
       for (const adm of admins) {
-        await Notification.create({
+        await M.Notification.create({
           user: adm._id,
           type: 'document_uploaded',
           titre: 'Document reçu (tiers)',
@@ -264,14 +260,14 @@ router.post(
       }
 
       const { dossierId, recipientEmail, message } = req.body;
-      const dossier = await Dossier.findById(String(dossierId).trim()).select('titre numero').lean();
+      const dossier = await M.Dossier.findById(String(dossierId).trim()).select('titre numero').lean();
       if (!dossier) {
         return res.status(404).json({ success: false, message: 'Dossier introuvable.' });
       }
 
       const token = crypto.randomBytes(TOKEN_BYTES).toString('hex');
       const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
-      const invite = await DossierGuestUploadInvite.create({
+      const invite = await M.DossierGuestUploadInvite.create({
         token,
         dossierId: dossier._id,
         createdBy: req.user.id,

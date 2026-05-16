@@ -1,12 +1,8 @@
 const express = require('express');
+const M = require('../tenantModels');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const mongoose = require('mongoose');
-const DocumentRequest = require('../models/DocumentRequest');
-const Document = require('../models/Document');
-const Dossier = require('../models/Dossier');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
 const { sendNotificationSMS } = require('../sendSMS');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
@@ -63,7 +59,7 @@ router.post(
       });
 
       // Vérifier que le dossier existe
-      const dossier = await Dossier.findById(dossierId)
+      const dossier = await M.Dossier.findById(dossierId)
         .populate('user', 'firstName lastName email phone');
       
       if (!dossier) {
@@ -118,7 +114,7 @@ router.post(
       } else if (dossier.clientEmail) {
         // Pas d'utilisateur connecté, mais email client disponible
         // Chercher l'utilisateur par email
-        const clientUser = await User.findOne({ email: dossier.clientEmail.toLowerCase() });
+        const clientUser = await M.User.findOne({ email: dossier.clientEmail.toLowerCase() });
         if (clientUser) {
           requestedFrom = clientUser._id;
         }
@@ -220,7 +216,7 @@ router.post(
 
       let documentRequest;
       try {
-        documentRequest = await DocumentRequest.create({
+        documentRequest = await M.DocumentRequest.create({
           dossier: dossierObjId,
           requestedBy: requestedByObjId,
           requestedFrom: requestedFromObjId,
@@ -252,7 +248,7 @@ router.post(
       await documentRequest.populate('dossier', 'titre numero');
 
       // Créer une notification pour le client
-      const clientUser = await User.findById(requestedFrom);
+      const clientUser = await M.User.findById(requestedFrom);
       if (!clientUser) {
         console.error(`❌ Utilisateur non trouvé pour l'ID: ${requestedFrom}`);
         return res.status(404).json({
@@ -262,7 +258,7 @@ router.post(
       }
 
       try {
-        await Notification.create({
+        await M.Notification.create({
           user: requestedFrom,
           type: 'document_request',
           titre: isUrgent 
@@ -440,7 +436,7 @@ router.get('/', async (req, res) => {
       // et optionnellement filtrer par dossierId / statut
       if (dossierId) {
         // Vérifier que le dossier est bien transmis à ce partenaire
-        const dossier = await Dossier.findById(dossierId).select('transmittedTo');
+        const dossier = await M.Dossier.findById(dossierId).select('transmittedTo');
         if (!dossier) {
           return res.status(404).json({
             success: false,
@@ -461,7 +457,7 @@ router.get('/', async (req, res) => {
         query.dossier = dossierId;
       } else {
         // Sans dossierId explicite, limiter aux dossiers transmis au partenaire
-        const dossiersTransmis = await Dossier.find({
+        const dossiersTransmis = await M.Dossier.find({
           'transmittedTo.partenaire': req.user.id
         }).select('_id');
         const dossierIds = dossiersTransmis.map((d) => d._id);
@@ -488,7 +484,7 @@ router.get('/', async (req, res) => {
       });
     }
 
-    const documentRequests = await DocumentRequest.find(query)
+    const documentRequests = await M.DocumentRequest.find(query)
       .populate('dossier', 'titre numero statut')
       .populate('requestedBy', 'firstName lastName email')
       .populate('requestedFrom', 'firstName lastName email phone')
@@ -515,7 +511,7 @@ router.get('/', async (req, res) => {
 // @access  Private
 router.get('/:id', async (req, res) => {
   try {
-    const documentRequest = await DocumentRequest.findById(req.params.id)
+    const documentRequest = await M.DocumentRequest.findById(req.params.id)
       .populate('dossier', 'titre numero statut')
       .populate('requestedBy', 'firstName lastName email')
       .populate('requestedFrom', 'firstName lastName email phone')
@@ -593,7 +589,7 @@ router.post(
       });
 
       // Vérifier que la demande existe
-      const documentRequest = await DocumentRequest.findById(req.params.id)
+      const documentRequest = await M.DocumentRequest.findById(req.params.id)
         .populate('dossier', 'titre numero')
         .populate('requestedBy', 'firstName lastName email')
         .populate('requestedFrom', 'firstName lastName email phone');
@@ -630,7 +626,7 @@ router.post(
       }
 
       // Vérifier que le document existe et appartient à l'utilisateur
-      const document = await Document.findById(documentId);
+      const document = await M.Document.findById(documentId);
       if (!document) {
         return res.status(404).json({
           success: false,
@@ -708,7 +704,7 @@ router.post(
           requestId: documentRequest._id.toString()
         });
 
-        await Notification.updateMany(
+        await M.Notification.updateMany(
           {
             user: requestedFromId,
             type: 'document_request',
@@ -738,7 +734,7 @@ router.post(
           : documentRequest.requestedBy.toString();
         
         console.log('👤 Recherche de l\'administrateur:', requestedById);
-        const adminUser = await User.findById(requestedById);
+        const adminUser = await M.User.findById(requestedById);
         
         if (!adminUser) {
           console.warn('⚠️ Administrateur non trouvé avec l\'ID:', requestedById);
@@ -752,7 +748,7 @@ router.post(
             documentName: document.nom
           });
 
-          await Notification.create({
+          await M.Notification.create({
             user: requestedById,
             type: 'document_received',
             titre: `📥 Document reçu - Dossier ${dossierNumero}`,
@@ -823,7 +819,7 @@ router.patch(
       }
 
       const { status } = req.body;
-      const documentRequest = await DocumentRequest.findById(req.params.id);
+      const documentRequest = await M.DocumentRequest.findById(req.params.id);
 
       if (!documentRequest) {
         return res.status(404).json({
@@ -866,7 +862,7 @@ router.patch(
 // @access  Private/Admin
 router.patch('/:id/cancel', authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    const documentRequest = await DocumentRequest.findById(req.params.id);
+    const documentRequest = await M.DocumentRequest.findById(req.params.id);
     if (!documentRequest) {
       return res.status(404).json({
         success: false,
@@ -903,7 +899,7 @@ router.patch('/:id/cancel', authorize('admin', 'superadmin'), async (req, res) =
 // @access  Private/Admin
 router.patch('/:id/remove-document', authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    const documentRequest = await DocumentRequest.findById(req.params.id);
+    const documentRequest = await M.DocumentRequest.findById(req.params.id);
     if (!documentRequest) {
       return res.status(404).json({
         success: false,
@@ -918,7 +914,7 @@ router.patch('/:id/remove-document', authorize('admin', 'superadmin'), async (re
       });
     }
 
-    await Document.findByIdAndDelete(documentRequest.document);
+    await M.Document.findByIdAndDelete(documentRequest.document);
 
     documentRequest.document = null;
     documentRequest.status = 'pending';

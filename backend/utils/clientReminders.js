@@ -1,8 +1,4 @@
-const RendezVous = require('../models/RendezVous');
-const DocumentRequest = require('../models/DocumentRequest');
-const Dossier = require('../models/Dossier');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
+const M = require('../tenantModels');
 const { sendTransactionalEmail, escapeHtml } = require('./emailNotifications');
 const { getPrimaryFrontendUrl } = require('./frontendOrigins');
 
@@ -20,7 +16,7 @@ async function checkAppointmentTomorrowReminders() {
   const dayAfter = new Date(tomorrow);
   dayAfter.setDate(dayAfter.getDate() + 1);
 
-  const rdvs = await RendezVous.find({
+  const rdvs = await M.RendezVous.find({
     statut: { $in: ['en_attente', 'confirme'] },
     archived: { $ne: true },
     date: { $gte: tomorrow, $lt: dayAfter },
@@ -41,7 +37,7 @@ async function checkAppointmentTomorrowReminders() {
   ];
   const emailToUserId = new Map();
   if (emailsToResolve.length > 0) {
-    const users = await User.find({ email: { $in: emailsToResolve } }).select('_id email').lean();
+    const users = await M.User.find({ email: { $in: emailsToResolve } }).select('_id email').lean();
     for (const u of users) {
       if (u.email) emailToUserId.set(String(u.email).trim().toLowerCase(), u._id.toString());
     }
@@ -58,7 +54,7 @@ async function checkAppointmentTomorrowReminders() {
     }
     if (!userId) continue;
 
-    const existing = await Notification.findOne({
+    const existing = await M.Notification.findOne({
       user: userId,
       type: 'appointment_reminder',
       'metadata.rendezVousId': rv._id.toString(),
@@ -75,7 +71,7 @@ async function checkAppointmentTomorrowReminders() {
     });
     const heurePart = rv.heure ? ` à ${rv.heure}` : '';
     const msgBody = `Vous avez un rendez-vous le ${dateStr}${heurePart}.`;
-    await Notification.create({
+    await M.Notification.create({
       user: userId,
       type: 'appointment_reminder',
       titre: 'Rappel : rendez-vous demain',
@@ -88,7 +84,7 @@ async function checkAppointmentTomorrowReminders() {
       },
     });
     try {
-      const uMail = await User.findById(userId).select('email firstName').lean();
+      const uMail = await M.User.findById(userId).select('email firstName').lean();
       if (uMail?.email && String(uMail.email).trim()) {
         const appUrl = getPrimaryFrontendUrl();
         await sendTransactionalEmail({
@@ -121,7 +117,7 @@ async function checkPendingDocumentRequestReminders() {
   const todayEnd = new Date(todayStart);
   todayEnd.setDate(todayEnd.getDate() + 1);
 
-  const requests = await DocumentRequest.find({
+  const requests = await M.DocumentRequest.find({
     status: 'pending',
     createdAt: { $lte: cutoff },
   })
@@ -136,7 +132,7 @@ async function checkPendingDocumentRequestReminders() {
     if (!requestedFrom) continue;
     const userId = requestedFrom.toString();
 
-    const existing = await Notification.findOne({
+    const existing = await M.Notification.findOne({
       user: userId,
       type: 'document_request_reminder',
       'metadata.documentRequestId': dr._id.toString(),
@@ -148,7 +144,7 @@ async function checkPendingDocumentRequestReminders() {
 
     const dossierTitle = dr.dossier?.titre || dr.dossier?.numero || 'votre dossier';
     const dossierId = dr.dossier?._id?.toString();
-    await Notification.create({
+    await M.Notification.create({
       user: userId,
       type: 'document_request_reminder',
       titre: 'Documents en attente',
@@ -188,7 +184,7 @@ async function checkTarificationPaymentDueReminders() {
   for (const d of dossiers) {
     if (!d.user) continue;
     const userId = d.user.toString();
-    const existing = await Notification.findOne({
+    const existing = await M.Notification.findOne({
       user: userId,
       type: 'tarification_payment_reminder',
       'metadata.dossierId': d._id.toString(),
@@ -200,7 +196,7 @@ async function checkTarificationPaymentDueReminders() {
 
     const montant = Number(d.montantTarificationFixe || 0);
     const titre = d.titre || d.numero || 'votre dossier';
-    await Notification.create({
+    await M.Notification.create({
       user: userId,
       type: 'tarification_payment_reminder',
       titre: 'Rappel : tarification en attente',

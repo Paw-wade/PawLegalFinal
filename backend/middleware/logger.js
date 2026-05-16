@@ -1,4 +1,4 @@
-const Log = require('../models/Log');
+const { getModel } = require('../lib/tenant/asyncContext');
 
 // Middleware pour logger les actions
 const logAction = async (req, action, description, metadata = {}) => {
@@ -7,7 +7,7 @@ const logAction = async (req, action, description, metadata = {}) => {
       return; // Pas de log si l'utilisateur n'est pas authentifié
     }
 
-    await Log.create({
+    await getModel('Log').create({
       action,
       user: req.user.id,
       userEmail: req.user.email,

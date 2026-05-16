@@ -49,6 +49,7 @@ function devApiRewriteRules(backendOrigin) {
     'sms-templates',
     'sms-history',
     'temoignages',
+    'tenant',
     'collaborative-drafts',
     'dossier-document-drafts',
     'dossier-guest-upload',

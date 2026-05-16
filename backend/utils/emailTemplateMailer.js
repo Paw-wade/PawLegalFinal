@@ -1,5 +1,4 @@
-const EmailTemplate = require('../models/EmailTemplate');
-const EmailLog = require('../models/EmailLog');
+const M = require('../tenantModels');
 const { sendTransactionalEmailDetailed, escapeHtml } = require('./emailNotifications');
 
 function renderTemplateWithVariables(template, variables = {}) {
@@ -47,7 +46,7 @@ async function sendTemplatedTransactionalEmail({
   }
 
   try {
-    const tpl = await EmailTemplate.findOne({ code: templateCode, isActive: true })
+    const tpl = await M.EmailTemplate.findOne({ code: templateCode, isActive: true })
       .sort({ version: -1, updatedAt: -1 })
       .lean();
     if (tpl?.subject && tpl?.htmlContent) {
@@ -82,7 +81,7 @@ async function sendTemplatedTransactionalEmail({
 
   if (eventKey) {
     try {
-      await EmailLog.create({
+      await M.EmailLog.create({
         eventKey,
         templateCode: templateCodeUsed,
         to,

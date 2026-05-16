@@ -3,9 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { body, validationResult } = require('express-validator');
-const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
 
+const M = require('../tenantModels');
 const router = express.Router();
 
 const avatarDir = path.join(__dirname, '../uploads/avatars');
@@ -118,7 +118,7 @@ const ALLOWED_USER_ROLES = [
 router.get('/profile', async (req, res) => {
   try {
     const effectiveUserId = req.user.id;
-    const user = await User.findById(effectiveUserId);
+    const user = await M.User.findById(effectiveUserId);
     
     if (!user) {
       return res.status(404).json({
@@ -186,7 +186,7 @@ router.put(
       } = req.body;
       
       const effectiveUserId = req.user.id;
-      const user = await User.findById(effectiveUserId);
+      const user = await M.User.findById(effectiveUserId);
       
       if (!user) {
         return res.status(404).json({
@@ -205,7 +205,7 @@ router.put(
         if (nextEmail === '') {
           // ne pas vider l'email unique sparse sans logique métier explicite
         } else if (nextEmail !== (user.email || '').toLowerCase()) {
-          const existingUser = await User.findOne({ email: nextEmail });
+          const existingUser = await M.User.findOne({ email: nextEmail });
           if (existingUser && String(existingUser._id) !== String(user._id)) {
             return res.status(400).json({
               success: false,
@@ -290,7 +290,7 @@ router.put(
 router.post('/profile/deactivate', async (req, res) => {
   try {
     const effectiveUserId = req.user.id;
-    const user = await User.findById(effectiveUserId);
+    const user = await M.User.findById(effectiveUserId);
 
     if (!user) {
       return res.status(404).json({
@@ -344,7 +344,7 @@ router.put(
       }
 
       const effectiveUserId = req.user.id;
-      const user = await User.findById(effectiveUserId);
+      const user = await M.User.findById(effectiveUserId);
 
       if (!user) {
         return res.status(404).json({
@@ -417,7 +417,7 @@ router.put(
 
       const { currentPassword, newPassword } = req.body;
       
-      const user = await User.findById(req.user.id).select('+password');
+      const user = await M.User.findById(req.user.id).select('+password');
       
       if (!user) {
         return res.status(404).json({
@@ -459,7 +459,7 @@ router.put(
 router.get('/all', authorize('admin', 'superadmin'), async (req, res) => {
   try {
     console.log('✅ Route GET /api/user/all appelée'); // Debug log
-    const users = await User.find().select('-password');
+    const users = await M.User.find().select('-password');
     
     res.json({
       success: true,
@@ -490,7 +490,7 @@ router.get('/expirations', authorize('admin', 'superadmin'), async (req, res) =>
 
     // Filtrer uniquement les clients avec une date d'expiration dans l'intervalle.
     // (Les clients déjà expirés sont inclus via pastDays)
-    const clients = await User.find({
+    const clients = await M.User.find({
       role: 'client',
       isActive: true,
       dateExpiration: { $gte: start, $lte: end }
@@ -567,7 +567,7 @@ router.put(
       }
 
       const { newPassword } = req.body;
-      const targetUser = await User.findById(req.params.id).select('+password');
+      const targetUser = await M.User.findById(req.params.id).select('+password');
 
       if (!targetUser) {
         return res.status(404).json({
@@ -583,8 +583,7 @@ router.put(
       await targetUser.save();
 
       try {
-        const Log = require('../models/Log');
-        await Log.create({
+                await M.Log.create({
           action: 'user_password_updated_by_admin',
           user: req.user.id,
           userEmail: req.user.email,
@@ -620,7 +619,7 @@ router.get('/:id', authorize('admin', 'superadmin'), async (req, res) => {
   try {
     console.log('✅ Route GET /api/user/:id appelée avec ID:', req.params.id); // Debug log
     console.log('✅ Requête complète:', req.method, req.originalUrl, req.path); // Debug log
-    const user = await User.findById(req.params.id).select('-password');
+    const user = await M.User.findById(req.params.id).select('-password');
     
     if (!user) {
       return res.status(404).json({
@@ -698,7 +697,7 @@ router.put(
         });
       }
 
-      const user = await User.findById(req.params.id);
+      const user = await M.User.findById(req.params.id);
       
       if (!user) {
         return res.status(404).json({
@@ -735,7 +734,7 @@ router.put(
 
       // Vérifier si l'email est déjà utilisé par un autre utilisateur
       if (email && email !== user.email) {
-        const existingUser = await User.findOne({ email });
+        const existingUser = await M.User.findOne({ email });
         if (existingUser) {
           return res.status(400).json({
             success: false,
@@ -796,8 +795,7 @@ router.put(
 
       // Logger l'action
       try {
-        const Log = require('../models/Log');
-        await Log.create({
+                await M.Log.create({
           action: 'user_updated',
           user: req.user.id,
           userEmail: req.user.email,
@@ -868,7 +866,7 @@ router.delete('/:id', authorize('admin', 'superadmin'), async (req, res) => {
   try {
     console.log('✅ Route DELETE /api/user/:id appelée avec ID:', req.params.id); // Debug log
     
-    const user = await User.findById(req.params.id);
+    const user = await M.User.findById(req.params.id);
     
     if (!user) {
       return res.status(404).json({
@@ -903,12 +901,11 @@ router.delete('/:id', authorize('admin', 'superadmin'), async (req, res) => {
 
     // Ajouter l'utilisateur à la corbeille avant suppression
     try {
-      const Trash = require('../models/Trash');
-      // Convertir l'utilisateur en objet et exclure le mot de passe
+            // Convertir l'utilisateur en objet et exclure le mot de passe
       const userData = user.toObject();
       delete userData.password; // Ne pas sauvegarder le mot de passe dans la corbeille
       
-      await Trash.create({
+      await M.Trash.create({
         itemType: 'user',
         originalId: user._id,
         itemData: userData,
@@ -931,8 +928,7 @@ router.delete('/:id', authorize('admin', 'superadmin'), async (req, res) => {
 
     // Logger l'action avant suppression
     try {
-      const Log = require('../models/Log');
-      await Log.create({
+            await M.Log.create({
         action: 'user_deleted',
         user: req.user.id,
         userEmail: req.user.email,
@@ -957,7 +953,7 @@ router.delete('/:id', authorize('admin', 'superadmin'), async (req, res) => {
     }
 
     // Supprimer l'utilisateur
-    await User.findByIdAndDelete(req.params.id);
+    await M.User.findByIdAndDelete(req.params.id);
 
     res.json({
       success: true,
@@ -1044,7 +1040,7 @@ router.post(
 
       // Vérifier si l'email existe déjà (seulement si un email est fourni)
       if (email && email.trim() !== '') {
-        const existingUser = await User.findOne({ email });
+        const existingUser = await M.User.findOne({ email });
         if (existingUser) {
           console.error('❌ Email déjà utilisé:', email);
           return res.status(400).json({
@@ -1086,14 +1082,13 @@ router.post(
       }
 
 
-      const user = await User.create(userData);
+      const user = await M.User.create(userData);
       console.log('✅ Utilisateur créé avec succès:', user._id);
 
 
       // Logger l'action
       try {
-        const Log = require('../models/Log');
-        await Log.create({
+                await M.Log.create({
           user: req.user.id,
           userEmail: req.user.email,
           targetUser: user._id,

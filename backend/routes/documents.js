@@ -3,11 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const mongoose = require('mongoose');
-const Document = require('../models/Document');
-const User = require('../models/User');
-const Log = require('../models/Log');
-const Dossier = require('../models/Dossier');
-const Notification = require('../models/Notification');
+const M = require('../tenantModels');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -200,7 +196,7 @@ const resolveDocumentPhysicalPath = async (document) => {
       rel && !rel.startsWith('..') && !path.isAbsolute(rel)
         ? rel.replace(/\\/g, '/')
         : absFile.replace(/\\/g, '/');
-    await Document.updateOne(
+    await M.Document.updateOne(
       { _id: document._id },
       {
         $set: {
@@ -467,7 +463,7 @@ router.get('/', async (req, res) => {
     
     console.log('📄 Récupération des documents pour l\'utilisateur:', targetUserId, 'Rôle:', req.user.role);
     
-    const documents = await Document.find({ user: targetUserId })
+    const documents = await M.Document.find({ user: targetUserId })
       .populate('dossierId', 'titre numero categorie statut')
       .sort({ createdAt: -1 });
 
@@ -513,9 +509,8 @@ router.get('/admin', protect, async (req, res) => {
     
     // Si partenaire, filtrer les documents des dossiers qui lui sont transmis (pending ou accepted, pas refused)
     if (isPartenaire) {
-      const Dossier = require('../models/Dossier');
       // Récupérer tous les dossiers qui ont une transmission au partenaire
-      const dossiersTransmis = await Dossier.find({
+      const dossiersTransmis = await M.Dossier.find({
         'transmittedTo.partenaire': req.user.id
       }).select('_id transmittedTo');
       
@@ -540,7 +535,7 @@ router.get('/admin', protect, async (req, res) => {
       console.log('🔍 Partenaire - Filtrage par dossiers transmis (pending/accepted):', dossierIds.length, 'dossiers');
     }
     
-    const documents = await Document.find(query)
+    const documents = await M.Document.find(query)
       .populate('user', 'firstName lastName email')
       .populate('dossierId', 'titre numero')
       .sort({ createdAt: -1 });
@@ -569,10 +564,9 @@ router.get('/admin', protect, async (req, res) => {
 router.get('/dossier/:dossierId', async (req, res) => {
   try {
     const { dossierId } = req.params;
-    const Dossier = require('../models/Dossier');
     
     // Vérifier que le dossier existe
-    const dossier = await Dossier.findById(dossierId)
+    const dossier = await M.Dossier.findById(dossierId)
       .populate('transmittedTo.partenaire', '_id');
     
     if (!dossier) {
@@ -615,7 +609,7 @@ router.get('/dossier/:dossierId', async (req, res) => {
     }
     
     // Récupérer tous les documents du dossier
-    const rawDocuments = await Document.find({ dossierId: dossierId })
+    const rawDocuments = await M.Document.find({ dossierId: dossierId })
       .populate('user', 'firstName lastName email')
       .sort({ createdAt: -1 });
 
@@ -756,19 +750,19 @@ router.post('/', (req, res, next) => {
     }
 
     console.log('📤 Création du document...');
-    const document = await Document.create(documentData);
+    const document = await M.Document.create(documentData);
     console.log('✅ Document créé avec succès:', document._id);
 
     // Notifier le client (push + in-app) quand un tiers ajoute un document à son dossier
     if (documentData.dossierId) {
       try {
-        const dossier = await Dossier.findById(documentData.dossierId)
+        const dossier = await M.Dossier.findById(documentData.dossierId)
           .select('user clientEmail titre numero')
           .lean();
         if (dossier) {
           let clientUserId = dossier.user ? dossier.user.toString() : null;
           if (!clientUserId && dossier.clientEmail) {
-            const linked = await User.findOne({
+            const linked = await M.User.findOne({
               email: String(dossier.clientEmail).trim().toLowerCase(),
             })
               .select('_id')
@@ -779,7 +773,7 @@ router.post('/', (req, res, next) => {
           const isOwnClientUpload = clientUserId && clientUserId === uploaderId;
           if (clientUserId && !isOwnClientUpload) {
             const dossierTitle = dossier.titre || dossier.numero || 'votre dossier';
-            await Notification.create({
+            await M.Notification.create({
               user: clientUserId,
               type: 'document_uploaded',
               titre: 'Nouveau document sur votre dossier',
@@ -800,7 +794,7 @@ router.post('/', (req, res, next) => {
 
     // Logger l'action
     try {
-      await Log.create({
+      await M.Log.create({
         user: req.user.id,
         userEmail: req.user.email,
         action: 'document_uploaded',
@@ -894,8 +888,7 @@ async function canClientAccessDocumentViaOwningDossier(document, user) {
   const rawDossierId = document.dossierId._id || document.dossierId;
   if (!rawDossierId || !mongoose.Types.ObjectId.isValid(String(rawDossierId))) return false;
   try {
-    const Dossier = require('../models/Dossier');
-    const dossier = await Dossier.findById(rawDossierId).select('user clientEmail').lean();
+    const dossier = await M.Dossier.findById(rawDossierId).select('user clientEmail').lean();
     if (!dossier) return false;
     if (dossier.user && dossier.user.toString() === userId) return true;
     if (
@@ -934,7 +927,7 @@ router.get('/:id/preview', async (req, res) => {
       });
     }
 
-    const document = await Document.findById(docId)
+    const document = await M.Document.findById(docId)
       .populate('user', 'firstName lastName email')
       .populate({
         path: 'dossierId',
@@ -970,12 +963,11 @@ router.get('/:id/preview', async (req, res) => {
       const dossier = document.dossierId;
       // Si le populate n'a pas fonctionné, récupérer le dossier séparément
       if (!dossier || !dossier.transmittedTo || !Array.isArray(dossier.transmittedTo)) {
-        const Dossier = require('../models/Dossier');
         const dossierId = dossier?._id || dossier || document.dossierId;
-        const fullDossier = await Dossier.findById(dossierId)
+        const fullDossier = await M.Dossier.findById(dossierId)
           .populate('transmittedTo.partenaire', '_id');
-        if (fullDossier && fullDossier.transmittedTo && Array.isArray(fullDossier.transmittedTo)) {
-          isTransmittedToPartenaire = fullDossier.transmittedTo.some(trans => {
+        if (fullDossier && fullM.Dossier.transmittedTo && Array.isArray(fullM.Dossier.transmittedTo)) {
+          isTransmittedToPartenaire = fullM.Dossier.transmittedTo.some(trans => {
             if (!trans || !trans.partenaire) return false;
             const transPartenaireId = trans.partenaire._id ? trans.partenaire._id.toString() : trans.partenaire.toString();
             // Accepter pending et accepted, mais pas refused
@@ -1079,7 +1071,7 @@ router.get('/:id/preview', async (req, res) => {
 // @access  Private
 router.get('/:id/download', async (req, res) => {
   try {
-    const document = await Document.findById(req.params.id)
+    const document = await M.Document.findById(req.params.id)
       .populate({
         path: 'dossierId',
         select: 'transmittedTo',
@@ -1111,12 +1103,11 @@ router.get('/:id/download', async (req, res) => {
       const dossier = document.dossierId;
       // Si le populate n'a pas fonctionné, récupérer le dossier séparément
       if (!dossier || !dossier.transmittedTo || !Array.isArray(dossier.transmittedTo)) {
-        const Dossier = require('../models/Dossier');
         const dossierId = dossier?._id || dossier || document.dossierId;
-        const fullDossier = await Dossier.findById(dossierId)
+        const fullDossier = await M.Dossier.findById(dossierId)
           .populate('transmittedTo.partenaire', '_id');
-        if (fullDossier && fullDossier.transmittedTo && Array.isArray(fullDossier.transmittedTo)) {
-          hasAccessViaTransmission = fullDossier.transmittedTo.some(trans => {
+        if (fullDossier && fullM.Dossier.transmittedTo && Array.isArray(fullM.Dossier.transmittedTo)) {
+          hasAccessViaTransmission = fullM.Dossier.transmittedTo.some(trans => {
             if (!trans || !trans.partenaire) return false;
             const transPartenaireId = trans.partenaire._id ? trans.partenaire._id.toString() : trans.partenaire.toString();
             // Accepter pending et accepted, mais pas refused
@@ -1189,7 +1180,7 @@ router.patch('/:id/visibility', authorize('admin', 'superadmin'), async (req, re
       return res.status(400).json({ success: false, message: 'Identifiant de document invalide' });
     }
 
-    const document = await Document.findById(req.params.id);
+    const document = await M.Document.findById(req.params.id);
     if (!document) {
       return res.status(404).json({ success: false, message: 'Document non trouvé' });
     }
@@ -1230,7 +1221,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     // Ne pas populate('user') : si le compte a été supprimé, user devient null et .toString() provoque un 500.
-    const document = await Document.findById(req.params.id).populate('dossierId', 'titre numero');
+    const document = await M.Document.findById(req.params.id).populate('dossierId', 'titre numero');
 
     if (!document) {
       return res.status(404).json({
@@ -1262,10 +1253,9 @@ router.delete('/:id', async (req, res) => {
 
     // Ajouter le document à la corbeille avant suppression
     try {
-      const Trash = require('../models/Trash');
       const documentData = document.toObject();
       
-      await Trash.create({
+      await M.Trash.create({
         itemType: 'document',
         originalId: document._id,
         itemData: documentData,
@@ -1312,7 +1302,7 @@ router.delete('/:id', async (req, res) => {
     try {
       const actorEmail =
         req.user.email || req.user.phone || (req.user.name ? String(req.user.name) : '') || 'inconnu';
-      await Log.create({
+      await M.Log.create({
         user: effectiveUserId,
         userEmail: actorEmail,
         action: 'document_deleted',

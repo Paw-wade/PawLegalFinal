@@ -3,11 +3,9 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { body, validationResult } = require('express-validator');
-const Message = require('../models/Message');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 
+const M = require('../tenantModels');
 const router = express.Router();
 
 // Configuration du stockage Multer pour les documents de contact
@@ -102,7 +100,7 @@ router.post(
       }
 
       // Sauvegarder le message dans la base de données
-      const newMessage = await Message.create({
+      const newMessage = await M.Message.create({
         name,
         email,
         phone: phone || '',
@@ -142,10 +140,10 @@ Pour faciliter le suivi de votre dossier, nous vous invitons à conserver cet e-
 
       // Notifier tous les admins + e-mail d’alerte
       try {
-        const admins = await User.find({ role: { $in: ['admin', 'superadmin'] } });
+        const admins = await M.User.find({ role: { $in: ['admin', 'superadmin'] } });
         
         for (const admin of admins) {
-          await Notification.create({
+          await M.Notification.create({
             user: admin._id,
             type: 'message_received',
             titre: 'Nouveau message de contact',
@@ -258,13 +256,13 @@ router.get(
         query.repondu = repondu === 'true';
       }
 
-      const messages = await Message.find(query)
+      const messages = await M.Message.find(query)
         .sort({ createdAt: -1 })
         .limit(parseInt(limit))
         .skip((parseInt(page) - 1) * parseInt(limit))
         .populate('lu.user', 'firstName lastName email');
 
-      const total = await Message.countDocuments(query);
+      const total = await M.Message.countDocuments(query);
 
       res.json({
         success: true,
@@ -303,7 +301,7 @@ router.get(
         });
       }
 
-      const message = await Message.findById(req.params.id);
+      const message = await M.Message.findById(req.params.id);
 
       if (!message) {
         return res.status(404).json({
@@ -393,7 +391,7 @@ router.patch(
         });
       }
 
-      const message = await Message.findById(req.params.id);
+      const message = await M.Message.findById(req.params.id);
 
       if (!message) {
         return res.status(404).json({
@@ -473,7 +471,7 @@ router.get(
   require('../middleware/auth').authorize('admin', 'superadmin'),
   async (req, res) => {
     try {
-      const message = await Message.findById(req.params.id);
+      const message = await M.Message.findById(req.params.id);
 
       if (!message) {
         return res.status(404).json({
@@ -542,7 +540,7 @@ router.post(
         });
       }
 
-      const message = await Message.findById(req.params.id);
+      const message = await M.Message.findById(req.params.id);
       if (!message) {
         return res.status(404).json({
           success: false,
@@ -550,9 +548,7 @@ router.post(
         });
       }
 
-      const Dossier = require('../models/Dossier');
-
-      // Extraire nom et prénom du message
+            // Extraire nom et prénom du message
       const nameParts = (message.name || '').split(' ');
       const clientPrenom = nameParts[0] || '';
       const clientNom = nameParts.slice(1).join(' ') || '';
@@ -573,7 +569,7 @@ router.post(
         createdFromContactMessage: message._id, // Lier le dossier au message
       };
 
-      const newDossier = await Dossier.create(dossierData);
+      const newDossier = await M.Dossier.create(dossierData);
 
       // Marquer le message comme traité (optionnel)
       message.repondu = true;
@@ -606,9 +602,9 @@ Nos équipes prendront en charge votre demande et vous informeront des prochaine
 
       // Notifier tous les admins de la création du dossier
       try {
-        const admins = await User.find({ role: { $in: ['admin', 'superadmin'] } });
+        const admins = await M.User.find({ role: { $in: ['admin', 'superadmin'] } });
         for (const admin of admins) {
-          await Notification.create({
+          await M.Notification.create({
             user: admin._id,
             type: 'dossier_created',
             titre: 'Dossier créé depuis un message de contact',

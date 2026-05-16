@@ -1,12 +1,8 @@
 const express = require('express');
+const M = require('../tenantModels');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
-const Task = require('../models/Task');
-const User = require('../models/User');
-const Dossier = require('../models/Dossier');
-const Notification = require('../models/Notification');
-
 // @route   GET /api/tasks
 // @desc    Récupérer toutes les tâches (Admin seulement)
 // @access  Private/Admin
@@ -28,7 +24,7 @@ router.get('/', protect, authorize('admin', 'superadmin'), async (req, res) => {
       filter.archived = { $ne: true };
     }
 
-    const tasks = await Task.find(filter)
+    const tasks = await M.Task.find(filter)
       .populate('assignedTo', 'firstName lastName email role')
       .populate('createdBy', 'firstName lastName email role')
       .populate('completedBy', 'firstName lastName email role')
@@ -67,7 +63,7 @@ router.get('/my', protect, async (req, res) => {
       filter.archived = { $ne: true };
     }
 
-    const tasks = await Task.find(filter)
+    const tasks = await M.Task.find(filter)
       .populate('assignedTo', 'firstName lastName email role')
       .populate('createdBy', 'firstName lastName email role')
       .populate('dossier', 'titre numero statut')
@@ -97,7 +93,7 @@ router.get('/dossier/:dossierId', protect, async (req, res) => {
     const { statut, priorite, includeArchived } = req.query;
     
     // Vérifier que le dossier existe
-    const dossier = await Dossier.findById(dossierId);
+    const dossier = await M.Dossier.findById(dossierId);
     if (!dossier) {
       return res.status(404).json({
         success: false,
@@ -139,7 +135,7 @@ router.get('/dossier/:dossierId', protect, async (req, res) => {
       filter.archived = { $ne: true };
     }
 
-    const tasks = await Task.find(filter)
+    const tasks = await M.Task.find(filter)
       .populate('assignedTo', 'firstName lastName email role')
       .populate('createdBy', 'firstName lastName email role')
       .populate('completedBy', 'firstName lastName email role')
@@ -166,7 +162,7 @@ router.get('/dossier/:dossierId', protect, async (req, res) => {
 // @access  Private
 router.get('/:id', protect, async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id)
+    const task = await M.Task.findById(req.params.id)
       .populate('assignedTo', 'firstName lastName email role')
       .populate('createdBy', 'firstName lastName email role')
       .populate('completedBy', 'firstName lastName email role')
@@ -275,7 +271,7 @@ router.post(
       // Vérifier que tous les utilisateurs assignés existent (seulement s'il y en a)
       if (assignedToArray.length > 0) {
         console.log('👤 Vérification des utilisateurs assignés:', assignedToArray);
-        const assignedUsers = await User.find({ _id: { $in: assignedToArray } });
+        const assignedUsers = await M.User.find({ _id: { $in: assignedToArray } });
         if (assignedUsers.length !== assignedToArray.length) {
           console.error('❌ Utilisateurs non trouvés. Attendus:', assignedToArray.length, 'Trouvés:', assignedUsers.length);
           return res.status(404).json({
@@ -295,7 +291,7 @@ router.post(
       // Vérifier que le dossier existe si fourni
       let dossierExists = null;
       if (dossier) {
-        dossierExists = await Dossier.findById(dossier);
+        dossierExists = await M.Dossier.findById(dossier);
         if (!dossierExists) {
           return res.status(404).json({
             success: false,
@@ -332,10 +328,10 @@ router.post(
         taskDataToCreate.assignedTo = assignedToArray;
       }
 
-      const task = await Task.create(taskDataToCreate);
+      const task = await M.Task.create(taskDataToCreate);
       console.log('✅ Tâche créée avec succès:', task._id);
 
-      const taskPopulated = await Task.findById(task._id)
+      const taskPopulated = await M.Task.findById(task._id)
         .populate('assignedTo', 'firstName lastName email role')
         .populate('createdBy', 'firstName lastName email role')
         .populate('completedBy', 'firstName lastName email role')
@@ -349,7 +345,7 @@ router.post(
 
           for (const assignedUserId of assignedToArray) {
             try {
-              await Notification.create({
+              await M.Notification.create({
                 user: assignedUserId,
                 type: 'other',
                 titre: 'Nouvelle tâche assignée',
@@ -394,14 +390,14 @@ router.post(
 
           if (memberIds.length > 0) {
             // Ne notifier que les admins, pas les clients
-            const teamUsers = await User.find({ 
+            const teamUsers = await M.User.find({ 
               _id: { $in: memberIds },
               role: { $in: ['admin', 'superadmin'] } // Filtrer uniquement les admins
             });
 
             for (const member of teamUsers) {
               try {
-                await Notification.create({
+                await M.Notification.create({
                   user: member._id,
                   type: 'other',
                   titre: 'Nouvelle tâche sur un dossier',
@@ -426,7 +422,7 @@ router.post(
       // Si un partenaire crée une tâche sur un dossier transmis, notifier tous les admins
       if (req.user.role === 'partenaire' && dossierExists) {
         try {
-          const allAdmins = await User.find({ 
+          const allAdmins = await M.User.find({ 
             role: { $in: ['admin', 'superadmin'] }
           });
 
@@ -434,7 +430,7 @@ router.post(
 
           for (const admin of allAdmins) {
             try {
-              await Notification.create({
+              await M.Notification.create({
                 user: admin._id,
                 type: 'other',
                 titre: 'Nouvelle tâche créée par un partenaire',
@@ -511,7 +507,7 @@ router.put(
       console.log('📝 Mise à jour de la tâche:', req.params.id);
       console.log('📝 Données reçues:', req.body);
       
-      const task = await Task.findById(req.params.id);
+      const task = await M.Task.findById(req.params.id);
       if (!task) {
         console.error('❌ Tâche non trouvée:', req.params.id);
         return res.status(404).json({
@@ -532,7 +528,7 @@ router.put(
       // Pour les partenaires, vérifier qu'ils ont accès au dossier de la tâche
       let hasDossierAccess = false;
       if (isPartenaire && task.dossier) {
-        const dossier = await Dossier.findById(task.dossier);
+        const dossier = await M.Dossier.findById(task.dossier);
         if (dossier) {
           const transmission = dossier.transmittedTo?.find((t) => {
             const partenaireId = t.partenaire?._id?.toString() || t.partenaire?.toString();
@@ -585,7 +581,7 @@ router.put(
 
         // Vérifier que tous les utilisateurs assignés existent (seulement s'il y en a)
         if (assignedToArray.length > 0) {
-          const assignedUsers = await User.find({ _id: { $in: assignedToArray } });
+          const assignedUsers = await M.User.find({ _id: { $in: assignedToArray } });
           if (assignedUsers.length !== assignedToArray.length) {
             return res.status(404).json({
               success: false,
@@ -597,7 +593,7 @@ router.put(
 
       // Vérifier que le dossier existe si fourni
       if (dossier) {
-        const dossierExists = await Dossier.findById(dossier);
+        const dossierExists = await M.Dossier.findById(dossier);
         if (!dossierExists) {
           return res.status(404).json({
             success: false,
@@ -679,11 +675,11 @@ router.put(
       // Créer des notifications pour tous les membres de l'équipe si la tâche est marquée comme effectuée
       if (req.body.effectue === true && !wasEffectue) {
         try {
-          const completedUser = await User.findById(req.user.id);
+          const completedUser = await M.User.findById(req.user.id);
           const completedUserName = completedUser ? `${completedUser.firstName} ${completedUser.lastName}` : 'Un utilisateur';
           
           // Récupérer tous les utilisateurs de l'équipe (admins et superadmins)
-          const teamUsers = await User.find({ 
+          const teamUsers = await M.User.find({ 
             role: { $in: ['admin', 'superadmin'] },
             _id: { $ne: req.user.id } // Exclure l'utilisateur qui a effectué la tâche
           });
@@ -703,7 +699,7 @@ router.put(
           }));
           
           if (notifications.length > 0) {
-            await Notification.insertManyWithPush(notifications);
+            await M.Notification.insertManyWithPush(notifications);
           }
         } catch (notifError) {
           console.error('Erreur lors de la création des notifications:', notifError);
@@ -723,7 +719,7 @@ router.put(
       
       // Ajouter tous les admins
       try {
-        const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } });
+        const admins = await M.User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } });
         admins.forEach(admin => allRecipients.add(admin._id.toString()));
       } catch (err) {
         console.error('Erreur lors de la récupération des admins:', err);
@@ -745,7 +741,7 @@ router.put(
           for (const recipientId of allRecipients) {
             if (recipientId === req.user.id.toString()) continue; // Ne pas notifier le modificateur
             try {
-              await Notification.create({
+              await M.Notification.create({
                 user: recipientId,
                 type: 'other',
                 titre: 'Statut de tâche modifié',
@@ -782,7 +778,7 @@ router.put(
           for (const recipientId of allRecipients) {
             if (recipientId === req.user.id.toString()) continue; // Ne pas notifier le modificateur
             try {
-              await Notification.create({
+              await M.Notification.create({
                 user: recipientId,
                 type: 'other',
                 titre: 'Priorité de tâche modifiée',
@@ -808,7 +804,7 @@ router.put(
       await task.save();
       console.log('✅ Tâche sauvegardée avec succès');
 
-      const taskPopulated = await Task.findById(task._id)
+      const taskPopulated = await M.Task.findById(task._id)
         .populate('assignedTo', 'firstName lastName email role')
         .populate('createdBy', 'firstName lastName email role')
         .populate('completedBy', 'firstName lastName email role')
@@ -852,7 +848,7 @@ router.post(
         });
       }
 
-      const task = await Task.findById(req.params.id);
+      const task = await M.Task.findById(req.params.id);
       if (!task) {
         return res.status(404).json({
           success: false,
@@ -884,7 +880,7 @@ router.post(
       await task.save();
 
       // Recharger la tâche avec les relations
-      const taskPopulated = await Task.findById(task._id)
+      const taskPopulated = await M.Task.findById(task._id)
         .populate('assignedTo', 'firstName lastName email role')
         .populate('createdBy', 'firstName lastName email role')
         .populate('dossier', 'titre numero statut')
@@ -896,7 +892,7 @@ router.post(
       // Notification au créateur de la tâche (s'il existe)
       if (task.createdBy) {
         try {
-          await Notification.create({
+          await M.Notification.create({
             user: task.createdBy,
             type: 'other',
             titre: 'Nouvelle note sur une tâche',
@@ -915,14 +911,14 @@ router.post(
 
       // Notification à tous les administrateurs (y compris superadmin)
       try {
-        const admins = await User.find({
+        const admins = await M.User.find({
           role: { $in: ['admin', 'superadmin'] },
           isActive: { $ne: false },
         });
 
         for (const admin of admins) {
           try {
-            await Notification.create({
+            await M.Notification.create({
               user: admin._id,
               type: 'other',
               titre: 'Nouvelle note sur une tâche',
@@ -963,7 +959,7 @@ router.post(
 // @access  Private/Admin
 router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id);
+    const task = await M.Task.findById(req.params.id);
     if (!task) {
       return res.status(404).json({
         success: false,
@@ -971,7 +967,7 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
       });
     }
 
-    await Task.findByIdAndDelete(req.params.id);
+    await M.Task.findByIdAndDelete(req.params.id);
 
     res.json({
       success: true,
@@ -1019,7 +1015,7 @@ router.put('/:id/archive', protect, authorize('admin', 'superadmin'), async (req
       });
     }
 
-    const task = await Task.findById(req.params.id);
+    const task = await M.Task.findById(req.params.id);
     if (!task) {
       return res.status(404).json({
         success: false,

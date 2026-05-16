@@ -1,5 +1,4 @@
-const Dossier = require('../models/Dossier');
-const User = require('../models/User');
+const { getModel } = require('../lib/tenant/asyncContext');
 
 /**
  * Vérifie si l'utilisateur a les permissions nécessaires pour une action sur un dossier
@@ -30,7 +29,7 @@ const checkDossierPermission = (action) => {
         return next();
       }
 
-      const dossier = await Dossier.findById(dossierId)
+      const dossier = await getModel('Dossier').findById(dossierId)
         .populate('teamMembers', 'firstName lastName email role')
         .populate('teamLeader', 'firstName lastName email role');
 

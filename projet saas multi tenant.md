@@ -1,46 +1,84 @@
-# Ada Papers — Prompt Cursor : architecture multi-tenant
+# Ada Papers — Architecture multi-tenant (roadmap & implémentation)
 
 ## Contexte du projet
 
-Tu travailles sur **Ada Papers**, une application SaaS de gestion de dossiers juridiques (recours, documents, messagerie, rendez-vous, tarification).
+**Ada Papers** est une application SaaS de gestion de dossiers juridiques (recours, documents, messagerie, rendez-vous, tarification).
 
-L'objectif est de transformer l'application en **plateforme multi-tenant** : un seul déploiement (Vercel + Coolify) qui sert plusieurs cabinets, chacun avec sa propre base de données MongoDB isolée, son propre domaine, son branding et ses intégrations.
+**Objectif** : une seule application déployée (Vercel + Coolify) pour plusieurs cabinets, chacun avec :
 
-**Stack technique actuelle :**
-- Backend : Node.js / Express (ou Next.js API routes)
-- Base de données : MongoDB avec Mongoose
-- Frontend : Next.js
-- Déploiement : Coolify (backend) + Vercel (frontend)
-- Email : Brevo (Sendinblue)
-- Auth : JWT
+- sa propre base MongoDB (données métier isolées) ;
+- son domaine, branding, emails ;
+- zéro redéploiement pour ajouter un cabinet.
+
+**Stack actuelle**
+
+| Couche | Technologie |
+|--------|-------------|
+| Backend | Node.js / Express (`backend/server.js`) |
+| Base | MongoDB + Mongoose (~35 modèles) |
+| Frontend | Next.js |
+| Déploiement | Coolify (API) + Vercel (front) |
+| Email | Brevo |
+| Auth | JWT (+ NextAuth côté front) |
 
 ---
 
-## Modèle d'architecture cible
+## Décisions d’architecture validées
 
-### Principe fondamental
+### Isolation des données
 
-Quand une requête arrive, l'app lit le `hostname` entrant, interroge la **base maître** pour charger la config du bon cabinet, puis connecte toutes les requêtes suivantes à la **base MongoDB dédiée** de ce cabinet.
+- **1 URI MongoDB par cabinet** (cluster ou base dédiée).
+- **Base maître** : uniquement la collection `organizations` (config, pas de dossiers/clients/documents).
 
-Aucune donnée ne traverse entre cabinets. Zéro redéploiement pour ajouter un nouveau cabinet.
+### Modules « plateforme » (partagés, pas par cabinet)
 
-### Base maître (collection `organizations`)
+Ces fonctionnalités restent au **niveau plateforme Ada Papers** (une config globale, pas de duplication par tenant en Phase 1–3) :
+
+| Module | Routes API | Remarque |
+|--------|------------|----------|
+| **CMS** | `/api/content`, `/api/media` | Contenu éditorial plateforme |
+| **Lexia / Paw AI** | `/api/lexia`, `/api/paw-search` | Index & clés globales |
+| **Légifrance** | `/api/legal` | API juridique externe |
+| **Judilibre** | `/api/judilibre` | API juridique externe |
+
+Le middleware tenant **n’exige pas** de cabinet résolu pour ces préfixes (voir `backend/middleware/tenant.js` → `PLATFORM_API_PREFIXES`).
+
+### Données « par cabinet »
+
+Tout le reste : utilisateurs, dossiers, documents, messages, RDV, brouillons, notifications, etc. → **base tenant** via `req.tenantDb` (Phase 2+).
+
+---
+
+## Principe de fonctionnement
+
+```
+1. Requête HTTP → Host (ou X-Tenant-Slug en dev)
+2. Lookup dans la base maître (organizations)
+3. Pool MongoDB → connexion dédiée au cabinet
+4. Route handler → données du bon cabinet uniquement
+5. JWT (Phase 2) → orgId doit correspondre au cabinet résolu
+```
+
+---
+
+## Schéma `Organization` (base maître)
 
 ```ts
 interface Organization {
   _id: ObjectId
   slug: string                    // ex: "cabinet-dupont"
-  domain: string                  // ex: "app.cabinetdupont.fr"
-  mongoUri: string                // URI Atlas dédiée à ce cabinet
+  domain?: string                 // legacy — préférer domains[]
+  domains: string[]               // ex: ["app.cabinetdupont.fr", "dupont.localhost"]
+  mongoUri: string                // URI Atlas dédiée
   status: "trial" | "active" | "suspended"
   branding: {
-    name: string                  // ex: "Cabinet Dupont"
-    logo: string                  // URL CDN
-    primaryColor: string          // ex: "#2A4DD0"
+    name: string
+    logo: string
+    primaryColor: string
     favicon?: string
   }
   email: {
-    from: string                  // ex: "contact@cabinetdupont.fr"
+    from: string
     brevoApiKey: string
     replyTo?: string
   }
@@ -52,196 +90,289 @@ interface Organization {
   limits: {
     maxUsers: number
     maxStorageGb: number
-    modules: string[]             // ex: ["dossiers", "messagerie", "lexia"]
+    modules: string[]
   }
   createdAt: Date
+  updatedAt: Date
 }
 ```
 
-### Middleware de routage tenant (à créer)
-
-Fichier : `middleware/tenant.ts`
-
-```ts
-import { NextRequest, NextResponse } from 'next/server'
-import { getMasterDb } from '@/lib/db/master'
-import { getTenantConnection } from '@/lib/db/tenants'
-
-export async function tenantMiddleware(req: NextRequest) {
-  const hostname = req.headers.get('host') ?? ''
-  const masterDb = await getMasterDb()
-  
-  const org = await masterDb
-    .collection('organizations')
-    .findOne({ domain: hostname, status: 'active' })
-
-  if (!org) {
-    return NextResponse.json({ error: 'Cabinet introuvable' }, { status: 404 })
-  }
-
-  // Injecter l'org dans les headers pour les route handlers
-  const res = NextResponse.next()
-  res.headers.set('x-org-id', org._id.toString())
-  res.headers.set('x-org-slug', org.slug)
-  return res
-}
-```
-
-### Gestionnaire de connexions MongoDB (pool par tenant)
-
-Fichier : `lib/db/tenants.ts`
-
-```ts
-import mongoose from 'mongoose'
-
-const connections: Map<string, mongoose.Connection> = new Map()
-
-export async function getTenantConnection(mongoUri: string, orgId: string) {
-  if (connections.has(orgId)) {
-    return connections.get(orgId)!
-  }
-  const conn = await mongoose.createConnection(mongoUri).asPromise()
-  connections.set(orgId, conn)
-  return conn
-}
-```
+Implémentation : `backend/models/Organization.js`
 
 ---
 
-## Règles absolues à respecter
+## Feature flag & variables d’environnement
 
-1. **Jamais de requête sans filtre tenant.** Toute lecture/écriture en base doit passer par la connexion du tenant actif, jamais par une connexion globale.
+| Variable | Rôle |
+|----------|------|
+| `MULTI_TENANT=true` | Active résolution par domaine + base maître |
+| `MASTER_MONGODB_URI` | URI base maître (sinon `MONGODB_URI` + `MASTER_DB_NAME`) |
+| `MASTER_DB_NAME` | Défaut `adapapers_master` |
+| `MONGODB_URI` | Connexion **legacy** (routes non migrées) + seed dev |
+| `DEFAULT_ORG_SLUG` | Cabinet par défaut sur `localhost` |
+| `X-Tenant-Slug` | En-tête HTTP **dev uniquement** pour forcer un cabinet |
 
-2. **La base maître ne contient que la config des organisations.** Aucune donnée métier (dossiers, clients, documents) ne doit s'y trouver.
-
-3. **Un pool de connexions par cabinet.** Ne pas ouvrir une nouvelle connexion Mongoose à chaque requête — réutiliser les connexions en cache.
-
-4. **Les fichiers uploadés sont préfixés par orgId.** Format : `uploads/{orgId}/{filename}`. Jamais de fichier partagé entre cabinets.
-
-5. **Les clés API (Brevo, Google) sont par cabinet.** Jamais une clé globale pour tous.
-
-6. **Les emails transactionnels utilisent le `from` du cabinet.** Ne jamais envoyer depuis une adresse Ada Papers à un client d'un autre cabinet.
-
-7. **Les tokens JWT incluent l'orgId.** Un token ne peut pas être réutilisé sur le domaine d'un autre cabinet.
+Exemple complet : `backend/.env.multi-tenant.example`
 
 ---
 
-## Structure des dossiers à créer/modifier
+## Phase 1 — Fondations ✅ (implémentée)
 
+### Livrables réalisés
+
+| Fichier | Rôle |
+|---------|------|
+| `backend/lib/db/master.js` | Connexion singleton base maître |
+| `backend/lib/db/tenants.js` | Pool `Map<orgId, Connection>` |
+| `backend/lib/db/mongoUri.js` | Helper URI avec nom de base |
+| `backend/models/Organization.js` | Schéma + `getOrganizationModel()` |
+| `backend/lib/models/registerTenantModels.js` | Copie des schémas sur connexion tenant |
+| `backend/lib/tenant/resolveOrganization.js` | Résolution Host / slug / cache |
+| `backend/lib/tenant/getTenantDb.js` | Helper Phase 2 `getTenantDb(req)` |
+| `backend/middleware/tenant.js` | Middleware Express |
+| `backend/routes/tenant.js` | `GET /api/tenant/config`, `GET /api/tenant/health` |
+| `backend/scripts/seedMasterOrganizations.js` | 2 orgs de dev |
+| `backend/server.js` | Intégration flag + middleware |
+
+### Commandes
+
+```bash
+cd backend
+
+# 1. Activer dans .env (voir .env.multi-tenant.example)
+#    MULTI_TENANT=true
+#    DEFAULT_ORG_SLUG=cabinet-dupont
+
+# 2. Créer / mettre à jour les orgs en base maître
+npm run seed:master-orgs
+
+# 3. Démarrer l’API
+npm run dev
 ```
-lib/
-  db/
-    master.ts          ← connexion à la base maître
-    tenants.ts         ← pool de connexions par cabinet
-  tenant.ts            ← helper pour lire l'org depuis req headers
-  branding.ts          ← charger le branding du cabinet actif
 
-middleware/
-  tenant.ts            ← middleware Next.js de routage
+### Organisations de développement (seed)
 
-models/
-  organization.ts      ← schéma Mongoose pour la base maître
+| Slug | Domaines | Base Mongo (suffixe) |
+|------|----------|----------------------|
+| `cabinet-dupont` | `dupont.localhost`, `www.dupont.localhost` | `tenant_cabinet_dupont` |
+| `cabinet-martin` | `martin.localhost`, `www.martin.localhost` | `tenant_cabinet_martin` |
 
-app/
-  api/
-    [tous les endpoints existants]  ← ajouter getTenantDb() en tête
+**Test local**
 
-components/
-  TenantProvider.tsx   ← context React avec branding + config cabinet
+1. Option A — fichier `hosts` : `127.0.0.1 dupont.localhost martin.localhost`
+2. Option B — en-tête : `X-Tenant-Slug: cabinet-dupont` ou `cabinet-martin`
+3. Option C — `localhost` + `DEFAULT_ORG_SLUG=cabinet-dupont`
+
+**Endpoints de test**
+
+```http
+GET /api/tenant/config
+Host: dupont.localhost:3005
+
+GET /api/health
+X-Tenant-Slug: cabinet-martin
 ```
+
+### Comportement si `MULTI_TENANT` absent ou `false`
+
+Comportement **identique à avant** : un seul `mongoose.connect(MONGODB_URI)`, pas de middleware bloquant.
 
 ---
 
-## Tâches à implémenter dans l'ordre
+## Phase 2 — Migration des routes métier ✅ (implémentée)
 
-### Étape 1 — Base maître et connexion
-- [ ] Créer `lib/db/master.ts` avec connexion singleton à la base maître
-- [ ] Créer le schéma `Organization` dans `models/organization.ts`
-- [ ] Créer `lib/db/tenants.ts` avec pool de connexions par `orgId`
+### Objectif
 
-### Étape 2 — Middleware de routage
-- [ ] Créer `middleware/tenant.ts` qui lit le hostname et charge l'org
-- [ ] Injecter `x-org-id` dans les headers de chaque requête
-- [ ] Retourner 404 si le domaine n'est pas dans la base maître
+Toutes les lectures/écritures métier passent par la connexion du cabinet courant ; JWT contient `orgId`.
 
-### Étape 3 — Adapter les route handlers
-- [ ] Créer helper `lib/tenant.ts` → `getTenantDb(req)` qui retourne la connexion du bon cabinet
-- [ ] Remplacer tous les `await mongoose.connect(...)` par `await getTenantDb(req)`
-- [ ] Vérifier que chaque endpoint utilise bien la connexion tenant
+### Infrastructure Phase 2
 
-### Étape 4 — Branding dynamique
-- [ ] Créer `components/TenantProvider.tsx` avec un context React
-- [ ] Charger `branding`, `landingPage`, `email` depuis l'API au démarrage
-- [ ] Injecter les CSS variables (`--primary-color`, etc.) dans le `<head>`
-- [ ] Landing page dynamique : lire `org.landingPage` pour afficher headline/CTA
+| Fichier | Rôle |
+|---------|------|
+| `backend/tenantModels.js` | Proxy `M.User`, `M.Dossier`, … → connexion tenant (ALS) |
+| `backend/lib/tenant/asyncContext.js` | `AsyncLocalStorage` + `getModel(name)` |
+| `backend/lib/tenant/jwt.js` | `signAuthToken`, `assertTokenMatchesTenant` |
+| `backend/middleware/auth.js` | Vérifie `orgId` + `getModel('User')` |
+| `backend/middleware/tenant.js` | Enveloppe chaque requête dans `runWithTenantStore` |
+| `backend/lib/tenant/runForEachActiveTenant.js` | Cron / jobs par cabinet actif |
 
-### Étape 5 — Fichiers et emails
-- [ ] Préfixer tous les uploads par `orgId` : `uploads/${orgId}/...`
-- [ ] Adapter l'envoi Brevo pour utiliser `org.email.brevoApiKey` et `org.email.from`
+### Routes migrées (`tenantModels`)
 
-### Étape 6 — Auth
-- [ ] Ajouter `orgId` dans le payload JWT à la connexion
-- [ ] Vérifier que `orgId` dans le token correspond au domaine de la requête
+- `auth`, `otp`, `user`, `permissions`, `messages`, `notifications`, `appointments`, `creneaux`, `tasks`, `notes`, `recours`, `forum`, `contact`, `sms`, `push`, `trash`, `logs`, `temoignages`, `document-requests`, `dossierGuestUpload`, `dossierDocumentDrafts`, `pawAiPublicShare`, `sms-templates`, `sms-history`
+- **`dossiers`**, **`documents`**, **`collaborativeDrafts`**, **`email`**, **`documentDownloadShare`**
 
-### Étape 7 — Console admin Ada Papers
-- [ ] Route `/admin` protégée par un superadmin Ada Papers
-- [ ] CRUD sur la collection `organizations`
-- [ ] Formulaire : créer un nouveau cabinet (slug, domain, mongoUri, branding, email)
+### Utils migrés (cron inclus)
 
----
+- `tarificationInstallmentNotifications`, `clientReminders`, `adminAgendaNotifications`, `taskDeadlineNotifications`, `emailTemplateMailer`, `pushService`
+- Cron serveur : `runForEachActiveTenant` avant rappels tarification
 
-## Comportement attendu pour chaque nouvelle requête
+### Plateforme (connexion legacy / pas de tenant obligatoire)
 
-```
-1. Requête → hostname lu par le middleware
-2. Middleware → cherche l'org dans la base maître
-3. Org trouvée → connexion tenant chargée depuis le pool
-4. Route handler → toutes les queries tapent dans la base du cabinet
-5. Réponse → données du bon cabinet, jamais mélangées
-```
+- `legal`, `judilibre`, `lexia`, `content`, `paw-search` — inchangés (`require('../models/...')` global)
 
----
+### JWT
 
-## Pour ajouter un nouveau cabinet (zéro déploiement)
+- Connexion / OTP : `signAuthToken(userId, { orgId: req.tenant?.orgId })`
+- `protect` : refuse si `orgId` du token ≠ cabinet résolu par le domaine
+- **Reconnecter** les utilisateurs après activation multi-tenant (anciens tokens sans `orgId`)
 
-Insérer un document dans la collection `organizations` de la base maître :
+### Utilisation dans une nouvelle route
 
 ```js
-await masterDb.collection('organizations').insertOne({
+const M = require('../tenantModels');
+// dans un handler (après tenantMiddleware) :
+const dossiers = await M.Dossier.find({ ... });
+```
+
+Ou : `const { getModel } = require('../lib/tenant/asyncContext');` → `getModel('Dossier')`
+
+### Critère de sortie
+
+- [x] Contexte tenant par requête (ALS)
+- [x] JWT + orgId sur routes auth
+- [x] Routes métier critiques sur `tenantModels`
+- [ ] Tests manuels 2 orgs (dupont / martin) : login, dossier, document sur chaque domaine
+
+---
+
+## Phase 3 — Fichiers & emails (1–2 semaines)
+
+- [ ] Uploads : `uploads/{orgId}/...` (`documents.js`, avatars, lexia attachments, guest upload)
+- [ ] Cloudinary : dossier `orgs/{orgId}/` ou credentials par org
+- [ ] Brevo : `brevoService` lit `req.tenant.email` (clé + `from` par cabinet)
+- [ ] Script migration fichiers existants
+
+---
+
+## Phase 4 — Frontend & domaines (2–3 semaines)
+
+- [ ] `middleware.ts` Next (optionnel si tout passe par Host API)
+- [ ] `TenantProvider.tsx` : fetch `/api/tenant/config`, CSS variables, logo
+- [ ] Landing dynamique depuis `landingPage`
+- [ ] Domaines Vercel par cabinet
+- [ ] CORS : origines dérivées des `domains` actifs
+- [ ] NextAuth : cookies non partagés entre domaines
+
+---
+
+## Phase 5 — Console Ada Papers (1–2 semaines)
+
+- [ ] CRUD `organizations` (superadmin plateforme)
+- [ ] Provisioning : création DB Atlas, premier admin cabinet
+- [ ] Checklist DNS + domaine Vercel
+
+---
+
+## Phase 6 — Migration production (1–3 semaines)
+
+- [ ] Dump Mongo actuel → URI cabinet pilote
+- [ ] Fichiers → préfixe `orgId`
+- [ ] Bascule DNS + rollback plan
+
+---
+
+## Phase 7 — Exploitation continue
+
+- [ ] Tests auto anti-fuite cross-tenant
+- [ ] Monitoring pool connexions
+- [ ] Suspension `status: suspended`
+- [ ] Sauvegardes par URI
+- [ ] Chiffrement `mongoUri` / `brevoApiKey` en base maître
+
+---
+
+## Structure des dossiers (cible)
+
+```
+backend/
+  lib/
+    db/
+      master.ts          ✅ master.js
+      tenants.ts         ✅ tenants.js
+      mongoUri.js        ✅
+    models/
+      registerTenantModels.js  ✅
+    tenant/
+      resolveOrganization.js   ✅
+      getTenantDb.js             ✅
+  middleware/
+    tenant.js            ✅
+  models/
+    Organization.js      ✅
+  routes/
+    tenant.js            ✅
+  scripts/
+    seedMasterOrganizations.js  ✅
+
+frontend/   (Phase 4)
+  middleware.ts
+  components/TenantProvider.tsx
+```
+
+---
+
+## Ajouter un nouveau cabinet (zéro déploiement)
+
+1. Créer la base MongoDB (Atlas) + URI.
+2. Insérer un document dans `organizations` (ou via console Phase 5).
+3. Ajouter le domaine dans Vercel / DNS.
+4. Configurer Brevo (clé + expéditeur) pour ce cabinet.
+
+Exemple :
+
+```js
+await Organization.create({
   slug: 'nouveau-cabinet',
-  domain: 'app.nouveau-cabinet.fr',
-  mongoUri: 'mongodb+srv://user:pass@cluster.mongodb.net/nouveau-cabinet',
+  domains: ['app.nouveau-cabinet.fr'],
+  mongoUri: 'mongodb+srv://.../nouveau-cabinet',
   status: 'active',
-  branding: {
-    name: 'Nouveau Cabinet',
-    logo: 'https://cdn.example.com/logo.png',
-    primaryColor: '#1A3D8F'
-  },
-  email: {
-    from: 'contact@nouveau-cabinet.fr',
-    brevoApiKey: 'xkeysib-...'
-  },
-  landingPage: {
-    headline: 'Votre recours, simplifié.',
-    cta: 'Déposer mon dossier'
-  },
-  limits: {
-    maxUsers: 10,
-    maxStorageGb: 20,
-    modules: ['dossiers', 'messagerie', 'documents']
-  },
-  createdAt: new Date()
+  branding: { name: 'Nouveau Cabinet', logo: '', primaryColor: '#1A3D8F' },
+  email: { from: 'contact@nouveau-cabinet.fr', brevoApiKey: 'xkeysib-...' },
+  landingPage: { headline: 'Votre recours, simplifié.', cta: 'Déposer mon dossier' },
+  limits: { maxUsers: 10, maxStorageGb: 20, modules: ['dossiers', 'messagerie'] },
 })
 ```
 
-Puis ajouter le domaine dans les settings Vercel. C'est tout.
+---
+
+## Ce qu’il ne faut jamais faire
+
+- Stocker dossiers / clients / documents dans la base maître.
+- Utiliser `MONGODB_URI` pour du métier tenant **après** migration sans passer par `getTenantDb(req)`.
+- Une clé Brevo globale pour tous les cabinets en production multi-tenant.
+- Ouvrir une nouvelle connexion Mongoose à **chaque** requête (utiliser le pool).
+- Mélanger `tenantId` dans une seule DB **et** DB par cabinet (choisir un seul modèle).
 
 ---
 
-## Ce que tu ne dois jamais faire
+## Estimation globale
 
-- Utiliser `process.env.MONGODB_URI` directement dans les route handlers (c'est la base maître, pas la base du cabinet)
-- Faire une requête Mongoose sans avoir appelé `getTenantDb(req)` d'abord
-- Stocker des données métier dans la base maître
-- Utiliser une seule clé Brevo pour tous les cabinets
-- Créer une nouvelle connexion Mongoose à chaque requête (utiliser le pool)
+| Phase | Durée indicative (1 dev) |
+|-------|--------------------------|
+| 1 Fondations | ✅ fait |
+| 2 Routes / auth | 2–4 sem. |
+| 3 Fichiers / mail | 1–2 sem. |
+| 4 Front / domaines | 2–3 sem. |
+| 5 Console | 1–2 sem. |
+| 6 Migration prod | 1–3 sem. |
+| **Total restant** | **~8–14 sem.** |
+
+---
+
+## Checklist « 2e cabinet en prod »
+
+- [ ] Domaine → bon `mongoUri`
+- [ ] Routes métier sur `req.tenantDb`
+- [ ] JWT lié à `orgId` + domaine
+- [ ] Uploads & emails scopés org
+- [ ] Branding / landing par host
+- [ ] Procédure doc sans redeploy
+
+---
+
+## Références code Phase 1
+
+- Activation : `backend/lib/db/master.js` → `isMultiTenantEnabled()`
+- Résolution : `backend/lib/tenant/resolveOrganization.js`
+- Middleware : `backend/middleware/tenant.js`
+- Config publique : `GET /api/tenant/config`

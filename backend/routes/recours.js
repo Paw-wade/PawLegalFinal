@@ -1,11 +1,7 @@
 const express = require('express');
+const M = require('../tenantModels');
 const router = express.Router();
 
-const RecoursType = require('../models/RecoursType');
-const RecoursTemplate = require('../models/RecoursTemplate');
-const CollaborativeDraft = require('../models/CollaborativeDraft');
-const Dossier = require('../models/Dossier');
-const User = require('../models/User');
 const { protect } = require('../middleware/auth');
 
 // Middleware auth
@@ -62,7 +58,7 @@ const DEFAULT_RECOURS_TYPES = [
 // GET /recours/types - liste des types de recours visibles pour l'utilisateur
 router.get('/recours/types', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -71,10 +67,10 @@ router.get('/recours/types', async (req, res) => {
     // (utile même si la base contient déjà des types créés manuellement)
     for (const t of DEFAULT_RECOURS_TYPES) {
       const code = t.code.toUpperCase();
-      const already = await RecoursType.findOne({ code });
+      const already = await M.RecoursType.findOne({ code });
       if (!already) {
-        const count = await RecoursType.countDocuments();
-        await RecoursType.create({
+        const count = await M.RecoursType.countDocuments();
+        await M.RecoursType.create({
           code,
           label: t.label,
           description: t.description,
@@ -90,7 +86,7 @@ router.get('/recours/types', async (req, res) => {
     }
 
     // Réparer automatiquement les ordres manquants/dupliqués.
-    const ordered = await RecoursType.find(query).sort({ order: 1, label: 1 });
+    const ordered = await M.RecoursType.find(query).sort({ order: 1, label: 1 });
     for (let i = 0; i < ordered.length; i += 1) {
       if (ordered[i].order !== i) {
         ordered[i].order = i;
@@ -98,7 +94,7 @@ router.get('/recours/types', async (req, res) => {
       }
     }
 
-    const types = await RecoursType.find(query).sort({ order: 1, label: 1 }).lean();
+    const types = await M.RecoursType.find(query).sort({ order: 1, label: 1 }).lean();
     return res.json({ success: true, types });
   } catch (error) {
     console.error('Erreur lors de la récupération des types de recours:', error);
@@ -109,7 +105,7 @@ router.get('/recours/types', async (req, res) => {
 // POST /recours/types - création d'un type (admin/superadmin)
 router.post('/recours/types', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -119,14 +115,14 @@ router.post('/recours/types', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Code et libellé sont requis' });
     }
 
-    const existing = await RecoursType.findOne({ code: code.toUpperCase() });
+    const existing = await M.RecoursType.findOne({ code: code.toUpperCase() });
     if (existing) {
       return res.status(409).json({ success: false, message: 'Un type de recours avec ce code existe déjà' });
     }
 
     const canRestrictToSuperadmin = isSuperadmin(user);
-    const count = await RecoursType.countDocuments();
-    const type = await RecoursType.create({
+    const count = await M.RecoursType.countDocuments();
+    const type = await M.RecoursType.create({
       code: code.toUpperCase().trim(),
       label: label.trim(),
       description: description || '',
@@ -144,7 +140,7 @@ router.post('/recours/types', async (req, res) => {
 // PATCH /recours/types/reorder - réordonner les thèmes (admin/superadmin)
 router.patch('/recours/types/reorder', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -154,13 +150,13 @@ router.patch('/recours/types/reorder', async (req, res) => {
       return res.status(400).json({ success: false, message: 'La liste ordonnée des thèmes est requise' });
     }
 
-    const types = await RecoursType.find({ _id: { $in: orderedTypeIds } });
+    const types = await M.RecoursType.find({ _id: { $in: orderedTypeIds } });
     if (types.length !== orderedTypeIds.length) {
       return res.status(400).json({ success: false, message: 'Un ou plusieurs thèmes sont introuvables' });
     }
 
     for (let i = 0; i < orderedTypeIds.length; i += 1) {
-      await RecoursType.updateOne({ _id: orderedTypeIds[i] }, { $set: { order: i } });
+      await M.RecoursType.updateOne({ _id: orderedTypeIds[i] }, { $set: { order: i } });
     }
 
     return res.json({ success: true, message: 'Ordre des thèmes mis à jour' });
@@ -173,13 +169,13 @@ router.patch('/recours/types/reorder', async (req, res) => {
 // DELETE /recours/types/:id - supprimer un thème (admin/superadmin)
 router.delete('/recours/types/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
 
     const { id } = req.params;
-    const type = await RecoursType.findById(id);
+    const type = await M.RecoursType.findById(id);
     if (!type) {
       return res.status(404).json({ success: false, message: 'Type de recours introuvable' });
     }
@@ -191,7 +187,7 @@ router.delete('/recours/types/:id', async (req, res) => {
       });
     }
 
-    const linkedTemplates = await RecoursTemplate.countDocuments({ type: type._id });
+    const linkedTemplates = await M.RecoursTemplate.countDocuments({ type: type._id });
     if (linkedTemplates > 0) {
       return res.status(409).json({
         success: false,
@@ -202,7 +198,7 @@ router.delete('/recours/types/:id', async (req, res) => {
     await type.deleteOne();
 
     // Recompacte l'ordre après suppression.
-    const remaining = await RecoursType.find().sort({ order: 1, label: 1 });
+    const remaining = await M.RecoursType.find().sort({ order: 1, label: 1 });
     for (let i = 0; i < remaining.length; i += 1) {
       if (remaining[i].order !== i) {
         remaining[i].order = i;
@@ -220,7 +216,7 @@ router.delete('/recours/types/:id', async (req, res) => {
 // GET /recours/templates - lister les modèles selon les droits
 router.get('/recours/templates', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -240,7 +236,7 @@ router.get('/recours/templates', async (req, res) => {
       { sharedWithRoles: user.role },
     ];
 
-    const templates = await RecoursTemplate.find({
+    const templates = await M.RecoursTemplate.find({
       ...typeFilter,
       $or: orClauses,
     })
@@ -259,7 +255,7 @@ router.get('/recours/templates', async (req, res) => {
 // POST /recours/templates - créer un modèle de recours (upload déjà géré ailleurs)
 router.post('/recours/templates', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -282,12 +278,12 @@ router.post('/recours/templates', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Type, titre et fichier sont requis' });
     }
 
-    const type = await RecoursType.findById(typeId);
+    const type = await M.RecoursType.findById(typeId);
     if (!type) {
       return res.status(404).json({ success: false, message: 'Type de recours introuvable' });
     }
 
-    const template = await RecoursTemplate.create({
+    const template = await M.RecoursTemplate.create({
       type: typeId,
       title: title.trim(),
       description: description || '',
@@ -312,7 +308,7 @@ router.post('/recours/templates', async (req, res) => {
 // PATCH /recours/templates/:id/share - mettre à jour le partage
 router.patch('/recours/templates/:id/share', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -320,7 +316,7 @@ router.patch('/recours/templates/:id/share', async (req, res) => {
     const { id } = req.params;
     const { sharedWithUsers, sharedWithRoles, sharedWithPartners, isPublicForAdmins } = req.body;
 
-    const template = await RecoursTemplate.findById(id);
+    const template = await M.RecoursTemplate.findById(id);
     if (!template) {
       return res.status(404).json({ success: false, message: 'Modèle de recours introuvable' });
     }
@@ -349,7 +345,7 @@ router.patch('/recours/templates/:id/share', async (req, res) => {
 // PATCH /recours/templates/:id/type - déplacer un modèle vers un autre type
 router.patch('/recours/templates/:id/type', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -360,12 +356,12 @@ router.patch('/recours/templates/:id/type', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Le nouveau type est requis' });
     }
 
-    const template = await RecoursTemplate.findById(id);
+    const template = await M.RecoursTemplate.findById(id);
     if (!template) {
       return res.status(404).json({ success: false, message: 'Modèle de recours introuvable' });
     }
 
-    const targetType = await RecoursType.findById(typeId);
+    const targetType = await M.RecoursType.findById(typeId);
     if (!targetType) {
       return res.status(404).json({ success: false, message: 'Type de recours introuvable' });
     }
@@ -395,13 +391,13 @@ router.patch('/recours/templates/:id/type', async (req, res) => {
 // DELETE /recours/templates/:id - supprimer un modèle de recours
 router.delete('/recours/templates/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
 
     const { id } = req.params;
-    const template = await RecoursTemplate.findById(id);
+    const template = await M.RecoursTemplate.findById(id);
     if (!template) {
       return res.status(404).json({ success: false, message: 'Modèle de recours introuvable' });
     }
@@ -428,7 +424,7 @@ router.delete('/recours/templates/:id', async (req, res) => {
 // POST /recours/templates/:id/send-to-dossier - créer un document en préparation à partir d'un modèle
 router.post('/recours/templates/:id/send-to-dossier', async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await M.User.findById(req.user.id);
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
@@ -440,12 +436,12 @@ router.post('/recours/templates/:id/send-to-dossier', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Le dossier est requis' });
     }
 
-    const template = await RecoursTemplate.findById(id).populate('type');
+    const template = await M.RecoursTemplate.findById(id).populate('type');
     if (!template) {
       return res.status(404).json({ success: false, message: 'Modèle de recours introuvable' });
     }
 
-    const dossier = await Dossier.findById(dossierId);
+    const dossier = await M.Dossier.findById(dossierId);
     if (!dossier) {
       return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     }
@@ -463,7 +459,7 @@ router.post('/recours/templates/:id/send-to-dossier', async (req, res) => {
       typeLabel: template.type?.label,
     };
 
-    const draft = await CollaborativeDraft.create({
+    const draft = await M.CollaborativeDraft.create({
       dossier: dossierId,
       title,
       content,

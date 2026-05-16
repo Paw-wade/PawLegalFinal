@@ -1,8 +1,8 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const SmsTemplate = require('../models/SmsTemplate');
 const { protect, authorize } = require('../middleware/auth');
 
+const M = require('../tenantModels');
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification admin
@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
       ];
     }
 
-    const templates = await SmsTemplate.find(query)
+    const templates = await M.SmsTemplate.find(query)
       .populate('createdBy', 'firstName lastName email')
       .populate('updatedBy', 'firstName lastName email')
       .sort({ category: 1, code: 1 });
@@ -364,11 +364,11 @@ router.post('/init-defaults', async (req, res) => {
     const userId = req.user.id || req.user._id;
     
     for (const templateData of defaultTemplates) {
-      const existing = await SmsTemplate.findOne({ code: templateData.code });
+      const existing = await M.SmsTemplate.findOne({ code: templateData.code });
       if (existing) {
         existingTemplates.push(templateData.code);
       } else {
-        const template = await SmsTemplate.create({
+        const template = await M.SmsTemplate.create({
           ...templateData,
           createdBy: userId,
           updatedBy: userId
@@ -399,7 +399,7 @@ router.post('/init-defaults', async (req, res) => {
 // @access  Private/Admin
 router.get('/:id', async (req, res) => {
   try {
-    const template = await SmsTemplate.findById(req.params.id)
+    const template = await M.SmsTemplate.findById(req.params.id)
       .populate('createdBy', 'firstName lastName email')
       .populate('updatedBy', 'firstName lastName email');
 
@@ -448,7 +448,7 @@ router.post(
       const { code, name, description, message, variables, category, isActive } = req.body;
 
       // Vérifier si le code existe déjà
-      const existingTemplate = await SmsTemplate.findOne({ code });
+      const existingTemplate = await M.SmsTemplate.findOne({ code });
       if (existingTemplate) {
         return res.status(400).json({
           success: false,
@@ -456,7 +456,7 @@ router.post(
         });
       }
 
-      const template = await SmsTemplate.create({
+      const template = await M.SmsTemplate.create({
         code,
         name,
         description,
@@ -507,7 +507,7 @@ router.put(
         });
       }
 
-      const template = await SmsTemplate.findById(req.params.id);
+      const template = await M.SmsTemplate.findById(req.params.id);
 
       if (!template) {
         return res.status(404).json({
@@ -521,7 +521,7 @@ router.put(
 
       // Vérifier si le code est modifié et s'il existe déjà
       if (req.body.code && req.body.code !== template.code) {
-        const existingTemplate = await SmsTemplate.findOne({ code: req.body.code });
+        const existingTemplate = await M.SmsTemplate.findOne({ code: req.body.code });
         if (existingTemplate) {
           return res.status(400).json({
             success: false,
@@ -540,7 +540,7 @@ router.put(
       if (isActive !== undefined) template.isActive = isActive;
       // Permettre la modification du code même pour les templates système
       if (req.body.code && req.body.code !== template.code) {
-        const existingTemplate = await SmsTemplate.findOne({ code: req.body.code });
+        const existingTemplate = await M.SmsTemplate.findOne({ code: req.body.code });
         if (existingTemplate) {
           return res.status(400).json({
             success: false,
@@ -575,7 +575,7 @@ router.put(
 // @access  Private/Admin
 router.delete('/:id', async (req, res) => {
   try {
-    const template = await SmsTemplate.findById(req.params.id);
+    const template = await M.SmsTemplate.findById(req.params.id);
 
     if (!template) {
       return res.status(404).json({
@@ -592,7 +592,7 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    await SmsTemplate.findByIdAndDelete(req.params.id);
+    await M.SmsTemplate.findByIdAndDelete(req.params.id);
 
     res.json({
       success: true,
@@ -627,7 +627,7 @@ router.post(
         });
       }
 
-      const template = await SmsTemplate.findById(req.params.id);
+      const template = await M.SmsTemplate.findById(req.params.id);
 
       if (!template) {
         return res.status(404).json({
@@ -682,7 +682,7 @@ router.post(
         });
       }
 
-      const template = await SmsTemplate.findById(req.params.id);
+      const template = await M.SmsTemplate.findById(req.params.id);
 
       if (!template) {
         return res.status(404).json({
