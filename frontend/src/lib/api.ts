@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getMultipartApiBaseUrl, getPublicApiBaseUrl } from './publicApiUrl';
-import { getStoredTenantSlug, tenantSlugFromHost } from './tenantSlug';
+import { resolveTenantSlugForRequest } from './tenantSlug';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -268,10 +268,7 @@ api.interceptors.request.use(
     }
     
     if (typeof window !== 'undefined') {
-      const slug =
-        getStoredTenantSlug() ||
-        tenantSlugFromHost(window.location.host) ||
-        undefined;
+      const slug = resolveTenantSlugForRequest();
       if (slug) {
         config.headers['X-Tenant-Slug'] = slug;
       }
@@ -1808,6 +1805,54 @@ export const smsPreferencesAPI = {
   }) => {
     return api.put('/user/sms-preferences', data);
   },
+};
+
+export type PlatformOrganization = {
+  id: string;
+  slug: string;
+  status: 'trial' | 'active' | 'suspended';
+  domains: string[];
+  domain: string;
+  mongoUri: string;
+  hasMongoUri: boolean;
+  branding: { name?: string; logo?: string; primaryColor?: string; favicon?: string };
+  email: { from?: string; replyTo?: string; hasBrevoApiKey?: boolean };
+  landingPage?: Record<string, string>;
+  limits?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export const platformOrganizationsAPI = {
+  list: () =>
+    api.get<{ success: boolean; organizations: PlatformOrganization[]; message?: string }>(
+      '/platform/organizations'
+    ),
+  get: (slug: string) =>
+    api.get<{ success: boolean; organization: PlatformOrganization }>(`/platform/organizations/${slug}`),
+  create: (data: Record<string, unknown>) =>
+    api.post<{ success: boolean; organization: PlatformOrganization; checklist?: unknown }>(
+      '/platform/organizations',
+      data
+    ),
+  update: (slug: string, data: Record<string, unknown>) =>
+    api.patch<{ success: boolean; organization: PlatformOrganization }>(
+      `/platform/organizations/${slug}`,
+      data
+    ),
+  suspend: (slug: string) => api.delete(`/platform/organizations/${slug}`),
+  dnsChecklist: (slug: string) =>
+    api.get<{ success: boolean; checklist: { slug: string; primaryDomain: string; steps: unknown[] } }>(
+      `/platform/organizations/${slug}/dns-checklist`
+    ),
+  provisionAdmin: (
+    slug: string,
+    data: { email: string; password: string; firstName?: string; lastName?: string; role?: string }
+  ) =>
+    api.post<{ success: boolean; message: string; created?: boolean }>(
+      `/platform/organizations/${slug}/provision-admin`,
+      data
+    ),
 };
 
 export const emailConsoleAPI = {

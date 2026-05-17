@@ -236,5 +236,14 @@ nextjs-portal[data-cursor-element-id] {
   list-style-type: square;
 }
 
+/* Espace pour le bandeau dev « Cabinet actif » (TenantDevBanner) */
+body.tenant-dev-banner-pad {
+  padding-bottom: 4.75rem;
+}
 
+@media (min-width: 640px) {
+  body.tenant-dev-banner-pad {
+    padding-bottom: 3.25rem;
+  }
+}
 

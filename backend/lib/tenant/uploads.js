@@ -116,15 +116,14 @@ function getCloudinaryFolder(subdir, ctx = null) {
     }
   }
 
-  slug = slug || getTenantSlugFromStore();
+  slug =
+    slug ||
+    getTenantSlugFromStore() ||
+    sanitizeTenantSlug(process.env.DEFAULT_ORG_SLUG);
 
-  if (isMultiTenantEnabled() && slug) {
-    return `cabinets/${slug}/${sub}`;
-  }
-
-  const oid = orgId || getOrgIdFromStore();
-  if (isOrgScopedUploadsEnabled(oid)) {
-    return `orgs/${oid}/${sub}`;
+  if (isMultiTenantEnabled()) {
+    const cabinetSlug = slug || 'unknown-cabinet';
+    return `cabinets/${cabinetSlug}/${sub}`;
   }
 
   return `pawlegal/${sub}`;

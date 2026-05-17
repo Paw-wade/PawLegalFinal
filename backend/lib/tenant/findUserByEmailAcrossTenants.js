@@ -5,6 +5,9 @@ const { getTenantConnection } = require('../db/tenants');
 const { runWithTenantStore, getModel } = require('./asyncContext');
 
 /**
+ * @deprecated Ne pas utiliser pour login / inscription — isolation stricte par cabinet.
+ * Conservé pour scripts ou outils admin éventuels.
+ *
  * Recherche un utilisateur par email dans les bases tenant (multi-cabinet).
  * Priorise le cabinet de la requête courante si fourni.
  *

@@ -42,8 +42,17 @@ function getTenantConnectionsCount() {
   return connections.size;
 }
 
+async function evictTenantConnection(orgId) {
+  const key = String(orgId);
+  const entry = connections.get(key);
+  if (!entry?.conn) return;
+  await entry.conn.close().catch(() => {});
+  connections.delete(key);
+}
+
 module.exports = {
   getTenantConnection,
   closeAllTenantConnections,
   getTenantConnectionsCount,
+  evictTenantConnection,
 };

@@ -7,6 +7,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { userAPI } from '@/lib/api';
 import { NotificationBadge } from '@/components/NotificationBadge';
 import { useCmsText } from '@/lib/contentClient';
+import { useTenant } from '@/components/TenantProvider';
+import Image from 'next/image';
 
 // Composant Button simplifié
 function Button({ 
@@ -69,6 +71,9 @@ interface HeaderProps {
 
 export function Header({ variant = 'home', showNav = true, navItems, onMenuClick }: HeaderProps) {
   const { data: session, status } = useSession();
+  const { branding } = useTenant();
+  const brandName = branding?.name?.trim() || 'Ada Papers';
+  const brandLogo = branding?.logo?.trim();
   const router = useRouter();
   const pathname = usePathname();
   const [userInfo, setUserInfo] = useState<{
@@ -347,9 +352,19 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               <>
                 <Link
                   href="/"
-                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base sm:text-xl max-w-[55vw] sm:max-w-none truncate"
+                  className="flex items-center gap-2 font-bold text-primary hover:opacity-90 transition-colors text-base sm:text-xl max-w-[55vw] sm:max-w-none min-w-0"
                 >
-                  Ada Papers
+                  {brandLogo ? (
+                    <Image
+                      src={brandLogo}
+                      alt={brandName}
+                      width={140}
+                      height={36}
+                      className="h-7 sm:h-8 w-auto object-contain flex-shrink-0"
+                      unoptimized
+                    />
+                  ) : null}
+                  <span className="truncate text-orange-500">{brandName}</span>
                 </Link>
                 <div className="hidden md:block h-4 w-px bg-gray-300 flex-shrink-0" />
                 <p className="hidden md:inline text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">

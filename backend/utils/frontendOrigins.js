@@ -81,7 +81,14 @@ function isLocalDevBrowserOrigin(origin) {
 function isOriginAllowed(origin) {
   if (!origin) return true;
   if (getFrontendOriginsList().includes(origin)) return true;
-  return isLocalDevBrowserOrigin(origin);
+  if (isLocalDevBrowserOrigin(origin)) return true;
+  try {
+    const { isTenantCorsOriginAllowed } = require('../lib/tenant/tenantCorsOrigins');
+    if (isTenantCorsOriginAllowed(origin)) return true;
+  } catch {
+    /* tenant CORS module optional at cold start */
+  }
+  return false;
 }
 
 /** Hôte type sous-domaine API (souvent en première position dans FRONTEND_URL) — à ne pas utiliser pour les liens e-mail. */

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import SessionProvider from '@/providers/SessionProvider';
+import TenantProvider from '@/components/TenantProvider';
+import { TenantDevBanner } from '@/components/TenantDevBanner';
 import { PushNotificationsBootstrap } from '@/components/PushNotificationsBootstrap';
 
 export const viewport: Viewport = {
@@ -40,8 +42,11 @@ export default function RootLayout({
     <html lang="fr">
       <body className="antialiased overflow-x-hidden min-w-0 max-w-[100vw]">
         <SessionProvider>
-          <PushNotificationsBootstrap />
-          {children}
+          <TenantProvider>
+            <PushNotificationsBootstrap />
+            {children}
+            <TenantDevBanner />
+          </TenantProvider>
         </SessionProvider>
       </body>
     </html>

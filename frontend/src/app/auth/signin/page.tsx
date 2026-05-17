@@ -2,9 +2,12 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { signIn, getSession, getProviders } from 'next-auth/react';
-import { persistTenantSlug } from '@/lib/tenantSlug';
+import { useRouter } from 'next/navigation';
+import { signIn, getSession, getProviders, useSession } from 'next-auth/react';
+import { clearGoogleSignupIntentClient } from '@/lib/googleOAuthIntent';
+import { persistTenantSlug, resolveTenantSlugForRequest } from '@/lib/tenantSlug';
 import { getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
+import { redirectAfterLogin, type SessionUserLike } from '@/lib/auth/postLoginRedirect';
 
 // Composants simplifiés
 function Button({ children, variant = 'default', size = 'default', className = '', disabled = false, type = 'button', ...props }: any) {
@@ -44,6 +47,8 @@ function Label({ className = '', children, ...props }: any) {
 }
 
 export default function SignInPage() {
+  const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isCheckingProviders, setIsCheckingProviders] = useState(true);
@@ -53,6 +58,27 @@ export default function SignInPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const isRedirecting = useRef(false);
+
+  useEffect(() => {
+    void getSession().then((sessionData) => {
+      const authErr = (sessionData as { authError?: string } | null)?.authError;
+      if (authErr) setError(authErr);
+      if ((sessionData as { redirectToSignup?: boolean } | null)?.redirectToSignup) {
+        router.replace('/auth/signup');
+      }
+    });
+  }, [router]);
+
+  useEffect(() => {
+    if (sessionStatus !== 'authenticated' || isRedirecting.current) return;
+    const user = (session?.user || {}) as SessionUserLike;
+    const meta = session as { authError?: string; redirectToSignup?: boolean } | null;
+    if (meta?.authError || user.authError) return;
+    if (meta?.redirectToSignup || user.redirectToSignup || user.googleSignupPending) return;
+    if (!user.accessToken) return;
+    isRedirecting.current = true;
+    router.replace(redirectAfterLogin(user));
+  }, [session, sessionStatus, router]);
 
   useEffect(() => {
     const loadProviders = async () => {
@@ -78,6 +104,14 @@ export default function SignInPage() {
     if (!authError && !decodedMsg) return;
     if (authError === 'google' && decodedMsg) {
       setError(decodedMsg);
+      return;
+    }
+    if (authError === 'OAuthCallback') {
+      const origin = window.location.origin;
+      setError(
+        decodedMsg ||
+          `Connexion Google interrompue. Vérifiez que l’URL dans la barre d’adresse correspond à NEXTAUTH_URL (ex. http://localhost:3004, pas 127.0.0.1) et que Google Console autorise : ${origin}/api/auth/callback/google et l’origine ${origin}`
+      );
       return;
     }
     if (authError === 'AccessDenied') {
@@ -132,7 +166,8 @@ export default function SignInPage() {
           const sessionTenantSlug =
             (sessionData as { tenantSlug?: string })?.tenantSlug ||
             (sessionUser as { tenantSlug?: string })?.tenantSlug;
-          persistTenantSlug(sessionTenantSlug);
+          const hostSlug = resolveTenantSlugForRequest();
+          persistTenantSlug(hostSlug || sessionTenantSlug);
 
           isRedirecting.current = true;
 
@@ -187,7 +222,8 @@ export default function SignInPage() {
     try {
       // Evite de réutiliser un ancien token API d'un autre compte.
       localStorage.removeItem('token');
-      await signIn('google', { callbackUrl: '/client' });
+      clearGoogleSignupIntentClient();
+      await signIn('google', { callbackUrl: '/auth/google-callback' });
     } catch (err: any) {
       console.error('Erreur lors de la connexion Google:', err);
       setError('Impossible de se connecter avec Google pour le moment.');

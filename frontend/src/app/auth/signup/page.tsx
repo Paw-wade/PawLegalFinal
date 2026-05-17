@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getProviders, signIn, useSession } from 'next-auth/react';
 import { authAPI } from '@/lib/api';
+import { setGoogleSignupIntent } from '@/lib/googleOAuthIntent';
 
 function Button({ 
   children, 
@@ -99,10 +100,24 @@ export default function SignupPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get('error');
+    if (authError === 'OAuthCallback') {
+      const origin = window.location.origin;
+      setError(
+        'Connexion Google interrompue. Utilisez la même URL que NEXTAUTH_URL (ex. http://localhost:3004, pas 127.0.0.1). ' +
+          `Google Console doit autoriser : ${origin}/api/auth/callback/google et l’origine ${origin}`
+      );
+      setIsGoogleLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
     const loadProviders = async () => {
       try {
         const providers = await getProviders();
-        setIsGoogleAvailable(Boolean(providers?.['google-signup']));
+        setIsGoogleAvailable(Boolean(providers?.google));
       } catch (e) {
         console.error('Erreur chargement providers NextAuth:', e);
         setIsGoogleAvailable(false);
@@ -314,7 +329,8 @@ export default function SignupPage() {
     setError(null);
     setIsGoogleLoading(true);
     try {
-      await signIn('google-signup', { callbackUrl: '/auth/signup' });
+      setGoogleSignupIntent();
+      await signIn('google', { callbackUrl: '/auth/google-callback' });
     } catch (err) {
       console.error('Erreur lors de la pré-inscription Google:', err);
       setError('Impossible de continuer avec Google pour le moment.');

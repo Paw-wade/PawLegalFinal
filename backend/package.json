@@ -22,6 +22,8 @@
     "verify:tenant-login": "node scripts/verifyTenantLogin.js",
     "fix:demo-login": "node scripts/fixDemoLogin.js",
     "migrate:uploads": "node scripts/migrateUploadsToOrgPrefix.js",
+    "migrate:cloudinary-cabinets": "node scripts/migrateCloudinaryToCabinetFolders.js",
+    "migrate:cloudinary-cabinets:dry": "node scripts/migrateCloudinaryToCabinetFolders.js --dry-run",
     "fix:document-nomfichier-index": "node scripts/fixDocumentNomFichierIndex.js"
   },
   "keywords": [],

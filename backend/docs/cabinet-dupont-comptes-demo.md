@@ -24,11 +24,13 @@
 
 ## Connexion interface web
 
-1. Backend démarré (`PORT=3005`) avec `MULTI_TENANT=true` et `DEFAULT_ORG_SLUG=cabinet-dupont` dans `backend/.env`.
-2. Frontend : [http://localhost:3004/auth/signin](http://localhost:3004/auth/signin)
+Voir aussi [dev-local-cabinets.md](./dev-local-cabinets.md) (tous les cabinets).
+
+1. Backend démarré (`PORT=3005`) avec `MULTI_TENANT=true`.
+2. Frontend : **[http://dupont.localhost:3004/auth/signin](http://dupont.localhost:3004/auth/signin)** (recommandé).
 3. Saisir l’email et le mot de passe d’un compte ci-dessus.
 
-**Alternative (domaine dédié)** : ajouter `127.0.0.1 dupont.localhost` dans le fichier `hosts`, puis ouvrir [http://dupont.localhost:3004/auth/signin](http://dupont.localhost:3004/auth/signin).
+> Sur `http://localhost:3004` sans sous-domaine, c’est `DEFAULT_ORG_SLUG` (souvent `cabinet-wadepaw`) qui s’applique — pas Dupont.
 
 ## Connexion API (PowerShell)
 

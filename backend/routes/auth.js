@@ -9,7 +9,7 @@ const { protect } = require('../middleware/auth');
 const { signAuthToken, signSignupActivationToken } = require('../lib/tenant/jwt');
 const { getTenantDb } = require('../lib/tenant/getTenantDb');
 const { getUserModel } = require('../lib/tenant/getUserModel');
-const { findUserByEmailAcrossTenants } = require('../lib/tenant/findUserByEmailAcrossTenants');
+const { isMultiTenantEnabled } = require('../lib/db/master');
 const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const {
@@ -22,6 +22,21 @@ const router = express.Router();
 
 function tokenOrgId(req) {
   return req.tenant?.orgId;
+}
+
+/** Auth publique : comptes strictement isolés par base tenant (pas de recherche cross-cabinet). */
+function requireTenantForAuth(req, res) {
+  if (!isMultiTenantEnabled()) return true;
+  if (req.tenant?.orgId) return true;
+  res.status(404).json({
+    success: false,
+    message: 'Cabinet introuvable pour ce domaine',
+    hint:
+      process.env.NODE_ENV !== 'production'
+        ? 'Utilisez le domaine du cabinet (ex. dupont.localhost) ou l’en-tête X-Tenant-Slug'
+        : undefined,
+  });
+  return false;
 }
 
 function isLoginDebugEnabled() {
@@ -225,6 +240,8 @@ router.post(
           errors: errors.array()
         });
       }
+
+      if (!requireTenantForAuth(req, res)) return;
 
       const { firstName, lastName, email, phone } = req.body;
 
@@ -499,29 +516,17 @@ router.post(
         });
       }
 
+      if (!requireTenantForAuth(req, res)) return;
+
       const { password } = req.body;
       const email = String(req.body.email || '')
         .trim()
         .toLowerCase();
 
-      let resolved = null;
       const User = getUserModel(req);
-      const localUser = await User.findOne({ email }).select('+password');
-      if (localUser && req.tenant?.orgId) {
-        resolved = {
-          user: localUser,
-          orgId: req.tenant.orgId,
-          slug: req.tenant.slug,
-        };
-      }
-      if (!resolved) {
-        resolved = await findUserByEmailAcrossTenants(email, {
-          preferredOrgId: req.tenant?.orgId,
-          selectPassword: true,
-        });
-      }
+      const user = await User.findOne({ email }).select('+password');
 
-      if (!resolved?.user) {
+      if (!user) {
         return res.status(401).json({
           success: false,
           message: 'Identifiants invalides',
@@ -529,7 +534,8 @@ router.post(
         });
       }
 
-      const { user, orgId: userOrgId, slug: tenantSlug } = resolved;
+      const userOrgId = req.tenant?.orgId || null;
+      const tenantSlug = req.tenant?.slug || null;
 
       if (!user.isActive) {
         return res.status(401).json({
@@ -604,6 +610,8 @@ router.post(
 // @access  Public
 router.post('/google-login', async (req, res) => {
     try {
+      if (!requireTenantForAuth(req, res)) return;
+
       const idTokenRaw = req.body?.idToken;
       const accessTokenRaw = req.body?.accessToken;
       const idToken = typeof idTokenRaw === 'string' ? idTokenRaw.trim() : '';
@@ -666,30 +674,18 @@ router.post('/google-login', async (req, res) => {
         });
       }
 
-      let resolved = null;
       const User = getUserModel(req);
-      const localUser = await User.findOne({ email });
-      if (localUser && req.tenant?.orgId) {
-        resolved = {
-          user: localUser,
-          orgId: req.tenant.orgId,
-          slug: req.tenant.slug,
-        };
-      }
-      if (!resolved) {
-        resolved = await findUserByEmailAcrossTenants(email, {
-          preferredOrgId: req.tenant?.orgId,
-        });
-      }
+      const user = await User.findOne({ email });
 
-      if (!resolved?.user) {
+      if (!user) {
         return res.status(404).json({
           success: false,
-          message: 'Aucun compte Ada Papers n’est associé à cet email Google.',
+          message: 'Aucun compte n’est associé à cet email Google sur ce cabinet.',
         });
       }
 
-      const { user, orgId: userOrgId, slug: tenantSlug } = resolved;
+      const userOrgId = req.tenant?.orgId || null;
+      const tenantSlug = req.tenant?.slug || null;
 
       if (!user.isActive) {
         return res.status(401).json({
@@ -1172,6 +1168,8 @@ router.post(
           errors: errors.array()
         });
       }
+
+      if (!requireTenantForAuth(req, res)) return;
 
       const { phone } = req.body;
       const { formatPhoneNumber } = require('../sendSMS');

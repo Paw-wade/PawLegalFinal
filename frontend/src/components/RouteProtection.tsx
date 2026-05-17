@@ -9,6 +9,7 @@ import {
   isCabinetStaffRole,
   isFullAdminRole,
 } from '@/lib/staffAccess';
+import { canAccessPlatformConsole, isPlatformConsolePath } from '@/lib/platformAdmin';
 
 interface RouteProtectionProps {
   children: React.ReactNode;
@@ -32,6 +33,7 @@ export function RouteProtection({ children }: RouteProtectionProps) {
   const [denied, setDenied] = useState(false);
 
   const userRole = (session?.user as any)?.role || 'client';
+  const userEmail = (session?.user as { email?: string })?.email;
   const isProfessional =
     userRole === 'consulat' || userRole === 'avocat' || userRole === 'association';
   const isStaff = isCabinetStaffRole(userRole);
@@ -56,13 +58,19 @@ export function RouteProtection({ children }: RouteProtectionProps) {
       return;
     }
 
+    if (isPlatformConsolePath(pathname)) {
+      setHasAccess(canAccessPlatformConsole(userRole, userEmail));
+      setLoading(false);
+      return;
+    }
+
     if (isAdmin || isProfessional) {
       setHasAccess(true);
       setLoading(false);
       return;
     }
 
-    if (canAccessAdminPath(userRole, pathname)) {
+    if (canAccessAdminPath(userRole, pathname, userEmail)) {
       setHasAccess(true);
       setLoading(false);
       return;
@@ -78,7 +86,7 @@ export function RouteProtection({ children }: RouteProtectionProps) {
     setHasAccess(false);
     setDenied(true);
     setLoading(false);
-  }, [pathname, userRole, isAdmin, isProfessional, isStaff, router, status]);
+  }, [pathname, userRole, userEmail, isAdmin, isProfessional, isStaff, router, status]);
 
   if (loading || status === 'loading') {
     return (

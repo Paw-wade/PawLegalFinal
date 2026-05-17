@@ -25,7 +25,9 @@ import {
   Scale,
   Trash2,
   User,
+  Building2,
 } from 'lucide-react';
+import { canAccessPlatformConsole } from '@/lib/platformAdmin';
 
 interface AdminSidebarProps {
   isOpen?: boolean;
@@ -74,8 +76,12 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
   const [prepDraftCount, setPrepDraftCount] = useState<number>(0);
 
   const userRole = (session?.user as any)?.role || 'client';
+  const userEmail = (session?.user as any)?.email as string | undefined;
 
-  const filteredMenuItems = adminMenuItems.filter(item => {
+  const filteredMenuItems = adminMenuItems.filter((item) => {
+    if (item.href === '/admin/platform/cabinets') {
+      return canAccessPlatformConsole(userRole, userEmail);
+    }
     if (!item.roles) return true;
     return item.roles.includes(userRole);
   });

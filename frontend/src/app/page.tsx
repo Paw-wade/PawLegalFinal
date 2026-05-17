@@ -11,6 +11,8 @@ import { ReservationWidget } from '@/components/ReservationWidget';
 import { ReservationBadge } from '@/components/ReservationBadge';
 import { useCmsText } from '@/lib/contentClient';
 import { servicesConfig } from '@/data/servicesConfig';
+import { useTenant } from '@/components/TenantProvider';
+import { shouldApplyTenantLandingCopy } from '@/lib/tenant/unifiedBranding';
 
 // Composant Button simplifié temporairement
 function Button({ 
@@ -104,6 +106,7 @@ function ExpandableItem({
 
 export default function HomePage() {
   const { data: session } = useSession();
+  const { landingPage } = useTenant();
   const [temoignages, setTemoignages] = useState<any[]>([]);
   const [loadingTemoignages, setLoadingTemoignages] = useState(true);
   const [isVisible, setIsVisible] = useState<{ [key: string]: boolean }>({});
@@ -147,6 +150,16 @@ export default function HomePage() {
     'home.hero.small_text',
     "Suivez en temps réel l'évolution de votre dossier"
   );
+
+  const useTenantLanding = shouldApplyTenantLandingCopy();
+  const tenantHeadline = useTenantLanding ? landingPage?.headline?.trim() : '';
+  const tenantSubheadline = useTenantLanding ? landingPage?.subheadline?.trim() : '';
+  const tenantCtaPrimary = useTenantLanding ? landingPage?.cta?.trim() : '';
+  const displayHeroTitle =
+    tenantHeadline || heroTitle.replace(heroTitleHighlight, '').trim() || heroTitle;
+  const displayHeroHighlight = tenantHeadline ? '' : heroTitleHighlight;
+  const displayHeroSubtitle = tenantSubheadline || heroSubtitle;
+  const displayHeroCtaPrimary = tenantCtaPrimary || heroCtaPrimary;
 
   const domainsTitle = useCmsText(
     'home.domains.title',
@@ -341,10 +354,13 @@ export default function HomePage() {
             <div className="relative max-w-2xl min-w-0">
               {/* Titre */}
               <h1 className="text-3xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-gray-900 leading-[1.15] tracking-tight mb-4 sm:mb-6">
-                {heroTitle.replace(heroTitleHighlight, '').trim() || heroTitle}{' '}
-                <span className="text-orange-500">
-                  {heroTitleHighlight}
-                </span>
+                {displayHeroTitle}
+                {displayHeroHighlight ? (
+                  <>
+                    {' '}
+                    <span className="text-orange-500">{displayHeroHighlight}</span>
+                  </>
+                ) : null}
               </h1>
               
               {/* Sous-titre */}
@@ -358,7 +374,7 @@ export default function HomePage() {
                   color: 'rgba(0, 0, 0, 1)',
                 }}
               >
-                {heroSubtitle}
+                {displayHeroSubtitle}
               </p>
               
               {/* CTAs */}
@@ -368,7 +384,7 @@ export default function HomePage() {
                     size="lg" 
                     className="min-w-[200px] shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200 group"
                   >
-                    {heroCtaPrimary}
+                    {displayHeroCtaPrimary}
                     <span className="ml-2 group-hover:translate-x-0.5 inline-block">→</span>
                   </Button>
                 </Link>

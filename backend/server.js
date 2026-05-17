@@ -122,6 +122,13 @@ try {
   console.error('❌ Impossible d\'enregistrer /api/tenant:', e.message);
 }
 
+try {
+  app.use('/api/platform/organizations', require('./routes/platformOrganizations'));
+  console.log('✅ Route /api/platform/organizations enregistrée (console Ada Papers)');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/platform/organizations:', e.message);
+}
+
 app.use('/api/auth', require('./routes/auth'));
 // Termine tout /api/auth non géré ci-dessus (NextAuth vit côté Next en dev avec proxy granulaire).
 // Sans cela, Express continue la chaîne jusqu’aux routers montés sur /api/* qui font `protect` → 401 sur /session, /providers…
@@ -333,6 +340,13 @@ const startServer = async () => {
   try {
     await connectDB();
 
+    if (isMultiTenantEnabled()) {
+      const { loadTenantCorsOrigins, startTenantCorsRefreshLoop } = require('./lib/tenant/tenantCorsOrigins');
+      const corsSet = await loadTenantCorsOrigins(true);
+      console.log(`✅ CORS — ${corsSet.size} origine(s) (env + domaines cabinets actifs)`);
+      startTenantCorsRefreshLoop();
+    }
+
     const PORT = process.env.PORT || 3005;
 
     const server = app.listen(PORT, () => {
@@ -350,7 +364,7 @@ const startServer = async () => {
           verifyCloudinaryConnection(cloudinary).then((ping) => {
             if (ping.ok) {
               console.log(
-                `📎 Uploads : cloudinary (cloud=${ping.cloud_name}, UPLOAD_STORAGE=${uploadEnv})`
+                `📎 Uploads : cloudinary (cloud=${ping.cloud_name}, dossiers cabinets/{slug}/…, UPLOAD_STORAGE=${uploadEnv})`
               );
             } else {
               console.warn(

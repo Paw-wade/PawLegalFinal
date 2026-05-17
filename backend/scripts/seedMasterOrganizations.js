@@ -61,7 +61,12 @@ async function main() {
   await upsertOrg(Organization, {
     slug: 'cabinet-dupont',
     domain: 'dupont.localhost',
-    domains: ['dupont.localhost', 'www.dupont.localhost'],
+    domains: [
+      'dupont.localhost',
+      'www.dupont.localhost',
+      'cabinet-dupont.localhost',
+      'www.cabinet-dupont.localhost',
+    ],
     mongoUri: dupontUri,
     status: 'active',
     branding: {
@@ -89,7 +94,12 @@ async function main() {
   await upsertOrg(Organization, {
     slug: 'cabinet-martin',
     domain: 'martin.localhost',
-    domains: ['martin.localhost', 'www.martin.localhost'],
+    domains: [
+      'martin.localhost',
+      'www.martin.localhost',
+      'cabinet-martin.localhost',
+      'www.cabinet-martin.localhost',
+    ],
     mongoUri: martinUri,
     status: 'active',
     branding: {

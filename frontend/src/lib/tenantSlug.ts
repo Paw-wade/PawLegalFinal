@@ -42,3 +42,20 @@ export function getStoredTenantSlug(): string | null {
     return null;
   }
 }
+
+/**
+ * Slug envoyé aux API : le domaine courant prime sur localStorage
+ * (évite d’inscrire / connecter sur le mauvais cabinet après une visite Wadepaw).
+ */
+export function resolveTenantSlugForRequest(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const fromHost = tenantSlugFromHost(window.location.host);
+  if (fromHost) {
+    const stored = getStoredTenantSlug();
+    if (stored !== fromHost) {
+      persistTenantSlug(fromHost);
+    }
+    return fromHost;
+  }
+  return getStoredTenantSlug() || undefined;
+}

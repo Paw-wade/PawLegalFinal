@@ -2,16 +2,18 @@
 
 import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { persistTenantSlug } from '@/lib/tenantSlug';
+import { persistTenantSlug, resolveTenantSlugForRequest } from '@/lib/tenantSlug';
 
-/** Conserve le slug cabinet après login Google / email pour les appels API (X-Tenant-Slug). */
+/** Aligne le slug cabinet sur le domaine courant ; session uniquement si cohérente. */
 export default function TenantSlugSync() {
   const { data: session } = useSession();
-  const slug = (session as { tenantSlug?: string } | null)?.tenantSlug;
+  const sessionSlug = (session as { tenantSlug?: string } | null)?.tenantSlug;
 
   useEffect(() => {
-    if (slug) persistTenantSlug(slug);
-  }, [slug]);
+    const fromHost = resolveTenantSlugForRequest();
+    if (fromHost) return;
+    if (sessionSlug) persistTenantSlug(sessionSlug);
+  }, [sessionSlug]);
 
   return null;
 }

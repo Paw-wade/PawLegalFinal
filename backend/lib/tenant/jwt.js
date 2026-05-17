@@ -38,6 +38,10 @@ function assertTokenMatchesTenant(decoded, req) {
   if (!isMultiTenantEnabled()) {
     return null;
   }
+  const path = req.originalUrl || req.url || req.path || '';
+  if (path.includes('/api/platform')) {
+    return null;
+  }
   if (!req.tenant?.orgId) {
     return null;
   }

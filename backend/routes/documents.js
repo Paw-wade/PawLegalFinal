@@ -401,23 +401,7 @@ if (!fs.existsSync(UPLOADS_ROOT)) {
   fs.mkdirSync(UPLOADS_ROOT, { recursive: true });
 }
 
-/** public_id Cloudinary depuis une URL res.cloudinary.com (évite slice(-2) qui coupe le dossier racine) */
-function cloudinaryPublicIdFromUrl(fileUrl) {
-  if (!fileUrl || typeof fileUrl !== 'string') return null;
-  if (!fileUrl.includes('res.cloudinary.com')) return null;
-  const noQuery = fileUrl.split('?')[0];
-  const marker = '/upload/';
-  const idx = noQuery.indexOf(marker);
-  if (idx === -1) return null;
-  let rest = noQuery.slice(idx + marker.length);
-  // Segments de transformations (ex. c_scale,w_500/) avant la version ou le public_id
-  while (rest.includes('/') && /^[a-z0-9_]+,[a-z0-9_.,\-]+/i.test(rest.split('/')[0])) {
-    rest = rest.slice(rest.indexOf('/') + 1);
-  }
-  rest = rest.replace(/^v\d+\//, '');
-  const withoutExt = rest.replace(/\.[^/.]+$/, '');
-  return withoutExt || null;
-}
+const { cloudinaryPublicIdFromUrl } = require('../lib/cloudinaryPaths');
 
 const uploadStorage = createTenantMulterStorage({
   subdir: 'documents',

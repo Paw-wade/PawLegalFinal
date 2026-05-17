@@ -3,6 +3,8 @@
  * Les droits par domaine reprennent les presets backend (permissions.js).
  */
 
+import { canAccessPlatformConsole, isPlatformConsolePath } from './platformAdmin';
+
 export const CABINET_STAFF_ROLES = [
   'admin',
   'superadmin',
@@ -127,7 +129,7 @@ const ROLE_DOMAIN_ACCESS: Record<CabinetStaffRole, Partial<Record<AdminPermissio
   },
 };
 
-const MENU_PATH_ORDER: { href: string; domain: AdminPermissionDomain | 'compte' | 'forum' | 'always' }[] = [
+const MENU_PATH_ORDER: { href: string; domain: AdminPermissionDomain | 'compte' | 'forum' | 'always' | 'platform' }[] = [
   { href: '/admin', domain: 'tableau_de_bord' },
   { href: '/admin/utilisateurs', domain: 'utilisateurs' },
   { href: '/admin/dossiers', domain: 'dossiers' },
@@ -149,6 +151,7 @@ const MENU_PATH_ORDER: { href: string; domain: AdminPermissionDomain | 'compte' 
   { href: '/admin/corbeille', domain: 'corbeille' },
   { href: '/forum', domain: 'messages' },
   { href: '/admin/compte', domain: 'compte' },
+  { href: '/admin/platform/cabinets', domain: 'platform' },
 ];
 
 export function isCabinetStaffRole(role?: string | null): role is CabinetStaffRole {
@@ -179,12 +182,15 @@ export function canAccessDossiersAsStaff(role?: string | null): boolean {
   return canViewAdminDomain(role ?? '', 'dossiers');
 }
 
-export function resolveAdminPathDomain(pathname: string): AdminPermissionDomain | 'compte' | 'forum' | 'always' | null {
+export function resolveAdminPathDomain(
+  pathname: string
+): AdminPermissionDomain | 'compte' | 'forum' | 'always' | 'platform' | null {
   const path = pathname.split('?')[0];
   if (path === '/admin/compte' || path.startsWith('/admin/compte/')) return 'compte';
   if (path === '/forum' || path.startsWith('/forum/')) return 'forum';
   if (path === '/admin/lexia' || path.startsWith('/admin/lexia/')) return 'always';
   if (path === '/admin/recours' || path.startsWith('/admin/recours/')) return 'dossiers';
+  if (path === '/admin/platform' || path.startsWith('/admin/platform/')) return 'platform';
 
   const sorted = [...MENU_PATH_ORDER].sort((a, b) => b.href.length - a.href.length);
   for (const entry of sorted) {
@@ -200,13 +206,21 @@ export function resolveAdminPathDomain(pathname: string): AdminPermissionDomain 
   return null;
 }
 
-export function canAccessAdminPath(role: string | undefined | null, pathname: string): boolean {
+export function canAccessAdminPath(
+  role: string | undefined | null,
+  pathname: string,
+  email?: string | null
+): boolean {
   if (!role) return false;
+  if (isPlatformConsolePath(pathname)) {
+    return canAccessPlatformConsole(role, email);
+  }
   if (isAdminOnlyPath(pathname)) return isFullAdminRole(role);
   if (isFullAdminRole(role)) return true;
 
   const domain = resolveAdminPathDomain(pathname);
   if (domain === 'compte') return isCabinetStaffRole(role);
+  if (domain === 'platform') return canAccessPlatformConsole(role, email);
   if (domain === 'always') return isFullAdminRole(role);
   if (domain === 'forum') return canViewAdminDomain(role, 'messages');
   if (!domain) return false;
