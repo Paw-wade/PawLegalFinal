@@ -4,7 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const morgan = require('morgan');
 const path = require('path');
-const { getFrontendOriginsList } = require('./utils/frontendOrigins');
+const { getFrontendOriginsList, isOriginAllowed } = require('./utils/frontendOrigins');
 const { getKnowledgeDir, getKnowledgeStats } = require('./services/lexiaInternal');
 const { isMultiTenantEnabled, connectMaster } = require('./lib/db/master');
 const { preloadDefaultModels } = require('./lib/models/registerTenantModels');
@@ -26,7 +26,7 @@ console.log('✅ CORS — origines autorisées:', allowedOrigins.join(', ') || '
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isOriginAllowed(origin)) {
         return callback(null, true);
       }
       console.warn('🚫 CORS bloqué pour:', origin);
@@ -338,6 +338,35 @@ const startServer = async () => {
     const server = app.listen(PORT, () => {
       console.log(`🚀 Serveur démarré sur le port ${PORT}`);
       console.log(`📡 API: /api`);
+      try {
+        const {
+          shouldUseCloudinaryForUploads,
+          isCloudinaryConfigured,
+          verifyCloudinaryConnection,
+        } = require('./lib/cloudinaryConfig');
+        const { cloudinary } = require('./lib/cloudinaryMulter');
+        const uploadEnv = (process.env.UPLOAD_STORAGE || 'cloudinary').trim();
+        if (shouldUseCloudinaryForUploads()) {
+          verifyCloudinaryConnection(cloudinary).then((ping) => {
+            if (ping.ok) {
+              console.log(
+                `📎 Uploads : cloudinary (cloud=${ping.cloud_name}, UPLOAD_STORAGE=${uploadEnv})`
+              );
+            } else {
+              console.warn(
+                `⚠️ Uploads : Cloudinary configuré mais ping échoué — repli disque possible. ${ping.error}`
+              );
+            }
+          });
+        } else {
+          const reason = isCloudinaryConfigured()
+            ? 'UPLOAD_STORAGE=disk'
+            : 'CLOUDINARY_* incomplet';
+          console.log(`📎 Uploads : disk (local uploads/) — ${reason}`);
+        }
+      } catch (e) {
+        console.warn('⚠️ Uploads : impossible de déterminer le mode de stockage', e.message);
+      }
       const lexiaKnowledgeDir = getKnowledgeDir();
       console.log(`🧠 Paw AI (interne) — dossier indexé: ${lexiaKnowledgeDir}`);
       getKnowledgeStats()

@@ -1,69 +1,50 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const { protect, authorize } = require('../middleware/auth');
+const { getOrgIdFromRequest } = require('../lib/tenant/uploads');
+const { createTenantMulterStorage } = require('../lib/cloudinaryMulterStorage');
+const { resolveUploadedFilePath } = require('../lib/resolveUploadedFile');
 
 const router = express.Router();
 
-// Configuration du stockage Multer pour les médias du carrousel
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads/hero-carousel');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    const name = path
-      .basename(file.originalname, ext)
-      .replace(/[^a-zA-Z0-9]/g, '_');
-    cb(null, name + '-' + uniqueSuffix + ext);
-  },
-});
-
-// Autoriser images et vidéos courantes (formats étendus)
-const fileFilter = (req, file, cb) => {
-  const allowedImage = [
-    'image/jpeg',
-    'image/png',
-    'image/jpg',
-    'image/webp',
-    'image/gif',
-  ];
-  const allowedVideo = [
-    'video/mp4',
-    'video/webm',
-    'video/ogg',
-    'video/quicktime', // .mov (iPhone, Mac)
-    'video/x-matroska', // .mkv
-    'video/x-msvideo', // .avi
-  ];
-
-  if (allowedImage.includes(file.mimetype) || allowedVideo.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(
-      new Error(
-        'Type de fichier non autorisé. Images (JPG, PNG, WEBP, GIF) ou vidéos (MP4, WEBM, OGG, MOV, MKV, AVI) uniquement.'
-      ),
-      false
-    );
-  }
-};
-
 const upload = multer({
-  storage,
+  storage: createTenantMulterStorage({
+    subdir: 'hero-carousel',
+    getOrgId: getOrgIdFromRequest,
+  }),
   limits: {
     fileSize: 300 * 1024 * 1024, // 300 MB max
   },
-  fileFilter,
+  fileFilter: (req, file, cb) => {
+    const allowedImage = [
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'image/webp',
+      'image/gif',
+    ];
+    const allowedVideo = [
+      'video/mp4',
+      'video/webm',
+      'video/ogg',
+      'video/quicktime',
+      'video/x-matroska',
+      'video/x-msvideo',
+    ];
+
+    if (allowedImage.includes(file.mimetype) || allowedVideo.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(
+        new Error(
+          'Type de fichier non autorisé. Images (JPG, PNG, WEBP, GIF) ou vidéos (MP4, WEBM, OGG, MOV, MKV, AVI) uniquement.'
+        ),
+        false
+      );
+    }
+  },
 });
 
-// Toutes les routes média nécessitent un admin
 router.use(protect, authorize('admin', 'superadmin'));
 
 // @route   POST /api/media/hero
@@ -101,8 +82,11 @@ router.post('/hero', (req, res, next) => {
 
     const isVideo = req.file.mimetype.startsWith('video/');
     const isImage = req.file.mimetype.startsWith('image/');
-
-    const publicUrl = `${req.protocol}://${req.get('host')}/uploads/hero-carousel/${req.file.filename}`;
+    const publicUrl = resolveUploadedFilePath(
+      req.file,
+      'hero-carousel',
+      getOrgIdFromRequest(req)
+    );
 
     res.status(201).json({
       success: true,
@@ -110,7 +94,7 @@ router.post('/hero', (req, res, next) => {
       url: publicUrl,
       type: isVideo ? 'video' : isImage ? 'image' : 'unknown',
       mimetype: req.file.mimetype,
-      filename: req.file.filename,
+      filename: req.file.filename || publicUrl,
     });
   } catch (error) {
     console.error('❌ Erreur lors du traitement du média hero:', error);
@@ -123,4 +107,3 @@ router.post('/hero', (req, res, next) => {
 });
 
 module.exports = router;
-

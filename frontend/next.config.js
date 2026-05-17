@@ -74,6 +74,10 @@ function devApiRewriteRules(backendOrigin) {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  /** Rewrites dev : défaut 30s — insuffisant pour uploads Cloudinary */
+  experimental: {
+    proxyTimeout: 180000,
+  },
   /**
    * Dev : proxy granular vers le backend (3005).
    * NextAuth `/api/auth/*` (sauf stubs Express listés ci-dessus) reste géré par Next.js.

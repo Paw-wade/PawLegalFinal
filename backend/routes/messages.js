@@ -8,21 +8,20 @@ const { body, validationResult } = require('express-validator');
 const { protect, authorize } = require('../middleware/auth');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
-const { ensureTenantUploadDir, getOrgIdFromRequest } = require('../lib/tenant/uploads');
-
-// Configuration de multer pour les pièces jointes
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, ensureTenantUploadDir('messages', getOrgIdFromRequest(req)));
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
+const { getOrgIdFromRequest } = require('../lib/tenant/uploads');
+const { createTenantMulterStorage } = require('../lib/cloudinaryMulterStorage');
+const {
+  resolveUploadedFilePath,
+  safeUnlinkMulterFiles,
+  safeUnlinkUploadedFile,
+  isRemoteUploadPath,
+} = require('../lib/resolveUploadedFile');
 
 const upload = multer({
-  storage: storage,
+  storage: createTenantMulterStorage({
+    subdir: 'messages',
+    getOrgId: getOrgIdFromRequest,
+  }),
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB max par fichier
   },
@@ -733,14 +732,15 @@ router.post(
       // Traiter les pièces jointes
       const piecesJointes = [];
       if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
+        const orgId = getOrgIdFromRequest(req);
+        req.files.forEach((file) => {
           piecesJointes.push({
-            filename: file.filename,
+            filename: file.filename || path.basename(String(file.path || '')),
             originalName: file.originalname,
-            path: file.path,
+            path: resolveUploadedFilePath(file, 'messages', orgId),
             size: file.size,
             mimetype: file.mimetype,
-            uploadedAt: new Date()
+            uploadedAt: new Date(),
           });
         });
       }
@@ -1038,18 +1038,7 @@ ${conversationUrl}`,
         keyValue: error.keyValue
       });
       
-      // Supprimer les fichiers uploadés en cas d'erreur
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            try {
-              fs.unlinkSync(file.path);
-            } catch (unlinkError) {
-              console.error('Erreur lors de la suppression du fichier:', unlinkError);
-            }
-          }
-        });
-      }
+      safeUnlinkMulterFiles(req.files);
       
       res.status(500).json({
         success: false,
@@ -1249,13 +1238,7 @@ router.post('/batch/delete', async (req, res) => {
     for (const message of messages) {
       if (message.piecesJointes && message.piecesJointes.length > 0) {
         message.piecesJointes.forEach((pieceJointe) => {
-          if (fs.existsSync(pieceJointe.path)) {
-            try {
-              fs.unlinkSync(pieceJointe.path);
-            } catch (unlinkError) {
-              console.error('Erreur lors de la suppression du fichier:', unlinkError);
-            }
-          }
+          safeUnlinkUploadedFile(pieceJointe.path);
         });
       }
     }
@@ -1739,13 +1722,7 @@ router.delete('/:id', async (req, res) => {
     // Supprimer les fichiers associés
     if (message.piecesJointes && message.piecesJointes.length > 0) {
       message.piecesJointes.forEach((pieceJointe) => {
-        if (fs.existsSync(pieceJointe.path)) {
-          try {
-            fs.unlinkSync(pieceJointe.path);
-          } catch (unlinkError) {
-            console.error('Erreur lors de la suppression du fichier:', unlinkError);
-          }
-        }
+        safeUnlinkUploadedFile(pieceJointe.path);
       });
     }
 
@@ -1805,6 +1782,10 @@ router.get('/:id/download/:fileIndex', async (req, res) => {
 
     const pieceJointe = message.piecesJointes[fileIndex];
     const filePath = pieceJointe.path;
+
+    if (isRemoteUploadPath(filePath)) {
+      return res.redirect(filePath);
+    }
 
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({

@@ -34,14 +34,31 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Gérer les erreurs de connexion (backend non disponible)
-    if (error.code === 'ECONNREFUSED' || error.message?.includes('ERR_CONNECTION_REFUSED') || !error.response) {
+    const cfg: { data?: unknown; url?: string } = error.config || {};
+    const isBackendDown =
+      error.code === 'ECONNREFUSED' ||
+      error.message?.includes('ERR_CONNECTION_REFUSED') ||
+      error.code === 'ERR_NETWORK';
+    const isUploadTimeout =
+      error.code === 'ECONNABORTED' &&
+      (cfg.data instanceof FormData || String(cfg.url || '').includes('/user/documents'));
+
+    if (isBackendDown) {
       console.warn('⚠️ Le serveur backend n\'est pas disponible. Vérifiez que le serveur est démarré sur le port 3005.');
-      // Ne pas rediriger automatiquement, juste logger l'erreur
       return Promise.reject({
         ...error,
         isConnectionError: true,
-        message: 'Le serveur backend n\'est pas disponible. Veuillez vérifier que le serveur est démarré.'
+        message:
+          'Le serveur backend n\'est pas disponible. Démarrez-le avec `npm run dev` dans le dossier backend (port 3005).',
+      });
+    }
+
+    if (isUploadTimeout) {
+      return Promise.reject({
+        ...error,
+        isTimeoutError: true,
+        message:
+          'Le téléversement a pris trop de temps. Réessayez ou vérifiez la taille du fichier (max 10 Mo).',
       });
     }
     

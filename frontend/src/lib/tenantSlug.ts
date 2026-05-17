@@ -6,7 +6,8 @@ export function tenantSlugFromHost(host: string | null | undefined): string | un
     return process.env.NEXT_PUBLIC_DEFAULT_ORG_SLUG?.trim() || undefined;
   }
   const h = host.split(':')[0].toLowerCase();
-  if (h.includes('dupont')) return 'cabinet-dupont';
+  // dupon / cabinet-dupont / cabinet-dupon-.localhost → cabinet-dupont
+  if (h.includes('dupont') || h.includes('dupon')) return 'cabinet-dupont';
   if (h.includes('martin')) return 'cabinet-martin';
   if (h.includes('wadepaw')) return 'cabinet-wadepaw';
   return process.env.NEXT_PUBLIC_DEFAULT_ORG_SLUG?.trim() || undefined;

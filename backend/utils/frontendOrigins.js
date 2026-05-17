@@ -26,10 +26,13 @@ const LOCAL_DEV_ORIGINS = [
 ];
 
 function getFrontendOriginsList() {
-  const raw =
-    process.env.FRONTEND_URL ||
-    process.env.CORS_ORIGINS ||
-    'http://localhost:3000,http://localhost:3004';
+  const raw = [
+    process.env.FRONTEND_URL,
+    process.env.FRONTEND_ORIGINS,
+    process.env.CORS_ORIGINS,
+  ]
+    .filter(Boolean)
+    .join(',') || 'http://localhost:3000,http://localhost:3004';
   const fromEnv = raw
     .split(',')
     .map((s) => s.trim())
@@ -55,6 +58,30 @@ function isLocalhostOrigin(urlStr) {
   } catch {
     return false;
   }
+}
+
+/** Dev : autoriser tout sous-domaine *.localhost (dupont.localhost, cabinet-dupont.localhost, etc.). */
+function isLocalDevBrowserOrigin(origin) {
+  if (process.env.CORS_ALLOW_LOCALHOST === 'false') return false;
+  try {
+    const u = new URL(origin);
+    const h = u.hostname.toLowerCase();
+    if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') {
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    }
+    if (h.endsWith('.localhost')) {
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function isOriginAllowed(origin) {
+  if (!origin) return true;
+  if (getFrontendOriginsList().includes(origin)) return true;
+  return isLocalDevBrowserOrigin(origin);
 }
 
 /** Hôte type sous-domaine API (souvent en première position dans FRONTEND_URL) — à ne pas utiliser pour les liens e-mail. */
@@ -136,4 +163,6 @@ function getPrimaryFrontendUrl() {
 module.exports = {
   getFrontendOriginsList,
   getPrimaryFrontendUrl,
+  isLocalDevBrowserOrigin,
+  isOriginAllowed,
 };

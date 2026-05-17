@@ -6,24 +6,16 @@ const { body, validationResult } = require('express-validator');
 const { protect, authorize } = require('../middleware/auth');
 
 const M = require('../tenantModels');
-const { ensureTenantUploadDir, toPublicUploadUrl, getOrgIdFromRequest } = require('../lib/tenant/uploads');
+const { getOrgIdFromRequest } = require('../lib/tenant/uploads');
+const { createTenantMulterStorage } = require('../lib/cloudinaryMulterStorage');
+const { resolveUploadedFilePath } = require('../lib/resolveUploadedFile');
 const router = express.Router();
 
-const avatarStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, ensureTenantUploadDir('avatars', getOrgIdFromRequest(req)));
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || '') || '.jpg';
-    const safe = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext.toLowerCase())
-      ? ext.toLowerCase()
-      : '.jpg';
-    cb(null, `user-${req.user.id}-${Date.now()}${safe}`);
-  },
-});
-
 const uploadProfilePhoto = multer({
-  storage: avatarStorage,
+  storage: createTenantMulterStorage({
+    subdir: 'avatars',
+    getOrgId: getOrgIdFromRequest,
+  }),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!file.mimetype || !file.mimetype.startsWith('image/')) {
@@ -214,8 +206,12 @@ router.put(
         }
       }
 
-      if (req.file && req.file.filename) {
-        user.profilePhoto = toPublicUploadUrl('avatars', req.file.filename, getOrgIdFromRequest(req));
+      if (req.file) {
+        user.profilePhoto = resolveUploadedFilePath(
+          req.file,
+          'avatars',
+          getOrgIdFromRequest(req)
+        );
       }
 
       // Champs optionnels texte : autoriser la mise à jour et la suppression (chaîne vide)

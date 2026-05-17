@@ -21,7 +21,8 @@
     "seed:tenants": "node scripts/seedTenants.js",
     "verify:tenant-login": "node scripts/verifyTenantLogin.js",
     "fix:demo-login": "node scripts/fixDemoLogin.js",
-    "migrate:uploads": "node scripts/migrateUploadsToOrgPrefix.js"
+    "migrate:uploads": "node scripts/migrateUploadsToOrgPrefix.js",
+    "fix:document-nomfichier-index": "node scripts/fixDocumentNomFichierIndex.js"
   },
   "keywords": [],
   "author": "",

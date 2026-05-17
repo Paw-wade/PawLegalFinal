@@ -9,11 +9,11 @@ const { protect, authorize } = require('../middleware/auth');
 const {
   UPLOADS_ROOT,
   ensureTenantUploadDir,
-  getCloudinaryFolder,
   getOrgIdFromRequest,
   getOrgIdFromStore,
   getUploadScanDirs,
   resolveTenantUploadFile,
+  toPublicUploadUrl,
 } = require('../lib/tenant/uploads');
 
 const router = express.Router();
@@ -390,14 +390,12 @@ const normalizeCategorie = (rawCategorie) => {
   return mapping[normalized] || 'autre';
 };
 
-// Configuration du stockage Multer (Cloudinary ou disque)
-const createCloudinaryStorage = require('multer-storage-cloudinary');
-const {
-  cloudinary,
-  isCloudinaryConfigured,
-} = require('../lib/cloudinaryMulter');
+const { cloudinary } = require('../lib/cloudinaryMulter');
+const { shouldUseCloudinaryForUploads } = require('../lib/cloudinaryConfig');
+const { createTenantMulterStorage } = require('../lib/cloudinaryMulterStorage');
+const { resolveUploadedFilePath } = require('../lib/resolveUploadedFile');
 
-const hasCloudinaryConfig = isCloudinaryConfigured();
+const hasCloudinaryConfig = shouldUseCloudinaryForUploads();
 
 if (!fs.existsSync(UPLOADS_ROOT)) {
   fs.mkdirSync(UPLOADS_ROOT, { recursive: true });
@@ -421,29 +419,10 @@ function cloudinaryPublicIdFromUrl(fileUrl) {
   return withoutExt || null;
 }
 
-const uploadStorage = hasCloudinaryConfig
-  ? createCloudinaryStorage({
-      cloudinary,
-      params: async (req, file) => {
-        const isImage = (file.mimetype || '').startsWith('image/');
-        const orgId = getOrgIdFromRequest(req);
-        return {
-          folder: getCloudinaryFolder('documents', orgId),
-          resource_type: isImage ? 'image' : 'raw',
-          public_id: `${Date.now()}-${(file.originalname || 'document').replace(/[^a-zA-Z0-9]/g, '_')}`,
-        };
-      },
-    })
-  : multer.diskStorage({
-      destination: (req, file, cb) =>
-        cb(null, ensureTenantUploadDir('documents', getOrgIdFromRequest(req))),
-      filename: (req, file, cb) => {
-        const safeName = (file.originalname || 'document')
-          .replace(/[^a-zA-Z0-9._-]/g, '_')
-          .replace(/_+/g, '_');
-        cb(null, `${Date.now()}-${safeName}`);
-      },
-    });
+const uploadStorage = createTenantMulterStorage({
+  subdir: 'documents',
+  getOrgId: getOrgIdFromRequest,
+});
 
 // Filtre permissif: accepter tous les types de fichiers
 const fileFilter = (req, file, cb) => {
@@ -681,6 +660,17 @@ router.post('/', (req, res, next) => {
           message: err.message
         });
       }
+
+      const aborted =
+        err.message === 'Request aborted' ||
+        /aborted/i.test(String(err.message || ''));
+      if (aborted) {
+        return res.status(408).json({
+          success: false,
+          message:
+            'Téléversement interrompu (connexion fermée ou délai dépassé). Réessayez avec un fichier plus petit ou vérifiez la connexion.',
+        });
+      }
       
       return res.status(400).json({
         success: false,
@@ -724,16 +714,21 @@ router.post('/', (req, res, next) => {
       categorieNormalisee: safeCategorie
     });
 
-    // Stocker un chemin relatif stable pour éviter les erreurs selon le cwd du serveur
+    const orgId = getOrgIdFromRequest(req);
+    const storedFilename =
+      req.file.filename ||
+      path.basename(String(req.file.path || '')) ||
+      `${Date.now()}-upload`;
+    const storedPath = resolveUploadedFilePath(req.file, 'documents', orgId);
+
     const documentData = {
       user: effectiveUserId,
       nom: nom || req.file.originalname,
-      // `nomFichier` est indexé/unique côté DB : utiliser le nom de fichier généré par multer (timestamp)
-      // pour éviter les doublons lorsque l'utilisateur upload plusieurs fois le même fichier original.
-      nomFichier: req.file.filename,
-      cheminFichier: req.file.path, // URL Cloudinary
-      typeMime: req.file.mimetype,
-      taille: req.file.size,
+      // `nomFichier` peut avoir un index unique en base : nom généré par multer (timestamp + aléa).
+      nomFichier: storedFilename,
+      cheminFichier: storedPath,
+      typeMime: req.file.mimetype || 'application/octet-stream',
+      taille: Number(req.file.size) || 0,
       description: description || '',
       categorie: safeCategorie,
       visibleToClient: uploaderIsCabinet ? parseBoolean(visibleToClient, true) : true,
@@ -802,7 +797,7 @@ router.post('/', (req, res, next) => {
     try {
       await M.Log.create({
         user: req.user.id,
-        userEmail: req.user.email,
+        userEmail: req.user.email || req.user.phone || 'system',
         action: 'document_uploaded',
         description: `${req.user.email} a téléversé le document "${document.nom}"`,
         ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
@@ -829,25 +824,39 @@ router.post('/', (req, res, next) => {
     console.error('❌ Request body:', req.body);
     console.error('❌ Request file:', req.file);
     
-    // Supprimer le fichier si le document n'a pas pu être créé
-    if (req.file && req.file.path && req.file.path.startsWith('http')) {
-      try {
-        const urlParts = req.file.path.split('/');
-        const publicIdWithExt = urlParts.slice(-2).join('/');
-        const publicId = publicIdWithExt.replace(/\.[^/.]+$/, '');
-        await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
-        console.log('🗑️ Fichier Cloudinary supprimé après erreur:', publicId);
-      } catch (cloudErr) {
-        console.warn('⚠️ Suppression Cloudinary échouée:', cloudErr.message);
+    if (req.file?.path) {
+      if (String(req.file.path).startsWith('http')) {
+        try {
+          const publicId = cloudinaryPublicIdFromUrl(req.file.path);
+          if (publicId) {
+            await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
+            console.log('🗑️ Fichier Cloudinary supprimé après erreur:', publicId);
+          }
+        } catch (cloudErr) {
+          console.warn('⚠️ Suppression Cloudinary échouée:', cloudErr.message);
+        }
+      } else if (fs.existsSync(req.file.path)) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (unlinkErr) {
+          console.warn('⚠️ Suppression fichier local échouée:', unlinkErr.message);
+        }
       }
     }
 
-    // Erreurs de validation Mongoose -> 400 (problème de données d'entrée)
     if (error && (error.name === 'ValidationError' || error.name === 'CastError')) {
       return res.status(400).json({
         success: false,
         message: 'Données de document invalides',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'Un document avec ce nom de fichier existe déjà. Réessayez.',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       });
     }
 
@@ -855,14 +864,24 @@ router.post('/', (req, res, next) => {
       success: false,
       message: 'Erreur serveur lors du téléversement du document',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      code: process.env.NODE_ENV === 'development' ? error?.code : undefined,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
 
 // Rôles équipe Ada Papers avec accès lecture à tous les documents
-const isCabinetStaff = (role) =>
-  role === 'admin' || role === 'superadmin' || role === 'secretaire';
+const CABINET_STAFF_UPLOAD_ROLES = new Set([
+  'admin',
+  'superadmin',
+  'assistant',
+  'comptable',
+  'secretaire',
+  'juriste',
+  'stagiaire',
+]);
+
+const isCabinetStaff = (role) => CABINET_STAFF_UPLOAD_ROLES.has(role);
 
 const parseBoolean = (value, fallback = false) => {
   if (value === undefined || value === null || value === '') return fallback;

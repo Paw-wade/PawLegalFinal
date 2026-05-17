@@ -172,7 +172,15 @@ export default function AdminDocumentsPage() {
       }
     } catch (err: any) {
       console.error('Erreur lors du téléversement:', err);
-      setError(err.response?.data?.message || 'Erreur lors du téléversement du document');
+      const apiErr = err.response?.data;
+      setError(
+        apiErr?.message ||
+          apiErr?.error ||
+          err.message ||
+          (err.isConnectionError
+            ? 'Serveur backend indisponible (port 3005). Lancez `npm run dev` dans backend/.'
+            : 'Erreur lors du téléversement du document')
+      );
     } finally {
       setUploading(false);
     }

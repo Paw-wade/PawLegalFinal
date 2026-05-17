@@ -6,21 +6,15 @@ const { body, validationResult } = require('express-validator');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 
 const M = require('../tenantModels');
-const { ensureTenantUploadDir, getOrgIdFromRequest } = require('../lib/tenant/uploads');
+const { getOrgIdFromRequest } = require('../lib/tenant/uploads');
+const { createTenantMulterStorage } = require('../lib/cloudinaryMulterStorage');
+const {
+  resolveUploadedFilePath,
+  safeUnlinkMulterFiles,
+  safeUnlinkUploadedFile,
+  isRemoteUploadPath,
+} = require('../lib/resolveUploadedFile');
 const router = express.Router();
-
-// Configuration du stockage Multer pour les documents de contact
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    cb(null, ensureTenantUploadDir('contact', getOrgIdFromRequest(req)));
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
-    cb(null, name + '-' + uniqueSuffix + ext);
-  }
-});
 
 // Filtre pour accepter seulement certains types de fichiers
 const fileFilter = (req, file, cb) => {
@@ -41,7 +35,10 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage: storage,
+  storage: createTenantMulterStorage({
+    subdir: 'contact',
+    getOrgId: getOrgIdFromRequest,
+  }),
   limits: {
     fileSize: 5 * 1024 * 1024 // 5 MB max par fichier
   },
@@ -65,14 +62,7 @@ router.post(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        // Supprimer les fichiers uploadés en cas d'erreur de validation
-        if (req.files && req.files.length > 0) {
-          req.files.forEach(file => {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          });
-        }
+        safeUnlinkMulterFiles(req.files);
         return res.status(400).json({
           success: false,
           message: 'Erreurs de validation',
@@ -85,13 +75,14 @@ router.post(
       // Préparer les informations des documents
       const documents = [];
       if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
+        const orgId = getOrgIdFromRequest(req);
+        req.files.forEach((file) => {
           documents.push({
-            filename: file.filename,
+            filename: file.filename || path.basename(String(file.path || '')),
             originalName: file.originalname,
-            path: file.path,
+            path: resolveUploadedFilePath(file, 'contact', orgId),
             size: file.size,
-            mimetype: file.mimetype
+            mimetype: file.mimetype,
           });
         });
       }
@@ -194,18 +185,7 @@ Vous pouvez consulter et traiter ce message depuis l’espace d’administration
     } catch (error) {
       console.error('Erreur lors de l\'envoi du message:', error);
       
-      // Supprimer les fichiers uploadés en cas d'erreur
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-          if (fs.existsSync(file.path)) {
-            try {
-              fs.unlinkSync(file.path);
-            } catch (unlinkError) {
-              console.error('Erreur lors de la suppression du fichier:', unlinkError);
-            }
-          }
-        });
-      }
+      safeUnlinkMulterFiles(req.files);
       
       res.status(500).json({
         success: false,
@@ -493,6 +473,10 @@ router.get(
           success: false,
           message: 'Document non trouvé'
         });
+      }
+
+      if (isRemoteUploadPath(document.path)) {
+        return res.redirect(document.path);
       }
 
       if (!fs.existsSync(document.path)) {

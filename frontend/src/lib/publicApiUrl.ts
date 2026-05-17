@@ -40,6 +40,17 @@ export function authApiPath(relativePath: string): string {
  * `ERR_CONNECTION_RESET` sur `/api/lexia`.
  * Côté serveur Next (SSR), on garde une URL absolue (`NEXT_PUBLIC_*` ou localhost:3005).
  */
+/**
+ * En dev navigateur : appels directs vers le backend (évite timeout ~30s du proxy Next sur multipart).
+ * Les autres requêtes restent sur `/api` (rewrites).
+ */
+export function getMultipartApiBaseUrl(): string {
+  if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
+    return `${getNextPublicApiOrigin()}/api`;
+  }
+  return getPublicApiBaseUrl();
+}
+
 export function getPublicApiBaseUrl(): string {
   if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
     return '/api';

@@ -16,38 +16,14 @@ const router = express.Router();
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TOKEN_BYTES = 24;
 
-const {
-  ensureTenantUploadDir,
-  getCloudinaryFolder,
-  getOrgIdFromRequest,
-} = require('../lib/tenant/uploads');
+const { getOrgIdFromRequest } = require('../lib/tenant/uploads');
+const { createTenantMulterStorage } = require('../lib/cloudinaryMulterStorage');
+const { resolveUploadedFilePath } = require('../lib/resolveUploadedFile');
 
-const createCloudinaryStorage = require('multer-storage-cloudinary');
-const { cloudinary, isCloudinaryConfigured } = require('../lib/cloudinaryMulter');
-
-const uploadStorage = isCloudinaryConfigured()
-  ? createCloudinaryStorage({
-      cloudinary,
-      params: async (req, file) => {
-        const isImage = (file.mimetype || '').startsWith('image/');
-        const orgId = getOrgIdFromRequest(req);
-        return {
-          folder: getCloudinaryFolder('documents', orgId),
-          resource_type: isImage ? 'image' : 'raw',
-          public_id: `${Date.now()}-${(file.originalname || 'document').replace(/[^a-zA-Z0-9]/g, '_')}`,
-        };
-      },
-    })
-  : multer.diskStorage({
-      destination: (req, file, cb) =>
-        cb(null, ensureTenantUploadDir('documents', getOrgIdFromRequest(req))),
-      filename: (req, file, cb) => {
-        const safeName = (file.originalname || 'document')
-          .replace(/[^a-zA-Z0-9._-]/g, '_')
-          .replace(/_+/g, '_');
-        cb(null, `${Date.now()}-${safeName}`);
-      },
-    });
+const uploadStorage = createTenantMulterStorage({
+  subdir: 'documents',
+  getOrgId: getOrgIdFromRequest,
+});
 
 const upload = multer({
   storage: uploadStorage,
@@ -169,11 +145,16 @@ router.post('/public/:token', (req, res, next) => {
     const guestName = String(contributorName || '').trim().slice(0, 200);
     const docNom = String(nom || req.file.originalname || 'Document').trim().slice(0, 500);
 
+    const orgId = getOrgIdFromRequest(req);
+    const storedPath = resolveUploadedFilePath(req.file, 'documents', orgId);
+    const storedFilename =
+      req.file.filename || path.basename(String(req.file.path || '')) || `${Date.now()}-upload`;
+
     const document = await M.Document.create({
       user: ownerUserId,
       nom: docNom,
-      nomFichier: req.file.filename,
-      cheminFichier: req.file.path,
+      nomFichier: storedFilename,
+      cheminFichier: storedPath,
       typeMime: req.file.mimetype,
       taille: req.file.size,
       description: String(description || '').trim(),

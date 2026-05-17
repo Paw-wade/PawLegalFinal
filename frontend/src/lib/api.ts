@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getPublicApiBaseUrl } from './publicApiUrl';
+import { getMultipartApiBaseUrl, getPublicApiBaseUrl } from './publicApiUrl';
 import { getStoredTenantSlug, tenantSlugFromHost } from './tenantSlug';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
@@ -100,6 +100,28 @@ function scheduleSessionExpiredRedirect(apiMessage?: string): void {
 /** URL API terminée par `/api` une seule fois (axios + fetch hors axios). */
 export function getApiBaseUrl(): string {
   return getPublicApiBaseUrl();
+}
+
+const MULTIPART_UPLOAD_TIMEOUT_MS = 180000;
+
+function multipartApiUrl(relativePath: string): string {
+  const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+  return `${getMultipartApiBaseUrl()}${path}`;
+}
+
+/** POST multipart : URL directe en dev + délai long (Cloudinary). */
+function apiPostMultipart(relativePath: string, data: FormData, timeoutMs = MULTIPART_UPLOAD_TIMEOUT_MS) {
+  return api.post(multipartApiUrl(relativePath), data, {
+    timeout: timeoutMs,
+    headers: {},
+  });
+}
+
+function apiPutMultipart(relativePath: string, data: FormData, timeoutMs = MULTIPART_UPLOAD_TIMEOUT_MS) {
+  return api.put(multipartApiUrl(relativePath), data, {
+    timeout: timeoutMs,
+    headers: {},
+  });
 }
 
 // Même base que getApiBaseUrl : sinon api.get('/logs') tape .../logs au lieu de .../api/logs → 404 en prod
@@ -345,15 +367,42 @@ api.interceptors.response.use(
       });
     }
     
-    // Gérer les erreurs de connexion (backend non disponible)
-    if (error.code === 'ECONNREFUSED' || error.message?.includes('ERR_CONNECTION_REFUSED') || !error.response) {
+    const isBackendDown =
+      error.code === 'ECONNREFUSED' ||
+      error.message?.includes('ERR_CONNECTION_REFUSED') ||
+      error.code === 'ERR_NETWORK';
+    const isUploadTimeout =
+      error.code === 'ECONNABORTED' &&
+      (cfg.data instanceof FormData || String(cfg.url || '').includes('/user/documents'));
+
+    if (isBackendDown) {
       console.warn('⚠️ Le serveur backend n\'est pas disponible. Vérifiez que le serveur est démarré sur le port 3005.');
-      // Ne pas rejeter l'erreur de manière agressive, retourner une erreur contrôlée
       return Promise.reject({
         ...error,
         isConnectionError: true,
-        message: 'Le serveur backend n\'est pas disponible. Veuillez vérifier que le serveur est démarré.'
+        message:
+          'Le serveur backend n\'est pas disponible. Démarrez-le avec `npm run dev` dans le dossier backend (port 3005).',
       });
+    }
+
+    const isUploadAborted =
+      cfg.data instanceof FormData &&
+      (error.response?.status === 408 ||
+        /aborted/i.test(String(error.message || '')) ||
+        /Request aborted/i.test(String(error.response?.data?.message || '')));
+
+    if (isUploadTimeout || isUploadAborted) {
+      return Promise.reject({
+        ...error,
+        isTimeoutError: true,
+        message:
+          error.response?.data?.message ||
+          'Le téléversement a pris trop de temps ou a été interrompu. Réessayez (fichier max 10 Mo) ; redémarrez le frontend si le proxy Next n’a pas été rechargé.',
+      });
+    }
+
+    if (!error.response && error.code === 'ERR_CANCELED') {
+      return Promise.reject(error);
     }
     
     // Log détaillé des erreurs pour appointments
@@ -484,7 +533,9 @@ export const userAPI = {
     api.get('/user/profile'),
   
   updateProfile: (data: any) => {
-    // FormData : l’intercepteur supprime Content-Type pour que le boundary soit correct
+    if (data instanceof FormData) {
+      return apiPutMultipart('/user/profile', data);
+    }
     return api.put('/user/profile', data);
   },
   
@@ -1230,12 +1281,7 @@ export const messagesAPI = {
     api.get('/messages/users'),
   
   // Envoyer un message
-  sendMessage: (data: FormData) =>
-    api.post('/messages', data, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    }),
+  sendMessage: (data: FormData) => apiPostMultipart('/messages', data),
   
   // Marquer un message comme lu
   markAsRead: (id: string) =>
@@ -1281,14 +1327,7 @@ export const documentsAPI = {
   },
   
   // Téléverser un document
-  uploadDocument: (formData: FormData) => {
-    // Ne pas définir Content-Type manuellement - laisser le navigateur le définir avec le boundary
-    return api.post('/user/documents', formData, {
-      headers: {
-        // Le navigateur définira automatiquement Content-Type: multipart/form-data avec le boundary
-      },
-    });
-  },
+  uploadDocument: (formData: FormData) => apiPostMultipart('/user/documents', formData),
   
   // Prévisualiser un document (blob URL — à révoquer avec URL.revokeObjectURL quand terminé)
   previewDocument: async (id: string): Promise<string> => {
@@ -1415,11 +1454,7 @@ export const mediaAPI = {
   uploadHeroMedia: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post('/media/hero', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    return apiPostMultipart('/media/hero', formData);
   },
 };
 

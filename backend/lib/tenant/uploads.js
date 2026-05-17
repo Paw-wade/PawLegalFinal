@@ -30,6 +30,27 @@ function getOrgIdFromRequest(req) {
   return sanitizeOrgId(req?.tenant?.orgId) || getOrgIdFromStore();
 }
 
+/** Slug cabinet (ex. cabinet-dupont) pour dossiers Cloudinary lisibles. */
+function sanitizeTenantSlug(slug) {
+  const s = String(slug || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  if (!s || s.length > 64 || !/^[a-z0-9][a-z0-9-]*$/.test(s)) return null;
+  return s;
+}
+
+function getTenantSlugFromStore() {
+  const store = getTenantStore();
+  return sanitizeTenantSlug(store?.slug);
+}
+
+function getTenantSlugFromRequest(req) {
+  return sanitizeTenantSlug(req?.tenant?.slug) || getTenantSlugFromStore();
+}
+
 function isOrgScopedUploadsEnabled(orgId) {
   return isMultiTenantEnabled() && Boolean(sanitizeOrgId(orgId));
 }
@@ -73,14 +94,39 @@ function toPublicUploadUrl(subdir, filename, orgId = null) {
 }
 
 /**
- * Dossier Cloudinary : orgs/{orgId}/{subdir} ou pawlegal/{subdir} (legacy).
+ * Dossier Cloudinary : cabinets/{slug}/{subdir} (ex. cabinets/cabinet-dupont/documents).
+ * Repli legacy : orgs/{orgId}/… si slug absent, puis pawlegal/{subdir}.
+ * @param {string} subdir
+ * @param {{ req?: import('express').Request, slug?: string, orgId?: string }|string|null} [ctx]
  */
-function getCloudinaryFolder(subdir, orgId = null) {
+function getCloudinaryFolder(subdir, ctx = null) {
   const sub = String(subdir || 'documents').replace(/^\/+|\/+$/g, '');
-  const oid = sanitizeOrgId(orgId) || getOrgIdFromStore();
+
+  let slug = null;
+  let orgId = null;
+  if (typeof ctx === 'string') {
+    if (/^[a-f\d]{24}$/i.test(ctx)) orgId = sanitizeOrgId(ctx);
+    else slug = sanitizeTenantSlug(ctx);
+  } else if (ctx && typeof ctx === 'object') {
+    slug = sanitizeTenantSlug(ctx.slug);
+    orgId = sanitizeOrgId(ctx.orgId);
+    if (ctx.req) {
+      slug = slug || getTenantSlugFromRequest(ctx.req);
+      orgId = orgId || getOrgIdFromRequest(ctx.req);
+    }
+  }
+
+  slug = slug || getTenantSlugFromStore();
+
+  if (isMultiTenantEnabled() && slug) {
+    return `cabinets/${slug}/${sub}`;
+  }
+
+  const oid = orgId || getOrgIdFromStore();
   if (isOrgScopedUploadsEnabled(oid)) {
     return `orgs/${oid}/${sub}`;
   }
+
   return `pawlegal/${sub}`;
 }
 
@@ -152,6 +198,9 @@ module.exports = {
   TENANT_UPLOAD_SUBDIRS,
   getOrgIdFromRequest,
   getOrgIdFromStore,
+  getTenantSlugFromRequest,
+  getTenantSlugFromStore,
+  sanitizeTenantSlug,
   isOrgScopedUploadsEnabled,
   getTenantUploadDir,
   ensureTenantUploadDir,
