@@ -89,9 +89,18 @@ async function tenantMiddleware(req, res, next) {
     });
   } catch (err) {
     console.error('tenantMiddleware:', err);
-    return res.status(500).json({
+    const isAtlasAuth =
+      err?.code === 8000 ||
+      err?.codeName === 'AtlasError' ||
+      /authentication failed|bad auth/i.test(String(err?.message || ''));
+    return res.status(isAtlasAuth ? 503 : 500).json({
       success: false,
-      message: 'Erreur de résolution du cabinet',
+      message: isAtlasAuth
+        ? 'Connexion MongoDB du cabinet impossible : identifiants Atlas invalides (vérifiez le mongoUri du cabinet dans la console plateforme).'
+        : 'Erreur de résolution du cabinet',
+      ...(process.env.NODE_ENV !== 'production' && err?.message
+        ? { details: err.message }
+        : {}),
     });
   }
 }

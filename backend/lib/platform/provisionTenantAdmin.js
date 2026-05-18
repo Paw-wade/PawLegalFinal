@@ -1,15 +1,5 @@
-const mongoose = require('mongoose');
 const { getTenantConnection } = require('../db/tenants');
-
-function getUserModel(conn) {
-  if (!mongoose.models.User) {
-    require('../../models/User');
-  }
-  if (!conn.models.User) {
-    conn.model('User', mongoose.models.User.schema);
-  }
-  return conn.models.User;
-}
+const { getTenantUserModel } = require('./tenantUserModel');
 
 /**
  * Crée ou met à jour le premier admin d’un cabinet sur sa base MongoDB.
@@ -34,7 +24,7 @@ async function provisionTenantAdmin(params) {
   }
 
   const conn = await getTenantConnection(mongoUri, orgId);
-  const User = getUserModel(conn);
+  const User = getTenantUserModel(conn);
   const normalizedEmail = email.trim().toLowerCase();
 
   const existing = await User.findOne({ email: normalizedEmail });

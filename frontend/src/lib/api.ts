@@ -1841,6 +1841,14 @@ export const platformOrganizationsAPI = {
       data
     ),
   suspend: (slug: string) => api.delete(`/platform/organizations/${slug}`),
+  reactivate: (slug: string) =>
+    api.post<{ success: boolean; message: string; organization: PlatformOrganization }>(
+      `/platform/organizations/${slug}/reactivate`
+    ),
+  deletePermanent: (slug: string) =>
+    api.delete<{ success: boolean; message: string; slug: string }>(
+      `/platform/organizations/${slug}/permanent`
+    ),
   dnsChecklist: (slug: string) =>
     api.get<{ success: boolean; checklist: { slug: string; primaryDomain: string; steps: unknown[] } }>(
       `/platform/organizations/${slug}/dns-checklist`

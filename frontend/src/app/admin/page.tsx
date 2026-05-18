@@ -16,6 +16,9 @@ import {
   isCabinetStaffRole,
   isFullAdminRole,
 } from '@/lib/staffAccess';
+import { canAccessPlatformConsole } from '@/lib/platformAdmin';
+import { PLATFORM_CONSOLE_PATH } from '@/lib/auth/platformSession';
+import { Building2 } from 'lucide-react';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -905,16 +908,30 @@ export default function AdminDashboardPage() {
   }
   
   const isAdmin = isFullAdminRole(userRole);
+  const userEmail = (session.user as { email?: string })?.email;
+  const showPlatformConsole = canAccessPlatformConsole(userRole, userEmail);
 
   return (
     <div className="min-h-screen bg-background">
       <main className="w-full px-4 py-8 max-w-full">
-        <div id="dashboard-top" className="mb-6 scroll-mt-20">
-          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Tableau de bord</p>
-          <h1 className="text-2xl font-bold text-foreground mb-1">
-            {dashboardTitle}
-          </h1>
-          <p className="text-sm text-gray-700">{dashboardSubtitle}</p>
+        <div
+          id="dashboard-top"
+          className="mb-6 scroll-mt-20 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4"
+        >
+          <div>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Tableau de bord</p>
+            <h1 className="text-2xl font-bold text-foreground mb-1">{dashboardTitle}</h1>
+            <p className="text-sm text-gray-700">{dashboardSubtitle}</p>
+          </div>
+          {showPlatformConsole && (
+            <Link
+              href={PLATFORM_CONSOLE_PATH}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 shadow-md shrink-0 transition-colors"
+            >
+              <Building2 className="h-4 w-4 text-orange-400" />
+              Console Ada Papers
+            </Link>
+          )}
         </div>
 
         {unreadAppointmentNotifications.length > 0 && (

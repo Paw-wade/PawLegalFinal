@@ -123,10 +123,11 @@ try {
 }
 
 try {
+  app.use('/api/platform', require('./routes/platform'));
   app.use('/api/platform/organizations', require('./routes/platformOrganizations'));
-  console.log('✅ Route /api/platform/organizations enregistrée (console Ada Papers)');
+  console.log('✅ Routes /api/platform enregistrées (console Ada Papers)');
 } catch (e) {
-  console.error('❌ Impossible d\'enregistrer /api/platform/organizations:', e.message);
+  console.error('❌ Impossible d\'enregistrer /api/platform:', e.message);
 }
 
 app.use('/api/auth', require('./routes/auth'));

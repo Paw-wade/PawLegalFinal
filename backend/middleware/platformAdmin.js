@@ -1,6 +1,7 @@
 /**
  * Accès console plateforme Ada Papers (CRUD organizations).
- * Requiert rôle superadmin + liste blanche PLATFORM_ADMIN_EMAILS si définie.
+ * Uniquement : rôle superadmin + email équipe Ada Papers (@adapapers.fr ou PLATFORM_ADMIN_EMAILS).
+ * Les superadmins d’un cabinet client n’y ont pas accès.
  */
 function getPlatformAdminEmails() {
   return (process.env.PLATFORM_ADMIN_EMAILS || '')
@@ -9,15 +10,34 @@ function getPlatformAdminEmails() {
     .filter(Boolean);
 }
 
+function getPlatformAdminEmailDomain() {
+  return (process.env.PLATFORM_ADMIN_EMAIL_DOMAIN || 'adapapers.fr')
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, '');
+}
+
+function isAdaPapersSuperadminEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) return false;
+
+  if (getPlatformAdminEmails().includes(normalized)) {
+    return true;
+  }
+
+  const domain = getPlatformAdminEmailDomain();
+  if (domain && normalized.endsWith(`@${domain}`)) {
+    return true;
+  }
+
+  return false;
+}
+
 function isPlatformAdminUser(user) {
   if (!user || user.role !== 'superadmin') {
     return false;
   }
-  const whitelist = getPlatformAdminEmails();
-  if (whitelist.length === 0) {
-    return true;
-  }
-  return whitelist.includes(String(user.email || '').toLowerCase());
+  return isAdaPapersSuperadminEmail(user.email);
 }
 
 function requirePlatformAdmin(req, res, next) {
@@ -27,7 +47,8 @@ function requirePlatformAdmin(req, res, next) {
   if (!isPlatformAdminUser(req.user)) {
     return res.status(403).json({
       success: false,
-      message: 'Accès réservé aux administrateurs plateforme Ada Papers',
+      message:
+        'Accès réservé aux superadmins Ada Papers (équipe plateforme). Les superadmins cabinet client ne sont pas autorisés.',
     });
   }
   next();
@@ -35,6 +56,8 @@ function requirePlatformAdmin(req, res, next) {
 
 module.exports = {
   getPlatformAdminEmails,
+  getPlatformAdminEmailDomain,
+  isAdaPapersSuperadminEmail,
   isPlatformAdminUser,
   requirePlatformAdmin,
 };

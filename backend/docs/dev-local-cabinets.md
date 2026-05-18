@@ -30,6 +30,15 @@ Sinon, ajoutez par exemple : `127.0.0.1 dupont.localhost` dans `C:\Windows\Syste
 
 Un bandeau jaune en bas de l’écran (mode dev) affiche le cabinet actif et des liens pour basculer.
 
+## Console plateforme SaaS (multi-cabinets)
+
+Connexion dédiée (séparée du login cabinet / client) :
+
+- **Connexion :** http://localhost:3004/platform/signin  
+- **Console :** http://localhost:3004/platform/cabinets  
+
+Prérequis : compte `superadmin` **Ada Papers** — email `*@adapapers.fr` ou liste `PLATFORM_ADMIN_EMAILS` (ex. `wadepaw@gmail.com`). Les superadmins d’un cabinet client (Dupont, etc.) sont **exclus**.
+
 ## Vérifier le cabinet côté API
 
 Réponse HTTP : en-têtes `x-org-slug` et `x-org-id`.
