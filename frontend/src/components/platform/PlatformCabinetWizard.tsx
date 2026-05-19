@@ -5,9 +5,16 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { platformAPI } from '@/lib/platform/platformApi';
 import { suggestedDomainsForSlug } from '@/lib/platform/cabinetUrls';
+import {
+  ORGANIZATION_TYPE_OPTIONS,
+  getOrganizationTypeLabel,
+  type OrganizationType,
+} from '@/lib/platform/organizationTypes';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 
 const emptyForm = {
+  organizationType: 'law_firm' as OrganizationType,
+  organizationTypeOther: '',
   slug: '',
   mongoUri: '',
   status: 'trial' as 'trial' | 'active' | 'suspended',
@@ -50,6 +57,8 @@ export function PlatformCabinetWizard() {
           slug,
           brandingName: r.structureName,
           domains: r.desiredDomains || f.domains,
+          organizationType: (r.organizationType as OrganizationType) || f.organizationType,
+          organizationTypeOther: r.organizationTypeOther || '',
         }));
         setPrefillNote(`Pré-rempli depuis la demande de ${r.contactName} (${r.contactEmail}).`);
         await platformAPI.signupRequests.update(fromRequest, {
@@ -84,6 +93,9 @@ export function PlatformCabinetWizard() {
         slug,
         mongoUri: form.mongoUri.trim(),
         status: form.status,
+        organizationType: form.organizationType,
+        organizationTypeOther:
+          form.organizationType === 'other' ? form.organizationTypeOther.trim() : '',
         domains,
         branding: {
           name: form.brandingName.trim(),
@@ -119,9 +131,9 @@ export function PlatformCabinetWizard() {
       <div>
         <Link href="/platform/cabinets" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" />
-          Retour aux cabinets
+          Retour aux organisations
         </Link>
-        <h1 className="text-2xl font-bold mt-2">Nouveau cabinet</h1>
+        <h1 className="text-2xl font-bold mt-2">Nouvelle organisation</h1>
         <p className="text-sm text-gray-600">Étape {step + 1} / {steps.length} — {steps[step]}</p>
         {prefillNote && <p className="text-xs text-primary mt-1">{prefillNote}</p>}
       </div>
@@ -144,11 +156,44 @@ export function PlatformCabinetWizard() {
         {step === 0 && (
           <>
             <label className="block text-sm">
+              <span className="font-medium">Type d&apos;organisation</span>
+              <select
+                required
+                className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+                value={form.organizationType}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    organizationType: e.target.value as OrganizationType,
+                    organizationTypeOther:
+                      e.target.value === 'other' ? form.organizationTypeOther : '',
+                  })
+                }
+              >
+                {ORGANIZATION_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {form.organizationType === 'other' && (
+              <label className="block text-sm">
+                <span className="font-medium">Précisez le type</span>
+                <input
+                  required
+                  className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
+                  value={form.organizationTypeOther}
+                  onChange={(e) => setForm({ ...form, organizationTypeOther: e.target.value })}
+                />
+              </label>
+            )}
+            <label className="block text-sm">
               <span className="font-medium">Slug</span>
               <input
                 required
                 className="mt-1 w-full border rounded-md px-3 py-2 text-sm font-mono"
-                placeholder="cabinet-nouveau"
+                placeholder="org-ma-structure"
                 value={form.slug}
                 onChange={(e) => setForm({ ...form, slug: e.target.value })}
               />
@@ -242,6 +287,12 @@ export function PlatformCabinetWizard() {
         {step === 3 && (
           <dl className="text-sm space-y-2">
             <div className="flex justify-between gap-4">
+              <dt className="text-gray-500">Type</dt>
+              <dd className="text-right">
+                {getOrganizationTypeLabel(form.organizationType, form.organizationTypeOther)}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Slug</dt>
               <dd className="font-mono">{form.slug}</dd>
             </div>
@@ -275,9 +326,15 @@ export function PlatformCabinetWizard() {
           <button
             type="button"
             onClick={() => {
-              if (step === 0 && !form.slug.trim()) {
-                setError('Slug requis');
-                return;
+              if (step === 0) {
+                if (form.organizationType === 'other' && !form.organizationTypeOther.trim()) {
+                  setError('Précisez le type d\'organisation');
+                  return;
+                }
+                if (!form.slug.trim()) {
+                  setError('Slug requis');
+                  return;
+                }
               }
               if (step === 1 && !form.mongoUri.trim()) {
                 setError('Mongo URI requis');
@@ -299,10 +356,11 @@ export function PlatformCabinetWizard() {
             className="inline-flex items-center gap-1 px-4 py-2 text-sm bg-primary text-white rounded-md disabled:opacity-50"
           >
             <Check className="h-4 w-4" />
-            {saving ? 'Création…' : 'Créer le cabinet'}
+            {saving ? 'Création…' : "Créer l'organisation"}
           </button>
         )}
       </div>
     </div>
   );
 }
+

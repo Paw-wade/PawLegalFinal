@@ -10,7 +10,7 @@ import { PlatformConsoleBrand } from './PlatformConsoleBrand';
 
 const nav = [
   { href: '/platform', label: 'Tableau de bord', icon: LayoutDashboard, exact: true },
-  { href: '/platform/cabinets', label: 'Cabinets', icon: Server, exact: false },
+  { href: '/platform/cabinets', label: 'Organisations', icon: Server, exact: false },
   { href: '/platform/demandes-organisations', label: 'Demandes', icon: ClipboardList, exact: false },
 ];
 

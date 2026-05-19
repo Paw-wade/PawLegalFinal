@@ -31,6 +31,13 @@ const organizationSchema = new mongoose.Schema(
       default: 'trial',
       index: true,
     },
+    organizationType: {
+      type: String,
+      enum: ['law_firm', 'consulting', 'association', 'institutional', 'other'],
+      default: 'law_firm',
+      index: true,
+    },
+    organizationTypeOther: { type: String, trim: true, default: '' },
     branding: {
       name: { type: String, required: true, trim: true },
       logo: { type: String, default: '' },

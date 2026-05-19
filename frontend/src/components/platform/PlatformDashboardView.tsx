@@ -6,6 +6,7 @@ import { platformAPI } from '@/lib/platform/platformApi';
 import type { PlatformDashboard } from '@/lib/platform/types';
 import { AUDIT_ACTION_LABELS } from '@/lib/platform/types';
 import { PlatformStatusBadge } from './PlatformStatusBadge';
+import { getOrganizationTypeLabel } from '@/lib/platform/organizationTypes';
 import { Building2, Plus, RefreshCw } from 'lucide-react';
 
 function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
@@ -64,7 +65,9 @@ export function PlatformDashboardView() {
             <Building2 className="h-7 w-7 text-primary" />
             Tableau de bord plateforme
           </h1>
-          <p className="text-sm text-gray-600 mt-1">Vue d&apos;ensemble des cabinets SaaS Ada Papers.</p>
+          <p className="text-sm text-gray-600 mt-1">
+            Vue d&apos;ensemble des organisations SaaS Ada Papers (cabinets, conseil, associations…).
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -80,7 +83,7 @@ export function PlatformDashboardView() {
             className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-primary text-white rounded-md hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
-            Nouveau cabinet
+            Nouvelle organisation
           </Link>
         </div>
       </div>
@@ -90,7 +93,7 @@ export function PlatformDashboardView() {
       )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total cabinets" value={summary?.total ?? 0} />
+        <StatCard label="Total organisations" value={summary?.total ?? 0} />
         <StatCard label="Actifs" value={summary?.byStatus?.active ?? 0} accent="text-green-700" />
         <StatCard label="Essai (trial)" value={summary?.byStatus?.trial ?? 0} accent="text-amber-700" />
         <StatCard label="Suspendus" value={summary?.byStatus?.suspended ?? 0} accent="text-red-700" />
@@ -112,7 +115,7 @@ export function PlatformDashboardView() {
             </li>
           </ul>
           <Link href="/platform/cabinets" className="text-sm text-primary hover:underline">
-            Voir tous les cabinets →
+            Voir toutes les organisations →
           </Link>
         </div>
 
@@ -144,7 +147,8 @@ export function PlatformDashboardView() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="text-left px-4 py-3">Cabinet</th>
+              <th className="text-left px-4 py-3">Organisation</th>
+              <th className="text-left px-4 py-3">Type</th>
               <th className="text-left px-4 py-3">Statut</th>
               <th className="text-left px-4 py-3">Checklist</th>
               <th className="px-4 py-3" />
@@ -156,6 +160,9 @@ export function PlatformDashboardView() {
                 <td className="px-4 py-3">
                   <div className="font-medium">{org.branding?.name || org.slug}</div>
                   <div className="text-xs text-gray-500 font-mono">{org.slug}</div>
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-600">
+                  {getOrganizationTypeLabel(org.organizationType, org.organizationTypeOther)}
                 </td>
                 <td className="px-4 py-3">
                   <PlatformStatusBadge status={org.status} />

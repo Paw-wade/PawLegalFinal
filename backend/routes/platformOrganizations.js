@@ -16,6 +16,7 @@ const {
   createPlatformBrandingUpload,
   resolvePlatformBrandingPublicUrl,
 } = require('../lib/platform/platformBrandingUpload');
+const { validateOrganizationType } = require('../lib/platform/organizationTypes');
 
 const router = express.Router();
 
@@ -387,6 +388,10 @@ router.post('/', async (req, res) => {
     if (!body.branding?.name?.trim()) {
       return res.status(400).json({ success: false, message: 'branding.name requis' });
     }
+    const typeCheck = validateOrganizationType(body);
+    if (!typeCheck.ok) {
+      return res.status(400).json({ success: false, message: typeCheck.message });
+    }
 
     const Organization = getOrganizationModel();
     const exists = await Organization.findOne({ slug });
@@ -405,6 +410,8 @@ router.post('/', async (req, res) => {
       domains,
       mongoUri: body.mongoUri.trim(),
       status: body.status || 'trial',
+      organizationType: typeCheck.organizationType,
+      organizationTypeOther: typeCheck.organizationTypeOther,
       branding: {
         name: body.branding.name.trim(),
         logo: body.branding.logo || '',
@@ -462,6 +469,18 @@ router.patch('/:slug', async (req, res) => {
     if (body.status && body.status !== org.status) {
       org.status = body.status;
       changed.push('status');
+    }
+    if (body.organizationType !== undefined) {
+      const typeCheck = validateOrganizationType({
+        organizationType: body.organizationType,
+        organizationTypeOther: body.organizationTypeOther ?? org.organizationTypeOther,
+      });
+      if (!typeCheck.ok) {
+        return res.status(400).json({ success: false, message: typeCheck.message });
+      }
+      org.organizationType = typeCheck.organizationType;
+      org.organizationTypeOther = typeCheck.organizationTypeOther;
+      changed.push('organizationType');
     }
     if (body.mongoUri?.trim() && body.mongoUri.trim() !== org.mongoUri) {
       org.mongoUri = body.mongoUri.trim();

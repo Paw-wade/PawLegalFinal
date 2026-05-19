@@ -200,10 +200,10 @@ export function PlatformCabinetsConsole() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Building2 className="h-7 w-7 text-primary" />
-            Cabinets — gestion multi-tenant
+            Organisations — gestion multi-tenant
           </h1>
           <p className="text-sm text-gray-600 mt-1">
-            Organisations, provisioning et checklist DNS / déploiement.
+            Cabinets d&apos;avocats, conseil, associations… provisioning et checklist DNS.
           </p>
         </div>
         <div className="flex gap-2">
@@ -221,7 +221,7 @@ export function PlatformCabinetsConsole() {
             className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-primary text-white rounded-md hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
-            Nouveau cabinet
+            Nouvelle organisation
           </button>
         </div>
       </div>
@@ -237,7 +237,7 @@ export function PlatformCabinetsConsole() {
           onSubmit={handleCreate}
           className="bg-white border border-gray-200 rounded-lg p-6 space-y-4 shadow-sm"
         >
-          <h2 className="font-semibold text-lg">Créer un cabinet</h2>
+          <h2 className="font-semibold text-lg">Créer une organisation</h2>
           <div className="grid md:grid-cols-2 gap-4">
             <label className="block text-sm">
               <span className="font-medium">Slug</span>

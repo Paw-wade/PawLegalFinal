@@ -13,6 +13,7 @@ import {
   type TenantHealth,
 } from '@/lib/platform/types';
 import { cabinetAdminUrl, cabinetDevUrl, cabinetSignInUrl } from '@/lib/platform/cabinetUrls';
+import { getOrganizationTypeLabel } from '@/lib/platform/organizationTypes';
 import { PlatformStatusBadge } from './PlatformStatusBadge';
 import { PlatformCabinetUsersPanel } from './PlatformCabinetUsersPanel';
 import { PlatformBrandingEditor } from './PlatformBrandingEditor';
@@ -263,12 +264,15 @@ export function PlatformCabinetDetail({ slug }: Props) {
         <div>
           <Link href="/platform/cabinets" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
             <ArrowLeft className="h-4 w-4" />
-            Cabinets
+            Organisations
           </Link>
           <h1 className="text-2xl font-bold mt-2 flex items-center gap-2 flex-wrap">
             {org.branding?.name || org.slug}
             <PlatformStatusBadge status={org.status} />
           </h1>
+          <p className="text-sm text-gray-600 mt-0.5">
+            {getOrganizationTypeLabel(org.organizationType, org.organizationTypeOther)}
+          </p>
           <p className="text-xs font-mono text-gray-500">{org.slug}</p>
         </div>
         <div className="flex flex-wrap gap-2">

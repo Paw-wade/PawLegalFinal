@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { platformAPI } from '@/lib/platform/platformApi';
 import type { OrgStatus, PlatformOrganization } from '@/lib/platform/types';
 import { PlatformStatusBadge } from './PlatformStatusBadge';
+import { getOrganizationTypeLabel } from '@/lib/platform/organizationTypes';
 import { Building2, Plus, RefreshCw, Search } from 'lucide-react';
 
 function HealthDot({
@@ -71,9 +72,11 @@ export function PlatformCabinetsList() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Building2 className="h-7 w-7 text-primary" />
-            Cabinets
+            Organisations
           </h1>
-          <p className="text-sm text-gray-600 mt-1">Liste des organisations multi-tenant.</p>
+          <p className="text-sm text-gray-600 mt-1">
+            Cabinets d&apos;avocats, conseil, associations et autres structures hébergées.
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -89,7 +92,7 @@ export function PlatformCabinetsList() {
             className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-primary text-white rounded-md hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
-            Nouveau cabinet
+            Nouvelle organisation
           </Link>
         </div>
       </div>
@@ -128,7 +131,8 @@ export function PlatformCabinetsList() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="text-left px-4 py-3 font-medium">Cabinet</th>
+              <th className="text-left px-4 py-3 font-medium">Organisation</th>
+              <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Type</th>
               <th className="text-left px-4 py-3 font-medium">Statut</th>
               <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Mongo</th>
               <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Checklist</th>
@@ -139,14 +143,14 @@ export function PlatformCabinetsList() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                   Chargement…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                  Aucun cabinet trouvé.
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  Aucune organisation trouvée.
                 </td>
               </tr>
             ) : (
@@ -155,6 +159,9 @@ export function PlatformCabinetsList() {
                   <td className="px-4 py-3">
                     <div className="font-medium">{org.branding?.name || org.slug}</div>
                     <div className="text-xs text-gray-500 font-mono">{org.slug}</div>
+                  </td>
+                  <td className="px-4 py-3 hidden sm:table-cell text-xs text-gray-600">
+                    {getOrganizationTypeLabel(org.organizationType, org.organizationTypeOther)}
                   </td>
                   <td className="px-4 py-3">
                     <PlatformStatusBadge status={org.status} />

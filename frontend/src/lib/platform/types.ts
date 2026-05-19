@@ -31,6 +31,9 @@ export type PlatformOrganization = {
   id: string;
   slug: string;
   status: OrgStatus;
+  organizationType?: string;
+  organizationTypeOther?: string;
+  organizationTypeLabel?: string;
   domains: string[];
   domain: string;
   mongoUri: string;

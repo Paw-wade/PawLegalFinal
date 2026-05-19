@@ -17,14 +17,21 @@ function normalizeDomains(org) {
  * @param {object} org — document lean ou mongoose
  * @param {{ maskSecrets?: boolean }} [opts]
  */
+const { organizationTypeLabel } = require('./organizationTypes');
+
 function toOrganizationDto(org, opts = {}) {
   const maskSecrets = opts.maskSecrets !== false;
   const o = org.toObject ? org.toObject() : org;
   const domains = normalizeDomains(o);
+  const organizationType = o.organizationType || 'law_firm';
+  const organizationTypeOther = o.organizationTypeOther || '';
   return {
     id: String(o._id),
     slug: o.slug,
     status: o.status,
+    organizationType,
+    organizationTypeOther,
+    organizationTypeLabel: organizationTypeLabel(organizationType, organizationTypeOther),
     domains,
     domain: domains[0] || '',
     mongoUri: maskSecrets ? maskMongoUri(o.mongoUri) : o.mongoUri,
