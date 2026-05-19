@@ -130,9 +130,9 @@ export default function DevenirCabinetPage() {
       <main className="flex-1 py-10 px-4">
         <div className="max-w-xl mx-auto space-y-6">
           <div>
-            <Link href="/" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
+            <Link href="/saas" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
               <ArrowLeft className="h-4 w-4" />
-              Accueil
+              Plateforme Ada Papers
             </Link>
             <h1 className="text-2xl sm:text-3xl font-bold mt-3">Demander un espace dédié</h1>
             <p className="text-sm text-muted-foreground mt-2">
