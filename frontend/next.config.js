@@ -51,6 +51,7 @@ function devApiRewriteRules(backendOrigin) {
     'temoignages',
     'tenant',
     'platform',
+    'public',
     'collaborative-drafts',
     'dossier-document-drafts',
     'dossier-guest-upload',

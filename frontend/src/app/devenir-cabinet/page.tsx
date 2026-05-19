@@ -2,19 +2,15 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Header } from '@/components/layout/Header';
-import { Footer } from '@/components/layout/Footer';
+import { SaasMarketingShell } from '@/components/saas/SaasMarketingShell';
+import { saasInputClass, saasPrimaryButtonClass } from '@/components/saas/saasMarketingStyles';
 import {
   ORGANIZATION_TYPE_OPTIONS,
   TEAM_SIZE_OPTIONS,
   submitOrganizationSignup,
   type OrganizationType,
 } from '@/lib/organizationSignup';
-import { tenantPrimaryButtonClass } from '@/lib/tenant/tenantPrimaryClasses';
 import { ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react';
-
-const inputClass =
-  'mt-1 w-full border-2 border-input rounded-lg px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
 
 export default function DevenirCabinetPage() {
   const [step, setStep] = useState(0);
@@ -102,43 +98,44 @@ export default function DevenirCabinetPage() {
 
   if (done) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <Header variant="home" showNav={false} />
-        <main className="flex-1 flex items-center justify-center px-4 py-16">
+      <SaasMarketingShell>
+        <div className="flex items-center justify-center px-4 py-16 md:py-24">
           <div className="max-w-md text-center space-y-4">
-            <CheckCircle2 className="h-14 w-14 text-primary mx-auto" />
-            <h1 className="text-2xl font-bold">Demande envoyée</h1>
-            <p className="text-muted-foreground text-sm">
+            <CheckCircle2 className="h-14 w-14 text-orange-500 mx-auto" />
+            <h1 className="text-2xl font-bold text-slate-900">Demande envoyée</h1>
+            <p className="text-slate-600 text-sm">
               Nous avons bien reçu votre demande pour <strong>{form.structureName}</strong>. Notre
               équipe vous recontactera à <strong>{form.contactEmail}</strong>.
             </p>
-            <Link href="/" className={`inline-flex px-6 py-2.5 rounded-md text-sm ${tenantPrimaryButtonClass}`}>
-              Retour à l&apos;accueil
+            <Link href="/saas" className={saasPrimaryButtonClass}>
+              Retour à la plateforme Ada Papers
             </Link>
           </div>
-        </main>
-        <Footer />
-      </div>
+        </div>
+      </SaasMarketingShell>
     );
   }
 
   const steps = ['Structure', 'Contact', 'Projet'];
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <Header variant="home" showNav={false} />
-      <main className="flex-1 py-10 px-4">
+    <SaasMarketingShell>
+      <div className="py-10 px-4 md:py-14">
         <div className="max-w-xl mx-auto space-y-6">
           <div>
-            <Link href="/saas" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
+            <Link
+              href="/saas"
+              className="text-sm text-orange-600 hover:text-orange-700 hover:underline inline-flex items-center gap-1"
+            >
               <ArrowLeft className="h-4 w-4" />
               Plateforme Ada Papers
             </Link>
-            <h1 className="text-2xl sm:text-3xl font-bold mt-3">Demander un espace dédié</h1>
-            <p className="text-sm text-muted-foreground mt-2">
-              Cabinets d&apos;avocats, cabinets de conseil, associations ou structures
-              d&apos;accompagnement : décrivez votre organisation pour obtenir un environnement Ada
-              Papers.
+            <h1 className="text-2xl sm:text-3xl font-bold mt-3 text-slate-900">
+              Demander un espace organisation
+            </h1>
+            <p className="text-sm text-slate-600 mt-2">
+              Décrivez votre structure pour obtenir un environnement Ada Papers dédié (droit des
+              étrangers, accompagnement juridique, conseil ou association).
             </p>
           </div>
 
@@ -146,12 +143,12 @@ export default function DevenirCabinetPage() {
             {steps.map((label, i) => (
               <div
                 key={label}
-                className={`flex-1 h-1 rounded ${i <= step ? 'bg-primary' : 'bg-gray-200'}`}
+                className={`flex-1 h-1 rounded ${i <= step ? 'bg-orange-500' : 'bg-slate-200'}`}
                 title={label}
               />
             ))}
           </div>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-slate-500">
             Étape {step + 1} / {steps.length} — {steps[step]}
           </p>
 
@@ -161,13 +158,13 @@ export default function DevenirCabinetPage() {
             </div>
           )}
 
-          <div className="bg-white border rounded-xl p-6 shadow-sm space-y-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
             {step === 0 && (
               <>
                 <label className="block text-sm">
-                  <span className="font-medium">Type de structure</span>
+                  <span className="font-medium text-slate-800">Type de structure</span>
                   <select
-                    className={inputClass}
+                    className={saasInputClass}
                     value={form.organizationType}
                     onChange={(e) =>
                       setForm({ ...form, organizationType: e.target.value as OrganizationType })
@@ -182,19 +179,19 @@ export default function DevenirCabinetPage() {
                 </label>
                 {isOther && (
                   <label className="block text-sm">
-                    <span className="font-medium">Précisez</span>
+                    <span className="font-medium text-slate-800">Précisez</span>
                     <input
-                      className={inputClass}
+                      className={saasInputClass}
                       value={form.organizationTypeOther}
                       onChange={(e) => setForm({ ...form, organizationTypeOther: e.target.value })}
                     />
                   </label>
                 )}
                 <label className="block text-sm">
-                  <span className="font-medium">Nom de la structure</span>
+                  <span className="font-medium text-slate-800">Nom de la structure</span>
                   <input
                     required
-                    className={inputClass}
+                    className={saasInputClass}
                     value={form.structureName}
                     onChange={(e) => setForm({ ...form, structureName: e.target.value })}
                     placeholder="Ex. Cabinet Dupont, Conseil Horizon…"
@@ -202,9 +199,9 @@ export default function DevenirCabinetPage() {
                 </label>
                 {isLawFirm && (
                   <label className="block text-sm">
-                    <span className="font-medium">Barreau (optionnel)</span>
+                    <span className="font-medium text-slate-800">Barreau (optionnel)</span>
                     <input
-                      className={inputClass}
+                      className={saasInputClass}
                       value={form.barreau}
                       onChange={(e) => setForm({ ...form, barreau: e.target.value })}
                     />
@@ -212,9 +209,9 @@ export default function DevenirCabinetPage() {
                 )}
                 {!isLawFirm && (
                   <label className="block text-sm">
-                    <span className="font-medium">SIRET (optionnel)</span>
+                    <span className="font-medium text-slate-800">SIRET (optionnel)</span>
                     <input
-                      className={inputClass}
+                      className={saasInputClass}
                       value={form.siret}
                       onChange={(e) => setForm({ ...form, siret: e.target.value })}
                     />
@@ -226,36 +223,36 @@ export default function DevenirCabinetPage() {
             {step === 1 && (
               <>
                 <label className="block text-sm">
-                  <span className="font-medium">Personne de contact</span>
+                  <span className="font-medium text-slate-800">Personne de contact</span>
                   <input
                     required
-                    className={inputClass}
+                    className={saasInputClass}
                     value={form.contactName}
                     onChange={(e) => setForm({ ...form, contactName: e.target.value })}
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="font-medium">Email professionnel</span>
+                  <span className="font-medium text-slate-800">Email professionnel</span>
                   <input
                     type="email"
                     required
-                    className={inputClass}
+                    className={saasInputClass}
                     value={form.contactEmail}
                     onChange={(e) => setForm({ ...form, contactEmail: e.target.value })}
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="font-medium">Téléphone (optionnel)</span>
+                  <span className="font-medium text-slate-800">Téléphone (optionnel)</span>
                   <input
-                    className={inputClass}
+                    className={saasInputClass}
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="font-medium">Ville (optionnel)</span>
+                  <span className="font-medium text-slate-800">Ville (optionnel)</span>
                   <input
-                    className={inputClass}
+                    className={saasInputClass}
                     value={form.city}
                     onChange={(e) => setForm({ ...form, city: e.target.value })}
                   />
@@ -266,9 +263,9 @@ export default function DevenirCabinetPage() {
             {step === 2 && (
               <>
                 <label className="block text-sm">
-                  <span className="font-medium">Effectif estimé</span>
+                  <span className="font-medium text-slate-800">Effectif estimé</span>
                   <select
-                    className={inputClass}
+                    className={saasInputClass}
                     value={form.teamSize}
                     onChange={(e) => setForm({ ...form, teamSize: e.target.value })}
                   >
@@ -281,37 +278,39 @@ export default function DevenirCabinetPage() {
                   </select>
                 </label>
                 <label className="block text-sm">
-                  <span className="font-medium">Domaine d&apos;activité principal (optionnel)</span>
+                  <span className="font-medium text-slate-800">
+                    Domaine d&apos;activité principal (optionnel)
+                  </span>
                   <input
-                    className={inputClass}
+                    className={saasInputClass}
                     value={form.practiceArea}
                     onChange={(e) => setForm({ ...form, practiceArea: e.target.value })}
                     placeholder="Ex. droit des étrangers, conseil RH…"
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="font-medium">Identifiant souhaité (slug, optionnel)</span>
+                  <span className="font-medium text-slate-800">Identifiant souhaité (slug, optionnel)</span>
                   <input
-                    className={`${inputClass} font-mono`}
+                    className={`${saasInputClass} font-mono`}
                     value={form.desiredSlug}
                     onChange={(e) => setForm({ ...form, desiredSlug: e.target.value })}
-                    placeholder="cabinet-exemple"
+                    placeholder="org-exemple"
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="font-medium">Domaines web souhaités (optionnel)</span>
+                  <span className="font-medium text-slate-800">Domaines web souhaités (optionnel)</span>
                   <textarea
-                    className={inputClass}
+                    className={saasInputClass}
                     rows={2}
                     value={form.desiredDomains}
                     onChange={(e) => setForm({ ...form, desiredDomains: e.target.value })}
-                    placeholder="exemple.adapapers.fr&#10;exemple.localhost"
+                    placeholder="exemple.adapapers.fr"
                   />
                 </label>
                 <label className="block text-sm">
-                  <span className="font-medium">Message (optionnel)</span>
+                  <span className="font-medium text-slate-800">Message (optionnel)</span>
                   <textarea
-                    className={inputClass}
+                    className={saasInputClass}
                     rows={3}
                     value={form.message}
                     onChange={(e) => setForm({ ...form, message: e.target.value })}
@@ -327,17 +326,17 @@ export default function DevenirCabinetPage() {
                   autoComplete="off"
                   aria-hidden
                 />
-                <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                <label className="flex items-start gap-2 text-xs text-slate-600">
                   <input
                     type="checkbox"
-                    className="mt-0.5 accent-primary"
+                    className="mt-0.5 accent-orange-500"
                     checked={form.gdprConsent}
                     onChange={(e) => setForm({ ...form, gdprConsent: e.target.checked })}
                   />
                   <span>
                     J&apos;accepte que mes données soient traitées par Ada Papers pour étudier cette
                     demande, conformément à la{' '}
-                    <Link href="/politique-confidentialite" className="text-primary underline">
+                    <Link href="/politique-confidentialite" className="text-orange-600 underline">
                       politique de confidentialité
                     </Link>
                     .
@@ -355,14 +354,14 @@ export default function DevenirCabinetPage() {
                 setError('');
                 setStep((s) => s - 1);
               }}
-              className="px-4 py-2 text-sm border rounded-md disabled:opacity-40"
+              className="px-4 py-2 text-sm border border-slate-300 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40"
             >
               Précédent
             </button>
             {step < 2 ? (
               <button
                 type="button"
-                className={`inline-flex items-center gap-1 px-4 py-2 text-sm rounded-md ${tenantPrimaryButtonClass}`}
+                className={saasPrimaryButtonClass}
                 onClick={() => {
                   const v = validateStep(step);
                   if (v) {
@@ -381,15 +380,14 @@ export default function DevenirCabinetPage() {
                 type="button"
                 disabled={loading}
                 onClick={() => void handleSubmit()}
-                className={`inline-flex items-center gap-1 px-4 py-2 text-sm rounded-md disabled:opacity-50 ${tenantPrimaryButtonClass}`}
+                className={saasPrimaryButtonClass}
               >
                 {loading ? 'Envoi…' : 'Envoyer la demande'}
               </button>
             )}
           </div>
         </div>
-      </main>
-      <Footer />
-    </div>
+      </div>
+    </SaasMarketingShell>
   );
 }
