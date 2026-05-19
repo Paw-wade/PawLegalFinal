@@ -1,5 +1,7 @@
 # Ada Papers — Architecture multi-tenant (roadmap & implémentation)
 
+> **Roadmap produit consolidée** : voir [`docs/ROADMAP.md`](docs/ROADMAP.md) (horizons H1–H6, jalons, métier cabinet).
+
 ## Contexte du projet
 
 **Ada Papers** est une application SaaS de gestion de dossiers juridiques (recours, documents, messagerie, rendez-vous, tarification).

@@ -1,6 +1,8 @@
 import api from '@/lib/api';
+import { getMultipartApiBaseUrl } from '@/lib/publicApiUrl';
 import type {
   OrgChecklist,
+  OrganizationSignupRequest,
   PlatformAuditEntry,
   PlatformDashboard,
   PlatformOrganization,
@@ -20,6 +22,32 @@ export const platformAPI = {
     }>('/platform/health'),
 
   dashboard: () => api.get<{ success: boolean } & PlatformDashboard>('/platform/dashboard'),
+
+  signupRequests: {
+    list: (status?: string) => {
+      const q = status ? `?status=${encodeURIComponent(status)}` : '';
+      return api.get<{ success: boolean; requests: OrganizationSignupRequest[] }>(
+        `/platform/signup-requests${q}`
+      );
+    },
+    get: (id: string) =>
+      api.get<{ success: boolean; request: OrganizationSignupRequest }>(
+        `/platform/signup-requests/${id}`
+      ),
+    update: (
+      id: string,
+      data: {
+        status?: OrganizationSignupRequest['status'];
+        rejectReason?: string;
+        internalNotes?: string;
+        organizationSlug?: string;
+      }
+    ) =>
+      api.patch<{ success: boolean; request: OrganizationSignupRequest }>(
+        `/platform/signup-requests/${id}`,
+        data
+      ),
+  },
 
   organizations: {
     list: (includeHealth = true) =>
@@ -84,5 +112,20 @@ export const platformAPI = {
         `/platform/organizations/${slug}/provision-admin`,
         data
       ),
+    uploadBranding: (slug: string, kind: 'logo' | 'favicon', file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('kind', kind);
+      const path = `/platform/organizations/${slug}/branding/upload`;
+      return api.post<{
+        success: boolean;
+        url?: string;
+        kind?: string;
+        message?: string;
+      }>(`${getMultipartApiBaseUrl()}${path}`, formData, {
+        timeout: 120000,
+        headers: {},
+      });
+    },
   },
 };

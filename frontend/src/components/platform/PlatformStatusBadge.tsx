@@ -6,10 +6,10 @@ const styles: Record<OrgStatus, string> = {
   trial: 'bg-amber-100 text-amber-800',
 };
 
-export function PlatformStatusBadge({ status }: { status: OrgStatus }) {
+export function PlatformStatusBadge({ status, label }: { status: OrgStatus; label?: string }) {
   return (
     <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${styles[status] || 'bg-gray-100'}`}>
-      {status}
+      {label || status}
     </span>
   );
 }

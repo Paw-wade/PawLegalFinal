@@ -11,7 +11,7 @@ import { useAutoFillDetection, getRealInputValues } from '@/hooks/useAutoFillDet
 function Button({ children, variant = 'default', className = '', disabled = false, type = 'button', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
   const variantClasses = {
-    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
+    default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md font-semibold',
     outline: 'border-2 border-primary text-primary hover:bg-primary hover:text-white',
     ghost: 'hover:bg-accent hover:text-accent-foreground',
   };

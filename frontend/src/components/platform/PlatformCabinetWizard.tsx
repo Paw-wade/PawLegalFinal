@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { platformAPI } from '@/lib/platform/platformApi';
 import { suggestedDomainsForSlug } from '@/lib/platform/cabinetUrls';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
@@ -20,10 +20,50 @@ const emptyForm = {
 
 export function PlatformCabinetWizard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromRequest = searchParams.get('fromRequest');
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [prefillNote, setPrefillNote] = useState('');
+
+  useEffect(() => {
+    if (!fromRequest) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await platformAPI.signupRequests.get(fromRequest);
+        if (cancelled || !res.data?.success) return;
+        const r = res.data.request;
+        const slug =
+          r.desiredSlug ||
+          `cabinet-${r.structureName
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '')
+            .slice(0, 40)}`;
+        setForm((f) => ({
+          ...f,
+          slug,
+          brandingName: r.structureName,
+          domains: r.desiredDomains || f.domains,
+        }));
+        setPrefillNote(`Pré-rempli depuis la demande de ${r.contactName} (${r.contactEmail}).`);
+        await platformAPI.signupRequests.update(fromRequest, {
+          status: 'in_review',
+          organizationSlug: slug,
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fromRequest]);
 
   const applySuggestedDomains = () => {
     const slug = form.slug.trim().toLowerCase();
@@ -56,6 +96,12 @@ export function PlatformCabinetWizard() {
         },
       });
       if (res.data?.success) {
+        if (fromRequest) {
+          await platformAPI.signupRequests.update(fromRequest, {
+            status: 'approved',
+            organizationSlug: slug,
+          });
+        }
         router.push(`/platform/cabinets/${slug}`);
       }
     } catch (e: unknown) {
@@ -77,6 +123,7 @@ export function PlatformCabinetWizard() {
         </Link>
         <h1 className="text-2xl font-bold mt-2">Nouveau cabinet</h1>
         <p className="text-sm text-gray-600">Étape {step + 1} / {steps.length} — {steps[step]}</p>
+        {prefillNote && <p className="text-xs text-primary mt-1">{prefillNote}</p>}
       </div>
 
       <div className="flex gap-1">

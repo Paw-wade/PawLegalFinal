@@ -126,6 +126,35 @@ export const PLATFORM_MODULE_OPTIONS = [
   'lexia',
 ] as const;
 
+export type OrganizationSignupRequest = {
+  id: string;
+  status: 'pending' | 'in_review' | 'approved' | 'rejected';
+  statusLabel: string;
+  organizationType: string;
+  organizationTypeLabel: string;
+  organizationTypeOther: string;
+  structureName: string;
+  contactName: string;
+  contactEmail: string;
+  phone: string;
+  city: string;
+  barreau: string;
+  siret: string;
+  teamSize: string;
+  teamSizeLabel: string;
+  practiceArea: string;
+  desiredSlug: string;
+  desiredDomains: string;
+  message: string;
+  organizationSlug: string;
+  reviewedBy: string;
+  reviewedAt: string | null;
+  rejectReason: string;
+  internalNotes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
   create: 'Création',
   update: 'Modification',
@@ -133,4 +162,6 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   reactivate: 'Réactivation',
   delete_permanent: 'Suppression définitive',
   provision_admin: 'Admin provisionné',
+  branding_upload: 'Upload branding',
+  signup_request_update: 'Demande organisation',
 };

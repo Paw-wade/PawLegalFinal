@@ -1,7 +1,7 @@
 import {
   ADAPAPERS_PRIMARY_HEX,
   ADAPAPERS_PRIMARY_HSL,
-  useUnifiedPublicBranding,
+  usesAdaPapersUnifiedBranding,
 } from './unifiedBranding';
 
 /** Convertit #RRGGBB en composantes HSL pour variables Tailwind `--primary`. */
@@ -40,10 +40,13 @@ export function hexToHslComponents(hex: string): string | null {
   return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
-export function applyTenantBrandingCss(branding?: { primaryColor?: string; name?: string }) {
+export function applyTenantBrandingCss(
+  branding?: { primaryColor?: string; name?: string },
+  slug?: string | null
+) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  const unified = useUnifiedPublicBranding();
+  const unified = usesAdaPapersUnifiedBranding(slug);
   const color = unified
     ? ADAPAPERS_PRIMARY_HEX
     : branding?.primaryColor?.trim();

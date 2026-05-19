@@ -8,6 +8,11 @@ import { userAPI } from '@/lib/api';
 import { NotificationBadge } from '@/components/NotificationBadge';
 import { useCmsText } from '@/lib/contentClient';
 import { useTenant } from '@/components/TenantProvider';
+import { resolveBrandingAssetUrl } from '@/lib/tenant/resolveBrandingAssetUrl';
+import {
+  ADA_PAPERS_PUBLIC_BRAND_NAME,
+  usesAdaPapersUnifiedBranding,
+} from '@/lib/tenant/unifiedBranding';
 import Image from 'next/image';
 
 // Composant Button simplifié
@@ -25,7 +30,7 @@ function Button({
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
   
   const variantClasses = {
-    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
+    default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md font-semibold',
     outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
     ghost: 'hover:bg-accent hover:text-accent-foreground',
     link: 'text-primary underline-offset-4 hover:underline',
@@ -71,9 +76,12 @@ interface HeaderProps {
 
 export function Header({ variant = 'home', showNav = true, navItems, onMenuClick }: HeaderProps) {
   const { data: session, status } = useSession();
-  const { branding } = useTenant();
-  const brandName = branding?.name?.trim() || 'Ada Papers';
-  const brandLogo = branding?.logo?.trim();
+  const { branding, slug } = useTenant();
+  const unifiedBrand = usesAdaPapersUnifiedBranding(slug);
+  const brandName = unifiedBrand
+    ? ADA_PAPERS_PUBLIC_BRAND_NAME
+    : branding?.name?.trim() || ADA_PAPERS_PUBLIC_BRAND_NAME;
+  const brandLogo = unifiedBrand ? '' : resolveBrandingAssetUrl(branding?.logo);
   const router = useRouter();
   const pathname = usePathname();
   const [userInfo, setUserInfo] = useState<{
@@ -364,7 +372,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                       unoptimized
                     />
                   ) : null}
-                  <span className="truncate text-orange-500">{brandName}</span>
+                  <span className="truncate text-primary">{brandName}</span>
                 </Link>
                 <div className="hidden md:block h-4 w-px bg-gray-300 flex-shrink-0" />
                 <p className="hidden md:inline text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
@@ -408,7 +416,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
             </Link>
             <Link
               href="/calculateur"
-              className="px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 bg-orange-500 text-white hover:bg-orange-600 shadow-sm font-semibold"
+              className="px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm font-semibold"
             >
               Calculateur
             </Link>
@@ -466,11 +474,11 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                     onClick={(e) => handleNavClick(e, item)}
                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
                       (item as any).active
-                        ? 'bg-orange-500 text-white shadow-sm'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
                         : item.highlight && item.href === '/client'
                         ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-sm font-semibold'
                         : item.highlight
-                        ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm font-semibold'
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm font-semibold'
                         : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
                     }`}
                   >
@@ -512,7 +520,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                     <button
                       type="button"
                       onClick={handleDashboardClick}
-                      className="text-xs font-semibold text-gray-900 hover:text-orange-500 transition-colors cursor-pointer block leading-tight truncate text-right w-full"
+                      className="text-xs font-semibold text-gray-900 hover:text-primary transition-colors cursor-pointer block leading-tight truncate text-right w-full"
                     >
                       {userName || 'Utilisateur'}
                     </button>
@@ -589,7 +597,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               <Link
                 href="/calculateur"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3.5 rounded-xl text-base font-medium bg-orange-500 text-white hover:bg-orange-600 active:bg-orange-700 transition-colors min-h-[48px] flex items-center"
+                className="px-4 py-3.5 rounded-xl text-base font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:opacity-80 transition-colors min-h-[48px] flex items-center"
               >
                 Calculateur
               </Link>

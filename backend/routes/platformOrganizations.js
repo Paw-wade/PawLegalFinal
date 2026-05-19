@@ -12,6 +12,10 @@ const { checkTenantOrgHealth } = require('../lib/platform/tenantOrgHealth');
 const { provisionTenantAdmin } = require('../lib/platform/provisionTenantAdmin');
 const { listTenantUsers } = require('../lib/platform/listTenantUsers');
 const { logPlatformAudit, auditActor } = require('../lib/platform/platformAudit');
+const {
+  createPlatformBrandingUpload,
+  resolvePlatformBrandingPublicUrl,
+} = require('../lib/platform/platformBrandingUpload');
 
 const router = express.Router();
 
@@ -138,6 +142,85 @@ router.get('/:slug/dns-checklist', async (req, res) => {
     const checklist = await buildOrgChecklist(org);
     res.json({ success: true, checklist });
   } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'Erreur serveur' });
+  }
+});
+
+router.post('/:slug/branding/upload', async (req, res) => {
+  const slug = req.params.slug.toLowerCase();
+  try {
+    const Organization = getOrganizationModel();
+    const org = await Organization.findOne({ slug });
+    if (!org) {
+      return res.status(404).json({ success: false, message: 'Cabinet introuvable' });
+    }
+
+    let upload;
+    try {
+      upload = createPlatformBrandingUpload(slug);
+    } catch (err) {
+      return res.status(400).json({ success: false, message: err.message || 'Slug invalide' });
+    }
+
+    upload.single('file')(req, res, async (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({
+            success: false,
+            message: 'Fichier trop volumineux (max. 5 Mo).',
+          });
+        }
+        return res.status(400).json({
+          success: false,
+          message: err.message || 'Téléversement impossible',
+        });
+      }
+
+      try {
+        if (!req.file) {
+          return res.status(400).json({
+            success: false,
+            message: 'Aucun fichier. Utilisez le champ « file ».',
+          });
+        }
+
+        const kind = String(req.body?.kind || req.query?.kind || '')
+          .trim()
+          .toLowerCase();
+        if (kind !== 'logo' && kind !== 'favicon') {
+          return res.status(400).json({
+            success: false,
+            message: 'Paramètre kind requis : logo ou favicon',
+          });
+        }
+
+        const url = resolvePlatformBrandingPublicUrl(req.file, slug);
+        const actor = auditActor(req);
+        await logPlatformAudit({
+          action: 'branding_upload',
+          orgSlug: slug,
+          orgId: String(org._id),
+          actorEmail: actor.email,
+          actorId: actor.id,
+          details: { kind, url },
+        });
+
+        res.status(201).json({
+          success: true,
+          url,
+          kind,
+          message: 'Fichier téléversé. Enregistrez le cabinet pour appliquer le branding.',
+        });
+      } catch (innerErr) {
+        console.error('platform branding upload:', innerErr);
+        res.status(500).json({
+          success: false,
+          message: innerErr.message || 'Erreur serveur',
+        });
+      }
+    });
+  } catch (err) {
+    console.error('platform POST branding/upload:', err);
     res.status(500).json({ success: false, message: err.message || 'Erreur serveur' });
   }
 });

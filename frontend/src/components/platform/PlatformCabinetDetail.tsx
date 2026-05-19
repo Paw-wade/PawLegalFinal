@@ -15,6 +15,7 @@ import {
 import { cabinetAdminUrl, cabinetDevUrl, cabinetSignInUrl } from '@/lib/platform/cabinetUrls';
 import { PlatformStatusBadge } from './PlatformStatusBadge';
 import { PlatformCabinetUsersPanel } from './PlatformCabinetUsersPanel';
+import { PlatformBrandingEditor } from './PlatformBrandingEditor';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -429,41 +430,16 @@ export function PlatformCabinetDetail({ slug }: Props) {
         )}
 
         {tab === 'branding' && (
-          <div className="grid sm:grid-cols-2 gap-4">
-            <label className="block text-sm sm:col-span-2">
-              <span className="font-medium">Nom</span>
-              <input
-                className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
-                value={form.brandingName}
-                onChange={(e) => setForm({ ...form, brandingName: e.target.value })}
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="font-medium">Couleur</span>
-              <input
-                type="color"
-                className="mt-1 h-10 w-full border rounded-md"
-                value={form.primaryColor}
-                onChange={(e) => setForm({ ...form, primaryColor: e.target.value })}
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="font-medium">Logo URL</span>
-              <input
-                className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
-                value={form.logo}
-                onChange={(e) => setForm({ ...form, logo: e.target.value })}
-              />
-            </label>
-            <label className="block text-sm sm:col-span-2">
-              <span className="font-medium">Favicon URL</span>
-              <input
-                className="mt-1 w-full border rounded-md px-3 py-2 text-sm"
-                value={form.favicon}
-                onChange={(e) => setForm({ ...form, favicon: e.target.value })}
-              />
-            </label>
-          </div>
+          <PlatformBrandingEditor
+            slug={slug}
+            value={{
+              brandingName: form.brandingName,
+              primaryColor: form.primaryColor,
+              logo: form.logo,
+              favicon: form.favicon,
+            }}
+            onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+          />
         )}
 
         {tab === 'email' && (

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
-import { LayoutDashboard, LogOut, Server } from 'lucide-react';
+import { ClipboardList, LayoutDashboard, LogOut, Server } from 'lucide-react';
 import { PLATFORM_SIGNIN_PATH } from '@/lib/auth/platformSession';
 import { clsx } from 'clsx';
 import { PlatformConsoleBrand } from './PlatformConsoleBrand';
@@ -11,6 +11,7 @@ import { PlatformConsoleBrand } from './PlatformConsoleBrand';
 const nav = [
   { href: '/platform', label: 'Tableau de bord', icon: LayoutDashboard, exact: true },
   { href: '/platform/cabinets', label: 'Cabinets', icon: Server, exact: false },
+  { href: '/platform/demandes-organisations', label: 'Demandes', icon: ClipboardList, exact: false },
 ];
 
 export function PlatformShell({ children }: { children: React.ReactNode }) {

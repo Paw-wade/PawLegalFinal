@@ -39,14 +39,34 @@ async function main() {
   console.log(`\n🏢 Organisation : ${org.slug}`);
   console.log(`   mongoUri (maître) : ${maskUri(org.mongoUri)}`);
 
-  const envDupont = process.env.TENANT_DUPONT_MONGODB_URI || process.env.TENANT_DUPONT_URI;
-  if (slug === 'cabinet-dupont' && envDupont && org.mongoUri !== envDupont.trim()) {
-    console.warn('\n⚠️  mongoUri en base maître ≠ TENANT_DUPONT_MONGODB_URI du .env');
-    console.warn(`   .env : ${maskUri(envDupont)}`);
-    console.warn('   → npm run seed:master-orgs puis redémarrer le serveur');
+  const envBySlug = {
+    'cabinet-dupont': process.env.TENANT_DUPONT_MONGODB_URI || process.env.TENANT_DUPONT_URI,
+    'cabinet-martin': process.env.TENANT_MARTIN_MONGODB_URI || process.env.TENANT_MARTIN_URI,
+    'cabinet-wadepaw':
+      process.env.TENANT_WADEPAW_MONGODB_URI || process.env.TENANT_WADEPAW_URI,
+  };
+  const envUri = envBySlug[slug]?.trim();
+
+  if (envUri && org.mongoUri?.trim() !== envUri) {
+    console.warn('\n⚠️  mongoUri en base maître ≠ variable .env pour ce cabinet');
+    console.warn(`   .env : ${maskUri(envUri)}`);
+    console.warn(`   → node scripts/syncTenantMongoFromEnv.js ${slug}`);
   }
 
-  const conn = await mongoose.createConnection(org.mongoUri).asPromise();
+  let connectUri = org.mongoUri;
+  let conn;
+  try {
+    conn = await mongoose.createConnection(connectUri).asPromise();
+  } catch (err) {
+    const authFailed = /authentication failed|bad auth/i.test(String(err.message || ''));
+    if (authFailed && envUri && envUri !== org.mongoUri?.trim()) {
+      console.warn('\n⚠️  Échec avec l’URI en base maître — nouvel essai avec le .env…');
+      connectUri = envUri;
+      conn = await mongoose.createConnection(connectUri).asPromise();
+    } else {
+      throw err;
+    }
+  }
   const User = getUserModel(conn);
   const user = await User.findOne({ email }).select('+password');
 

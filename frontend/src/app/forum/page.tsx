@@ -260,7 +260,7 @@ export default function ForumPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Chercher un mot-clé (titre, contenu, réponse...)"
-                className="w-full pl-9 pr-3 py-2 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                className="w-full pl-9 pr-3 py-2 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-white"
               />
             </div>
             <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500">
@@ -350,7 +350,7 @@ export default function ForumPage() {
                         type="text"
                         value={guestName}
                         onChange={(e) => setGuestName(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
                         placeholder="Ex. : Awa"
                         maxLength={120}
                       />
@@ -369,7 +369,7 @@ export default function ForumPage() {
                         setTheme(e.target.value as ForumThemeValue);
                         setCreateStep((s) => Math.max(s, 1));
                       }}
-                      className="flex-1 min-w-[180px] rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                      className="flex-1 min-w-[180px] rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary bg-white"
                       required
                       aria-label="Choisir le thème de la discussion"
                     >
@@ -393,7 +393,7 @@ export default function ForumPage() {
                           setTitle(e.target.value);
                           setCreateStep((s) => (e.target.value.trim() ? Math.max(s, 2) : s));
                         }}
-                        className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
                         placeholder="Ex. : Question sur le renouvellement"
                         maxLength={200}
                       />
@@ -409,7 +409,7 @@ export default function ForumPage() {
                           id="forum-body"
                           value={body}
                           onChange={(e) => setBody(e.target.value)}
-                          className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 min-h-[80px]"
+                          className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary min-h-[80px]"
                           placeholder="Décrivez votre situation (sans données sensibles)."
                         />
                       </div>
@@ -420,7 +420,7 @@ export default function ForumPage() {
                         <button
                           type="submit"
                           disabled={creating || !title.trim() || !body.trim() || !theme}
-                          className="inline-flex items-center justify-center px-3 py-1.5 rounded-md bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                          className="inline-flex items-center justify-center px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                         >
                           {creating ? 'Publication...' : 'Publier'}
                         </button>
@@ -436,7 +436,7 @@ export default function ForumPage() {
               <button
                 type="button"
                 onClick={() => setFilterTheme(null)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterTheme === null ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterTheme === null ? 'bg-primary text-primary-foreground' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
               >
                 Tous
               </button>
@@ -445,7 +445,7 @@ export default function ForumPage() {
                   key={t.value}
                   type="button"
                   onClick={() => setFilterTheme(t.value)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterTheme === t.value ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterTheme === t.value ? 'bg-primary text-primary-foreground' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                 >
                   {t.label}
                 </button>
@@ -460,7 +460,7 @@ export default function ForumPage() {
                   key={s.value}
                   type="button"
                   onClick={() => setFilterStatus(s.value)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterStatus === s.value ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterStatus === s.value ? 'bg-primary text-primary-foreground' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                 >
                   {s.label}
                 </button>

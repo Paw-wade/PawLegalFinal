@@ -123,8 +123,16 @@ try {
 }
 
 try {
+  app.use('/api/public/organization-signup', require('./routes/publicOrganizationSignup'));
+  console.log('✅ Route /api/public/organization-signup enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/public/organization-signup:', e.message);
+}
+
+try {
   app.use('/api/platform', require('./routes/platform'));
   app.use('/api/platform/organizations', require('./routes/platformOrganizations'));
+  app.use('/api/platform/signup-requests', require('./routes/platformSignupRequests'));
   console.log('✅ Routes /api/platform enregistrées (console Ada Papers)');
 } catch (e) {
   console.error('❌ Impossible d\'enregistrer /api/platform:', e.message);

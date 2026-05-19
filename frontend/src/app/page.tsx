@@ -31,7 +31,7 @@ function Button({
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
   
   const variantClasses = {
-    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
+    default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md font-semibold',
     outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
     ghost: 'hover:bg-accent hover:text-accent-foreground',
     link: 'text-primary underline-offset-4 hover:underline',
@@ -106,7 +106,7 @@ function ExpandableItem({
 
 export default function HomePage() {
   const { data: session } = useSession();
-  const { landingPage } = useTenant();
+  const { landingPage, slug } = useTenant();
   const [temoignages, setTemoignages] = useState<any[]>([]);
   const [loadingTemoignages, setLoadingTemoignages] = useState(true);
   const [isVisible, setIsVisible] = useState<{ [key: string]: boolean }>({});
@@ -151,7 +151,7 @@ export default function HomePage() {
     "Suivez en temps réel l'évolution de votre dossier"
   );
 
-  const useTenantLanding = shouldApplyTenantLandingCopy();
+  const useTenantLanding = shouldApplyTenantLandingCopy(slug);
   const tenantHeadline = useTenantLanding ? landingPage?.headline?.trim() : '';
   const tenantSubheadline = useTenantLanding ? landingPage?.subheadline?.trim() : '';
   const tenantCtaPrimary = useTenantLanding ? landingPage?.cta?.trim() : '';
@@ -330,7 +330,7 @@ export default function HomePage() {
                 </Link>
                 <Link
                   href="/calculateur"
-                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-white bg-orange-500 hover:bg-orange-600 whitespace-nowrap"
+                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-primary-foreground bg-primary hover:bg-primary/90 whitespace-nowrap"
                 >
                   Calculateur
                 </Link>
@@ -343,10 +343,10 @@ export default function HomePage() {
       {/* Hero Section — design renforcé, padding mobile */}
       <section className="relative min-h-[80vh] sm:min-h-[85vh] flex items-center py-12 sm:py-20 lg:py-28 overflow-hidden">
         {/* Fond : dégradé doux + formes organiques */}
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-50/90 via-white to-orange-50/60" />
+        <div className="absolute inset-0 bg-gradient-to-br from-amber-50/90 via-white to-primary/5" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_70%_20%,rgba(249,115,22,0.12),transparent)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_20%_80%,rgba(251,146,60,0.08),transparent)]" />
-        <div className="absolute top-1/4 right-0 w-[500px] h-[500px] rounded-full bg-orange-200/20 blur-[100px] pointer-events-none" />
+        <div className="absolute top-1/4 right-0 w-[500px] h-[500px] rounded-full bg-primary/20 blur-[100px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-amber-100/30 blur-[80px] pointer-events-none" />
         
         <div className="w-full max-w-[100vw] container mx-auto px-3 sm:px-4 relative z-10">
@@ -358,7 +358,7 @@ export default function HomePage() {
                 {displayHeroHighlight ? (
                   <>
                     {' '}
-                    <span className="text-orange-500">{displayHeroHighlight}</span>
+                    <span className="text-primary">{displayHeroHighlight}</span>
                   </>
                 ) : null}
               </h1>
@@ -392,7 +392,7 @@ export default function HomePage() {
                   <Button 
                     variant="outline" 
                     size="lg"
-                    className="min-w-[180px] border-2 border-gray-300 text-gray-700 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/50 transition-all duration-200"
+                    className="min-w-[180px] border-2 border-gray-300 text-gray-700 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all duration-200"
                   >
                     {heroCtaSecondaryLabel}
                   </Button>
@@ -474,8 +474,8 @@ export default function HomePage() {
               })}
 
               {/* Dégradé et cadre décoratif */}
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-black/5 via-transparent to-orange-500/10" />
-              <div className="pointer-events-none absolute -inset-1 rounded-[2rem] border border-orange-500/20" />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-black/5 via-transparent to-primary/10" />
+              <div className="pointer-events-none absolute -inset-1 rounded-[2rem] border border-primary/20" />
 
               {/* Indicateurs de slide */}
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
@@ -486,7 +486,7 @@ export default function HomePage() {
                     onClick={() => setCurrentSlide(index)}
                     className={`h-2.5 rounded-full transition-all duration-300 ${
                       index === currentSlide
-                        ? 'w-6 bg-orange-500'
+                        ? 'w-6 bg-primary'
                         : 'w-2.5 bg-white/70 hover:bg-white'
                     }`}
                     aria-label={`Afficher l'image ${index + 1}`}
@@ -520,7 +520,7 @@ export default function HomePage() {
             <div className={`mb-8 transition-all duration-700 ${
               isVisible['services-section-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
-              <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-3">
+              <span className="inline-block text-xs font-semibold uppercase tracking-wider text-primary mb-3">
                 Solutions
               </span>
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-3 text-gray-900 leading-tight">
@@ -543,7 +543,7 @@ export default function HomePage() {
                     onMouseEnter={() => setSelectedSolutionIndex(index)}
                     className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                       selectedSolutionIndex === index
-                        ? 'bg-white border border-orange-400 text-orange-700 font-semibold shadow-sm'
+                        ? 'bg-white border border-primary text-primary font-semibold shadow-sm'
                         : 'bg-transparent border border-transparent text-gray-700 hover:bg-white hover:border-gray-200'
                     }`}
                   >
@@ -792,7 +792,7 @@ export default function HomePage() {
             <div className={`mb-6 text-center transition-all duration-700 ${
               isVisible['plateforme-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
-              <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
+              <span className="inline-block text-xs font-semibold uppercase tracking-wider text-primary mb-4">
                 La plateforme
               </span>
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900">
@@ -818,11 +818,11 @@ export default function HomePage() {
                     onFocus={() => setHoveredPlateformeIndex(index)}
                     className={`w-full flex items-start gap-2.5 rounded-lg px-3 py-1.5 text-sm text-left transition-colors ${
                       hoveredPlateformeIndex === index
-                        ? 'bg-white border border-orange-200 shadow-sm'
+                        ? 'bg-white border border-primary/30 shadow-sm'
                         : 'bg-transparent border border-transparent hover:bg-white/60'
                     }`}
                   >
-                    <span className="mt-0.5 h-6 w-6 flex items-center justify-center rounded-full bg-orange-50 text-orange-500 text-xs font-semibold">
+                    <span className="mt-0.5 h-6 w-6 flex items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
                       {index + 1}
                     </span>
                     <p className="font-medium text-gray-800">{label}</p>
@@ -911,7 +911,7 @@ export default function HomePage() {
             data-animate-item
             data-animate-id="temoignages-title"
           >
-            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-orange-500 mb-4">
+            <span className="inline-block text-xs font-semibold uppercase tracking-wider text-primary mb-4">
               Témoignages
             </span>
             <h2 className={`text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-gray-900 transition-all duration-700 ${
@@ -952,7 +952,7 @@ export default function HomePage() {
                       {[...Array(5)].map((_, i) => (
                         <span
                           key={i}
-                          className={`text-lg ${i < temoignage.note ? 'text-orange-500' : 'text-gray-300'}`}
+                          className={`text-lg ${i < temoignage.note ? 'text-primary' : 'text-gray-300'}`}
                         >
                           ★
                         </span>
@@ -983,7 +983,7 @@ export default function HomePage() {
                         {[...Array(5)].map((_, i) => (
                           <span
                             key={i}
-                            className={`text-lg ${i < temoignage.note ? 'text-orange-500' : 'text-gray-300'}`}
+                            className={`text-lg ${i < temoignage.note ? 'text-primary' : 'text-gray-300'}`}
                           >
                             ★
                           </span>
@@ -1031,7 +1031,7 @@ export default function HomePage() {
       {/* Badge flottant pour ouvrir l'outil de prise de rendez-vous */}
       <Link
         href={lexiaHref}
-        className="fixed bottom-24 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:bg-orange-600 hover:shadow-xl md:bottom-6 md:right-6"
+        className="fixed bottom-24 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg transition-all duration-200 hover:bg-primary/90 hover:shadow-xl md:bottom-6 md:right-6"
         aria-label="Accéder à Paw AI"
       >
         <span className="text-base leading-none">⚖️</span>

@@ -10,6 +10,11 @@ import {
   type ReactNode,
 } from 'react';
 import { applyTenantBrandingCss } from '@/lib/tenant/brandingCss';
+import { resolveBrandingAssetUrl } from '@/lib/tenant/resolveBrandingAssetUrl';
+import {
+  ADA_PAPERS_PUBLIC_BRAND_NAME,
+  usesAdaPapersUnifiedBranding,
+} from '@/lib/tenant/unifiedBranding';
 import { fetchTenantConfig } from '@/lib/tenant/fetchTenantConfig';
 import { persistTenantSlug } from '@/lib/tenantSlug';
 import type { TenantOrganization } from '@/lib/tenant/types';
@@ -52,12 +57,17 @@ export default function TenantProvider({ children }: { children: ReactNode }) {
       if (data.organization?.slug) {
         persistTenantSlug(data.organization.slug);
       }
-      applyTenantBrandingCss(data.organization?.branding);
-      const name = data.organization?.branding?.name;
-      if (name && typeof document !== 'undefined') {
-        document.title = name;
+      const slug = data.organization?.slug ?? null;
+      const unified = usesAdaPapersUnifiedBranding(slug);
+      applyTenantBrandingCss(data.organization?.branding, slug);
+      if (typeof document !== 'undefined') {
+        document.title = unified
+          ? ADA_PAPERS_PUBLIC_BRAND_NAME
+          : data.organization?.branding?.name?.trim() || ADA_PAPERS_PUBLIC_BRAND_NAME;
       }
-      const favicon = data.organization?.branding?.favicon;
+      const favicon = unified
+        ? ''
+        : resolveBrandingAssetUrl(data.organization?.branding?.favicon);
       if (favicon && typeof document !== 'undefined') {
         let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
         if (!link) {

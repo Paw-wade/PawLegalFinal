@@ -8,7 +8,7 @@ function Button({ children, variant = 'default', className = '', ...props }: any
   const baseClasses =
     'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
   const variantClasses: Record<string, string> = {
-    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
+    default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md font-semibold',
     outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
     ghost: 'hover:bg-accent hover:text-accent-foreground',
   };
@@ -114,7 +114,7 @@ export default function ForgotPasswordPage() {
           <div className="text-center mb-6">
             <Link href="/" className="inline-block">
               <div className="flex flex-col items-center">
-                <span className="text-3xl font-bold text-orange-500 hover:text-orange-600 transition-colors">
+                <span className="text-3xl font-bold text-primary hover:opacity-90 transition-colors">
                   Ada Papers
                 </span>
                 <p className="text-[10px] text-muted-foreground font-medium mt-1">

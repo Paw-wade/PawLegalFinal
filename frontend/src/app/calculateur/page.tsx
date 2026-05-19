@@ -14,7 +14,7 @@ import jsPDF from 'jspdf';
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
   const variantClasses = {
-    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
+    default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md font-semibold',
     outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
     ghost: 'hover:bg-accent hover:text-accent-foreground',
   };
@@ -2251,7 +2251,7 @@ export default function CalculateurPage() {
                       return null;
                     } else if (moisRestants < 5) {
                       return (
-                        <div className="mt-4 p-3.5 bg-orange-50 border border-orange-200 rounded-xl">
+                        <div className="mt-4 p-3.5 bg-orange-50 border border-primary/30 rounded-xl">
                           <div className="flex-1">
                             <p className="text-xs font-bold text-orange-900 mb-1.5">Expiration proche</p>
                             <p className="text-[11px] text-orange-800 leading-relaxed">
@@ -3073,7 +3073,7 @@ export default function CalculateurPage() {
 
                       {/* Détails RAPO - seulement si aucun RAPO n'a été déposé */}
                       {!calculs.erreur && !calculs.demandeRapo && calculs.dateDebutRapo && calculs.dateLimiteRapo && !formData.dateDepotRapo && (
-                        <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                        <div className="bg-orange-50 rounded-lg p-4 border border-primary/30">
                           <h4 className="font-semibold text-sm text-orange-800 mb-2">Détails RAPO</h4>
                           <div className="text-xs space-y-1">
                             <p><strong>Début possible :</strong> {formatDateCourte(calculs.dateDebutRapo)}</p>
@@ -3342,7 +3342,7 @@ export default function CalculateurPage() {
 
                         {/* Si Non : Message d'invitation */}
                         {formData.renouvellementDepose === false && (
-                          <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                          <div className="bg-orange-50 rounded-lg p-4 border border-primary/30">
                             <p className="text-sm text-orange-800 font-semibold mb-2">📋 Action requise</p>
                             <p className="text-sm text-orange-700 mb-2">
                               Nous vous invitons à déposer immédiatement votre demande de renouvellement. 
@@ -3454,7 +3454,7 @@ export default function CalculateurPage() {
                         <Button
                           variant="default"
                           onClick={isAuthenticated ? genererPDFRenouvellement : () => router.push('/auth/signin')}
-                          className="bg-orange-500 hover:bg-orange-600 text-white"
+                          className="bg-primary hover:bg-primary/90 text-primary-foreground"
                         >
                           {isAuthenticated ? '📄 Télécharger le rapport PDF' : 'Se connecter pour télécharger le rapport PDF'}
                         </Button>
@@ -3617,7 +3617,7 @@ export default function CalculateurPage() {
 
                         {/* Si Non : Message d'invitation */}
                         {formData.renouvellementDepose === false && (
-                          <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                          <div className="bg-orange-50 rounded-lg p-4 border border-primary/30">
                             <p className="text-sm text-orange-800 font-semibold mb-2">📋 Action requise</p>
                             <p className="text-sm text-orange-700 mb-2">
                               Nous vous invitons à déposer immédiatement votre première demande de titre de séjour. 
@@ -3729,7 +3729,7 @@ export default function CalculateurPage() {
                         <Button
                           variant="default"
                           onClick={genererPDFPremiereDemande}
-                          className="bg-orange-500 hover:bg-orange-600 text-white"
+                          className="bg-primary hover:bg-primary/90 text-primary-foreground"
                         >
                           📄 Télécharger le rapport PDF
                         </Button>
@@ -3886,7 +3886,7 @@ export default function CalculateurPage() {
                     </ul>
                   </div>
 
-                  <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                  <div className="bg-orange-50 rounded-lg p-4 border border-primary/30">
                     <h3 className="font-semibold mb-2 text-orange-800">Délais légaux</h3>
                     <ul className="space-y-2 text-sm text-orange-700">
                       <li>

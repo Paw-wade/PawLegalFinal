@@ -436,7 +436,7 @@ export default function ForumThreadPage() {
           <div className="mb-4">
             <Link
               href="/forum"
-              className="text-xs text-orange-600 hover:underline"
+              className="text-xs text-primary hover:underline"
             >
               ← Retour au forum
             </Link>
@@ -506,7 +506,7 @@ export default function ForumThreadPage() {
                               {session && (
                                 <button
                                   type="button"
-                                  className="inline-flex items-center gap-1 text-[11px] md:text-xs text-orange-700 hover:text-orange-900 hover:underline"
+                                  className="inline-flex items-center gap-1 text-[11px] md:text-xs text-primary hover:text-primary/80 hover:underline"
                                   onClick={async () => {
                                     try {
                                       const res = await forumAPI.toggleBookmarkThread(threadId);
@@ -761,7 +761,7 @@ export default function ForumThreadPage() {
                                         type="button"
                                         disabled={savingPostId === post._id || !editingBody.trim()}
                                         onClick={() => handleAdminSavePostEdit(post._id)}
-                                        className="inline-flex items-center justify-center px-2.5 py-1 rounded-md bg-orange-500 text-white text-[11px] font-medium hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        className="inline-flex items-center justify-center px-2.5 py-1 rounded-md bg-primary text-primary-foreground text-[11px] font-medium hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed"
                                       >
                                         {savingPostId === post._id ? 'Enregistrement...' : 'Enregistrer'}
                                       </button>
@@ -899,7 +899,7 @@ export default function ForumThreadPage() {
                                       <button
                                         type="submit"
                                         disabled={sending || !replyBody.trim()}
-                                        className="inline-flex items-center justify-center px-3 py-1.5 rounded-md bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                                        className="inline-flex items-center justify-center px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                                       >
                                         {sending ? 'Envoi...' : 'Publier'}
                                       </button>
@@ -1021,7 +1021,7 @@ export default function ForumThreadPage() {
                           <button
                             type="submit"
                             disabled={sending || !replyBody.trim()}
-                            className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                            className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                           >
                             {sending ? 'Envoi...' : 'Publier la réponse'}
                           </button>

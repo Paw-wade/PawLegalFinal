@@ -16,6 +16,7 @@
     "test:lexia-sse": "node scripts/testLexiaSseStream.js",
     "sync:google-calendar": "node scripts/backfillGoogleCalendarRdv.js",
     "seed:master-orgs": "node scripts/seedMasterOrganizations.js",
+    "sync:tenant-mongo": "node scripts/syncTenantMongoFromEnv.js",
     "seed:wadepaw-org": "node scripts/seedWadepawLegacyOrganization.js",
     "patch:wadepaw-uri": "node scripts/patchWadepawMongoUri.js",
     "seed:tenants": "node scripts/seedTenants.js",

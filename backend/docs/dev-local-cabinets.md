@@ -39,6 +39,14 @@ Connexion dédiée (séparée du login cabinet / client) :
 
 Prérequis : compte `superadmin` **Ada Papers** — email `*@adapapers.fr` ou liste `PLATFORM_ADMIN_EMAILS` (ex. `wadepaw@gmail.com`). Les superadmins d’un cabinet client (Dupont, etc.) sont **exclus**.
 
+## Demande d’espace organisation (onboarding)
+
+- **Formulaire public :** http://localhost:3004/devenir-cabinet  
+- **API :** `POST /api/public/organization-signup` (base maître, pas le tenant courant)  
+- **Console :** http://localhost:3004/platform/demandes-organisations — traiter la demande puis **Créer l’espace** (wizard pré-rempli)
+
+Types de structure : avocats, conseil, association, institutionnel, autre.
+
 ## Vérifier le cabinet côté API
 
 Réponse HTTP : en-têtes `x-org-slug` et `x-org-id`.
