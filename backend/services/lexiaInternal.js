@@ -3,6 +3,7 @@ const fsp = fs.promises;
 const path = require('path');
 const os = require('os');
 const { getInternalModeLegalFooter } = require('./lexiaLegalCharter');
+const { isPdfTextInsufficient, extractPdfTextWithGemini } = require('./lexiaGeminiOcr');
 
 /** VPS Linux — sans résolution win32 pour éviter `/root/…` → `C:\\root\\…`. */
 const DEFAULT_DIR_POSIX = '/root/adapapers/backend/lexia/CAA';
@@ -349,9 +350,23 @@ async function extractPlainTextFromKnowledgeBuffer(buf, extRaw) {
       case '.pdf': {
         const pdfParse = require('pdf-parse');
         const res = await pdfParse(buf);
-        return String(res.text || '')
+        let text = String(res.text || '')
           .replace(/\u0000/g, ' ')
           .trim();
+        if (isPdfTextInsufficient(text, buf.length)) {
+          const ocr = await extractPdfTextWithGemini(buf);
+          if (ocr.text) {
+            text = ocr.text;
+            if (process.env.NODE_ENV !== 'production') {
+              console.info(
+                `[lexia] PDF complété par OCR Gemini (${text.length} caractères, ${buf.length} octets)`
+              );
+            }
+          } else if (!text && ocr.note) {
+            console.warn(`[lexia] PDF sans texte natif : ${ocr.note}`);
+          }
+        }
+        return text;
       }
       case '.docx': {
         const mammoth = require('mammoth');

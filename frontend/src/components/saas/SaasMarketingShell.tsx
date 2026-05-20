@@ -32,13 +32,16 @@ export function SaasMarketingShell({ children, headerExtra }: Props) {
 
       <footer className="border-t border-slate-200 bg-white py-8 mt-auto">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-center text-sm text-slate-500 sm:flex-row md:px-8">
-          <p>© {new Date().getFullYear()} Ada Papers — Plateforme de gestion juridique</p>
+          <p>© {new Date().getFullYear()} Ada Papers · Plateforme de gestion juridique</p>
           <div className="flex flex-wrap justify-center gap-6">
             <Link href="/saas" className="hover:text-orange-600 transition-colors">
               Plateforme
             </Link>
             <Link href="/devenir-cabinet" className="hover:text-orange-600 transition-colors">
               Demander un espace
+            </Link>
+            <Link href="/contact-commercial" className="hover:text-orange-600 transition-colors">
+              Service commercial
             </Link>
           </div>
         </div>

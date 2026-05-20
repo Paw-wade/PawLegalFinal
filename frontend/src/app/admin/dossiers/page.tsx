@@ -32,6 +32,7 @@ import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { Toast } from '@/components/Toast';
 import { QuickComplementTabsForm } from '@/components/dossiers/QuickComplementTabsForm';
+import { DossierPawAiTrigger } from '@/components/dossiers/DossierPawAiPanel';
 import { isDossierStaffRole, normalizeDossierId, dossierListCardId } from '@/lib/dossierAccess';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
@@ -2879,6 +2880,11 @@ export default function AdminDossiersPage() {
                                   <span className="text-sm leading-none">📌</span>
                                 )}
                               </button>
+                              <DossierPawAiTrigger
+                                dossierId={dossierId}
+                                dossierTitle={dossier.titre}
+                                dossierNumero={dossier.numero || dossier.numeroDossier}
+                              />
                             </div>
                             {(dossier.numero || dossier.numeroDossier) && (
                               <p className="mt-1 text-xs font-mono font-semibold text-muted-foreground">

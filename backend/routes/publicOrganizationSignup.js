@@ -152,7 +152,7 @@ router.post(
         await sendTransactionalEmail({
           to: doc.contactEmail,
           toName: contactName,
-          subject: 'Demande d’espace Ada Papers — accusé de réception',
+          subject: 'Demande d’espace Ada Papers | Accusé de réception',
           htmlContent: `<p>Nous avons bien reçu votre demande pour <strong>${escapeHtml(structureName)}</strong>.</p><p>Notre équipe l’examine et vous recontactera à cette adresse email.</p>`,
           textContent: `Nous avons bien reçu votre demande pour ${structureName}. Notre équipe l'examine et vous recontactera.`,
         });
@@ -169,15 +169,15 @@ router.post(
 <ul>
 <li><strong>Structure :</strong> ${escapeHtml(structureName)}</li>
 <li><strong>Type :</strong> ${escapeHtml(doc.organizationType)}</li>
-<li><strong>Contact :</strong> ${escapeHtml(contactName)} — ${escapeHtml(doc.contactEmail)}</li>
-<li><strong>Slug souhaité :</strong> ${escapeHtml(desiredSlug || '—')}</li>
+<li><strong>Contact :</strong> ${escapeHtml(contactName)}, ${escapeHtml(doc.contactEmail)}</li>
+<li><strong>Slug souhaité :</strong> ${escapeHtml(desiredSlug || 'Non renseigné')}</li>
 </ul>
 <p><a href="${escapeHtml(consoleUrl)}">Voir dans la console</a></p>`;
         for (const to of notifyList) {
           try {
             await sendTransactionalEmail({
               to,
-              subject: `[Ada Papers] Nouvelle demande — ${structureName}`,
+              subject: `[Ada Papers] Nouvelle demande : ${structureName}`,
               htmlContent: html,
               textContent: `Nouvelle demande: ${structureName} (${doc.contactEmail})`,
             });

@@ -5285,4 +5285,6 @@ router.get('/:id/history', async (req, res) => {
   }
 });
 
+router.use('/:id/paw-ai', require('./dossierPawAi'));
+
 module.exports = router;

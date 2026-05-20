@@ -130,6 +130,13 @@ try {
 }
 
 try {
+  app.use('/api/public/commercial-contact', require('./routes/publicCommercialContact'));
+  console.log('✅ Route /api/public/commercial-contact enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/public/commercial-contact:', e.message);
+}
+
+try {
   app.use('/api/platform', require('./routes/platform'));
   app.use('/api/platform/organizations', require('./routes/platformOrganizations'));
   app.use('/api/platform/signup-requests', require('./routes/platformSignupRequests'));

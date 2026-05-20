@@ -306,7 +306,8 @@ async function callAnthropic(messages, retrievalCtx = null) {
   }
 
   const maxTokens = Math.min(Math.max(Number(process.env.ANTHROPIC_MAX_TOKENS) || 4096, 256), 8192);
-  const system = mergeSystemPrompt(getPawAiLegalSystemPrompt(), ctx.systemAppendix);
+  const systemBase = ctx.systemPromptOverride || getPawAiLegalSystemPrompt();
+  const system = mergeSystemPrompt(systemBase, ctx.systemAppendix);
   const timeoutMs = Math.min(Math.max(Number(process.env.ANTHROPIC_TIMEOUT_MS) || 120000, 30000), 600000);
 
   const client = new Anthropic({ apiKey: key, timeout: timeoutMs });
@@ -362,8 +363,9 @@ async function callGemini(messages, retrievalCtx = null) {
   }
 
   const maxOut = Math.min(Math.max(Number(process.env.GEMINI_MAX_TOKENS) || 8192, 256), 8192);
+  const systemBase = ctx.systemPromptOverride || getPawAiLegalSystemPrompt();
   const systemInstruction = {
-    parts: [{ text: mergeSystemPrompt(getPawAiLegalSystemPrompt(), ctx.systemAppendix) }],
+    parts: [{ text: mergeSystemPrompt(systemBase, ctx.systemAppendix) }],
   };
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
@@ -618,10 +620,17 @@ async function runLexiaWithProvider(messages, providerRequested, lexiaOpts = {})
   const resolved = resolveLexiaProvider(providerRequested);
   const dir = getKnowledgeDir();
   const attachmentAppendix = String(lexiaOpts.threadAttachmentAppendix || '').trim();
+  const customSystemPrompt = String(lexiaOpts.customSystemPrompt || '').trim();
   const internalMessages = attachmentAppendix
     ? prependAttachmentsToLastUserMessage(messages, attachmentAppendix)
     : messages;
   const ctxOptions = { threadAttachmentAppendix: attachmentAppendix };
+  const applyCustomSystem = (ctx) => {
+    if (customSystemPrompt && ctx && typeof ctx === 'object') {
+      ctx.systemPromptOverride = customSystemPrompt;
+    }
+    return ctx;
+  };
 
   if (resolved === 'internal') {
     const [result, ext] = await Promise.all([
@@ -643,10 +652,11 @@ async function runLexiaWithProvider(messages, providerRequested, lexiaOpts = {})
     try {
       let retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
       try {
-        retrievalCtx = await prepareLlmContext(messages, ctxOptions);
+        retrievalCtx = applyCustomSystem(await prepareLlmContext(messages, ctxOptions));
       } catch (prepErr) {
         console.warn('[lexia] Récupération (Anthropic) — non bloquant:', prepErr?.message || prepErr);
       }
+      applyCustomSystem(retrievalCtx);
       const out = await callAnthropic(internalMessages, retrievalCtx);
       const ctx = out.retrievalCtx || retrievalCtx;
       const sources = [
@@ -689,10 +699,11 @@ async function runLexiaWithProvider(messages, providerRequested, lexiaOpts = {})
     try {
       let retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
       try {
-        retrievalCtx = await prepareLlmContext(messages, ctxOptions);
+        retrievalCtx = applyCustomSystem(await prepareLlmContext(messages, ctxOptions));
       } catch (prepErr) {
         console.warn('[lexia] Récupération (Gemini) — non bloquant:', prepErr?.message || prepErr);
       }
+      applyCustomSystem(retrievalCtx);
       const out = await callGemini(internalMessages, retrievalCtx);
       const ctx = out.retrievalCtx || retrievalCtx;
       const sources = [

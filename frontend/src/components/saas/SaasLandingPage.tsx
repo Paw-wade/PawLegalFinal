@@ -3,50 +3,35 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ORGANIZATION_TYPE_OPTIONS } from '@/lib/organizationSignup';
-import {
-  ArrowRight,
-  Calendar,
-  FileText,
-  FolderOpen,
-  MessageSquare,
-  Scale,
-  Shield,
-  Users,
-} from 'lucide-react';
+import { ArrowRight, Shield } from 'lucide-react';
 
 const FEATURES = [
   {
-    icon: FolderOpen,
     title: 'Dossiers structurés',
     description:
-      'Première demande, renouvellement, regroupement familial : suivez chaque dossier, son statut et l\'équipe en charge.',
+      'Créez, classez et suivez chaque dossier : statut, échéances, responsables et historique au même endroit.',
   },
   {
-    icon: FileText,
     title: 'Documents & pièces',
     description:
       'Collecte, préparation et validation des pièces. Vos clients déposent en ligne ; vous pilotez la complétude.',
   },
   {
-    icon: MessageSquare,
     title: 'Messagerie intégrée',
     description:
       'Échanges traçables avec les clients et l\'équipe, sans disperser les informations sur des boîtes mail personnelles.',
   },
   {
-    icon: Calendar,
     title: 'Rendez-vous',
     description:
-      'Prise de créneaux, rappels et visibilité sur l\'agenda du cabinet pour fluidifier l\'accueil des usagers.',
+      'Prise de créneaux, rappels et visibilité sur l\'agenda pour fluidifier l\'accueil et le suivi des clients.',
   },
   {
-    icon: Scale,
-    title: 'Outils métier',
+    title: 'Pilotage & productivité',
     description:
-      'Tarification, recours, calculateur de délais : des briques adaptées aux pratiques du droit des étrangers.',
+      'Tableaux de bord, tâches, modèles et paramètres pour accompagner le travail quotidien de votre organisation.',
   },
   {
-    icon: Users,
     title: 'Équipe & rôles',
     description:
       'Assignation des dossiers, tâches internes et droits par profil (juriste, secrétariat, direction).',
@@ -74,7 +59,7 @@ const STEPS = [
 const FAQ = [
   {
     q: 'À qui s\'adresse Ada Papers ?',
-    a: 'Aux professionnels qui accompagnent des démarches administratives et juridiques liées au séjour en France : cabinets d\'avocats, structures de conseil, associations et organismes institutionnels.',
+    a: 'Aux cabinets d\'avocats, structures de conseil, associations et organismes qui gèrent des dossiers clients, une équipe et des échanges documentés au quotidien.',
   },
   {
     q: 'Chaque organisation a-t-elle son propre espace ?',
@@ -130,7 +115,7 @@ export function SaasLandingPage() {
             </a>
           </nav>
           <CtaButton className="!px-4 !py-2 text-xs sm:text-sm">
-            Demander un espace
+            Créer mon organisation
             <ArrowRight className="h-4 w-4" />
           </CtaButton>
         </div>
@@ -139,35 +124,31 @@ export function SaasLandingPage() {
       <main className="flex-1">
         {/* Hero */}
         <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-white via-orange-50/40 to-slate-50">
-          <div className="mx-auto max-w-6xl px-4 py-16 md:py-24 md:px-8">
+          <div className="mx-auto flex max-w-6xl flex-col items-center px-4 py-10 text-center md:px-8 md:py-14">
             <div className="max-w-3xl">
-              <p className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-medium text-orange-800">
-                <Shield className="h-3.5 w-3.5" />
-                Plateforme SaaS — droit des étrangers & accompagnement juridique
-              </p>
-              <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl md:text-5xl">
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl md:text-[2.75rem] md:leading-tight">
                 Le pilotage de vos dossiers,{' '}
                 <span className="text-orange-600">dans un espace dédié à votre organisation</span>
               </h1>
-              <p className="mt-6 text-lg text-slate-600 leading-relaxed">
+              <p className="mt-4 text-base text-slate-600 leading-relaxed md:text-lg">
                 Ada Papers centralise dossiers clients, pièces, messagerie, rendez-vous et suivi
-                d&apos;équipe pour les structures qui accompagnent titres de séjour, visas et
-                démarches administratives en France.
+                d&apos;équipe pour les cabinets d&apos;avocats et les structures de conseil qui
+                pilotent leur activité au quotidien.
               </p>
-              <div className="mt-10 flex flex-wrap gap-4">
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
                 <CtaButton>
-                  Créer mon organisation
+                  Commencer l&apos;essai sans frais
                   <ArrowRight className="h-4 w-4" />
                 </CtaButton>
-                <a
-                  href="#fonctionnalites"
+                <Link
+                  href="/contact-commercial"
                   className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-6 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                 >
-                  Découvrir la plateforme
-                </a>
+                  Contacter le service commercial
+                </Link>
               </div>
-              <p className="mt-6 text-xs text-slate-500">
-                Demande sans engagement — réponse sous quelques jours ouvrés après étude de votre
+              <p className="mt-4 text-xs text-slate-500">
+                Demande sans engagement. Réponse sous quelques jours ouvrés après étude de votre
                 projet.
               </p>
             </div>
@@ -178,22 +159,21 @@ export function SaasLandingPage() {
         <section id="fonctionnalites" className="py-16 md:py-20">
           <div className="mx-auto max-w-6xl px-4 md:px-8">
             <div className="text-center max-w-2xl mx-auto mb-12">
-              <h2 className="text-2xl font-bold sm:text-3xl">Pensé pour la pratique juridique au quotidien</h2>
+              <h2 className="text-2xl font-bold sm:text-3xl">
+                Pourquoi gérer votre structure juridique avec la solution Ada Papers ?
+              </h2>
               <p className="mt-3 text-slate-600">
-                Un outil de gestion qui respecte la confidentialité des dossiers et la réalité du
-                terrain en préfecture, à l&apos;OFPRA et en contentieux.
+                Un outil de gestion qui respecte la confidentialité des dossiers : suivi,
+                collaboration et traçabilité pour toute votre organisation.
               </p>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {FEATURES.map(({ icon: Icon, title, description }) => (
+              {FEATURES.map(({ title, description }) => (
                 <article
                   key={title}
                   className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:border-orange-200 hover:shadow-md transition-shadow"
                 >
-                  <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-orange-100 text-orange-600">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <h3 className="mt-4 font-semibold text-slate-900">{title}</h3>
+                  <h3 className="font-semibold text-slate-900">{title}</h3>
                   <p className="mt-2 text-sm text-slate-600 leading-relaxed">{description}</p>
                 </article>
               ))}
@@ -210,8 +190,8 @@ export function SaasLandingPage() {
                   Une plateforme pour chaque type de structure
                 </h2>
                 <p className="mt-4 text-slate-600 leading-relaxed">
-                  Que vous exerciez en cabinet réglementé, en conseil spécialisé ou au sein d&apos;une
-                  association d&apos;aide aux migrants, vous obtenez un environnement nommé, isolé et
+                  Que vous exerciez en cabinet réglementé, en conseil ou au sein d&apos;une association
+                  ou d&apos;un organisme institutionnel, vous obtenez un environnement nommé, isolé et
                   configurable (branding, domaine, équipe).
                 </p>
                 <ul className="mt-6 space-y-3">
@@ -223,7 +203,7 @@ export function SaasLandingPage() {
                   ))}
                 </ul>
                 <div className="mt-8">
-                  <CtaButton>Demander mon espace organisation</CtaButton>
+                  <CtaButton>Commencer l&apos;essai</CtaButton>
                 </div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-8 space-y-6">
@@ -306,7 +286,7 @@ export function SaasLandingPage() {
 
       <footer className="border-t border-slate-200 bg-white py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-center text-sm text-slate-500 sm:flex-row md:px-8">
-          <p>© {new Date().getFullYear()} Ada Papers — Plateforme de gestion juridique</p>
+          <p>© {new Date().getFullYear()} Ada Papers · Plateforme de gestion juridique</p>
           <div className="flex gap-6">
             <Link href="/" className="hover:text-orange-600 transition-colors">
               Site public

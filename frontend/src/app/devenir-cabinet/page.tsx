@@ -134,8 +134,8 @@ export default function DevenirCabinetPage() {
               Demander un espace organisation
             </h1>
             <p className="text-sm text-slate-600 mt-2">
-              Décrivez votre structure pour obtenir un environnement Ada Papers dédié (droit des
-              étrangers, accompagnement juridique, conseil ou association).
+              Décrivez votre structure pour obtenir un environnement Ada Papers dédié (cabinet
+              d&apos;avocats, conseil, association ou organisme institutionnel).
             </p>
           </div>
 
@@ -149,7 +149,7 @@ export default function DevenirCabinetPage() {
             ))}
           </div>
           <p className="text-xs text-slate-500">
-            Étape {step + 1} / {steps.length} — {steps[step]}
+            Étape {step + 1} / {steps.length} : {steps[step]}
           </p>
 
           {error && (
@@ -269,7 +269,7 @@ export default function DevenirCabinetPage() {
                     value={form.teamSize}
                     onChange={(e) => setForm({ ...form, teamSize: e.target.value })}
                   >
-                    <option value="">—</option>
+                    <option value="">Sélectionner</option>
                     {TEAM_SIZE_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
@@ -285,7 +285,7 @@ export default function DevenirCabinetPage() {
                     className={saasInputClass}
                     value={form.practiceArea}
                     onChange={(e) => setForm({ ...form, practiceArea: e.target.value })}
-                    placeholder="Ex. droit des étrangers, conseil RH…"
+                    placeholder="Ex. droit des affaires, droit social, conseil RH…"
                   />
                 </label>
                 <label className="block text-sm">

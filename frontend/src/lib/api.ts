@@ -1131,6 +1131,47 @@ export const dossiersAPI = {
   getDossierRecap: (dossierId: string) => {
     return api.get(`/user/dossiers/${dossierId}/recap`);
   },
+
+  getPawAiState: (dossierId: string) =>
+    api.get<{
+      success: boolean;
+      state?: {
+        dossierId: string;
+        extractionStatus: string;
+        extractionError?: string;
+        extractedAt?: string;
+        corpusMeta?: Record<string, number>;
+        runs?: Array<{
+          id: string;
+          prompt: string;
+          isDefaultPrompt: boolean;
+          outputMarkdown: string;
+          provider?: string;
+          resolvedProvider?: string;
+          createdAt?: string;
+        }>;
+      };
+      defaultPrompt?: string;
+    }>(`/user/dossiers/${dossierId}/paw-ai/state`),
+
+  extractPawAiCorpus: (dossierId: string) =>
+    api.post<{ success: boolean; state?: unknown }>(`/user/dossiers/${dossierId}/paw-ai/extract`),
+
+  runPawAi: (
+    dossierId: string,
+    body: { prompt: string; isDefaultPrompt?: boolean; provider?: string }
+  ) =>
+    api.post<{
+      success: boolean;
+      run?: {
+        id: string;
+        prompt: string;
+        isDefaultPrompt: boolean;
+        outputMarkdown: string;
+      };
+      state?: { extractionStatus: string; runs?: unknown[] };
+      text?: string;
+    }>(`/user/dossiers/${dossierId}/paw-ai/run`, body),
   
   // Télécharger le récit récapitulatif en PDF
   downloadDossierRecapPDF: (dossierId: string) => {

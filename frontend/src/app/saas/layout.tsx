@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Ada Papers — Plateforme de gestion pour le droit des étrangers',
+  title: 'Ada Papers | Plateforme de gestion pour cabinets et structures juridiques',
   description:
-    "SaaS dédié aux cabinets d'avocats, structures de conseil et associations : dossiers, documents, messagerie, rendez-vous et suivi des démarches administratives en un seul espace sécurisé.",
+    "SaaS pour cabinets d'avocats et structures de conseil : dossiers, documents, messagerie, rendez-vous et suivi d'équipe dans un espace sécurisé et dédié.",
   openGraph: {
-    title: 'Ada Papers — Votre organisation, un espace dédié',
+    title: 'Ada Papers | Votre organisation, un espace dédié',
     description:
-      'Centralisez dossiers, pièces, échanges clients et équipe sur une plateforme pensée pour le droit des étrangers et l\'accompagnement juridique.',
+      'Centralisez dossiers, pièces, échanges clients et équipe sur une plateforme de gestion pensée pour les cabinets et structures juridiques.',
     locale: 'fr_FR',
     type: 'website',
   },

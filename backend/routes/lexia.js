@@ -18,7 +18,8 @@ const {
   streamAnthropicLexia,
 } = require('../services/lexiaProviders');
 const { protect, authorize } = require('../middleware/auth');
-const LexiaPawAiState = require('../models/LexiaPawAiState');
+const M = require('../tenantModels');
+require('../models/LexiaPawAiState');
 const jwt = require('jsonwebtoken');
 const { buildThreadAttachmentAppendix } = require('../services/lexiaThreadAttachments');
 
@@ -284,7 +285,7 @@ router.put('/chat-state', protect, authorize(...LEXIA_KNOWLEDGE_READ_ROLES), asy
       console.error('[lexia] PUT /chat-state: identifiant utilisateur invalide', req.user?.id);
       return res.status(400).json({ success: false, error: 'Identifiant utilisateur invalide' });
     }
-    await LexiaPawAiState.findOneAndUpdate(
+    await M.LexiaPawAiState.findOneAndUpdate(
       { user: userId },
       { $set: { threads } },
       { upsert: true, new: true }

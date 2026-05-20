@@ -3,8 +3,10 @@ const fsp = fs.promises;
 const path = require('path');
 const axios = require('axios');
 const mongoose = require('mongoose');
-const LexiaPawAiAttachment = require('../models/LexiaPawAiAttachment');
+const M = require('../tenantModels');
+require('../models/LexiaPawAiAttachment');
 const { extractPlainTextFromKnowledgeBuffer } = require('./lexiaInternal');
+const { extractImageTextWithGemini, getGeminiApiKey } = require('./lexiaGeminiOcr');
 
 const MAX_ATTACHMENTS_PER_THREAD = 20;
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
@@ -171,71 +173,6 @@ function parseGeminiTextResponse(data) {
     : '';
 }
 
-async function extractImageTextWithGemini(buffer, mimeType) {
-  const key = String(process.env.GEMINI_API_KEY || '').trim();
-  if (!key) return { text: '', note: 'Image jointe : transcription automatique indisponible (GEMINI_API_KEY absente).' };
-
-  const model = (process.env.GEMINI_MODEL || 'gemini-2.0-flash').trim();
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    model
-  )}:generateContent?key=${encodeURIComponent(key)}`;
-
-  try {
-    const res = await axios.post(
-      url,
-      {
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text:
-                  'Transcris intégralement le texte visible sur cette image (OCR). ' +
-                  'Si aucun texte n’est lisible, décris brièvement le document en français.',
-              },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: buffer.toString('base64'),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          maxOutputTokens: 4096,
-          temperature: 0.1,
-        },
-      },
-      { timeout: 120000, validateStatus: () => true }
-    );
-
-    if (res.status >= 400) {
-      return {
-        text: '',
-        note: 'Image jointe : transcription automatique indisponible (erreur Gemini).',
-      };
-    }
-
-    const parts = res.data?.candidates?.[0]?.content?.parts;
-    const text = Array.isArray(parts)
-      ? parts
-          .map((p) => (typeof p?.text === 'string' ? p.text : ''))
-          .join('\n')
-          .trim()
-      : '';
-    if (!text) {
-      return { text: '', note: 'Image jointe : aucun texte détecté.' };
-    }
-    return { text, note: '' };
-  } catch (err) {
-    return {
-      text: '',
-      note: `Image jointe : transcription automatique indisponible (${err.message || 'erreur'}).`,
-    };
-  }
-}
-
 async function extractAudioTextWithGemini(buffer, mimeType, ext = '') {
   const key = String(process.env.GEMINI_API_KEY || '').trim();
   if (!key) {
@@ -335,7 +272,16 @@ async function extractAttachmentText(buffer, ext, mimeType) {
   if (text.length > MAX_EXTRACT_CHARS_PER_FILE) {
     text = text.slice(0, MAX_EXTRACT_CHARS_PER_FILE);
   }
-  return { text, note: text.trim() ? '' : 'Aucun texte exploitable extrait de ce fichier.' };
+  if (!text.trim()) {
+    if (ext === '.pdf') {
+      const note = getGeminiApiKey()
+        ? 'PDF (scan) : aucun texte exploitable après extraction et OCR.'
+        : 'PDF scanné : configurez GEMINI_API_KEY sur le serveur pour activer l’OCR.';
+      return { text: '', note };
+    }
+    return { text: '', note: 'Aucun texte exploitable extrait de ce fichier.' };
+  }
+  return { text, note: '' };
 }
 
 async function saveThreadAttachment({ userId, threadId, originalName, buffer, mimeType }) {
@@ -367,7 +313,7 @@ async function saveThreadAttachment({ userId, threadId, originalName, buffer, mi
     throw err;
   }
 
-  const count = await LexiaPawAiAttachment.countDocuments({ user: ownerId, threadId: safeThreadId });
+  const count = await M.LexiaPawAiAttachment.countDocuments({ user: ownerId, threadId: safeThreadId });
   if (count >= MAX_ATTACHMENTS_PER_THREAD) {
     const err = new Error(`Maximum ${MAX_ATTACHMENTS_PER_THREAD} pièces jointes par discussion.`);
     err.code = 'ATTACHMENT_LIMIT';
@@ -399,7 +345,7 @@ async function saveThreadAttachment({ userId, threadId, originalName, buffer, mi
   const storagePath = path.join(userDir, `${attachmentId}${ext}`);
   await fsp.writeFile(storagePath, buffer);
 
-  const doc = await LexiaPawAiAttachment.create({
+  const doc = await M.LexiaPawAiAttachment.create({
     user: ownerId,
     threadId: safeThreadId,
     originalName: safeName,
@@ -428,7 +374,7 @@ async function listThreadAttachments(userId, threadId) {
   const safeThreadId = sanitizeThreadId(threadId);
   const ownerId = normalizeAttachmentUserId(userId);
   if (!safeThreadId || !ownerId) return [];
-  const rows = await LexiaPawAiAttachment.find({ user: ownerId, threadId: safeThreadId })
+  const rows = await M.LexiaPawAiAttachment.find({ user: ownerId, threadId: safeThreadId })
     .sort({ createdAt: 1 })
     .lean();
   return rows.map((row) => ({
@@ -452,7 +398,7 @@ async function deleteThreadAttachment(userId, attachmentId) {
     err.code = 'NOT_FOUND';
     throw err;
   }
-  const doc = await LexiaPawAiAttachment.findOne({ _id: attachmentId, user: ownerId });
+  const doc = await M.LexiaPawAiAttachment.findOne({ _id: attachmentId, user: ownerId });
   if (!doc) {
     const err = new Error('Pièce jointe introuvable.');
     err.code = 'NOT_FOUND';
@@ -474,7 +420,7 @@ async function buildThreadAttachmentAppendix(userId, threadId) {
   const ownerId = normalizeAttachmentUserId(userId);
   if (!safeThreadId || !ownerId) return '';
 
-  const rows = await LexiaPawAiAttachment.find({ user: ownerId, threadId: safeThreadId })
+  const rows = await M.LexiaPawAiAttachment.find({ user: ownerId, threadId: safeThreadId })
     .sort({ createdAt: 1 })
     .lean();
   if (!rows.length) return '';
