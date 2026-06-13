@@ -382,8 +382,9 @@ const normalizeCategorie = (rawCategorie) => {
 };
 
 // Configuration du stockage Multer
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinaryPkg = require('cloudinary');
+const cloudinary = cloudinaryPkg.v2;
+const createCloudinaryStorage = require('multer-storage-cloudinary');
 
 const hasCloudinaryConfig =
   !!process.env.CLOUDINARY_CLOUD_NAME &&
@@ -422,8 +423,8 @@ function cloudinaryPublicIdFromUrl(fileUrl) {
 }
 
 const cloudinaryStorage = hasCloudinaryConfig
-  ? new CloudinaryStorage({
-      cloudinary,
+  ? createCloudinaryStorage({
+      cloudinary: cloudinaryPkg,
       params: async (req, file) => {
         const isImage = (file.mimetype || '').startsWith('image/');
         return {
@@ -1177,6 +1178,56 @@ router.get('/:id/download', async (req, res) => {
       message: 'Erreur serveur',
       error: error.message
     });
+  }
+});
+
+// @route   PATCH /api/user/documents/:id
+// @desc    Renommer / mettre à jour les métadonnées d’un document
+// @access  Private (propriétaire ou admin)
+router.patch('/:id', async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Identifiant de document invalide' });
+    }
+
+    const document = await Document.findById(req.params.id);
+    if (!document) {
+      return res.status(404).json({ success: false, message: 'Document non trouvé' });
+    }
+
+    const effectiveUserId = req.user.id || req.user._id;
+    if (!effectiveUserId) {
+      return res.status(401).json({ success: false, message: 'Session invalide' });
+    }
+
+    const ownerId = document.user != null ? String(document.user) : null;
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    if (ownerId && ownerId !== String(effectiveUserId) && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Accès non autorisé à ce document' });
+    }
+
+    const { nom, description } = req.body || {};
+    if (nom !== undefined) {
+      const trimmed = String(nom).trim();
+      if (!trimmed) {
+        return res.status(400).json({ success: false, message: 'Le nom du document est requis' });
+      }
+      document.nom = trimmed;
+    }
+    if (description !== undefined) {
+      document.description = String(description || '').trim();
+    }
+
+    await document.save();
+
+    return res.json({
+      success: true,
+      message: 'Document mis à jour.',
+      document,
+    });
+  } catch (error) {
+    console.error('Erreur PATCH document:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 

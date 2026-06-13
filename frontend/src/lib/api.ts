@@ -288,7 +288,27 @@ api.interceptors.request.use(
 
 // Intercepteur pour gérer les erreurs de réponse
 api.interceptors.response.use(
-  (response) => {
+  async (response) => {
+    const cfg: any = response.config || {};
+    const data = response.data;
+    const isEmptyBody =
+      data === '' ||
+      data === null ||
+      data === undefined ||
+      (typeof data === 'string' && data.trim() === '');
+    // Express envoie parfois 304 (ETag) : XHR/axios n’expose pas le corps → requête identique sans cache
+    if (response.status === 304 && isEmptyBody && !cfg.__retried304) {
+      cfg.__retried304 = true;
+      return api.request({
+        ...cfg,
+        params: { ...(cfg.params || {}), _: Date.now() },
+        headers: {
+          ...(typeof cfg.headers?.toJSON === 'function' ? cfg.headers.toJSON() : cfg.headers),
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      });
+    }
     return response;
   },
   async (error) => {
@@ -1025,7 +1045,10 @@ export const dossiersAPI = {
   
   // Admin - Récupérer tous les dossiers
   getAllDossiers: (params?: { statut?: string; type?: string; categorie?: string; userId?: string; search?: string }) => {
-    return api.get('/user/dossiers/admin', { params });
+    return api.get('/user/dossiers/admin', {
+      params,
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    });
   },
   
   // Créer un dossier
@@ -1326,6 +1349,9 @@ export const documentsAPI = {
   // Supprimer un document
   deleteDocument: (id: string) =>
     api.delete(`/user/documents/${id}`),
+
+  updateDocument: (id: string, data: { nom?: string; description?: string }) =>
+    api.patch(`/user/documents/${id}`, data),
 
   /** Admin — autoriser ou masquer un document pour le client */
   updateDocumentVisibility: (

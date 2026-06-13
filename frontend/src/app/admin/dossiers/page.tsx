@@ -30,6 +30,7 @@ import {
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
+import { InlineDocumentRename } from '@/components/InlineDocumentRename';
 import { Toast } from '@/components/Toast';
 import { QuickComplementTabsForm } from '@/components/dossiers/QuickComplementTabsForm';
 import { isDossierStaffRole, normalizeDossierId, dossierListCardId } from '@/lib/dossierAccess';
@@ -1406,6 +1407,28 @@ export default function AdminDossiersPage() {
     } finally {
       setDeletingDocumentId(null);
     }
+  };
+
+  const handleRenameDocument = async (documentId: string, nom: string) => {
+    const docId = String(documentId || '');
+    const trimmed = nom.trim();
+    if (!docId || !trimmed) throw new Error('Le nom ne peut pas être vide.');
+
+    const response = await documentsAPI.updateDocument(docId, { nom: trimmed });
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.message || 'Erreur lors du renommage du document');
+    }
+    const updated = response.data.document;
+    setDossierDocuments((prev) => {
+      const next: Record<string, any[]> = {};
+      for (const [key, docs] of Object.entries(prev)) {
+        next[key] = docs.map((doc) =>
+          String(doc._id || doc.id) === docId ? { ...doc, ...updated, nom: updated?.nom || trimmed } : doc
+        );
+      }
+      return next;
+    });
+    setToast({ message: 'Document renommé.', type: 'success' });
   };
 
   const closeGuestInviteModal = () => {
@@ -4121,8 +4144,14 @@ export default function AdminDossiersPage() {
                                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                                         <span className="text-lg flex-shrink-0">✅</span>
                                         <div className="flex-1 min-w-0">
-                                          <h5 className="font-semibold text-sm truncate text-foreground">
-                                            {doc.nom || 'Document'}
+                                          <h5 className="font-semibold text-sm text-foreground">
+                                            <InlineDocumentRename
+                                              value={doc.nom || 'Document'}
+                                              className="font-semibold text-sm text-foreground"
+                                              onSave={(nextName) =>
+                                                handleRenameDocument(String(doc._id || doc.id), nextName)
+                                              }
+                                            />
                                           </h5>
                                         </div>
                                         <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-semibold flex-shrink-0">
@@ -4278,7 +4307,14 @@ export default function AdminDossiersPage() {
                                                 >
                                                   <div className="flex items-start justify-between gap-2 mb-2">
                                                     <div className="flex-1 min-w-0">
-                                                      <p className="text-xs font-medium text-gray-900 truncate">{doc.nom}</p>
+                                                      <InlineDocumentRename
+                                                        value={doc.nom || 'Document'}
+                                                        className="text-xs font-medium text-gray-900"
+                                                        inputClassName="text-xs"
+                                                        onSave={(nextName) =>
+                                                          handleRenameDocument(String(doc._id || doc.id), nextName)
+                                                        }
+                                                      />
                                                       {doc.description && (
                                                         <p className="text-[10px] text-gray-500 line-clamp-1 mt-0.5">{doc.description}</p>
                                                       )}
