@@ -3,9 +3,11 @@ const router = express.Router();
 
 const RecoursType = require('../models/RecoursType');
 const RecoursTemplate = require('../models/RecoursTemplate');
-const CollaborativeDraft = require('../models/CollaborativeDraft');
+const Document = require('../models/Document');
 const Dossier = require('../models/Dossier');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
+const Log = require('../models/Log');
 const { protect } = require('../middleware/auth');
 
 // Middleware auth
@@ -19,6 +21,11 @@ function isAdmin(user) {
 
 function isSuperadmin(user) {
   return user.role === 'superadmin';
+}
+
+function extractDocumentIdFromFileUrl(fileUrl) {
+  const m = String(fileUrl || '').match(/\/user\/documents\/([a-f0-9]{24})(?:\/|$|\?)/i);
+  return m ? m[1] : null;
 }
 
 // Thèmes de recours autorisés (affichés dans le répertoire)
@@ -309,6 +316,43 @@ router.post('/recours/templates', async (req, res) => {
   }
 });
 
+// PATCH /recours/templates/:id - renommer / mettre à jour un modèle
+router.patch('/recours/templates/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user || !isAdmin(user)) {
+      return res.status(403).json({ success: false, message: 'Accès refusé' });
+    }
+
+    const { id } = req.params;
+    const { title, description } = req.body || {};
+
+    const template = await RecoursTemplate.findById(id);
+    if (!template) {
+      return res.status(404).json({ success: false, message: 'Modèle de recours introuvable' });
+    }
+
+    if (title !== undefined) {
+      const trimmed = String(title).trim();
+      if (!trimmed) {
+        return res.status(400).json({ success: false, message: 'Le titre est requis' });
+      }
+      template.title = trimmed;
+    }
+    if (description !== undefined) {
+      template.description = String(description || '').trim();
+    }
+
+    await template.save();
+    await template.populate('type', 'code label order restrictedToSuperadmin');
+
+    return res.json({ success: true, template });
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour du modèle de recours:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // PATCH /recours/templates/:id/share - mettre à jour le partage
 router.patch('/recours/templates/:id/share', async (req, res) => {
   try {
@@ -425,7 +469,7 @@ router.delete('/recours/templates/:id', async (req, res) => {
   }
 });
 
-// POST /recours/templates/:id/send-to-dossier - créer un document en préparation à partir d'un modèle
+// POST /recours/templates/:id/send-to-dossier - ajouter le modèle documentation au dossier
 router.post('/recours/templates/:id/send-to-dossier', async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -434,7 +478,7 @@ router.post('/recours/templates/:id/send-to-dossier', async (req, res) => {
     }
 
     const { id } = req.params;
-    const { dossierId } = req.body;
+    const { dossierId, visibleToClient } = req.body;
 
     if (!dossierId) {
       return res.status(400).json({ success: false, message: 'Le dossier est requis' });
@@ -450,28 +494,112 @@ router.post('/recours/templates/:id/send-to-dossier', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     }
 
-    // Créer un brouillon collaboratif qui référence le fichier modèle
-    const title = template.title || `Modèle recours ${template.type?.label || ''}`.trim();
-    const content = {
-      type: 'recours_template',
-      templateId: template._id.toString(),
-      fileUrl: template.fileUrl,
-      fileName: template.fileName,
-      mimeType: template.mimeType,
-      size: template.size,
-      typeId: template.type?._id?.toString(),
-      typeLabel: template.type?.label,
-    };
+    const sourceDocId = extractDocumentIdFromFileUrl(template.fileUrl);
+    const sourceDoc = sourceDocId ? await Document.findById(sourceDocId) : null;
+    const cheminFichier =
+      sourceDoc?.cheminFichier ||
+      String(template.fileUrl || '')
+        .split('?')[0]
+        .trim();
 
-    const draft = await CollaborativeDraft.create({
-      dossier: dossierId,
-      title,
-      content,
-      createdBy: user._id,
-      visibleToAdmins: true,
+    if (!cheminFichier) {
+      return res.status(400).json({
+        success: false,
+        message: 'Impossible de résoudre le fichier source de ce modèle',
+      });
+    }
+
+    const safeNomFichier = `${Date.now()}-${String(template.fileName || 'document')
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/_+/g, '_')}`;
+
+    const docTitle = String(template.title || template.fileName || 'Document').trim();
+    const typeLabel = template.type?.label ? String(template.type.label).trim() : '';
+    const descriptionParts = [
+      template.description ? String(template.description).trim() : '',
+      typeLabel ? `Documentation · ${typeLabel}` : 'Documentation',
+    ].filter(Boolean);
+
+    const clientVisible =
+      visibleToClient === false || visibleToClient === 'false' ? false : true;
+
+    const document = await Document.create({
+      user: user._id,
+      nom: docTitle,
+      nomFichier: safeNomFichier,
+      cheminFichier,
+      typeMime: template.mimeType || sourceDoc?.typeMime || 'application/octet-stream',
+      taille: template.size || sourceDoc?.taille || 0,
+      description: descriptionParts.join(' — '),
+      categorie: sourceDoc?.categorie || 'autre',
+      dossierId,
+      visibleToClient: clientVisible,
+      confidentialReason: clientVisible ? '' : 'Document interne — issu de la documentation',
     });
 
-    return res.status(201).json({ success: true, draft });
+    try {
+      const dossierLean = await Dossier.findById(dossierId)
+        .select('user clientEmail titre numero')
+        .lean();
+      if (dossierLean) {
+        let clientUserId = dossierLean.user ? dossierLean.user.toString() : null;
+        if (!clientUserId && dossierLean.clientEmail) {
+          const linked = await User.findOne({
+            email: String(dossierLean.clientEmail).trim().toLowerCase(),
+          })
+            .select('_id')
+            .lean();
+          if (linked?._id) clientUserId = linked._id.toString();
+        }
+        const uploaderId = String(user._id);
+        if (clientUserId && clientUserId !== uploaderId && clientVisible) {
+          const dossierTitle = dossierLean.titre || dossierLean.numero || 'votre dossier';
+          await Notification.create({
+            user: clientUserId,
+            type: 'document_uploaded',
+            titre: 'Nouveau document sur votre dossier',
+            message: `« ${document.nom} » a été ajouté au dossier « ${dossierTitle} ».`,
+            lien: `/client/dossiers/${dossierLean._id}`,
+            metadata: {
+              dossierId: dossierLean._id.toString(),
+              documentId: document._id.toString(),
+              uploadedBy: uploaderId,
+            },
+          });
+        }
+      }
+    } catch (notifErr) {
+      console.error('⚠️ Notification client send-to-dossier:', notifErr?.message || notifErr);
+    }
+
+    try {
+      await Log.create({
+        user: user._id,
+        userEmail: user.email,
+        action: 'document_sent_to_dossier_from_recours',
+        description: `${user.email} a ajouté « ${document.nom} » au dossier ${dossierId} depuis la documentation`,
+        ipAddress: req.ip || req.connection?.remoteAddress || req.headers['x-forwarded-for'],
+        userAgent: req.get('user-agent'),
+        metadata: {
+          documentId: document._id.toString(),
+          dossierId: String(dossierId),
+          templateId: template._id.toString(),
+        },
+      });
+    } catch (logErr) {
+      console.error('Erreur log send-to-dossier:', logErr?.message || logErr);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Document ajouté au dossier avec succès',
+      document,
+      dossier: {
+        _id: dossier._id,
+        titre: dossier.titre,
+        numero: dossier.numero,
+      },
+    });
   } catch (error) {
     console.error('Erreur lors de l\'envoi du modèle de recours vers un dossier:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
