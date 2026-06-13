@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { documentsAPI, dossiersAPI } from '@/lib/api';
 import { DocumentPreview } from '@/components/DocumentPreview';
+import { InlineDocumentRename } from '@/components/InlineDocumentRename';
 import { FileText, Download, Folder, Upload, Search, Filter, Eye, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -222,6 +223,22 @@ export default function DocumentsPage() {
       console.error('Erreur lors de la suppression:', err);
       setError(err.response?.data?.message || 'Erreur lors de la suppression du document');
     }
+  };
+
+  const handleRenameDocument = async (documentId: string, nom: string) => {
+    const response = await documentsAPI.updateDocument(documentId, { nom });
+    if (!response.data?.success) {
+      throw new Error(response.data?.message || 'Erreur lors du renommage');
+    }
+    const updated = response.data.document;
+    setDocuments((prev) =>
+      prev.map((doc) => {
+        const id = String(doc._id || doc.id);
+        return id === String(documentId) ? { ...doc, ...updated, nom: updated?.nom || nom } : doc;
+      })
+    );
+    setSuccess('Document renommé.');
+    setTimeout(() => setSuccess(null), 3000);
   };
 
   const getCategoryLabel = (categorie: string) => {
@@ -566,8 +583,12 @@ export default function DocumentsPage() {
                           >
                             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                               <div className="min-w-0 flex-1">
-                                <h3 className="font-semibold text-foreground mb-1 text-sm sm:text-base break-words sm:truncate">
-                                  {docNom}
+                                <h3 className="font-semibold text-foreground mb-1 text-sm sm:text-base break-words">
+                                  <InlineDocumentRename
+                                    value={docNom}
+                                    className="font-semibold text-foreground"
+                                    onSave={(nextName) => handleRenameDocument(docId, nextName)}
+                                  />
                                 </h3>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                                   <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-md text-xs font-medium">

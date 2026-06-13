@@ -12,6 +12,10 @@ export const recoursAPI = {
   deleteTemplate: (id: string) => api.delete(`/recours/templates/${id}`),
   moveTemplateToType: (id: string, data: { typeId: string }) =>
     api.patch(`/recours/templates/${id}/type`, data),
+  updateTemplate: (id: string, data: { title?: string; description?: string }) =>
+    api.patch(`/recours/templates/${id}`, data),
+  sendTemplateToDossier: (id: string, data: { dossierId: string; visibleToClient?: boolean }) =>
+    api.post(`/recours/templates/${id}/send-to-dossier`, data),
   updateTemplateShare: (id: string, data: any) =>
     api.patch(`/recours/templates/${id}/share`, data),
 };
