@@ -27,8 +27,9 @@ if (!fs.existsSync(localDocumentsDir)) {
   fs.mkdirSync(localDocumentsDir, { recursive: true });
 }
 
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinaryPkg = require('cloudinary');
+const cloudinary = cloudinaryPkg.v2;
+const createCloudinaryStorage = require('multer-storage-cloudinary');
 
 const hasCloudinaryConfig =
   !!process.env.CLOUDINARY_CLOUD_NAME &&
@@ -44,8 +45,8 @@ if (hasCloudinaryConfig) {
 }
 
 const cloudinaryStorage = hasCloudinaryConfig
-  ? new CloudinaryStorage({
-      cloudinary,
+  ? createCloudinaryStorage({
+      cloudinary: cloudinaryPkg,
       params: async (req, file) => {
         const isImage = (file.mimetype || '').startsWith('image/');
         return {
