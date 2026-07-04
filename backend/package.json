@@ -14,7 +14,10 @@
     "init-cms": "node scripts/initCmsContent.js",
     "email:test-forum": "node scripts/sendForumTestEmail.js",
     "test:lexia-sse": "node scripts/testLexiaSseStream.js",
-    "sync:google-calendar": "node scripts/backfillGoogleCalendarRdv.js"
+    "sync:google-calendar": "node scripts/backfillGoogleCalendarRdv.js",
+    "documents:audit": "node scripts/audit-documents-quick.js",
+    "documents:recover": "node scripts/recover-documents.js --apply",
+    "documents:recover:dry": "node scripts/recover-documents.js --dry-run"
   },
   "keywords": [],
   "author": "",

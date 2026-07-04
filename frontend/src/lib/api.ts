@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getPublicApiBaseUrl } from './publicApiUrl';
+import { getDirectBackendApiBaseUrl, getPublicApiBaseUrl } from './publicApiUrl';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -1295,13 +1295,12 @@ export const documentsAPI = {
     return api.get('/user/documents/admin', { params });
   },
   
-  // Téléverser un document
+  // Televerser un document (dev: direct :3005 sans proxy Next; timeout 120s pour Cloudinary)
   uploadDocument: (formData: FormData) => {
-    // Ne pas définir Content-Type manuellement - laisser le navigateur le définir avec le boundary
+    const useDirect = typeof window !== 'undefined' && process.env.NODE_ENV === 'development';
     return api.post('/user/documents', formData, {
-      headers: {
-        // Le navigateur définira automatiquement Content-Type: multipart/form-data avec le boundary
-      },
+      timeout: 120000,
+      ...(useDirect ? { baseURL: getDirectBackendApiBaseUrl() } : {}),
     });
   },
   

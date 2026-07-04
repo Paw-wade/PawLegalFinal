@@ -15,6 +15,7 @@ const {
   sendTemplatedTransactionalEmail,
 } = require('../utils/emailTemplateMailer');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
+const { resolveUploadedFileStoragePath } = require('../utils/documentFileStorage');
 
 const router = express.Router();
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -29,7 +30,6 @@ if (!fs.existsSync(localDocumentsDir)) {
 
 const cloudinaryPkg = require('cloudinary');
 const cloudinary = cloudinaryPkg.v2;
-const createCloudinaryStorage = require('multer-storage-cloudinary');
 
 const hasCloudinaryConfig =
   !!process.env.CLOUDINARY_CLOUD_NAME &&
@@ -44,30 +44,35 @@ if (hasCloudinaryConfig) {
   });
 }
 
-const cloudinaryStorage = hasCloudinaryConfig
-  ? createCloudinaryStorage({
-      cloudinary: cloudinaryPkg,
-      params: async (req, file) => {
-        const isImage = (file.mimetype || '').startsWith('image/');
-        return {
-          folder: 'pawlegal/documents',
-          resource_type: isImage ? 'image' : 'raw',
-          public_id: `${Date.now()}-${(file.originalname || 'document').replace(/[^a-zA-Z0-9]/g, '_')}`,
-        };
-      },
-    })
-  : multer.diskStorage({
-      destination: (req, file, cb) => cb(null, localDocumentsDir),
-      filename: (req, file, cb) => {
-        const safeName = (file.originalname || 'document')
-          .replace(/[^a-zA-Z0-9._-]/g, '_')
-          .replace(/_+/g, '_');
-        cb(null, `${Date.now()}-${safeName}`);
-      },
-    });
+const diskStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, localDocumentsDir),
+  filename: (req, file, cb) => {
+    const safeName = (file.originalname || 'document')
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/_+/g, '_');
+    cb(null, `${Date.now()}-${safeName}`);
+  },
+});
+
+async function uploadLocalFileToCloudinary(file) {
+  if (!hasCloudinaryConfig || String(process.env.UPLOAD_STORAGE || '').toLowerCase() === 'local') {
+    return null;
+  }
+  const localPath = file?.path;
+  if (!localPath || !fs.existsSync(localPath)) return null;
+  const isImage = String(file.mimetype || '').startsWith('image/');
+  const baseName = path.basename(String(file.filename || 'document'), path.extname(String(file.filename || '')));
+  const result = await cloudinary.uploader.upload(localPath, {
+    resource_type: isImage ? 'image' : 'raw',
+    folder: 'pawlegal/documents',
+    public_id: baseName || `${Date.now()}-document`,
+    overwrite: true,
+  });
+  return result?.secure_url || null;
+}
 
 const upload = multer({
-  storage: cloudinaryStorage,
+  storage: diskStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => cb(null, true),
 });
@@ -186,11 +191,26 @@ router.post('/public/:token', (req, res, next) => {
     const guestName = String(contributorName || '').trim().slice(0, 200);
     const docNom = String(nom || req.file.originalname || 'Document').trim().slice(0, 500);
 
+    let cheminFichier = resolveUploadedFileStoragePath(req.file, BACKEND_ROOT);
+    try {
+      const cloudUrl = await uploadLocalFileToCloudinary(req.file);
+      if (cloudUrl) {
+        cheminFichier = cloudUrl;
+        try {
+          if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* conservation locale */
+    }
+
     const document = await Document.create({
       user: ownerUserId,
       nom: docNom,
       nomFichier: req.file.filename,
-      cheminFichier: req.file.path,
+      cheminFichier,
       typeMime: req.file.mimetype,
       taille: req.file.size,
       description: String(description || '').trim(),

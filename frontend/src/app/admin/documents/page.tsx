@@ -190,7 +190,13 @@ export default function AdminDocumentsPage() {
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
       console.error('Erreur lors du téléchargement:', err);
-      setError('Erreur lors du téléchargement du document');
+      const code = err.response?.data?.code;
+      const msg = err.response?.data?.message;
+      setError(
+        code === 'FILE_NOT_FOUND'
+          ? 'Fichier introuvable sur le serveur. Re-téléversez le document ou récupérez les fichiers depuis le VPS.'
+          : msg || 'Erreur lors du téléchargement du document'
+      );
     }
   };
 

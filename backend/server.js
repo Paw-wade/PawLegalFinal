@@ -320,6 +320,12 @@ const startServer = async () => {
       }
     });
 
+    server.timeout = 120_000;
+    server.headersTimeout = 125_000;
+    if (typeof server.requestTimeout === 'number') {
+      server.requestTimeout = 120_000;
+    }
+
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
         console.error(
