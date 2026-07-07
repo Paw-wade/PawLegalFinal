@@ -80,14 +80,39 @@ function localPathFor(doc) {
   const stored = String(doc.cheminFichier || '').replace(/\\/g, '/');
   const docker = stored.match(/uploads\/documents\/([^/?#]+)/i);
   if (docker?.[1]) candidates.push(path.join(UPLOADS_DIR, docker[1]));
-  for (const p of candidates) {
+
+  const tryFile = (p) => {
     try {
-      if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
+      return fs.existsSync(p) && fs.statSync(p).isFile() ? p : null;
     } catch {
-      /* ignore */
+      return null;
     }
+  };
+
+  for (const p of candidates) {
+    const hit = tryFile(p);
+    if (hit) return hit;
   }
-  return null;
+
+  // Recherche recursive sous uploads/ (ex. uploads/{userId}/documents/)
+  const targets = new Set([name.toLowerCase()]);
+  try {
+    const walk = (dir) => {
+      if (!fs.existsSync(dir)) return null;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isFile() && targets.has(entry.name.toLowerCase())) return full;
+        if (entry.isDirectory()) {
+          const nested = walk(full);
+          if (nested) return nested;
+        }
+      }
+      return null;
+    };
+    return walk(path.join(BACKEND_ROOT, 'uploads'));
+  } catch {
+    return null;
+  }
 }
 
 function httpGetBuffer(url, redirectCount = 0) {
@@ -237,8 +262,14 @@ async function main() {
       api_secret: process.env.CLOUDINARY_API_SECRET,
     });
     console.log('☁️ Index Cloudinary…');
-    cloudIndex = await buildCloudinaryIndex(cloudinary);
-    console.log(`☁️ ${cloudIndex.size} clés Cloudinary indexées`);
+    try {
+      cloudIndex = await buildCloudinaryIndex(cloudinary);
+      console.log(`☁️ ${cloudIndex.size} clés Cloudinary indexées`);
+    } catch (e) {
+      const msg = e?.error?.message || e?.message || String(e);
+      console.warn(`⚠️ Index Cloudinary ignoré (${msg}) — poursuite sans index.`);
+      cloudIndex = new Map();
+    }
   }
 
   const origins = buildRemoteOrigins();
@@ -307,6 +338,19 @@ async function main() {
     if (!recovered && !SKIP_REMOTE) {
       recovered = await tryRemoteDownload(doc, origins);
       if (recovered) newChemin = `uploads/documents/${name}`;
+    }
+
+    if (!recovered && !SKIP_REMOTE) {
+      const { fetchProductionApiDocumentBuffer } = require('../utils/documentFileStorage');
+      const apiHit = await fetchProductionApiDocumentBuffer(doc);
+      if (apiHit?.buffer) {
+        recovered = {
+          buffer: apiHit.buffer,
+          source: apiHit.url,
+          contentType: apiHit.contentType,
+        };
+        newChemin = `uploads/documents/${name}`;
+      }
     }
 
     if (!recovered) {

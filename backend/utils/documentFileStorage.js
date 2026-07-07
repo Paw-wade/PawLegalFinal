@@ -4,6 +4,9 @@ const https = require('https');
 
 const REMOTE_FETCH_TIMEOUT_MS = Number(process.env.DOCUMENT_REMOTE_FETCH_TIMEOUT_MS) || 45000;
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+const failedRecoveryApiOrigins = new Set();
+
+const { isS3StoragePath, headS3Object, tryServeDocumentFromS3 } = require('./s3DocumentStorage');
 
 function isHttpStorageUrl(value) {
   return /^https?:\/\//i.test(String(value || '').trim());
@@ -14,7 +17,7 @@ function isCloudinaryStoragePath(value) {
 }
 
 function isRemoteDocumentStoragePath(value) {
-  return isHttpStorageUrl(value);
+  return isHttpStorageUrl(value) || isS3StoragePath(value);
 }
 
 function normalizeOrigin(raw) {
@@ -118,7 +121,7 @@ function getStoredDocumentFileName(document) {
 
 function getDocumentRemoteStaticUrl(document, origin = getDocumentsRemoteOrigin()) {
   const stored = String(document?.cheminFichier || '').trim();
-  if (isHttpStorageUrl(stored) || isCloudinaryStoragePath(stored)) {
+  if (isHttpStorageUrl(stored) || isCloudinaryStoragePath(stored) || isS3StoragePath(stored)) {
     return null;
   }
   if (!origin) return null;
@@ -129,7 +132,7 @@ function getDocumentRemoteStaticUrl(document, origin = getDocumentsRemoteOrigin(
 
 function getDocumentRemoteStaticUrls(document) {
   const stored = String(document?.cheminFichier || '').trim();
-  if (isHttpStorageUrl(stored) || isCloudinaryStoragePath(stored)) {
+  if (isHttpStorageUrl(stored) || isCloudinaryStoragePath(stored) || isS3StoragePath(stored)) {
     return [];
   }
   const fileName = getStoredDocumentFileName(document);
@@ -306,11 +309,20 @@ async function isDocumentFileAvailable(document, { localPath = null } = {}) {
   const directUrl = getDocumentHttpUrl(document);
   if (directUrl && (await probeHttpDocumentUrl(directUrl))) return true;
 
+  if (isS3StoragePath(document?.cheminFichier) && (await headS3Object(document.cheminFichier))) {
+    return true;
+  }
+
   const cloudUrl = await findCloudinaryDocumentUrl(document);
   if (cloudUrl && (await probeHttpDocumentUrl(cloudUrl))) return true;
 
   for (const remoteUrl of getDocumentRemoteStaticUrls(document)) {
     if (await probeHttpDocumentUrl(remoteUrl)) return true;
+  }
+
+  if (getRecoveryJwt()) {
+    const apiHit = await fetchProductionApiDocumentBuffer(document);
+    if (apiHit?.buffer) return true;
   }
 
   return false;
@@ -430,9 +442,146 @@ async function tryServeDocumentFromRemoteOrigin(document, res, { inline = false 
   return false;
 }
 
+function getRecoveryApiOrigins() {
+  const raw =
+    process.env.DOCUMENTS_RECOVERY_API_ORIGINS ||
+    process.env.PRODUCTION_API_ORIGIN ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'https://api.adapapers.fr';
+  const out = [];
+  const seen = new Set();
+  for (const part of String(raw).split(',')) {
+    const origin = normalizeOrigin(part);
+    if (!origin || !/^https?:\/\//i.test(origin) || isLocalOrigin(origin)) continue;
+    const key = origin.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(origin);
+  }
+  for (const o of getDocumentsRemoteOrigins()) {
+    const key = o.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(o);
+    }
+  }
+  return out;
+}
+
+function getRecoveryJwt() {
+  const explicit = String(process.env.DOCUMENTS_RECOVERY_JWT || '').trim();
+  if (explicit) return explicit;
+  const secret = process.env.JWT_SECRET;
+  const userId = process.env.DOCUMENTS_RECOVERY_USER_ID;
+  if (!secret || !userId) return null;
+  try {
+    const jwt = require('jsonwebtoken');
+    return jwt.sign({ id: userId }, secret, { expiresIn: '2h' });
+  } catch {
+    return null;
+  }
+}
+
+function fetchProductionApiDocumentBuffer(document, redirectCount = 0) {
+  return new Promise((resolve) => {
+    const token = getRecoveryJwt();
+    const docId = document?._id ? String(document._id) : '';
+    if (!token || !docId || redirectCount > 4) {
+      resolve(null);
+      return;
+    }
+
+    const tryOrigin = (originIndex) => {
+      const origins = getRecoveryApiOrigins().filter((o) => !failedRecoveryApiOrigins.has(o.toLowerCase()));
+      if (originIndex >= origins.length) {
+        resolve(null);
+        return;
+      }
+      const origin = origins[originIndex];
+      const url = `${origin}/api/user/documents/${encodeURIComponent(docId)}/download`;
+      const client = url.toLowerCase().startsWith('https') ? https : http;
+      const req = client.request(
+        url,
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}`, Accept: '*/*' },
+          timeout: REMOTE_FETCH_TIMEOUT_MS,
+          ...getHttpClientOptions(url),
+        },
+        (remoteRes) => {
+          const status = remoteRes.statusCode || 0;
+          if (status >= 300 && status < 400 && remoteRes.headers.location) {
+            remoteRes.resume();
+            let nextUrl = String(remoteRes.headers.location).trim();
+            try {
+              nextUrl = new URL(nextUrl, url).href;
+            } catch {
+              /* keep */
+            }
+            const nextClient = nextUrl.toLowerCase().startsWith('https') ? https : http;
+            const req2 = nextClient.get(nextUrl, getHttpClientOptions(nextUrl), (r2) => {
+              const chunks = [];
+              r2.on('data', (c) => chunks.push(c));
+              r2.on('end', () => {
+                const buf = Buffer.concat(chunks);
+                if ((r2.statusCode || 0) < 400 && buf.length > 64) resolve({ buffer: buf, url: nextUrl });
+                else tryOrigin(originIndex + 1);
+              });
+            });
+            req2.on('error', () => tryOrigin(originIndex + 1));
+            return;
+          }
+          if (!status || status >= 400) {
+            remoteRes.resume();
+            if (status === 404 || status === 503) failedRecoveryApiOrigins.add(origin.toLowerCase());
+            tryOrigin(originIndex + 1);
+            return;
+          }
+          const chunks = [];
+          remoteRes.on('data', (c) => chunks.push(c));
+          remoteRes.on('end', () => {
+            const buf = Buffer.concat(chunks);
+            const ct = String(remoteRes.headers['content-type'] || '').toLowerCase();
+            if (buf.length < 64 || isRejectableRemoteContentType(ct)) {
+              tryOrigin(originIndex + 1);
+              return;
+            }
+            resolve({ buffer: buf, url, contentType: remoteRes.headers['content-type'] });
+          });
+          remoteRes.on('error', () => tryOrigin(originIndex + 1));
+        }
+      );
+      req.on('error', () => tryOrigin(originIndex + 1));
+      req.on('timeout', () => {
+        req.destroy();
+        tryOrigin(originIndex + 1);
+      });
+      req.end();
+    };
+
+    tryOrigin(0);
+  });
+}
+
+async function tryServeDocumentFromProductionApi(document, res, { inline = false } = {}) {
+  const hit = await fetchProductionApiDocumentBuffer(document);
+  if (!hit?.buffer) return false;
+  const contentType = resolveDocumentResponseContentType(document, hit.contentType || 'application/octet-stream');
+  res.setHeader('Content-Type', contentType);
+  res.setHeader(
+    'Content-Disposition',
+    `${inline ? 'inline' : 'attachment'}; filename="${encodeURIComponent(document.nom || 'document')}"`
+  );
+  res.send(hit.buffer);
+  console.log('✅ Document — API production:', hit.url);
+  return true;
+}
+
 async function tryServeDocumentFromAlternateSources(document, res, { inline = false } = {}) {
+  if (await tryServeDocumentFromS3(document, res, { inline })) return true;
   if (await tryServeDocumentFromCloudinary(document, res, { inline })) return true;
-  return tryServeDocumentFromRemoteOrigin(document, res, { inline });
+  if (await tryServeDocumentFromRemoteOrigin(document, res, { inline })) return true;
+  return tryServeDocumentFromProductionApi(document, res, { inline });
 }
 
 module.exports = {
@@ -452,5 +601,9 @@ module.exports = {
   pipeHttpDocumentUrl,
   tryServeDocumentFromCloudinary,
   tryServeDocumentFromRemoteOrigin,
+  tryServeDocumentFromProductionApi,
   tryServeDocumentFromAlternateSources,
+  fetchProductionApiDocumentBuffer,
+  getRecoveryApiOrigins,
+  isS3StoragePath,
 };

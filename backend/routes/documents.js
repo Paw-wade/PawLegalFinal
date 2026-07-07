@@ -14,8 +14,15 @@ const {
   pipeHttpDocumentUrl,
   tryServeDocumentFromAlternateSources,
   resolveDocumentResponseContentType,
-  resolveUploadedFileStoragePath,
+  isS3StoragePath,
 } = require('../utils/documentFileStorage');
+const {
+  deleteS3Object,
+  archiveS3Object,
+  tryServeDocumentFromS3,
+} = require('../utils/s3DocumentStorage');
+const { uploadDocumentToRemoteStorage, removeLocalUploadTempFile } = require('../utils/documentRemoteUpload');
+const { resolveCabinetForUser } = require('../utils/cabinetResolver');
 
 const router = express.Router();
 const BACKEND_ROOT = path.resolve(__dirname, '..');
@@ -244,6 +251,8 @@ async function sendDocumentToClient(document, res, { inline = false } = {}) {
     if (ok) return true;
   }
 
+  if (await tryServeDocumentFromS3(document, res, { inline })) return true;
+
   const localPath = await resolveDocumentPhysicalPath(document);
   if (localPath) {
     const fileName = resolveDocumentDownloadFileName(document, localPath);
@@ -297,6 +306,7 @@ function isInternalStorageFileName(name) {
   if (isHttpLikeStoragePath(value)) return true;
   const normalized = value.toLowerCase();
   if (normalized.includes('cloudinary.com')) return true;
+  if (normalized.startsWith('s3://')) return true;
   if (
     normalized.includes('raw_upload') ||
     normalized.includes('pawlegal_documents') ||
@@ -477,11 +487,13 @@ const diskStorage = multer.diskStorage({
   },
 });
 
-/** Disque d'abord (reception rapide), puis Cloudinary dans le handler POST. */
+/** Disque d'abord (reception rapide), puis S3 ou Cloudinary dans le handler POST. */
 async function uploadLocalFileToCloudinary(file) {
-  if (!hasCloudinaryConfig || String(process.env.UPLOAD_STORAGE || '').toLowerCase() === 'local') {
+  const storage = String(process.env.UPLOAD_STORAGE || 'cloudinary').toLowerCase();
+  if (storage === 'local' || storage === 's3') {
     return null;
   }
+  if (!hasCloudinaryConfig) return null;
   const localPath = file?.path;
   if (!localPath || !fs.existsSync(localPath)) return null;
 
@@ -784,22 +796,23 @@ router.post('/', (req, res, next) => {
       categorieNormalisee: safeCategorie
     });
 
-    let cheminFichier = resolveUploadedFileStoragePath(req.file, BACKEND_ROOT);
+    let cheminFichier;
+    const cabinet = await resolveCabinetForUser(req.user);
+    const s3Prefix = cabinet?.s3Prefix || null;
     try {
-      const cloudUrl = await uploadLocalFileToCloudinary(req.file);
-      if (cloudUrl) {
-        cheminFichier = cloudUrl;
-        try {
-          if (req.file.path && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-          }
-        } catch (unlinkErr) {
-          console.warn('Fichier local non supprime apres Cloudinary:', unlinkErr.message);
-        }
-        console.log('Document envoye sur Cloudinary');
-      }
-    } catch (cloudErr) {
-      console.warn('Echec Cloudinary, conservation locale:', cloudErr.message);
+      cheminFichier = await uploadDocumentToRemoteStorage(req.file, {
+        backendRoot: BACKEND_ROOT,
+        s3Prefix,
+        uploadToCloudinary: () => uploadLocalFileToCloudinary(req.file),
+      });
+    } catch (uploadErr) {
+      removeLocalUploadTempFile(req.file);
+      console.error('Échec upload distant — document non créé:', uploadErr.message);
+      return res.status(503).json({
+        success: false,
+        message:
+          'Impossible d\'enregistrer le fichier sur le stockage distant. Le document n\'a pas été créé. Réessayez dans quelques instants.',
+      });
     }
 
     const documentData = {
@@ -814,6 +827,7 @@ router.post('/', (req, res, next) => {
       description: description || '',
       categorie: safeCategorie,
       visibleToClient: uploaderIsCabinet ? parseBoolean(visibleToClient, true) : true,
+      cabinetId: cabinet?._id || null,
       confidentialReason:
         uploaderIsCabinet && parseBoolean(visibleToClient, true) === false
           ? String(confidentialReason || '').trim()
@@ -1372,6 +1386,22 @@ router.delete('/:id', async (req, res) => {
     } catch (trashError) {
       console.error('⚠️ Erreur lors de l\'ajout à la corbeille (continuation de la suppression):', trashError);
       // Continuer la suppression même si l'ajout à la corbeille échoue
+    }
+
+    // Archivage S3 (copie vers archive/) au lieu de suppression définitive
+    if (isS3StoragePath(document.cheminFichier)) {
+      const hardDelete = String(process.env.DOCUMENT_S3_HARD_DELETE || '').toLowerCase() === 'true';
+      try {
+        if (hardDelete) {
+          await deleteS3Object(document.cheminFichier);
+          console.log('✅ Fichier supprimé sur S3 (hard delete):', document.cheminFichier);
+        } else {
+          const archiveUri = await archiveS3Object(document.cheminFichier);
+          console.log('✅ Fichier archivé sur S3:', archiveUri || document.cheminFichier);
+        }
+      } catch (s3Err) {
+        console.warn('⚠️ Archivage/suppression S3 échouée:', s3Err.message);
+      }
     }
 
     // Suppression sur Cloudinary (uniquement si configuré + URL Cloudinary + public_id fiable)

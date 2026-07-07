@@ -15,7 +15,8 @@ const {
   sendTemplatedTransactionalEmail,
 } = require('../utils/emailTemplateMailer');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
-const { resolveUploadedFileStoragePath } = require('../utils/documentFileStorage');
+const { uploadDocumentToRemoteStorage, removeLocalUploadTempFile } = require('../utils/documentRemoteUpload');
+const { resolveCabinetForUser } = require('../utils/cabinetResolver');
 
 const router = express.Router();
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -55,9 +56,11 @@ const diskStorage = multer.diskStorage({
 });
 
 async function uploadLocalFileToCloudinary(file) {
-  if (!hasCloudinaryConfig || String(process.env.UPLOAD_STORAGE || '').toLowerCase() === 'local') {
+  const storage = String(process.env.UPLOAD_STORAGE || 'cloudinary').toLowerCase();
+  if (storage === 'local' || storage === 's3') {
     return null;
   }
+  if (!hasCloudinaryConfig) return null;
   const localPath = file?.path;
   if (!localPath || !fs.existsSync(localPath)) return null;
   const isImage = String(file.mimetype || '').startsWith('image/');
@@ -191,19 +194,23 @@ router.post('/public/:token', (req, res, next) => {
     const guestName = String(contributorName || '').trim().slice(0, 200);
     const docNom = String(nom || req.file.originalname || 'Document').trim().slice(0, 500);
 
-    let cheminFichier = resolveUploadedFileStoragePath(req.file, BACKEND_ROOT);
+    let cheminFichier;
+    const cabinet = await resolveCabinetForUser(ownerUserId);
+    const s3Prefix = cabinet?.s3Prefix || null;
     try {
-      const cloudUrl = await uploadLocalFileToCloudinary(req.file);
-      if (cloudUrl) {
-        cheminFichier = cloudUrl;
-        try {
-          if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-        } catch {
-          /* ignore */
-        }
-      }
-    } catch {
-      /* conservation locale */
+      cheminFichier = await uploadDocumentToRemoteStorage(req.file, {
+        backendRoot: BACKEND_ROOT,
+        s3Prefix,
+        uploadToCloudinary: () => uploadLocalFileToCloudinary(req.file),
+      });
+    } catch (uploadErr) {
+      removeLocalUploadTempFile(req.file);
+      console.error('Échec upload distant (invité) — document non créé:', uploadErr.message);
+      return res.status(503).json({
+        success: false,
+        message:
+          'Impossible d\'enregistrer le fichier. Réessayez dans quelques instants.',
+      });
     }
 
     const document = await Document.create({
@@ -216,6 +223,7 @@ router.post('/public/:token', (req, res, next) => {
       description: String(description || '').trim(),
       categorie: normalizeCategorie(categorie),
       dossierId: invite.dossierId,
+      cabinetId: cabinet?._id || null,
       visibleToClient: false,
       confidentialReason: 'Document transmis par un tiers via lien sécurisé — en attente de validation par le cabinet.',
       uploadedViaGuestLink: true,
