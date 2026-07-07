@@ -71,6 +71,13 @@ const connectDB = async () => {
 
     console.log(`✅ MongoDB connecté : ${conn.connection.host}`);
     isDatabaseConnected = true;
+
+    try {
+      const { ensureDefaultCabinet } = require('./utils/cabinetResolver');
+      await ensureDefaultCabinet();
+    } catch (cabinetErr) {
+      console.warn('⚠️ Cabinet par défaut non initialisé:', cabinetErr.message);
+    }
   } catch (error) {
     console.warn(`⚠️ MongoDB indisponible (${error.message}) — démarrage en mode dégradé`);
     isDatabaseConnected = false;
@@ -123,6 +130,13 @@ try {
 try {
   app.use('/api/permissions', require('./routes/permissions'));
 } catch (e) {}
+
+try {
+  app.use('/api/cabinets', require('./routes/cabinets'));
+  console.log('✅ Route /api/cabinets enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/cabinets:', e.message);
+}
 
 try {
   app.use('/api/user/dossiers', require('./routes/dossiers'));
@@ -317,8 +331,26 @@ const startServer = async () => {
         };
         setTimeout(runTarificationInstallmentReminders, 60_000);
         setInterval(runTarificationInstallmentReminders, 24 * 60 * 60 * 1000);
+
+        if (String(process.env.DOCUMENTS_INTEGRITY_AUDIT_ENABLED || '').toLowerCase() === 'true') {
+          const { runDocumentsIntegrityAudit } = require('./utils/documentsIntegrityAudit');
+          const runAudit = () => {
+            void runDocumentsIntegrityAudit({ quiet: true }).catch((e) => {
+              console.warn('⚠️ Audit documents échoué:', e.message);
+            });
+          };
+          setTimeout(runAudit, 5 * 60 * 1000);
+          setInterval(runAudit, 24 * 60 * 60 * 1000);
+          console.log('📋 Audit intégrité documents activé (quotidien)');
+        }
       }
     });
+
+    server.timeout = 120_000;
+    server.headersTimeout = 125_000;
+    if (typeof server.requestTimeout === 'number') {
+      server.requestTimeout = 120_000;
+    }
 
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {

@@ -1085,6 +1085,22 @@ router.post(
         };
       }
 
+      const staffRoles = ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'];
+      if (staffRoles.includes(finalRole)) {
+        const { resolveCabinetForUser } = require('../utils/cabinetResolver');
+        const Cabinet = require('../models/Cabinet');
+        let cabinet = null;
+        if (req.body.cabinetId) {
+          cabinet = await Cabinet.findById(req.body.cabinetId).lean();
+        }
+        if (!cabinet) {
+          cabinet = await resolveCabinetForUser(req.user);
+        }
+        if (cabinet?._id) {
+          userData.cabinetId = cabinet._id;
+        }
+      }
+
 
       const user = await User.create(userData);
       console.log('✅ Utilisateur créé avec succès:', user._id);

@@ -45,6 +45,12 @@ const userSchema = new mongoose.Schema({
     enum: ['client', 'admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire', 'visiteur', 'partenaire'],
     default: 'client'
   },
+  cabinetId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Cabinet',
+    default: null,
+    index: true,
+  },
   partenaireInfo: {
     typeOrganisme: {
       type: String,

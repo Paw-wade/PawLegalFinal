@@ -15,6 +15,8 @@ const {
   sendTemplatedTransactionalEmail,
 } = require('../utils/emailTemplateMailer');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
+const { uploadDocumentToRemoteStorage, removeLocalUploadTempFile } = require('../utils/documentRemoteUpload');
+const { resolveCabinetForUser } = require('../utils/cabinetResolver');
 
 const router = express.Router();
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -29,7 +31,6 @@ if (!fs.existsSync(localDocumentsDir)) {
 
 const cloudinaryPkg = require('cloudinary');
 const cloudinary = cloudinaryPkg.v2;
-const createCloudinaryStorage = require('multer-storage-cloudinary');
 
 const hasCloudinaryConfig =
   !!process.env.CLOUDINARY_CLOUD_NAME &&
@@ -44,30 +45,37 @@ if (hasCloudinaryConfig) {
   });
 }
 
-const cloudinaryStorage = hasCloudinaryConfig
-  ? createCloudinaryStorage({
-      cloudinary: cloudinaryPkg,
-      params: async (req, file) => {
-        const isImage = (file.mimetype || '').startsWith('image/');
-        return {
-          folder: 'pawlegal/documents',
-          resource_type: isImage ? 'image' : 'raw',
-          public_id: `${Date.now()}-${(file.originalname || 'document').replace(/[^a-zA-Z0-9]/g, '_')}`,
-        };
-      },
-    })
-  : multer.diskStorage({
-      destination: (req, file, cb) => cb(null, localDocumentsDir),
-      filename: (req, file, cb) => {
-        const safeName = (file.originalname || 'document')
-          .replace(/[^a-zA-Z0-9._-]/g, '_')
-          .replace(/_+/g, '_');
-        cb(null, `${Date.now()}-${safeName}`);
-      },
-    });
+const diskStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, localDocumentsDir),
+  filename: (req, file, cb) => {
+    const safeName = (file.originalname || 'document')
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/_+/g, '_');
+    cb(null, `${Date.now()}-${safeName}`);
+  },
+});
+
+async function uploadLocalFileToCloudinary(file) {
+  const storage = String(process.env.UPLOAD_STORAGE || 'cloudinary').toLowerCase();
+  if (storage === 'local' || storage === 's3') {
+    return null;
+  }
+  if (!hasCloudinaryConfig) return null;
+  const localPath = file?.path;
+  if (!localPath || !fs.existsSync(localPath)) return null;
+  const isImage = String(file.mimetype || '').startsWith('image/');
+  const baseName = path.basename(String(file.filename || 'document'), path.extname(String(file.filename || '')));
+  const result = await cloudinary.uploader.upload(localPath, {
+    resource_type: isImage ? 'image' : 'raw',
+    folder: 'pawlegal/documents',
+    public_id: baseName || `${Date.now()}-document`,
+    overwrite: true,
+  });
+  return result?.secure_url || null;
+}
 
 const upload = multer({
-  storage: cloudinaryStorage,
+  storage: diskStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => cb(null, true),
 });
@@ -186,16 +194,36 @@ router.post('/public/:token', (req, res, next) => {
     const guestName = String(contributorName || '').trim().slice(0, 200);
     const docNom = String(nom || req.file.originalname || 'Document').trim().slice(0, 500);
 
+    let cheminFichier;
+    const cabinet = await resolveCabinetForUser(ownerUserId);
+    const s3Prefix = cabinet?.s3Prefix || null;
+    try {
+      cheminFichier = await uploadDocumentToRemoteStorage(req.file, {
+        backendRoot: BACKEND_ROOT,
+        s3Prefix,
+        uploadToCloudinary: () => uploadLocalFileToCloudinary(req.file),
+      });
+    } catch (uploadErr) {
+      removeLocalUploadTempFile(req.file);
+      console.error('Échec upload distant (invité) — document non créé:', uploadErr.message);
+      return res.status(503).json({
+        success: false,
+        message:
+          'Impossible d\'enregistrer le fichier. Réessayez dans quelques instants.',
+      });
+    }
+
     const document = await Document.create({
       user: ownerUserId,
       nom: docNom,
       nomFichier: req.file.filename,
-      cheminFichier: req.file.path,
+      cheminFichier,
       typeMime: req.file.mimetype,
       taille: req.file.size,
       description: String(description || '').trim(),
       categorie: normalizeCategorie(categorie),
       dossierId: invite.dossierId,
+      cabinetId: cabinet?._id || null,
       visibleToClient: false,
       confidentialReason: 'Document transmis par un tiers via lien sécurisé — en attente de validation par le cabinet.',
       uploadedViaGuestLink: true,

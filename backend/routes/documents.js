@@ -9,6 +9,20 @@ const Log = require('../models/Log');
 const Dossier = require('../models/Dossier');
 const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
+const {
+  getDocumentHttpUrl,
+  pipeHttpDocumentUrl,
+  tryServeDocumentFromAlternateSources,
+  resolveDocumentResponseContentType,
+  isS3StoragePath,
+} = require('../utils/documentFileStorage');
+const {
+  deleteS3Object,
+  archiveS3Object,
+  tryServeDocumentFromS3,
+} = require('../utils/s3DocumentStorage');
+const { uploadDocumentToRemoteStorage, removeLocalUploadTempFile } = require('../utils/documentRemoteUpload');
+const { resolveCabinetForUser } = require('../utils/cabinetResolver');
 
 const router = express.Router();
 const BACKEND_ROOT = path.resolve(__dirname, '..');
@@ -83,6 +97,17 @@ const resolveExistingDocumentPath = (storedPath, fileName) => {
   const asForwardSlash = rawPath.replace(/\\/g, '/').replace(/^\/+/, '');
 
   const candidates = [];
+
+  const dockerUploadsMatch = asForwardSlash.match(/^(?:app\/)?uploads\/documents\/(.+)$/i);
+  if (dockerUploadsMatch?.[1]) {
+    const relFile = dockerUploadsMatch[1];
+    candidates.push(
+      path.join(UPLOADS_ROOT, 'documents', relFile),
+      path.resolve(BACKEND_ROOT, 'uploads', 'documents', relFile),
+      path.join(process.cwd(), 'uploads', 'documents', relFile),
+      path.join(process.cwd(), 'backend', 'uploads', 'documents', relFile)
+    );
+  }
 
   if (normalized) {
     if (path.isAbsolute(normalized)) candidates.push(normalized);
@@ -219,6 +244,36 @@ const resolveDocumentPhysicalPath = async (document) => {
   return filePath;
 };
 
+async function sendDocumentToClient(document, res, { inline = false } = {}) {
+  const directUrl = getDocumentHttpUrl(document);
+  if (directUrl) {
+    const ok = await pipeHttpDocumentUrl(directUrl, res, document, { inline });
+    if (ok) return true;
+  }
+
+  if (await tryServeDocumentFromS3(document, res, { inline })) return true;
+
+  const localPath = await resolveDocumentPhysicalPath(document);
+  if (localPath) {
+    const fileName = resolveDocumentDownloadFileName(document, localPath);
+    const contentType = resolveDocumentResponseContentType(document);
+    if (inline) {
+      res.setHeader('Content-Type', contentType);
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="${encodeURIComponent(document.nom || fileName)}"`
+      );
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      res.sendFile(localPath);
+    } else {
+      res.download(localPath, fileName);
+    }
+    return true;
+  }
+
+  return tryServeDocumentFromAlternateSources(document, res, { inline });
+}
+
 const isHttpLikeStoragePath = (value) => /^https?:\/\//i.test(String(value || '').trim());
 
 function extractStoredFileLabel(raw) {
@@ -251,6 +306,7 @@ function isInternalStorageFileName(name) {
   if (isHttpLikeStoragePath(value)) return true;
   const normalized = value.toLowerCase();
   if (normalized.includes('cloudinary.com')) return true;
+  if (normalized.startsWith('s3://')) return true;
   if (
     normalized.includes('raw_upload') ||
     normalized.includes('pawlegal_documents') ||
@@ -384,7 +440,6 @@ const normalizeCategorie = (rawCategorie) => {
 // Configuration du stockage Multer
 const cloudinaryPkg = require('cloudinary');
 const cloudinary = cloudinaryPkg.v2;
-const createCloudinaryStorage = require('multer-storage-cloudinary');
 
 const hasCloudinaryConfig =
   !!process.env.CLOUDINARY_CLOUD_NAME &&
@@ -422,37 +477,45 @@ function cloudinaryPublicIdFromUrl(fileUrl) {
   return withoutExt || null;
 }
 
-const cloudinaryStorage = hasCloudinaryConfig
-  ? createCloudinaryStorage({
-      cloudinary: cloudinaryPkg,
-      params: async (req, file) => {
-        const isImage = (file.mimetype || '').startsWith('image/');
-        return {
-          folder: 'pawlegal/documents',
-          resource_type: isImage ? 'image' : 'raw',
-          public_id: `${Date.now()}-${(file.originalname || 'document').replace(/[^a-zA-Z0-9]/g, '_')}`,
-        };
-      },
-    })
-  : multer.diskStorage({
-      destination: (req, file, cb) => cb(null, localDocumentsDir),
-      filename: (req, file, cb) => {
-        const safeName = (file.originalname || 'document')
-          .replace(/[^a-zA-Z0-9._-]/g, '_')
-          .replace(/_+/g, '_');
-        cb(null, `${Date.now()}-${safeName}`);
-      },
-    });
+const diskStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, localDocumentsDir),
+  filename: (req, file, cb) => {
+    const safeName = (file.originalname || 'document')
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/_+/g, '_');
+    cb(null, `${Date.now()}-${safeName}`);
+  },
+});
 
-// Filtre permissif: accepter tous les types de fichiers
+/** Disque d'abord (reception rapide), puis S3 ou Cloudinary dans le handler POST. */
+async function uploadLocalFileToCloudinary(file) {
+  const storage = String(process.env.UPLOAD_STORAGE || 'cloudinary').toLowerCase();
+  if (storage === 'local' || storage === 's3') {
+    return null;
+  }
+  if (!hasCloudinaryConfig) return null;
+  const localPath = file?.path;
+  if (!localPath || !fs.existsSync(localPath)) return null;
+
+  const isImage = String(file.mimetype || '').startsWith('image/');
+  const baseName = path.basename(String(file.filename || 'document'), path.extname(String(file.filename || '')));
+  const result = await cloudinary.uploader.upload(localPath, {
+    resource_type: isImage ? 'image' : 'raw',
+    folder: 'pawlegal/documents',
+    public_id: baseName || `${Date.now()}-document`,
+    overwrite: true,
+  });
+  return result?.secure_url || null;
+}
+
 const fileFilter = (req, file, cb) => {
   cb(null, true);
 };
 
 const upload = multer({
-  storage: cloudinaryStorage,
+  storage: diskStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: fileFilter
+  fileFilter,
 });
 
 // Toutes les routes nécessitent une authentification
@@ -682,6 +745,14 @@ router.post('/', (req, res, next) => {
           message: err.message
         });
       }
+
+      if (err.message === 'Request aborted' || /request aborted/i.test(String(err.message || ''))) {
+        return res.status(408).json({
+          success: false,
+          message:
+            'Televersement interrompu (connexion coupee). Reessayez avec un fichier plus petit ou verifiez votre connexion.',
+        });
+      }
       
       return res.status(400).json({
         success: false,
@@ -725,19 +796,38 @@ router.post('/', (req, res, next) => {
       categorieNormalisee: safeCategorie
     });
 
-    // Stocker un chemin relatif stable pour éviter les erreurs selon le cwd du serveur
+    let cheminFichier;
+    const cabinet = await resolveCabinetForUser(req.user);
+    const s3Prefix = cabinet?.s3Prefix || null;
+    try {
+      cheminFichier = await uploadDocumentToRemoteStorage(req.file, {
+        backendRoot: BACKEND_ROOT,
+        s3Prefix,
+        uploadToCloudinary: () => uploadLocalFileToCloudinary(req.file),
+      });
+    } catch (uploadErr) {
+      removeLocalUploadTempFile(req.file);
+      console.error('Échec upload distant — document non créé:', uploadErr.message);
+      return res.status(503).json({
+        success: false,
+        message:
+          'Impossible d\'enregistrer le fichier sur le stockage distant. Le document n\'a pas été créé. Réessayez dans quelques instants.',
+      });
+    }
+
     const documentData = {
       user: effectiveUserId,
       nom: nom || req.file.originalname,
       // `nomFichier` est indexé/unique côté DB : utiliser le nom de fichier généré par multer (timestamp)
       // pour éviter les doublons lorsque l'utilisateur upload plusieurs fois le même fichier original.
       nomFichier: req.file.filename,
-      cheminFichier: req.file.path, // URL Cloudinary
+      cheminFichier,
       typeMime: req.file.mimetype,
       taille: req.file.size,
       description: description || '',
       categorie: safeCategorie,
       visibleToClient: uploaderIsCabinet ? parseBoolean(visibleToClient, true) : true,
+      cabinetId: cabinet?._id || null,
       confidentialReason:
         uploaderIsCabinet && parseBoolean(visibleToClient, true) === false
           ? String(confidentialReason || '').trim()
@@ -1025,44 +1115,15 @@ router.get('/:id/preview', async (req, res) => {
       }
     }
 
-    // Gérer Cloudinary (URL http/https) ET stockage local (chemin disque)
-    const fileUrl = document.cheminFichier;
-    let contentType = document.typeMime || 'application/octet-stream';
-    if (!document.typeMime && (document.nom || '').toLowerCase().endsWith('.pdf')) {
-      contentType = 'application/pdf';
-    }
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(document.nom)}"`);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    // Stream Cloudinary / local / origines distantes
+    const served = await sendDocumentToClient(document, res, { inline: true });
+    if (served) return;
 
-    if (fileUrl && fileUrl.startsWith('http')) {
-      // Récupérer le fichier depuis Cloudinary et le streamer
-      const https = require('https');
-      const http = require('http');
-      const protocol = fileUrl.startsWith('https') ? https : http;
-      console.log('✅ Prévisualisation — stream Cloudinary:', fileUrl);
-      protocol.get(fileUrl, (stream) => {
-        stream.pipe(res);
-      }).on('error', (err) => {
-        console.error('❌ Erreur stream Cloudinary:', err.message);
-        if (!res.headersSent) {
-          res.status(500).json({ success: false, message: 'Erreur lecture du fichier' });
-        }
-      });
-      return;
-    }
-
-    // Fichier local
-    const localPath = await resolveDocumentPhysicalPath(document);
-    if (!localPath) {
-      return res.status(404).json({
-        success: false,
-        code: 'FILE_NOT_FOUND',
-        message: 'Fichier non trouvé'
-      });
-    }
-    console.log('✅ Prévisualisation — fichier local:', localPath);
-    return res.sendFile(localPath);
+    return res.status(404).json({
+      success: false,
+      code: 'FILE_NOT_FOUND',
+      message: 'Fichier non trouvé sur le serveur. Le fichier peut être absent du disque local — récupérez-le depuis le VPS ou re-téléversez le document.',
+    });
   } catch (error) {
     console.error('Erreur lors de la prévisualisation du document:', error);
     if (!res.headersSent) {
@@ -1102,7 +1163,8 @@ router.get('/:id/download', async (req, res) => {
     // Les admins peuvent télécharger tous les documents
     // Les partenaires peuvent télécharger les documents des dossiers transmis
     const effectiveUserId = req.user.id;
-    const isOwner = document.user.toString() === effectiveUserId.toString();
+    const isOwner =
+      document.user && document.user.toString() === effectiveUserId.toString();
     const isAdmin = isCabinetStaff(req.user.role);
     const isPartenaire = req.user.role === 'partenaire';
     
@@ -1154,23 +1216,14 @@ router.get('/:id/download', async (req, res) => {
       }
     }
 
-    const fileUrl = document.cheminFichier;
-    if (fileUrl && fileUrl.startsWith('http')) {
-      console.log('✅ Téléchargement — redirect Cloudinary:', fileUrl);
-      return res.redirect(fileUrl);
-    }
+    const served = await sendDocumentToClient(document, res, { inline: false });
+    if (served) return;
 
-    const localPath = await resolveDocumentPhysicalPath(document);
-    if (!localPath) {
-      return res.status(404).json({
-        success: false,
-        code: 'FILE_NOT_FOUND',
-        message: 'Fichier non trouvé'
-      });
-    }
-
-    console.log('✅ Téléchargement — fichier local:', localPath);
-    return res.download(localPath, resolveDocumentDownloadFileName(document, localPath));
+    return res.status(404).json({
+      success: false,
+      code: 'FILE_NOT_FOUND',
+      message: 'Fichier non trouvé sur le serveur. Le fichier peut être absent du disque local — récupérez-le depuis le VPS ou re-téléversez le document.',
+    });
   } catch (error) {
     console.error('Erreur lors du téléchargement du document:', error);
     res.status(500).json({
@@ -1335,6 +1388,22 @@ router.delete('/:id', async (req, res) => {
       // Continuer la suppression même si l'ajout à la corbeille échoue
     }
 
+    // Archivage S3 (copie vers archive/) au lieu de suppression définitive
+    if (isS3StoragePath(document.cheminFichier)) {
+      const hardDelete = String(process.env.DOCUMENT_S3_HARD_DELETE || '').toLowerCase() === 'true';
+      try {
+        if (hardDelete) {
+          await deleteS3Object(document.cheminFichier);
+          console.log('✅ Fichier supprimé sur S3 (hard delete):', document.cheminFichier);
+        } else {
+          const archiveUri = await archiveS3Object(document.cheminFichier);
+          console.log('✅ Fichier archivé sur S3:', archiveUri || document.cheminFichier);
+        }
+      } catch (s3Err) {
+        console.warn('⚠️ Archivage/suppression S3 échouée:', s3Err.message);
+      }
+    }
+
     // Suppression sur Cloudinary (uniquement si configuré + URL Cloudinary + public_id fiable)
     if (
       hasCloudinaryConfig &&
@@ -1401,15 +1470,13 @@ router.delete('/:id', async (req, res) => {
 });
 
 async function deliverDocumentFileResponse(document, res) {
-  const fileUrl = document.cheminFichier;
-  if (fileUrl && String(fileUrl).trim().toLowerCase().startsWith('http')) {
-    return res.redirect(fileUrl);
-  }
-  const localPath = await resolveDocumentPhysicalPath(document);
-  if (!localPath) {
-    return res.status(404).json({ success: false, message: 'Fichier non trouvé' });
-  }
-  return res.download(localPath, resolveDocumentDownloadFileName(document, localPath));
+  const served = await sendDocumentToClient(document, res, { inline: false });
+  if (served) return;
+  return res.status(404).json({
+    success: false,
+    code: 'FILE_NOT_FOUND',
+    message: 'Fichier non trouvé',
+  });
 }
 
 module.exports = router;

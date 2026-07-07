@@ -54,6 +54,14 @@ export function getPublicApiBaseUrl(): string {
   return `${DEFAULT_ORIGIN}/api`;
 }
 
+/** Uploads multipart : en dev, contourne le proxy Next qui coupe souvent les gros POST. */
+export function getDirectBackendApiBaseUrl(): string {
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    return 'http://127.0.0.1:3005/api';
+  }
+  return getPublicApiBaseUrl();
+}
+
 /**
  * Chemin sous `/api`, ex. `publicApiPath('/auth/login')` → même URL que
  * `` `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login` ``.

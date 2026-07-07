@@ -42,6 +42,12 @@ const documentSchema = new mongoose.Schema({
     ref: 'Dossier',
     default: null
   },
+  cabinetId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Cabinet',
+    default: null,
+    index: true,
+  },
   visibleToClient: {
     type: Boolean,
     default: true
