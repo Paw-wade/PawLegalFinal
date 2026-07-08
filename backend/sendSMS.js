@@ -1,6 +1,7 @@
 // sendSMS.js
 const twilio = require('twilio');
 const { sendPushToUser } = require('./utils/pushService');
+const { sendDexchangeSMS } = require('./dexchangeSMS');
 
 // Variables d'environnement
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -44,45 +45,75 @@ function getTwilioClient() {
 }
 
 /**
- * Formate un numéro de téléphone pour Twilio (format E.164)
+ * Formate un numéro de téléphone au format E.164 (France +33 et Sénégal +221).
  * @param {string} phone - numéro de téléphone à formater
  * @returns {string|null} - numéro formaté ou null si invalide
  */
 function formatPhoneNumber(phone) {
   if (!phone) return null;
-  
+
   // Supprimer tous les espaces, tirets, points, parenthèses
-  let cleaned = phone.replace(/[\s\-\.\(\)]/g, '');
-  
-  // Si le numéro commence par 0, le remplacer par +33 (code France)
+  const cleaned = phone.replace(/[\s\-\.\(\)]/g, '');
+
+  // Déjà au format international
+  if (cleaned.startsWith('+')) {
+    return cleaned;
+  }
+
+  // Indicatif pays saisi sans le « + »
+  if (cleaned.startsWith('221')) {
+    return '+' + cleaned; // Sénégal
+  }
+  if (cleaned.startsWith('33')) {
+    return '+' + cleaned; // France
+  }
+
+  // Numéro français national : 0X XX XX XX XX (10 chiffres commençant par 0)
   if (cleaned.startsWith('0')) {
-    cleaned = '+33' + cleaned.substring(1);
+    return '+33' + cleaned.substring(1);
   }
-  // Si le numéro ne commence pas par +, ajouter +33
-  else if (!cleaned.startsWith('+')) {
-    // Si c'est un numéro français (10 chiffres), ajouter +33
-    if (cleaned.length === 10 && /^[0-9]+$/.test(cleaned)) {
-      cleaned = '+33' + cleaned.substring(1);
-    } else {
-      cleaned = '+' + cleaned;
-    }
+
+  // Numéro sénégalais local : 9 chiffres commençant par 7 (70/75/76/77/78)
+  if (/^7[0-9]{8}$/.test(cleaned)) {
+    return '+221' + cleaned;
   }
-  
-  return cleaned;
+
+  // Numéro français local à 10 chiffres sans 0 initial (cas résiduel)
+  if (cleaned.length === 10 && /^[0-9]+$/.test(cleaned)) {
+    return '+33' + cleaned.substring(1);
+  }
+
+  // Repli : ajouter simplement le préfixe international
+  return '+' + cleaned;
 }
 
 function isFrenchPhone(formattedPhone) {
   return typeof formattedPhone === 'string' && formattedPhone.startsWith('+33');
 }
 
+function isSenegalPhone(formattedPhone) {
+  return typeof formattedPhone === 'string' && formattedPhone.startsWith('+221');
+}
+
 /**
- * Envoie un SMS via Twilio
- * @param {string} to - numéro du destinataire, ex: '+33612345678' ou '0612345678'
+ * Détermine l'opérateur SMS à utiliser selon l'indicatif du numéro.
+ * @param {string} formattedPhone - numéro au format E.164
+ * @returns {'twilio'|'dexchange'|null}
+ */
+function getSmsProvider(formattedPhone) {
+  if (isFrenchPhone(formattedPhone)) return 'twilio';
+  if (isSenegalPhone(formattedPhone)) return 'dexchange';
+  return null;
+}
+
+/**
+ * Envoie un SMS via Twilio (numéros France +33).
+ * @param {string} formattedTo - numéro déjà formaté au format E.164 (+33...)
  * @param {string} body - message à envoyer
  * @param {object} options - options supplémentaires (from, etc.)
- * @returns {Promise<object>} - message Twilio créé
+ * @returns {Promise<object>} - résultat normalisé
  */
-async function sendSMS(to, body, options = {}) {
+async function sendTwilioSMS(formattedTo, body, options = {}) {
   // Obtenir le client Twilio (initialisation paresseuse)
   const twilioClient = getTwilioClient();
   if (!twilioClient) {
@@ -93,26 +124,7 @@ async function sendSMS(to, body, options = {}) {
     throw new Error('TWILIO_PHONE_NUMBER n\'est pas configuré dans les variables d\'environnement.');
   }
 
-  if (!to) {
-    throw new Error('Le numéro de téléphone du destinataire est requis.');
-  }
-
-  if (!body || body.trim().length === 0) {
-    throw new Error('Le message SMS ne peut pas être vide.');
-  }
-
   try {
-    // Formater le numéro de téléphone
-    const formattedTo = formatPhoneNumber(to);
-    if (!formattedTo) {
-      throw new Error(`Numéro de téléphone invalide: ${to}`);
-    }
-
-    // Règle métier : SMS uniquement pour les numéros français (+33).
-    if (!isFrenchPhone(formattedTo)) {
-      throw new Error('SMS non autorisé pour cet indicatif. Seuls les numéros +33 peuvent recevoir un SMS.');
-    }
-
     // Préparer les options du message
     const messageOptions = {
       body: body.trim(),
@@ -122,14 +134,15 @@ async function sendSMS(to, body, options = {}) {
 
     // Envoyer le SMS
     const message = await twilioClient.messages.create(messageOptions);
-    
-    console.log(`✅ SMS envoyé avec succès:`);
+
+    console.log(`✅ SMS Twilio envoyé avec succès:`);
     console.log(`   - SID: ${message.sid}`);
     console.log(`   - À: ${formattedTo}`);
     console.log(`   - Statut: ${message.status}`);
-    
+
     return {
       success: true,
+      provider: 'twilio',
       sid: message.sid,
       status: message.status,
       to: formattedTo,
@@ -137,8 +150,8 @@ async function sendSMS(to, body, options = {}) {
       body: body.trim()
     };
   } catch (error) {
-    console.error('❌ Erreur lors de l\'envoi du SMS:', error);
-    
+    console.error('❌ Erreur lors de l\'envoi du SMS Twilio:', error);
+
     // Gérer les erreurs spécifiques de Twilio
     if (error.code === 21211) {
       throw new Error('Le numéro de téléphone fourni est invalide.');
@@ -152,6 +165,46 @@ async function sendSMS(to, body, options = {}) {
       throw new Error('Erreur lors de l\'envoi du SMS. Vérifiez vos credentials Twilio.');
     }
   }
+}
+
+/**
+ * Envoie un SMS en routant automatiquement vers le bon opérateur :
+ *   - numéros France (+33)   → Twilio
+ *   - numéros Sénégal (+221) → Dexchange
+ * @param {string} to - numéro du destinataire, ex: '+33612345678', '0612345678', '+221771234567', '771234567'
+ * @param {string} body - message à envoyer
+ * @param {object} options - options supplémentaires (from, signature, etc.)
+ * @returns {Promise<object>} - résultat normalisé (success, provider, sid, status, to, from, body)
+ */
+async function sendSMS(to, body, options = {}) {
+  if (!to) {
+    throw new Error('Le numéro de téléphone du destinataire est requis.');
+  }
+
+  if (!body || body.trim().length === 0) {
+    throw new Error('Le message SMS ne peut pas être vide.');
+  }
+
+  // Formater le numéro de téléphone
+  const formattedTo = formatPhoneNumber(to);
+  if (!formattedTo) {
+    throw new Error(`Numéro de téléphone invalide: ${to}`);
+  }
+
+  const provider = getSmsProvider(formattedTo);
+
+  // Sénégal → Dexchange
+  if (provider === 'dexchange') {
+    return sendDexchangeSMS(formattedTo, body, options);
+  }
+
+  // France → Twilio
+  if (provider === 'twilio') {
+    return sendTwilioSMS(formattedTo, body, options);
+  }
+
+  // Indicatif non pris en charge
+  throw new Error('SMS non autorisé pour cet indicatif. Seuls les numéros +33 (France) et +221 (Sénégal) peuvent recevoir un SMS.');
 }
 
 /**
@@ -507,6 +560,7 @@ module.exports = {
   sendSMS,
   sendNotificationSMS,
   formatPhoneNumber,
+  getSmsProvider,
   fillTemplate,
   canReceiveSMS,
   recordOutboundSms,
