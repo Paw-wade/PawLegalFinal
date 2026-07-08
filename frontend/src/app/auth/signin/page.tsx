@@ -204,7 +204,7 @@ export default function SignInPage() {
           <div className="mb-8">
             <h1 className="text-4xl font-bold mb-4">Bienvenue sur Ada Papers</h1>
             <p className="text-lg text-white/90 mb-6">
-              Service d&apos;Accompagnement aux démarches administratives.
+              Service d'Accompagnement aux démarches administratives.
             </p>
           </div>
           <div className="space-y-4">
@@ -219,7 +219,7 @@ export default function SignInPage() {
               <span className="text-2xl">✓</span>
               <div>
                 <h3 className="font-semibold mb-1">Suivi en temps réel</h3>
-                <p className="text-white/80 text-sm">Suivez l&apos;évolution de votre dossier en temps réel</p>
+                <p className="text-white/80 text-sm">Suivez l'évolution de votre dossier en temps réel</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -244,7 +244,7 @@ export default function SignInPage() {
                   Ada Papers
                 </span>
                 <p className="text-[10px] text-muted-foreground font-medium mt-1">
-                  Service d&apos;Accompagnement aux démarches administratives
+                  Service d'Accompagnement aux démarches administratives
                 </p>
               </div>
             </Link>

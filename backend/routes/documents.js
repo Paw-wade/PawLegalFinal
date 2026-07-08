@@ -9,6 +9,7 @@ const Log = require('../models/Log');
 const Dossier = require('../models/Dossier');
 const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
+const { getAssignedDossierIds, userHasPermission } = require('../utils/accessScope');
 const {
   getDocumentHttpUrl,
   pipeHttpDocumentUrl,
@@ -602,6 +603,17 @@ router.get('/admin', protect, async (req, res) => {
         query.dossierId = { $in: dossierIds };
       }
       console.log('🔍 Partenaire - Filtrage par dossiers transmis (pending/accepted):', dossierIds.length, 'dossiers');
+    }
+
+    // Accès restreint : un membre du staff sans permission "documents" ne voit
+    // que les documents rattachés à un dossier qui lui est assigné.
+    if (!isPartenaire && req.user.role !== 'superadmin') {
+      const canViewAll = await userHasPermission(req.user, 'documents', 'consulter');
+      if (!canViewAll) {
+        const assignedIds = await getAssignedDossierIds(req.user.id);
+        query.dossierId = { $in: assignedIds };
+        console.log('🔒 Accès restreint documents - dossiers assignés:', assignedIds.length);
+      }
     }
     
     const documents = await Document.find(query)

@@ -1,13 +1,13 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const SmsTemplate = require('../models/SmsTemplate');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorizePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification admin
 router.use(protect);
-router.use(authorize('admin', 'superadmin'));
+router.use(authorizePermission('sms', 'consulter'));
 
 // @route   GET /api/sms-templates
 // @desc    Récupérer tous les templates SMS

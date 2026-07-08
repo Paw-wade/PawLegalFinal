@@ -757,7 +757,7 @@ export default function CreateDossierPage() {
 
                       <div>
                         <Label htmlFor="dateEcheance" className="mb-1 block text-sm font-medium">
-                          Date d&apos;échéance (si applicable)
+                          Date d'échéance (si applicable)
                         </Label>
                         <Input
                           id="dateEcheance"

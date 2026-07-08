@@ -241,7 +241,7 @@ export default function ForumPage() {
         <header className="mb-8">
           <h1 className="text-2xl md:text-3xl font-bold">Forum Ada Papers</h1>
           <p className="text-sm md:text-base text-gray-600 mt-2">
-            Posez vos questions et échangez avec l&apos;équipe et les autres utilisateurs sur les démarches administratives.
+            Posez vos questions et échangez avec l'équipe et les autres utilisateurs sur les démarches administratives.
           </p>
           {/* Barre de recherche dans les titres, contenus et réponses */}
           <div className="mt-4 max-w-xl">
@@ -324,7 +324,7 @@ export default function ForumPage() {
             <div className="px-5 pb-5 pt-0 border-t border-amber-100">
               <ul className="list-disc pl-5 space-y-1 text-xs md:text-sm text-gray-700">
                 <li>Ne publiez pas de données sensibles : numéros de titre de séjour complets, numéros de passeport, adresses exactes, etc.</li>
-                <li>Restez respectueux dans vos échanges, aucun propos discriminatoire ou agressif n&apos;est toléré.</li>
+                <li>Restez respectueux dans vos échanges, aucun propos discriminatoire ou agressif n'est toléré.</li>
                 <li>Les réponses données sur ce forum sont informatives et ne constituent pas un accompagnement personnalisé.</li>
                 <li>Pour une prise en charge complète de votre dossier, utilisez les fonctionnalités de la plateforme et suivez les instructions de votre espace client.</li>
                 <li>Les administrateurs se réservent le droit de modifier ou supprimer tout contenu non conforme à ces règles.</li>

@@ -2,7 +2,8 @@
 
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { RouteProtection } from '@/components/RouteProtection';
-import { useEffect } from 'react';
+import { StaffPermissionsProvider } from '@/contexts/StaffPermissionsContext';
+import { Suspense, useEffect } from 'react';
 
 export default function AdminLayout({
   children,
@@ -15,10 +16,20 @@ export default function AdminLayout({
   }, []);
 
   return (
-    <DashboardLayout variant="admin">
-      <RouteProtection>
-        {children}
-      </RouteProtection>
-    </DashboardLayout>
+    <StaffPermissionsProvider>
+      <DashboardLayout variant="admin">
+        <RouteProtection>
+          <Suspense
+            fallback={
+              <div className="min-h-[60vh] flex items-center justify-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+              </div>
+            }
+          >
+            {children}
+          </Suspense>
+        </RouteProtection>
+      </DashboardLayout>
+    </StaffPermissionsProvider>
   );
 }

@@ -1520,9 +1520,9 @@ export default function AdminRendezVousPage() {
                     disabled={adminBookingSubmitting}
                   />
                   <span>
-                    <span className="font-medium">Informer l&apos;équipe</span>
+                    <span className="font-medium">Informer l'équipe</span>
                     <span className="block text-xs text-muted-foreground">
-                      Notifications dans l&apos;application et e-mails aux administrateurs.
+                      Notifications dans l'application et e-mails aux administrateurs.
                     </span>
                   </span>
                 </label>

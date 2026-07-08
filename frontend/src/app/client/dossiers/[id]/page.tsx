@@ -1356,7 +1356,7 @@ export default function DossierDetailPage() {
                 <p className="text-sm text-red-600">{messagesError}</p>
               ) : messages.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Aucun message pour ce dossier pour le moment. Vous pouvez écrire à l&apos;équipe juridique depuis la page Messagerie.
+                  Aucun message pour ce dossier pour le moment. Vous pouvez écrire à l'équipe juridique depuis la page Messagerie.
                 </p>
               ) : (
                 <div className="space-y-3">

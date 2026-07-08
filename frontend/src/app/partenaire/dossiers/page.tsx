@@ -2930,7 +2930,7 @@ export default function PartenaireDossiersPage() {
                               </>
                             ) : (
                               <option value="">
-                                Aucune étape définie (ouvrir &quot;Ajouter une étape&quot; dans les détails)
+                                Aucune étape définie (ouvrir « Ajouter une étape » dans les détails)
                               </option>
                             )}
                           </select>
@@ -3400,7 +3400,7 @@ export default function PartenaireDossiersPage() {
             >
               <div className="space-y-3 mb-4">
                 <div>
-                  <Label htmlFor="newEtapeLabelPart">Libellé de l&apos;étape *</Label>
+                  <Label htmlFor="newEtapeLabelPart">Libellé de l'étape *</Label>
                   <Input
                     id="newEtapeLabelPart"
                     value={newEtapeLabel}

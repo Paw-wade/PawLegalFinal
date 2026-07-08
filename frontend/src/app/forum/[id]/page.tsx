@@ -981,7 +981,7 @@ export default function ForumThreadPage() {
                     <h2 className="text-sm md:text-base font-semibold mb-3">Répondre à cette discussion</h2>
                     {thread.status === 'resolved' || thread.status === 'closed' || thread.status === 'archived' ? (
                       <p className="text-sm text-gray-700">
-                        Cette discussion est marquée comme {thread.status === 'resolved' ? 'résolue' : 'fermée'} et n&apos;accepte plus de nouvelles réponses.
+                        Cette discussion est marquée comme {thread.status === 'resolved' ? 'résolue' : 'fermée'} et n'accepte plus de nouvelles réponses.
                         {isAdmin && ' Vous pouvez la rouvrir via les actions administrateur ci-dessus.'}
                       </p>
                     ) : replyTargetId ? (

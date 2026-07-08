@@ -375,7 +375,7 @@ export default function CompleteProfilePage() {
               </p>
               {userRole === 'client' && (
                 <p className="text-xs text-muted-foreground/90 mt-2">
-                  Sans profil complété, l&apos;accès au calculateur de délais n&apos;est pas possible.
+                  Sans profil complété, l'accès au calculateur de délais n'est pas possible.
                 </p>
               )}
             </div>

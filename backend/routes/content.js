@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, validationResult, query } = require('express-validator');
 const CmsContent = require('../models/CmsContent');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorizePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -94,7 +94,7 @@ router.get(
 );
 
 // Toutes les routes suivantes nécessitent une authentification admin
-router.use(protect, authorize('admin', 'superadmin'));
+router.use(protect, authorizePermission('cms', 'consulter'));
 
 // @route   GET /api/content
 // @desc    Lister les entrées CMS

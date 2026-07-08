@@ -1,6 +1,9 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const isDev = process.env.NODE_ENV !== 'production';
+
+const ACCESS_DENIED_MESSAGE =
+  "Vous n'avez pas accès à cette ressource. Contactez l'administrateur pour plus d'informations.";
 const authUserCache = new Map();
 const AUTH_USER_CACHE_TTL_MS = 30000;
 
@@ -113,7 +116,7 @@ const authorize = (...roles) => {
       if (isDev) console.error('❌ Authorize: Rôle non autorisé', req.user.role, 'pour', roles); // Debug log
       return res.status(403).json({
         success: false,
-        message: `Le rôle ${req.user.role} n'a pas accès à cette ressource`
+        message: ACCESS_DENIED_MESSAGE
       });
     }
 
@@ -122,6 +125,121 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { protect, authorize };
+// Middleware de contrôle d'accès basé sur les permissions par domaine.
+// action ∈ { 'consulter', 'modifier', 'supprimer' }.
+// Le superadmin a toujours accès. Les autres rôles staff sont soumis à leur
+// document Permission (à défaut, au preset de leur rôle).
+const authorizePermission = (domaine, action = 'consulter') => {
+  // Requis ici (et non en haut) pour éviter tout cycle de dépendances au chargement.
+  const Permission = require('../models/Permission');
+  const { getPresetForRole, isStaffRole } = require('../utils/rolePresets');
+
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Non autorisé' });
+      }
+
+      const role = req.user.role;
+
+      // Superadmin : accès total
+      if (role === 'superadmin') {
+        return next();
+      }
+
+      // Seuls les rôles staff peuvent accéder à ces ressources d'administration
+      if (!isStaffRole(role)) {
+        return res.status(403).json({ success: false, message: ACCESS_DENIED_MESSAGE });
+      }
+
+      // Charger les permissions de l'utilisateur (fallback : preset du rôle)
+      let permissionDoc = await Permission.findOne({ user: req.user.id }).lean();
+      let permissionsList = permissionDoc?.permissions;
+      if (!permissionsList || permissionsList.length === 0) {
+        const preset = getPresetForRole(role);
+        permissionsList = preset?.permissions || [];
+      }
+
+      const perm = permissionsList.find((p) => p.domaine === domaine);
+      if (!perm) {
+        return res.status(403).json({ success: false, message: ACCESS_DENIED_MESSAGE });
+      }
+
+      let allowed = false;
+      if (action === 'modifier') {
+        allowed = Boolean(perm.modifier) && !perm.nePasModifier;
+      } else if (action === 'supprimer') {
+        allowed = Boolean(perm.supprimer);
+      } else {
+        allowed = Boolean(perm.consulter) && !perm.nePasConsulter;
+      }
+
+      if (!allowed) {
+        return res.status(403).json({ success: false, message: ACCESS_DENIED_MESSAGE });
+      }
+
+      return next();
+    } catch (error) {
+      if (isDev) console.error('❌ authorizePermission erreur:', error.message);
+      return res.status(500).json({ success: false, message: 'Erreur serveur (permissions)' });
+    }
+  };
+};
+
+// Comme authorizePermission, mais accorde un accès "restreint" (scoped) aux
+// membres du staff qui n'ont pas la permission de catégorie mais qui ont des
+// dossiers assignés. Dans ce cas, on laisse passer la requête en positionnant
+// req.accessMode = 'scoped' et req.assignedDossierIds ; le handler doit alors
+// filtrer les résultats sur ces dossiers assignés.
+// Sinon, req.accessMode = 'full'.
+const authorizePermissionOrAssignment = (domaine, action = 'consulter') => {
+  const { getAssignedDossierIds, userHasPermission, isStaffRole } = require('../utils/accessScope');
+
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Non autorisé' });
+      }
+
+      const role = req.user.role;
+
+      if (role === 'superadmin') {
+        req.accessMode = 'full';
+        return next();
+      }
+
+      if (!isStaffRole(role)) {
+        return res.status(403).json({ success: false, message: ACCESS_DENIED_MESSAGE });
+      }
+
+      // Permission de catégorie => accès complet
+      if (await userHasPermission(req.user, domaine, action)) {
+        req.accessMode = 'full';
+        return next();
+      }
+
+      // Sinon : accès restreint aux dossiers assignés (le cas échéant)
+      const assignedIds = await getAssignedDossierIds(req.user.id);
+      if (assignedIds.length > 0) {
+        req.accessMode = 'scoped';
+        req.assignedDossierIds = assignedIds;
+        return next();
+      }
+
+      return res.status(403).json({ success: false, message: ACCESS_DENIED_MESSAGE });
+    } catch (error) {
+      if (isDev) console.error('❌ authorizePermissionOrAssignment erreur:', error.message);
+      return res.status(500).json({ success: false, message: 'Erreur serveur (permissions)' });
+    }
+  };
+};
+
+module.exports = {
+  protect,
+  authorize,
+  authorizePermission,
+  authorizePermissionOrAssignment,
+  ACCESS_DENIED_MESSAGE,
+};
 
 

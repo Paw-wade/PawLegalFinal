@@ -267,7 +267,7 @@ export default function AdminDocumentPreparationEditPage() {
         </div>
 
         <div className="space-y-2 max-w-xs">
-          <Label htmlFor="dueDate">Date d&apos;échéance (optionnel)</Label>
+          <Label htmlFor="dueDate">Date d'échéance (optionnel)</Label>
           <Input id="dueDate" type="date" value={dueDateInput} onChange={(e) => setDueDateInput(e.target.value)} />
         </div>
 

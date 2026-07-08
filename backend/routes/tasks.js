@@ -1,16 +1,32 @@
 const express = require('express');
 const router = express.Router();
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, authorizePermission, authorizePermissionOrAssignment } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 const Task = require('../models/Task');
 const User = require('../models/User');
 const Dossier = require('../models/Dossier');
 const Notification = require('../models/Notification');
 
+// Un membre du staff assigné au dossier (membre d'équipe, chef d'équipe ou
+// legacy assignedTo) a accès aux tâches rattachées à ce dossier.
+async function isUserAssignedToDossier(dossierId, userId) {
+  if (!dossierId || !userId) return false;
+  const rawId = dossierId._id ? dossierId._id : dossierId;
+  const dossier = await Dossier.findOne({
+    _id: rawId,
+    $or: [
+      { assignedTo: userId },
+      { teamMembers: userId },
+      { teamLeader: userId },
+    ],
+  }).select('_id').lean();
+  return Boolean(dossier);
+}
+
 // @route   GET /api/tasks
 // @desc    Récupérer toutes les tâches (Admin seulement)
 // @access  Private/Admin
-router.get('/', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.get('/', protect, authorizePermissionOrAssignment('taches', 'consulter'), async (req, res) => {
   try {
     const { statut, assignedTo, createdBy, dossier, priorite, includeArchived } = req.query;
     
@@ -26,6 +42,15 @@ router.get('/', protect, authorize('admin', 'superadmin'), async (req, res) => {
     // Par défaut, exclure les tâches archivées sauf si includeArchived=true
     if (includeArchived !== 'true') {
       filter.archived = { $ne: true };
+    }
+
+    // Accès restreint : ne renvoyer que les tâches assignées à l'utilisateur
+    // ou rattachées à un dossier qui lui est assigné.
+    if (req.accessMode === 'scoped') {
+      filter.$or = [
+        { assignedTo: req.user.id },
+        { dossier: { $in: req.assignedDossierIds || [] } },
+      ];
     }
 
     const tasks = await Task.find(filter)
@@ -180,12 +205,15 @@ router.get('/:id', protect, async (req, res) => {
       });
     }
 
-    // Vérifier que l'utilisateur a accès à la tâche (créateur, assigné, ou admin)
-    const isCreator = task.createdBy._id.toString() === req.user.id;
-    const isAssigned = task.assignedTo._id.toString() === req.user.id;
+    // Vérifier que l'utilisateur a accès à la tâche (créateur, assigné, admin,
+    // ou membre du staff assigné au dossier de la tâche).
+    const isCreator = task.createdBy && task.createdBy._id.toString() === req.user.id;
+    const assignedArray = Array.isArray(task.assignedTo) ? task.assignedTo : [task.assignedTo].filter(Boolean);
+    const isAssigned = assignedArray.some((a) => (a._id ? a._id : a).toString() === req.user.id);
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const hasDossierAccess = await isUserAssignedToDossier(task.dossier, req.user.id);
 
-    if (!isCreator && !isAssigned && !isAdmin) {
+    if (!isCreator && !isAssigned && !isAdmin && !hasDossierAccess) {
       return res.status(403).json({
         success: false,
         message: 'Vous n\'avez pas accès à cette tâche'
@@ -542,6 +570,11 @@ router.put(
         }
       }
 
+      // Staff assigné au dossier : accès à la tâche (mise à jour du statut, etc.)
+      if (!hasDossierAccess && !isPartenaire && task.dossier) {
+        hasDossierAccess = await isUserAssignedToDossier(task.dossier, req.user.id);
+      }
+
       if (!isCreator && !isAssigned && !isAdmin && !hasDossierAccess) {
         return res.status(403).json({
           success: false,
@@ -861,10 +894,12 @@ router.post(
       }
 
       const isCreator = task.createdBy && task.createdBy.toString() === req.user.id;
-      const isAssigned = task.assignedTo && task.assignedTo.toString() === req.user.id;
+      const assignedArrayNote = Array.isArray(task.assignedTo) ? task.assignedTo : [task.assignedTo].filter(Boolean);
+      const isAssigned = assignedArrayNote.some((a) => (a._id ? a._id : a).toString() === req.user.id);
       const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+      const hasDossierAccessNote = await isUserAssignedToDossier(task.dossier, req.user.id);
 
-      if (!isCreator && !isAssigned && !isAdmin) {
+      if (!isCreator && !isAssigned && !isAdmin && !hasDossierAccessNote) {
         return res.status(403).json({
           success: false,
           message: 'Vous n\'avez pas la permission d\'ajouter une note à cette tâche',
@@ -961,7 +996,7 @@ router.post(
 // @route   DELETE /api/tasks/:id
 // @desc    Supprimer une tâche (Admin seulement)
 // @access  Private/Admin
-router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.delete('/:id', protect, authorizePermission('taches', 'supprimer'), async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
     if (!task) {
@@ -990,7 +1025,7 @@ router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res
 // @route   POST /api/tasks/check-overdue
 // @desc    Vérifier et notifier les tâches en retard (Admin seulement)
 // @access  Private/Admin
-router.post('/check-overdue', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.post('/check-overdue', protect, authorizePermission('taches', 'modifier'), async (req, res) => {
   try {
     const { checkOverdueTasks } = require('../utils/taskDeadlineNotifications');
     const result = await checkOverdueTasks();
@@ -1008,7 +1043,7 @@ router.post('/check-overdue', protect, authorize('admin', 'superadmin'), async (
 // @route   PUT /api/tasks/:id/archive
 // @desc    Archiver ou désarchiver une tâche (Admin seulement)
 // @access  Private/Admin
-router.put('/:id/archive', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.put('/:id/archive', protect, authorizePermission('taches', 'modifier'), async (req, res) => {
   try {
     const { archived } = req.body;
     

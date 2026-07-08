@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, authorizePermission } = require('../middleware/auth');
 const { sendSMS, sendNotificationSMS, formatPhoneNumber, recordOutboundSms } = require('../sendSMS');
 const User = require('../models/User');
 const Log = require('../models/Log');
@@ -12,7 +12,7 @@ const Log = require('../models/Log');
 router.post(
   '/send',
   protect,
-  authorize('admin', 'superadmin'),
+  authorizePermission('sms', 'modifier'),
   [
     body('to').trim().notEmpty().withMessage('Le numéro de téléphone est requis'),
     body('message').trim().notEmpty().withMessage('Le message est requis').isLength({ max: 1600 }).withMessage('Le message ne peut pas dépasser 1600 caractères')
@@ -91,7 +91,7 @@ router.post(
 router.post(
   '/notification',
   protect,
-  authorize('admin', 'superadmin'),
+  authorizePermission('sms', 'modifier'),
   [
     body('to').trim().notEmpty().withMessage('Le numéro de téléphone est requis'),
     body('type').trim().notEmpty().withMessage('Le type de notification est requis'),
@@ -156,7 +156,7 @@ router.post(
 router.post(
   '/bulk',
   protect,
-  authorize('admin', 'superadmin'),
+  authorizePermission('sms', 'modifier'),
   [
     body('recipients').isArray({ min: 1 }).withMessage('Au moins un destinataire est requis'),
     body('recipients.*.phone').trim().notEmpty().withMessage('Le numéro de téléphone est requis pour chaque destinataire'),

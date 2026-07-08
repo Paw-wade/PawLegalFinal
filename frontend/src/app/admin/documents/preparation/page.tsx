@@ -458,7 +458,7 @@ export default function AdminDocumentsPreparationPage() {
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Documents en préparation</h1>
           <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed max-w-prose">
-            Tous les brouillons utilisent l&apos;éditeur riche. Export Word (.docx) disponible pour les documents
+            Tous les brouillons utilisent l'éditeur riche. Export Word (.docx) disponible pour les documents
             Ada Papers.
           </p>
         </div>
@@ -520,7 +520,7 @@ export default function AdminDocumentsPreparationPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="due">Date d&apos;échéance (optionnel)</Label>
+              <Label htmlFor="due">Date d'échéance (optionnel)</Label>
               <Input id="due" type="date" value={createDueDate} onChange={(e) => setCreateDueDate(e.target.value)} />
             </div>
           </div>

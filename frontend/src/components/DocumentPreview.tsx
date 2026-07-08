@@ -302,10 +302,10 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
               <div className="text-center">
                 <div className="mb-4 text-5xl sm:text-6xl">📎</div>
                 <p className="mb-4 text-sm text-muted-foreground">
-                  La prévisualisation n&apos;est pas disponible pour ce type de fichier.
+                  La prévisualisation n'est pas disponible pour ce type de fichier.
                 </p>
                 <p className="text-xs text-muted-foreground sm:text-sm">
-                  Veuillez télécharger le fichier pour l&apos;ouvrir.
+                  Veuillez télécharger le fichier pour l'ouvrir.
                 </p>
               </div>
             </div>

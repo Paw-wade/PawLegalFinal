@@ -250,7 +250,7 @@ export default function AdminEmailsPage() {
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-primary/10 p-4 md:p-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Console Email</h1>
-        <p className="text-muted-foreground">Templates, activations d&apos;événements, journal d&apos;envoi et tests.</p>
+        <p className="text-muted-foreground">Templates, activations d'événements, journal d'envoi et tests.</p>
       </div>
 
       {dbWarning && (

@@ -840,6 +840,10 @@ export const contactAPI = {
 };
 
 export const permissionsAPI = {
+  // Récupérer les permissions de l'utilisateur connecté (interface staff)
+  getMyPermissions: () =>
+    api.get('/permissions/me'),
+
   // Récupérer les permissions d'un utilisateur
   getUserPermissions: (userId: string) =>
     api.get(`/permissions/${userId}`),
@@ -1047,6 +1051,13 @@ export const dossiersAPI = {
   getAllDossiers: (params?: { statut?: string; type?: string; categorie?: string; userId?: string; search?: string }) => {
     return api.get('/user/dossiers/admin', {
       params,
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    });
+  },
+
+  // Admin - Statistiques globales (tous les dossiers), indépendantes du périmètre
+  getGlobalDossierStats: () => {
+    return api.get('/user/dossiers/stats/global', {
       headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
     });
   },

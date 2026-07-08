@@ -27,7 +27,7 @@ export default function AProposPage() {
           <div className="text-center max-w-3xl mx-auto">
             <div className="inline-block mb-3 px-4 py-1 bg-primary/10 rounded-full border border-primary/20">
               <span className="text-xs md:text-sm font-medium text-primary tracking-wide uppercase">
-                À propos d&apos;Ada Papers
+                À propos d'Ada Papers
               </span>
             </div>
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 text-foreground leading-tight px-4">
@@ -55,7 +55,7 @@ export default function AProposPage() {
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Notre objectif est de rendre les démarches administratives liées au titre de séjour
                 plus simples, plus rapides et moins contraignantes. Face à la complexité et à
-                l&apos;exigence des procédures, nous souhaitons offrir une approche plus claire
+                l'exigence des procédures, nous souhaitons offrir une approche plus claire
                 et plus efficace. Nous nous engageons à rendre ces démarches plus accessibles
                 et plus compréhensibles.
               </p>
@@ -71,10 +71,10 @@ export default function AProposPage() {
                 Offrir un espace unique où chaque dossier est compréhensible, bien
                 documenté et suivi en temps réel, grâce à une collaboration fluide
                 entre clients, administrateurs et partenaires. Cet espace permet
-                également d&apos;anticiper les démarches à venir, de déléguer en
+                également d'anticiper les démarches à venir, de déléguer en
                 toute confiance les procédures liées au titre de séjour pour plus de
                 sérénité, et de mieux se préparer aux actions à entreprendre en cas
-                de non-respect ou de silence de l&apos;administration.
+                de non-respect ou de silence de l'administration.
               </p>
               <div>
                 <h3 className="text-sm font-semibold text-foreground mb-1">Nos valeurs</h3>
@@ -112,7 +112,7 @@ export default function AProposPage() {
                   <h3 className="text-sm font-semibold mb-1">Partenaires</h3>
                   <p className="text-xs text-muted-foreground">
                     Avocats, associations et consulats qui interviennent sur certains
-                    dossiers via l&apos;espace dédié.
+                    dossiers via l'espace dédié.
                   </p>
                 </div>
               </div>
@@ -141,7 +141,7 @@ export default function AProposPage() {
                   <span className="block text-xs">
                     Nous créons un dossier structuré dans la plateforme, avec une
                     référence unique et des informations claires. Cet espace en ligne
-                    vous permet de suivre, en temps réel, l&apos;ensemble des actions
+                    vous permet de suivre, en temps réel, l'ensemble des actions
                     réalisées dans le cadre de la procédure.
                   </span>
                 </li>
@@ -149,15 +149,15 @@ export default function AProposPage() {
                   <span className="font-semibold text-foreground">3. Documents à préparer</span>
                   <span className="block text-xs">
                     Vous visualisez la liste complète des documents à transmettre, ainsi
-                    que des modèles prêts à l&apos;emploi pour chaque type de document
-                    demandé (recours, attestations, déclarations, etc.), avec l&apos;état
+                    que des modèles prêts à l'emploi pour chaque type de document
+                    demandé (recours, attestations, déclarations, etc.), avec l'état
                     de complétude de votre dossier mis à jour en temps réel.
                   </span>
                 </li>
                 <li>
                   <span className="font-semibold text-foreground">4. Suivi et échanges</span>
                   <span className="block text-xs">
-                    Vous pouvez suivre l&apos;avancement, échanger des messages sécurisés
+                    Vous pouvez suivre l'avancement, échanger des messages sécurisés
                     et être notifié des actions importantes.
                   </span>
                 </li>
@@ -214,15 +214,15 @@ export default function AProposPage() {
                 Une équipe dédiée à vos démarches
               </h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                L&apos;équipe Ada Papers est composée de professionnels spécialisés dans le
+                L'équipe Ada Papers est composée de professionnels spécialisés dans le
                 droit des étrangers, qui travaillent en étroite collaboration avec des avocats,
                 des associations et le Consulat du Sénégal. Cette synergie permet de traiter
                 chaque situation avec sérieux, précision et sens pratique.
               </p>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                L&apos;équipe est dirigée par Papa Abdoulaye WADE, chargé d&apos;enseignement
+                L'équipe est dirigée par Papa Abdoulaye WADE, chargé d'enseignement
                 et consultant en droit des étrangers, qui met son expérience académique et
-                pratique au service de l&apos;accompagnement des personnes étrangères dans
+                pratique au service de l'accompagnement des personnes étrangères dans
                 leurs démarches et éventuels contentieux liés au séjour.
               </p>
             </section>
@@ -298,7 +298,7 @@ export default function AProposPage() {
                   <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
                     Notre objectif est de rendre les démarches administratives liées au titre de séjour
                     plus simples, plus rapides et moins contraignantes. Face à la complexité et à
-                    l&apos;exigence des procédures, nous souhaitons offrir une approche plus claire
+                    l'exigence des procédures, nous souhaitons offrir une approche plus claire
                     et plus efficace. Nous nous engageons à rendre ces démarches plus accessibles
                     et plus compréhensibles.
                   </p>
@@ -314,10 +314,10 @@ export default function AProposPage() {
                     Offrir un espace unique où chaque dossier est compréhensible, bien
                     documenté et suivi en temps réel, grâce à une collaboration fluide
                     entre clients, administrateurs et partenaires. Cet espace permet
-                    également d&apos;anticiper les démarches à venir, de déléguer en
+                    également d'anticiper les démarches à venir, de déléguer en
                     toute confiance les procédures liées au titre de séjour pour plus de
                     sérénité, et de mieux se préparer aux actions à entreprendre en cas
-                    de non-respect ou de silence de l&apos;administration.
+                    de non-respect ou de silence de l'administration.
                   </p>
                   <div className="mt-4">
                     <h3 className="text-sm font-semibold text-foreground mb-1">Nos valeurs</h3>
@@ -355,7 +355,7 @@ export default function AProposPage() {
                       <h3 className="text-sm font-semibold mb-1">Partenaires</h3>
                       <p className="text-xs text-muted-foreground">
                         Avocats, associations et consulats qui interviennent sur certains
-                        dossiers via l&apos;espace dédié.
+                        dossiers via l'espace dédié.
                       </p>
                     </div>
                   </div>
@@ -382,7 +382,7 @@ export default function AProposPage() {
                       <span className="block text-xs sm:text-sm">
                         Nous créons un dossier structuré dans la plateforme, avec une
                         référence unique et des informations claires. Cet espace en ligne
-                        vous permet de suivre, en temps réel, l&apos;ensemble des actions
+                        vous permet de suivre, en temps réel, l'ensemble des actions
                         réalisées dans le cadre de la procédure.
                       </span>
                     </li>
@@ -390,15 +390,15 @@ export default function AProposPage() {
                       <span className="font-semibold text-foreground">3. Documents à préparer</span>
                       <span className="block text-xs sm:text-sm">
                         Vous visualisez la liste complète des documents à transmettre, ainsi
-                        que des modèles prêts à l&apos;emploi pour chaque type de document
-                        demandé (recours, attestations, déclarations, etc.), avec l&apos;état
+                        que des modèles prêts à l'emploi pour chaque type de document
+                        demandé (recours, attestations, déclarations, etc.), avec l'état
                         de complétude de votre dossier mis à jour en temps réel.
                       </span>
                     </li>
                     <li>
                       <span className="font-semibold text-foreground">4. Suivi et échanges</span>
                       <span className="block text-xs sm:text-sm">
-                        Vous pouvez suivre l&apos;avancement, échanger des messages sécurisés
+                        Vous pouvez suivre l'avancement, échanger des messages sécurisés
                         et être notifié des actions importantes.
                       </span>
                     </li>
@@ -451,15 +451,15 @@ export default function AProposPage() {
                     Notre équipe
                   </h2>
                   <p className="text-sm md:text-base text-muted-foreground leading-relaxed mb-3">
-                    L&apos;équipe Ada Papers est composée de professionnels spécialisés dans le
+                    L'équipe Ada Papers est composée de professionnels spécialisés dans le
                     droit des étrangers, qui travaillent en étroite collaboration avec des avocats,
                     des associations et le Consulat du Sénégal. Cette synergie permet de traiter
                     chaque situation avec sérieux, précision et sens pratique.
                   </p>
                   <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
-                    L&apos;équipe est dirigée par Papa Abdoulaye WADE, chargé d&apos;enseignement
+                    L'équipe est dirigée par Papa Abdoulaye WADE, chargé d'enseignement
                     et consultant en droit des étrangers, qui met son expérience académique et
-                    pratique au service de l&apos;accompagnement des personnes étrangères dans
+                    pratique au service de l'accompagnement des personnes étrangères dans
                     leurs démarches et éventuels contentieux liés au séjour.
                   </p>
                 </div>

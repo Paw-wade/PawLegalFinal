@@ -9,7 +9,7 @@ const Temoignage = require('../models/Temoignage');
 const Task = require('../models/Task');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, authorizePermission } = require('../middleware/auth');
 
 // Toutes les routes nécessitent une authentification
 router.use(protect);
@@ -236,7 +236,7 @@ router.delete('/:id', async (req, res) => {
 // @route   POST /api/trash/empty
 // @desc    Vider la corbeille (supprimer définitivement tous les éléments)
 // @access  Private/Admin
-router.post('/empty', authorize('admin', 'superadmin'), async (req, res) => {
+router.post('/empty', authorizePermission('corbeille', 'supprimer'), async (req, res) => {
   try {
     const result = await Trash.deleteMany({});
     

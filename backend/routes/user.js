@@ -4,7 +4,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, authorizePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -456,7 +456,7 @@ router.put(
 // @route   GET /api/user/all
 // @desc    Récupérer tous les utilisateurs (Admin seulement)
 // @access  Private/Admin
-router.get('/all', authorize('admin', 'superadmin'), async (req, res) => {
+router.get('/all', authorizePermission('utilisateurs', 'consulter'), async (req, res) => {
   try {
     console.log('✅ Route GET /api/user/all appelée'); // Debug log
     const users = await User.find().select('-password');
@@ -479,7 +479,7 @@ router.get('/all', authorize('admin', 'superadmin'), async (req, res) => {
 // @route   GET /api/user/expirations
 // @desc    Récupérer les comptes clients dont la date d'expiration est dans une plage (trié par date)
 // @access  Private/Admin
-router.get('/expirations', authorize('admin', 'superadmin'), async (req, res) => {
+router.get('/expirations', authorizePermission('utilisateurs', 'consulter'), async (req, res) => {
   try {
     const pastDays = Math.max(0, parseInt(req.query.pastDays, 10) || 125);
     const futureDays = Math.max(0, parseInt(req.query.futureDays, 10) || 15);
@@ -549,7 +549,7 @@ router.get('/expirations', authorize('admin', 'superadmin'), async (req, res) =>
 // @access  Private/Admin
 router.put(
   '/:id/password',
-  authorize('admin', 'superadmin'),
+  authorizePermission('utilisateurs', 'modifier'),
   [
     body('newPassword')
       .isLength({ min: 8 })
@@ -616,7 +616,7 @@ router.put(
 // @route   GET /api/user/:id
 // @desc    Récupérer un utilisateur par ID (Admin seulement)
 // @access  Private/Admin
-router.get('/:id', authorize('admin', 'superadmin'), async (req, res) => {
+router.get('/:id', authorizePermission('utilisateurs', 'consulter'), async (req, res) => {
   try {
     console.log('✅ Route GET /api/user/:id appelée avec ID:', req.params.id); // Debug log
     console.log('✅ Requête complète:', req.method, req.originalUrl, req.path); // Debug log
@@ -673,7 +673,7 @@ router.get('/:id', authorize('admin', 'superadmin'), async (req, res) => {
 // @access  Private/Admin
 router.put(
   '/:id',
-  authorize('admin', 'superadmin'),
+  authorizePermission('utilisateurs', 'modifier'),
   [
     body('firstName').optional().trim().notEmpty().withMessage('Le prénom ne peut pas être vide'),
     body('lastName').optional().trim().notEmpty().withMessage('Le nom ne peut pas être vide'),
@@ -864,7 +864,7 @@ router.put(
 // @route   DELETE /api/user/:id
 // @desc    Supprimer un utilisateur par ID (Admin seulement)
 // @access  Private/Admin
-router.delete('/:id', authorize('admin', 'superadmin'), async (req, res) => {
+router.delete('/:id', authorizePermission('utilisateurs', 'supprimer'), async (req, res) => {
   try {
     console.log('✅ Route DELETE /api/user/:id appelée avec ID:', req.params.id); // Debug log
     
@@ -978,7 +978,7 @@ router.delete('/:id', authorize('admin', 'superadmin'), async (req, res) => {
 // @access  Private/SuperAdmin ou Admin (pour professionnels)
 router.post(
   '/create',
-  authorize('superadmin', 'admin'),
+  authorizePermission('utilisateurs', 'modifier'),
   [
     body('firstName').trim().notEmpty().withMessage('Le prénom est requis'),
     body('lastName').trim().notEmpty().withMessage('Le nom est requis'),
@@ -1105,6 +1105,12 @@ router.post(
       const user = await User.create(userData);
       console.log('✅ Utilisateur créé avec succès:', user._id);
 
+      try {
+        const { applyRolePresetForUser } = require('../utils/rolePresets');
+        await applyRolePresetForUser(user._id, user.role);
+      } catch (permErr) {
+        console.warn('⚠️ Preset permissions non appliqué:', permErr.message);
+      }
 
       // Logger l'action
       try {

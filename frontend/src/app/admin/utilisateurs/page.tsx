@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -9,6 +9,27 @@ import { UserPermissionsModal } from '@/components/admin/UserPermissionsModal';
 import jsPDF from 'jspdf';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
+
+// Libellés lisibles des rôles. Les rôles « métier » sont présentés comme des
+// sous-rôles de la catégorie Administration (interface /admin partagée).
+const STAFF_SUBROLE_LABELS: Record<string, string> = {
+  admin: 'Admin (complet)',
+  assistant: 'Assistant',
+  comptable: 'Comptable',
+  secretaire: 'Secrétaire',
+  juriste: 'Juriste',
+  stagiaire: 'Stagiaire',
+  visiteur: 'Visiteur',
+};
+
+function formatRoleLabel(role?: string | null): string {
+  const r = String(role || 'client').trim();
+  if (r === 'client') return 'Client';
+  if (r === 'superadmin') return 'Superadmin';
+  if (r === 'partenaire') return 'Partenaire';
+  if (STAFF_SUBROLE_LABELS[r]) return `Administration · ${STAFF_SUBROLE_LABELS[r]}`;
+  return r;
+}
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -116,7 +137,7 @@ const downloadUserProfile = (user: any) => {
   yPosition += lineHeight;
   yPosition = addText(`Téléphone: ${user.phone || '-'}`, margin, yPosition);
   yPosition += lineHeight;
-  yPosition = addText(`Rôle: ${user.role || 'client'}`, margin, yPosition);
+  yPosition = addText(`Rôle: ${formatRoleLabel(user.role)}`, margin, yPosition);
   yPosition += lineHeight;
   yPosition = addText(`Date de naissance: ${user.dateNaissance ? new Date(user.dateNaissance).toLocaleDateString('fr-FR') : '-'}`, margin, yPosition);
   yPosition += lineHeight;
@@ -553,7 +574,7 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
                             ? 'bg-primary/10 text-primary'
                             : 'bg-blue-500/10 text-blue-500'
                         }`}>
-                          {user?.role || 'client'}
+                          {formatRoleLabel(user?.role)}
                         </span>
                       </p>
                     </div>
@@ -865,7 +886,7 @@ function Modal({ isOpen, onClose, userId, onUpdate }: { isOpen: boolean; onClose
   );
 }
 
-export default function AdminUtilisateursPage() {
+function AdminUtilisateursContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1502,7 +1523,7 @@ export default function AdminUtilisateursPage() {
                             ? 'bg-primary/10 text-primary'
                             : 'bg-blue-500/10 text-blue-500'
                         }`}>
-                          {user.role || 'client'}
+                          {formatRoleLabel(user.role)}
                         </span>
                       </td>
                       <td className="p-4">
@@ -1577,6 +1598,23 @@ export default function AdminUtilisateursPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function AdminUtilisateursPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Chargement...</p>
+          </div>
+        </div>
+      }
+    >
+      <AdminUtilisateursContent />
+    </Suspense>
   );
 }
 

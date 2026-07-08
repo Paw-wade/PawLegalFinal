@@ -521,7 +521,7 @@ export default function AdminSmsPage() {
       <div className="mx-auto w-full min-w-0 max-w-7xl">
         <div className="mb-4 sm:mb-6">
           <h1 className="mb-2 text-2xl font-bold text-foreground sm:text-3xl">Gestion des SMS</h1>
-          <p className="text-sm text-muted-foreground sm:text-base">Gérez les templates de messages SMS et consultez l&apos;historique</p>
+          <p className="text-sm text-muted-foreground sm:text-base">Gérez les templates de messages SMS et consultez l'historique</p>
         </div>
 
         {/* Tabs */}
@@ -568,7 +568,7 @@ export default function AdminSmsPage() {
             {activeTab === 'templates' ? (
               <div className="space-y-6">
                 <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground break-words">
-                  La liste inclut tous les codes utilisés par l&apos;application. À l&apos;ouverture de cet onglet, les modèles
+                  La liste inclut tous les codes utilisés par l'application. À l'ouverture de cet onglet, les modèles
                   système manquants sont ajoutés automatiquement (sans écraser vos textes déjà enregistrés). Utilisez le bouton
                   « Synchroniser » pour forcer une mise à jour après déploiement.
                 </p>

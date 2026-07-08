@@ -2,13 +2,71 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Permission = require('../models/Permission');
 const User = require('../models/User');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, authorizePermission } = require('../middleware/auth');
+const { ROLE_PRESETS, getPresetForRole, applyRolePresetForUser } = require('../utils/rolePresets');
+const { getAssignedDossierIds } = require('../utils/accessScope');
 
 const router = express.Router();
 
-// Toutes les routes nécessitent une authentification admin
 router.use(protect);
-router.use(authorize('admin', 'superadmin'));
+
+// @route   GET /api/permissions/me
+// @desc    Permissions de l'utilisateur connecté (interface staff)
+// @access  Private
+router.get('/me', async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Nombre de dossiers assignés : permet à l'interface d'ouvrir en mode
+    // "restreint" les catégories (dossiers/tâches/documents) non autorisées
+    // lorsqu'au moins un dossier est assigné à l'utilisateur.
+    let assignedDossierCount = 0;
+    try {
+      const assignedIds = await getAssignedDossierIds(userId);
+      assignedDossierCount = assignedIds.length;
+    } catch {
+      assignedDossierCount = 0;
+    }
+
+    let permission = await Permission.findOne({ user: userId }).lean();
+    if (!permission) {
+      const preset = getPresetForRole(req.user.role);
+      return res.json({
+        success: true,
+        assignedDossierCount,
+        permission: {
+          user: userId,
+          roles: preset.roles || [req.user.role],
+          permissions: preset.permissions || [],
+        },
+      });
+    }
+    res.json({ success: true, assignedDossierCount, permission });
+  } catch (error) {
+    console.error('Erreur GET /permissions/me:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// Routes de gestion des permissions : réservées au domaine "utilisateurs"
+router.use(authorizePermission('utilisateurs', 'consulter'));
+
+// @route   GET /api/permissions/roles/presets
+router.get('/roles/presets', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      presets: ROLE_PRESETS,
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des modèles:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: error.message
+    });
+  }
+});
 
 // @route   GET /api/permissions/:userId
 // @desc    Récupérer les permissions d'un utilisateur
@@ -28,12 +86,13 @@ router.get('/:userId', async (req, res) => {
         });
       }
 
+      const preset = getPresetForRole(user.role);
       return res.json({
         success: true,
         permission: {
           user: user._id,
-          roles: [user.role],
-          permissions: []
+          roles: preset.roles || [user.role],
+          permissions: preset.permissions || [],
         }
       });
     }
@@ -86,7 +145,7 @@ router.post(
 
       // Valider et convertir les domaines de permissions
       const validDomaines = [
-        'tableau_de_bord', 'utilisateurs', 'dossiers', 'taches',
+        'tableau_de_bord', 'utilisateurs', 'dossiers', 'tarification', 'taches',
         'rendez_vous', 'creneaux', 'messages', 'documents',
         'temoignages', 'notifications', 'sms', 'cms', 'logs', 'corbeille'
       ];
@@ -256,7 +315,7 @@ router.put(
 
       // Valider et convertir les domaines de permissions
       const validDomaines = [
-        'tableau_de_bord', 'utilisateurs', 'dossiers', 'taches',
+        'tableau_de_bord', 'utilisateurs', 'dossiers', 'tarification', 'taches',
         'rendez_vous', 'creneaux', 'messages', 'documents',
         'temoignages', 'notifications', 'sms', 'cms', 'logs', 'corbeille'
       ];
@@ -478,113 +537,6 @@ router.put(
     }
   }
 );
-
-// @route   GET /api/permissions/roles/presets
-// @desc    Récupérer les modèles de permissions prédéfinis
-// @access  Private/Admin
-router.get('/roles/presets', async (req, res) => {
-  try {
-    const presets = {
-      client: {
-        roles: ['client'],
-        permissions: [
-          { domaine: 'dossiers', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
-          { domaine: 'documents', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'rendez_vous', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false }
-        ]
-      },
-      admin: {
-        roles: ['admin'],
-        permissions: [
-          { domaine: 'tableau_de_bord', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
-          { domaine: 'utilisateurs', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'dossiers', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'taches', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'rendez_vous', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'creneaux', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'messages', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'documents', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'temoignages', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'notifications', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'sms', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'cms', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'corbeille', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false }
-        ]
-      },
-      superadmin: {
-        roles: ['superadmin'],
-        permissions: [
-          { domaine: 'tableau_de_bord', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
-          { domaine: 'utilisateurs', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'dossiers', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'taches', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'rendez_vous', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'creneaux', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'messages', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'documents', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'temoignages', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'notifications', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'sms', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'cms', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true },
-          { domaine: 'logs', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
-          { domaine: 'corbeille', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: true }
-        ]
-      },
-      assistant: {
-        roles: ['assistant'],
-        permissions: [
-          { domaine: 'dossiers', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'documents', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'taches', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'rendez_vous', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false }
-        ]
-      },
-      collaborateur: {
-        roles: ['collaborateur'],
-        permissions: [
-          { domaine: 'dossiers', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'documents', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'taches', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'rendez_vous', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false },
-          { domaine: 'messages', consulter: true, modifier: true, nePasConsulter: false, nePasModifier: false, supprimer: false }
-        ]
-      },
-      visiteur: {
-        roles: ['visiteur'],
-        permissions: [
-          // Accès autorisés
-          { domaine: 'tableau_de_bord', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
-          { domaine: 'dossiers', consulter: true, modifier: false, nePasConsulter: false, nePasModifier: true, supprimer: false },
-          // Refus strict sur le reste (dont documents)
-          { domaine: 'utilisateurs', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'taches', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'rendez_vous', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'creneaux', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'messages', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'documents', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'temoignages', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'notifications', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'sms', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'cms', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'logs', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false },
-          { domaine: 'corbeille', consulter: false, modifier: false, nePasConsulter: true, nePasModifier: true, supprimer: false }
-        ]
-      }
-    };
-
-    res.json({
-      success: true,
-      presets
-    });
-  } catch (error) {
-    console.error('Erreur lors de la récupération des modèles:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur serveur',
-      error: error.message
-    });
-  }
-});
 
 module.exports = router;
 

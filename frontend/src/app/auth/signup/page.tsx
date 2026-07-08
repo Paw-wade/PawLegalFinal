@@ -332,7 +332,7 @@ export default function SignupPage() {
     <div className="min-h-screen flex bg-gradient-to-br from-primary/5 via-background to-primary/10 relative">
       <Link href="/" className="absolute top-4 left-4 z-50">
         <Button variant="ghost" className="text-foreground hover:bg-primary/10 backdrop-blur-sm">
-          &larr; Retour à l&apos;accueil
+          ← Retour à l'accueil
         </Button>
       </Link>
 
@@ -341,7 +341,7 @@ export default function SignupPage() {
           <div className="mb-8">
             <h1 className="text-4xl font-bold mb-4">Rejoignez Ada Papers</h1>
             <p className="text-lg text-white/90 mb-6">
-              Service d&apos;Accompagnement aux démarches administratives.
+              Service d'Accompagnement aux démarches administratives.
             </p>
           </div>
           <div className="space-y-4">
@@ -381,7 +381,7 @@ export default function SignupPage() {
                   Ada Papers
                 </span>
                 <p className="text-[10px] text-muted-foreground font-medium mt-1">
-                  Service d&apos;Accompagnement aux démarches administratives
+                  Service d'Accompagnement aux démarches administratives
                 </p>
               </div>
             </Link>
@@ -464,7 +464,7 @@ export default function SignupPage() {
                     ) : (
                       <span className="flex items-center gap-2">
                         <span>🔵</span>
-                        <span>S&apos;inscrire avec Google</span>
+                        <span>S'inscrire avec Google</span>
                       </span>
                     )}
                   </Button>
@@ -602,9 +602,9 @@ export default function SignupPage() {
                       required
                     />
                     <span>
-                      J&apos;accepte les{' '}
+                      J'accepte les{' '}
                       <Link href="/cgu" className="text-primary hover:underline font-semibold">
-                        Conditions Générales d&apos;Utilisation
+                        Conditions Générales d'Utilisation
                       </Link>{' '}
                       et la{' '}
                       <Link href="/politique-confidentialite" className="text-primary hover:underline font-semibold">
@@ -621,7 +621,7 @@ export default function SignupPage() {
                     {success ? (
                       <span className="flex items-center justify-center gap-2">
                         <span className="animate-pulse">✓</span>
-                        <span>Redirection vers l&apos;accueil…</span>
+                        <span>Redirection vers l'accueil…</span>
                       </span>
                     ) : isLoading ? (
                       <span className="flex items-center gap-2">

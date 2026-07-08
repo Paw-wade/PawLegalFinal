@@ -75,14 +75,14 @@ export default function PolitiqueConfidentialitePage() {
                 Ada Papers peut collecter les catégories de données suivantes :
               </p>
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li><strong>Données d&apos;identification</strong> : prénom, nom, adresse e‑mail, numéro de téléphone.</li>
+                <li><strong>Données d'identification</strong> : prénom, nom, adresse e‑mail, numéro de téléphone.</li>
                 <li><strong>Données relatives au dossier</strong> : informations sur votre situation administrative, type de titre de séjour, dates importantes, documents transmis ou à transmettre, catégorie de démarches, historique des actions.</li>
-                <li><strong>Données de connexion et d&apos;usage</strong> : identifiants de connexion, logs, adresse IP, type de navigateur, pages consultées, date et heure d&apos;accès.</li>
+                <li><strong>Données de connexion et d'usage</strong> : identifiants de connexion, logs, adresse IP, type de navigateur, pages consultées, date et heure d'accès.</li>
                 <li><strong>Échanges</strong> : messages envoyés via la Plateforme, réponses aux formulaires, commentaires éventuels.</li>
               </ul>
               <p className="mt-2">
                 Certaines données peuvent être sensibles au sens large (informations sur la situation administrative,
-                contentieux…), mais elles sont collectées uniquement dans la mesure nécessaire à l&apos;accompagnement
+                contentieux…), mais elles sont collectées uniquement dans la mesure nécessaire à l'accompagnement
                 des démarches confiées.
               </p>
             </section>
@@ -104,9 +104,9 @@ export default function PolitiqueConfidentialitePage() {
                 Les bases légales sont :
               </p>
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>l&apos;exécution de mesures précontractuelles et contractuelles (gestion du compte et du dossier) ;</li>
-                <li>le respect d&apos;obligations légales le cas échéant ;</li>
-                <li>l&apos;intérêt légitime d&apos;Ada Papers (amélioration du service, sécurisation) ;</li>
+                <li>l'exécution de mesures précontractuelles et contractuelles (gestion du compte et du dossier) ;</li>
+                <li>le respect d'obligations légales le cas échéant ;</li>
+                <li>l'intérêt légitime d'Ada Papers (amélioration du service, sécurisation) ;</li>
                 <li>votre consentement, lorsque requis (par exemple, pour certaines communications).</li>
               </ul>
             </section>
@@ -117,12 +117,12 @@ export default function PolitiqueConfidentialitePage() {
                 Vos données peuvent être transmises, dans la limite de ce qui est strictement nécessaire :
               </p>
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>aux membres autorisés de l&apos;équipe Ada Papers ;</li>
-                <li>à des partenaires intervenant sur le dossier (avocats, associations, etc.), uniquement si vous y consentez ou si cela est indispensable à l&apos;exécution de la mission ;</li>
-                <li>aux prestataires techniques (hébergement, maintenance, envoi d&apos;e‑mails/SMS), agissant en qualité de sous-traitants, liés par des obligations contractuelles de confidentialité et de sécurité.</li>
+                <li>aux membres autorisés de l'équipe Ada Papers ;</li>
+                <li>à des partenaires intervenant sur le dossier (avocats, associations, etc.), uniquement si vous y consentez ou si cela est indispensable à l'exécution de la mission ;</li>
+                <li>aux prestataires techniques (hébergement, maintenance, envoi d'e‑mails/SMS), agissant en qualité de sous-traitants, liés par des obligations contractuelles de confidentialité et de sécurité.</li>
               </ul>
               <p className="mt-2">
-                Aucune donnée n&apos;est cédée à des fins de prospection commerciale à des tiers sans votre accord explicite.
+                Aucune donnée n'est cédée à des fins de prospection commerciale à des tiers sans votre accord explicite.
               </p>
             </section>
 
@@ -132,7 +132,7 @@ export default function PolitiqueConfidentialitePage() {
                 Les données sont conservées pour la durée strictement nécessaire aux finalités poursuivies :
               </p>
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>données de compte : pendant la durée d&apos;utilisation de la Plateforme, puis pendant une durée limitée nécessaire au respect des obligations légales ou à la défense des droits d&apos;Ada Papers ;</li>
+                <li>données de compte : pendant la durée d'utilisation de la Plateforme, puis pendant une durée limitée nécessaire au respect des obligations légales ou à la défense des droits d'Ada Papers ;</li>
                 <li>données de dossier : pendant la durée de la procédure, puis archivage ou suppression selon la nature des démarches, les délais de prescription applicables et la politique interne de conservation ;</li>
                 <li>logs techniques : pour une durée limitée, généralement quelques mois, à des fins de sécurité et de traçabilité.</li>
               </ul>
@@ -149,10 +149,10 @@ export default function PolitiqueConfidentialitePage() {
                 <li>chiffrement des communications (HTTPS) ;</li>
                 <li>sauvegardes régulières ;</li>
                 <li>journalisation des accès et actions sensibles ;</li>
-                <li>sensibilisation de l&apos;équipe à la confidentialité.</li>
+                <li>sensibilisation de l'équipe à la confidentialité.</li>
               </ul>
               <p className="mt-2">
-                En cas de violation de données susceptible d&apos;engendrer un risque pour vos droits et libertés,
+                En cas de violation de données susceptible d'engendrer un risque pour vos droits et libertés,
                 vous serez informé conformément aux textes applicables.
               </p>
             </section>
@@ -163,11 +163,11 @@ export default function PolitiqueConfidentialitePage() {
                 Conformément au RGPD, vous disposez des droits suivants sur vos données :
               </p>
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li><strong>Droit d&apos;accès</strong> : obtenir la confirmation que des données vous concernant sont traitées et en recevoir une copie ;</li>
+                <li><strong>Droit d'accès</strong> : obtenir la confirmation que des données vous concernant sont traitées et en recevoir une copie ;</li>
                 <li><strong>Droit de rectification</strong> : corriger des données inexactes ou incomplètes ;</li>
-                <li><strong>Droit d&apos;effacement</strong> (droit à l&apos;oubli) : demander la suppression de vos données, dans les limites des obligations légales ;</li>
-                <li><strong>Droit à la limitation</strong> : demander la suspension temporaire d&apos;un traitement dans certaines conditions ;</li>
-                <li><strong>Droit d&apos;opposition</strong> : vous opposer, pour des raisons tenant à votre situation particulière, à certains traitements fondés sur l&apos;intérêt légitime ;</li>
+                <li><strong>Droit d'effacement</strong> (droit à l'oubli) : demander la suppression de vos données, dans les limites des obligations légales ;</li>
+                <li><strong>Droit à la limitation</strong> : demander la suspension temporaire d'un traitement dans certaines conditions ;</li>
+                <li><strong>Droit d'opposition</strong> : vous opposer, pour des raisons tenant à votre situation particulière, à certains traitements fondés sur l'intérêt légitime ;</li>
                 <li><strong>Droit à la portabilité</strong> : recevoir les données que vous avez fournies dans un format structuré, ou demander leur transmission à un autre responsable lorsque cela est techniquement possible.</li>
               </ul>
               <p className="mt-2">
@@ -178,7 +178,7 @@ export default function PolitiqueConfidentialitePage() {
                 .
               </p>
               <p className="mt-2">
-                Vous disposez également du droit d&apos;introduire une réclamation auprès de la CNIL (www.cnil.fr).
+                Vous disposez également du droit d'introduire une réclamation auprès de la CNIL (www.cnil.fr).
               </p>
             </section>
 
@@ -186,10 +186,10 @@ export default function PolitiqueConfidentialitePage() {
               <h2 className="text-xl font-semibold mb-2 text-primary">9. Cookies et traceurs</h2>
               <p>
                 La Plateforme peut utiliser des cookies ou traceurs techniques (nécessaires au fonctionnement :
-                session, sécurité, préférences de langue, etc.) et, le cas échéant, des outils de mesure d&apos;audience.
+                session, sécurité, préférences de langue, etc.) et, le cas échéant, des outils de mesure d'audience.
               </p>
               <p className="mt-2">
-                Lorsque la loi l&apos;exige, votre consentement est recueilli pour les cookies non strictement
+                Lorsque la loi l'exige, votre consentement est recueilli pour les cookies non strictement
                 nécessaires. Vous pouvez paramétrer vos choix via votre navigateur ou, si disponible, via le
                 bandeau de gestion des cookies.
               </p>
@@ -198,9 +198,9 @@ export default function PolitiqueConfidentialitePage() {
             <section>
               <h2 className="text-xl font-semibold mb-2 text-primary">10. Transferts hors UE</h2>
               <p>
-                En principe, les données sont hébergées au sein de l&apos;Union européenne. Si un transfert hors UE
-                devait intervenir (par exemple via un prestataire), Ada Papers s&apos;engage à mettre en place les
-                garanties appropriées (clauses contractuelles types, encadrement juridique adéquat) afin d&apos;assurer
+                En principe, les données sont hébergées au sein de l'Union européenne. Si un transfert hors UE
+                devait intervenir (par exemple via un prestataire), Ada Papers s'engage à mettre en place les
+                garanties appropriées (clauses contractuelles types, encadrement juridique adéquat) afin d'assurer
                 un niveau de protection suffisant.
               </p>
             </section>

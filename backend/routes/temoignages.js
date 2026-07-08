@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Temoignage = require('../models/Temoignage');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, authorizePermission } = require('../middleware/auth');
 
 // @route   GET /api/temoignages
 // @desc    Récupérer les témoignages validés (public)
@@ -104,7 +104,7 @@ router.post(
 // @route   GET /api/temoignages/admin
 // @desc    Récupérer tous les témoignages (admin)
 // @access  Private (Admin)
-router.get('/admin', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.get('/admin', protect, authorizePermission('temoignages', 'consulter'), async (req, res) => {
   try {
     const { valide } = req.query;
     let query = {};
@@ -137,7 +137,7 @@ router.get('/admin', protect, authorize('admin', 'superadmin'), async (req, res)
 router.patch(
   '/:id/validate',
   protect,
-  authorize('admin', 'superadmin'),
+  authorizePermission('temoignages', 'modifier'),
   [
     body('valide')
       .isBoolean()
@@ -192,7 +192,7 @@ router.patch(
 // @route   DELETE /api/temoignages/:id
 // @desc    Supprimer un témoignage (admin)
 // @access  Private (Admin)
-router.delete('/:id', protect, authorize('admin', 'superadmin'), async (req, res) => {
+router.delete('/:id', protect, authorizePermission('temoignages', 'supprimer'), async (req, res) => {
   try {
     const temoignage = await Temoignage.findById(req.params.id);
 

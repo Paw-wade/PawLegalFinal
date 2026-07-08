@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const { sendTransactionalEmailDetailed } = require('../utils/emailNotifications');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorizePermission } = require('../middleware/auth');
 const EmailTemplate = require('../models/EmailTemplate');
 const EmailEventSetting = require('../models/EmailEventSetting');
 const EmailLog = require('../models/EmailLog');
@@ -611,7 +611,7 @@ router.post(
 );
 
 router.use(protect);
-router.use(authorize('admin', 'superadmin'));
+router.use(authorizePermission('sms', 'consulter'));
 router.use(requireMongo);
 
 router.post('/init-defaults', async (req, res) => {

@@ -3,7 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Creneau = require('../models/Creneau');
 const RendezVous = require('../models/RendezVous');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, authorizePermission } = require('../middleware/auth');
 
 // @route   GET /api/creneaux/available
 // @desc    Récupérer les créneaux disponibles pour une date donnée
@@ -95,7 +95,7 @@ router.get('/available', async (req, res) => {
 
 // Toutes les routes suivantes nécessitent une authentification admin
 router.use(protect);
-router.use(authorize('admin', 'superadmin'));
+router.use(authorizePermission('creneaux', 'consulter'));
 
 // @route   GET /api/creneaux
 // @desc    Récupérer tous les créneaux (admin)

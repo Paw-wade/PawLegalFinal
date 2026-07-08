@@ -997,7 +997,7 @@ function MessagesContent() {
                 <div>
                   <Label htmlFor="compose-dest">Destinataire (optionnel)</Label>
                   <p className="text-xs text-muted-foreground mb-2">
-                    Par défaut, votre message est adressé à toute l&apos;équipe administrative. Vous pouvez cibler un administrateur.
+                    Par défaut, votre message est adressé à toute l'équipe administrative. Vous pouvez cibler un administrateur.
                   </p>
                   <select
                     id="compose-dest"
@@ -1005,7 +1005,7 @@ function MessagesContent() {
                     onChange={(e) => setComposeDestinataireId(e.target.value)}
                     className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background"
                   >
-                    <option value="">Toute l&apos;équipe administrative</option>
+                    <option value="">Toute l'équipe administrative</option>
                     {users.map((u) => {
                       const uid = u._id || u.id;
                       return (

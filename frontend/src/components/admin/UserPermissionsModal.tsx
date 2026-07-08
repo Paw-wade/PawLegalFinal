@@ -9,6 +9,7 @@ const DOMAINES = [
   { id: 'tableau_de_bord', label: 'Tableau de bord', icon: '📊' },
   { id: 'utilisateurs', label: 'Utilisateurs', icon: '👥' },
   { id: 'dossiers', label: 'Dossiers', icon: '📁' },
+  { id: 'tarification', label: 'Dossiers tarification', icon: '💶' },
   { id: 'taches', label: 'Tâches', icon: '✅' },
   { id: 'rendez_vous', label: 'Rendez-vous', icon: '📅' },
   { id: 'creneaux', label: 'Créneaux', icon: '⏰' },
@@ -34,6 +35,39 @@ const ROLES = [
   { id: 'visiteur', label: 'Visiteur', color: 'bg-zinc-100 text-zinc-800' },
   { id: 'partenaire', label: 'Partenaire', color: 'bg-blue-100 text-blue-800' },
 ];
+
+// Catégories de compte (niveau supérieur). Les rôles « métier » (assistant,
+// comptable, …) ne sont pas autonomes : ils sont présentés comme des sous-rôles
+// de la catégorie « Administration ». Le rôle réellement stocké reste le
+// sous-rôle (admin, assistant, …), l'interface /admin est partagée par tous.
+const ACCOUNT_CATEGORIES = [
+  { id: 'client', label: 'Client' },
+  { id: 'administration', label: 'Administration' },
+  { id: 'superadmin', label: 'Superadmin' },
+  { id: 'partenaire', label: 'Partenaire' },
+];
+
+// Sous-rôles de la catégorie Administration (interface /admin identique).
+const STAFF_SUBROLES = [
+  { id: 'admin', label: 'Admin (complet)' },
+  { id: 'assistant', label: 'Assistant' },
+  { id: 'comptable', label: 'Comptable' },
+  { id: 'secretaire', label: 'Secrétaire' },
+  { id: 'juriste', label: 'Juriste' },
+  { id: 'stagiaire', label: 'Stagiaire' },
+  { id: 'visiteur', label: 'Visiteur' },
+];
+
+const STAFF_SUBROLE_IDS = STAFF_SUBROLES.map((s) => s.id);
+
+// Détermine la catégorie de compte à partir d'un rôle stocké.
+function getCategoryForRole(role?: string | null): string {
+  const r = String(role || 'client').trim();
+  if (r === 'superadmin') return 'superadmin';
+  if (r === 'partenaire') return 'partenaire';
+  if (STAFF_SUBROLE_IDS.includes(r)) return 'administration';
+  return 'client';
+}
 
 interface Permission {
   domaine: string;
@@ -202,12 +236,38 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
     setPermissions(preset.permissions);
   };
 
-  const toggleRole = (roleId: string) => {
-    setSelectedRoles(prev =>
-      prev.includes(roleId)
-        ? prev.filter(r => r !== roleId)
-        : [...prev, roleId]
-    );
+  // --- Modèle catégorie → sous-rôle -------------------------------------
+  // Le rôle effectif est le premier (et unique) rôle sélectionné.
+  const effectiveRole = selectedRoles[0] || 'client';
+  const currentCategory = getCategoryForRole(effectiveRole);
+
+  // Sous-rôles réellement proposables selon le rôle de l'utilisateur connecté.
+  const availableSubRoles = STAFF_SUBROLES.filter((sr) =>
+    availableRoles.some((r) => r.id === sr.id)
+  );
+
+  // Catégories proposables selon le rôle de l'utilisateur connecté.
+  const availableCategories = ACCOUNT_CATEGORIES.filter((c) => {
+    if (c.id === 'administration') return availableSubRoles.length > 0;
+    return availableRoles.some((r) => r.id === c.id);
+  });
+
+  // Sélectionne un rôle unique et applique le preset de permissions associé.
+  const selectSingleRole = (roleId: string) => {
+    setSelectedRoles([roleId]);
+    if (presets && presets[roleId] && Array.isArray(presets[roleId].permissions)) {
+      setPermissions(presets[roleId].permissions);
+    }
+  };
+
+  const handleCategoryChange = (categoryId: string) => {
+    if (categoryId === 'administration') {
+      // Sous-rôle par défaut : « Admin (complet) » si disponible, sinon le premier.
+      const preferred = availableSubRoles.find((s) => s.id === 'admin') || availableSubRoles[0];
+      if (preferred) selectSingleRole(preferred.id);
+      return;
+    }
+    selectSingleRole(categoryId);
   };
 
   const updatePermission = (domaine: string, field: keyof Permission, value: boolean) => {
@@ -629,28 +689,64 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
                   </div>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {availableRoles.map(role => (
-                  <button
-                    key={role.id}
-                    onClick={() => toggleRole(role.id)}
-                    className={`px-4 py-2 rounded-lg border-2 transition-colors ${
-                      selectedRoles.includes(role.id)
-                        ? `${role.color} border-current`
-                        : 'bg-white border-border hover:border-primary'
-                    }`}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-semibold mb-2 block">
+                    Catégorie de compte <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={currentCategory}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
-                    {role.label}
-                    {selectedRoles.includes(role.id) && ' ✓'}
-                  </button>
-                ))}
+                    {availableCategories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Détermine l'espace de l'utilisateur (client, administration, partenaire).
+                  </p>
+                </div>
+
+                {/* Sous-rôle : uniquement pour la catégorie Administration */}
+                {currentCategory === 'administration' && (
+                  <div>
+                    <label className="text-sm font-semibold mb-2 block">
+                      Sous-rôle (Administration) <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={effectiveRole}
+                      onChange={(e) => selectSingleRole(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      {availableSubRoles.map((sr) => (
+                        <option key={sr.id} value={sr.id}>
+                          {sr.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Même interface d'administration ; seules les permissions par défaut changent.
+                    </p>
+                  </div>
+                )}
               </div>
-              {selectedRoles.length === 0 && (
-                <p className="text-sm text-red-600 mt-2">Veuillez sélectionner au moins un rôle</p>
+
+              {currentCategory === 'administration' && (
+                <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                  Les sous-rôles (Assistant, Comptable, Secrétaire, Juriste, Stagiaire, Visiteur)
+                  partagent l'interface d'administration. Le sous-rôle applique un modèle de
+                  permissions par défaut, que vous pouvez ensuite ajuster à l'étape suivante.
+                </div>
               )}
+
               {currentUserRole === 'admin' && (
                 <p className="text-sm text-muted-foreground mt-2">
-                  Note: En tant qu&apos;admin, vous pouvez attribuer les rôles métier (assistant, comptable, secretaire, juriste, stagiaire, visiteur), mais pas admin/superadmin.
+                  Note : en tant qu'admin, vous pouvez attribuer les sous-rôles métier
+                  (assistant, comptable, secrétaire, juriste, stagiaire, visiteur), mais pas
+                  « Admin (complet) » ni « Superadmin ».
                 </p>
               )}
 
@@ -803,18 +899,29 @@ export function UserPermissionsModal({ isOpen, onClose, userId, onSuccess }: Use
                 </div>
               </div>
 
-              {/* Rôles */}
+              {/* Rôle */}
               <div className="bg-muted/50 rounded-lg p-4">
-                <h4 className="font-semibold mb-2">Rôles sélectionnés</h4>
-                <div className="flex flex-wrap gap-2">
-                  {selectedRoles.map(roleId => {
-                    const role = availableRoles.find(r => r.id === roleId) || ROLES.find(r => r.id === roleId);
-                    return role ? (
-                      <span key={roleId} className={`px-3 py-1 rounded-md text-sm ${role.color}`}>
-                        {role.label}
-                      </span>
-                    ) : null;
-                  })}
+                <h4 className="font-semibold mb-2">Rôle</h4>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(() => {
+                    const category = ACCOUNT_CATEGORIES.find((c) => c.id === currentCategory);
+                    const role = availableRoles.find((r) => r.id === effectiveRole) || ROLES.find((r) => r.id === effectiveRole);
+                    return (
+                      <>
+                        <span className="px-3 py-1 rounded-md text-sm bg-slate-100 text-slate-800">
+                          {category?.label || 'Client'}
+                        </span>
+                        {currentCategory === 'administration' && role && (
+                          <>
+                            <span className="text-muted-foreground">·</span>
+                            <span className={`px-3 py-1 rounded-md text-sm ${role.color}`}>
+                              {STAFF_SUBROLES.find((s) => s.id === effectiveRole)?.label || role.label}
+                            </span>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 

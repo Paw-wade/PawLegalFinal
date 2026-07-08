@@ -23,7 +23,8 @@
     "documents:migrate-s3:apply": "node scripts/migrate-documents-to-s3.js --apply",
     "documents:purge-inaccessible": "node scripts/purge-inaccessible-documents.js",
     "documents:purge-inaccessible:apply": "node scripts/purge-inaccessible-documents.js --apply",
-    "cabinets:assign-default": "node scripts/assign-default-cabinet.js",
+    "permissions:backfill-staff": "node scripts/backfill-staff-permissions.js",
+    "permissions:backfill-staff:apply": "node scripts/backfill-staff-permissions.js --apply",
     "documents:fetch-vps": "node scripts/fetch-vps-uploads.js",
     "documents:test-access": "node scripts/test-document-access-report.js"
   },

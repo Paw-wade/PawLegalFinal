@@ -105,7 +105,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex bg-gradient-to-br from-primary/5 via-background to-primary/10 relative">
       <Link href="/" className="absolute top-4 left-4 z-50">
         <Button variant="ghost" className="text-foreground hover:bg-primary/10 backdrop-blur-sm">
-          ← Retour à l&apos;accueil
+          ← Retour à l'accueil
         </Button>
       </Link>
 
@@ -118,7 +118,7 @@ export default function ForgotPasswordPage() {
                   Ada Papers
                 </span>
                 <p className="text-[10px] text-muted-foreground font-medium mt-1">
-                  Service d&apos;Accompagnement aux démarches administratives
+                  Service d'Accompagnement aux démarches administratives
                 </p>
               </div>
             </Link>

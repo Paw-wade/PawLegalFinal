@@ -281,7 +281,7 @@ export default function AdminCarouselPage() {
       <main className="w-full px-4 py-8 max-w-5xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">
-            Gestion du carrousel de la page d&apos;accueil
+            Gestion du carrousel de la page d'accueil
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             Configurez les slides du carrousel du hero : chaque slide peut être une image ou une

@@ -96,8 +96,8 @@ export default function MentionsLegalesPage() {
             <div>
               <h2 className="text-lg font-semibold text-foreground mb-2">Propriété intellectuelle</h2>
               <p>
-                Sauf mention contraire, l&apos;ensemble des éléments présents sur cette Plateforme (textes, logos,
-                visuels, modèles de documents, etc.) est la propriété d&apos;Ada Papers et ne peut être reproduit
+                Sauf mention contraire, l'ensemble des éléments présents sur cette Plateforme (textes, logos,
+                visuels, modèles de documents, etc.) est la propriété d'Ada Papers et ne peut être reproduit
                 ou réutilisé sans autorisation préalable écrite.
               </p>
             </div>

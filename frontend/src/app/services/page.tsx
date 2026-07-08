@@ -196,7 +196,7 @@ export default function ServicesPage() {
                 {/* Appel à l'action */}
                 <div className="pt-4 border-t border-border/60 mt-4 flex flex-wrap gap-3 justify-between items-center">
                   <div className="text-xs text-muted-foreground max-w-xs">
-                    Un doute sur le service le plus adapté ? Nous pouvons vous orienter lors d&apos;un
+                    Un doute sur le service le plus adapté ? Nous pouvons vous orienter lors d'un
                     premier échange.
                   </div>
                   <div className="flex gap-3">
@@ -234,7 +234,7 @@ export default function ServicesPage() {
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-sm text-muted-foreground">
-                Aucun service n&apos;est configuré pour le moment.
+                Aucun service n'est configuré pour le moment.
               </div>
             )}
           </section>

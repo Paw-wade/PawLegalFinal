@@ -286,6 +286,7 @@ export default function AdminDossiersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [dossiers, setDossiers] = useState<any[]>([]);
+  const [globalStats, setGlobalStats] = useState<{ pending: number; in_progress: number; standby: number; closed: number; archived: number; total: number } | null>(null);
   const [utilisateurs, setUtilisateurs] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]); // Membres de l'équipe (admins/superadmins)
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -759,6 +760,20 @@ export default function AdminDossiersPage() {
       if (response.data.success) {
         const dossiersList = response.data.dossiers || [];
         setDossiers(dossiersList);
+
+        // Statistiques globales (tous les dossiers du cabinet), indépendantes du
+        // périmètre : les cartes doivent rester identiques quel que soit l'admin.
+        dossiersAPI
+          .getGlobalDossierStats()
+          .then((statsRes) => {
+            if (statsRes?.data?.success && statsRes.data.stats) {
+              setGlobalStats(statsRes.data.stats);
+            }
+          })
+          .catch(() => {
+            // En cas d'échec, on retombe sur le calcul local (périmètre courant).
+            setGlobalStats(null);
+          });
         
         // Charger les demandes de documents pour chaque dossier
         // Ignorer silencieusement les erreurs 404 (route peut ne pas être disponible si le serveur n'est pas redémarré)
@@ -2494,21 +2509,23 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-yellow-700 font-semibold mb-1 uppercase tracking-wide">En attente</p>
                   <p className="text-2xl font-bold text-yellow-900">
-                    {dossiers.filter((d: any) => {
-                      const hasClient = !!d.user; // dossier créé par un utilisateur
-                      const rawStatut = getRawStatut(d);
-                      const initialStatut =
-                        !rawStatut ||
-                        rawStatut === 'recu' ||
-                        rawStatut === 'en_attente_onboarding';
-                      return (
-                        hasClient &&
-                        initialStatut &&
-                        !d.isStandby &&
-                        !isClosedDossier(d) &&
-                        !isArchivedDossier(d)
-                      );
-                    }).length}
+                    {globalStats
+                      ? globalStats.pending
+                      : dossiers.filter((d: any) => {
+                          const hasClient = !!d.user; // dossier créé par un utilisateur
+                          const rawStatut = getRawStatut(d);
+                          const initialStatut =
+                            !rawStatut ||
+                            rawStatut === 'recu' ||
+                            rawStatut === 'en_attente_onboarding';
+                          return (
+                            hasClient &&
+                            initialStatut &&
+                            !d.isStandby &&
+                            !isClosedDossier(d) &&
+                            !isArchivedDossier(d)
+                          );
+                        }).length}
                   </p>
                 </button>
                 {/* En cours : tous les autres dossiers non clôturés / non archivés */}
@@ -2523,21 +2540,23 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-blue-700 font-semibold mb-1 uppercase tracking-wide">En cours</p>
                   <p className="text-2xl font-bold text-blue-900">
-                    {dossiers.filter((d: any) => {
-                      const hasClient = !!d.user;
-                      const rawStatut = getRawStatut(d);
-                      const initialStatut =
-                        hasClient &&
-                        (!rawStatut ||
-                          rawStatut === 'recu' ||
-                          rawStatut === 'en_attente_onboarding');
-                      return (
-                        !d.isStandby &&
-                        !isClosedDossier(d) &&
-                        !isArchivedDossier(d) &&
-                        !initialStatut
-                      );
-                    }).length}
+                    {globalStats
+                      ? globalStats.in_progress
+                      : dossiers.filter((d: any) => {
+                          const hasClient = !!d.user;
+                          const rawStatut = getRawStatut(d);
+                          const initialStatut =
+                            hasClient &&
+                            (!rawStatut ||
+                              rawStatut === 'recu' ||
+                              rawStatut === 'en_attente_onboarding');
+                          return (
+                            !d.isStandby &&
+                            !isClosedDossier(d) &&
+                            !isArchivedDossier(d) &&
+                            !initialStatut
+                          );
+                        }).length}
                   </p>
                 </button>
                 <button
@@ -2551,7 +2570,9 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-violet-700 font-semibold mb-1 uppercase tracking-wide">Stand-by</p>
                   <p className="text-2xl font-bold text-violet-900">
-                    {dossiers.filter((d: any) => !!d.isStandby && !isClosedDossier(d) && !isArchivedDossier(d)).length}
+                    {globalStats
+                      ? globalStats.standby
+                      : dossiers.filter((d: any) => !!d.isStandby && !isClosedDossier(d) && !isArchivedDossier(d)).length}
                   </p>
                 </button>
                 <button
@@ -2565,7 +2586,7 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-green-700 font-semibold mb-1 uppercase tracking-wide">Clôturés</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {dossiers.filter((d: any) => isClosedDossier(d)).length}
+                    {globalStats ? globalStats.closed : dossiers.filter((d: any) => isClosedDossier(d)).length}
                   </p>
                 </button>
                 <button
@@ -2579,7 +2600,7 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
                   <p className="text-2xl font-bold text-red-900">
-                    {dossiers.filter((d: any) => isArchivedDossier(d)).length}
+                    {globalStats ? globalStats.archived : dossiers.filter((d: any) => isArchivedDossier(d)).length}
                   </p>
                 </button>
               </div>
@@ -4880,7 +4901,7 @@ export default function AdminDossiersPage() {
               {tarifExonerer && (
                 <div>
                   <Label htmlFor="tarif-exo-motif" className="text-sm mb-1 block">
-                    Motif d&apos;exonération (optionnel)
+                    Motif d'exonération (optionnel)
                   </Label>
                   <Textarea
                     id="tarif-exo-motif"
@@ -5365,7 +5386,7 @@ export default function AdminDossiersPage() {
             >
               <div className="space-y-3 mb-4">
                 <div>
-                  <Label htmlFor="newEtapeLabel">Libellé de l&apos;étape *</Label>
+                  <Label htmlFor="newEtapeLabel">Libellé de l'étape *</Label>
                   <Input
                     id="newEtapeLabel"
                     value={newEtapeLabel}

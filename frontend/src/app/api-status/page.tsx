@@ -48,10 +48,10 @@ export default function ApiStatusPage() {
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold mb-4 text-foreground">
-              Statut de l&apos;API
+              Statut de l'API
             </h1>
             <p className="text-lg text-muted-foreground">
-              Vérification de l&apos;état de l&apos;API - Service d&apos;Accompagnement aux démarches administratives
+              Vérification de l'état de l'API - Service d'Accompagnement aux démarches administratives
             </p>
           </div>
 
@@ -105,7 +105,7 @@ export default function ApiStatusPage() {
 
               <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
                 <h3 className="text-xl font-bold mb-4 text-foreground">
-                  Informations de l&apos;API
+                  Informations de l'API
                 </h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between py-2 border-b border-gray-200">
@@ -142,7 +142,7 @@ export default function ApiStatusPage() {
 
               <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
                 <p className="text-sm text-blue-800">
-                  <span className="font-semibold">URL de l&apos;API:</span>{' '}
+                  <span className="font-semibold">URL de l'API:</span>{' '}
                   <code className="bg-blue-100 px-2 py-1 rounded">
                     {getNextPublicApiOrigin()}/
                   </code>

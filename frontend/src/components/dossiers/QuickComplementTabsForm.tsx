@@ -156,7 +156,7 @@ export function QuickComplementTabsForm({
         />
       </div>
       <div>
-        <label className="text-[11px] md:text-sm font-medium block mb-1">Complément d&apos;information</label>
+        <label className="text-[11px] md:text-sm font-medium block mb-1">Complément d'information</label>
         <textarea
           ref={textareaRef}
           value={activeDraft.text}

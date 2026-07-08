@@ -9,6 +9,7 @@ const permissionSchema = new mongoose.Schema({
       'tableau_de_bord',
       'utilisateurs',
       'dossiers',
+      'tarification',
       'taches',
       'rendez_vous',
       'creneaux',

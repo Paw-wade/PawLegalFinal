@@ -268,7 +268,7 @@ export default function ClientDossierRecapPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-500">Aucun complément n&apos;a encore été ajouté.</p>
+              <p className="text-sm text-gray-500">Aucun complément n'a encore été ajouté.</p>
             )}
           </section>
 

@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const StandaloneTarificationRequest = require('../models/StandaloneTarificationRequest');
 const { protect, authorize } = require('../middleware/auth');
+const { getAssignedDossierIds, userHasPermission, isUserOnDossierTeam, getScopedDossierModifyViolations } = require('../utils/accessScope');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const { sendSMS, formatPhoneNumber } = require('../sendSMS');
 
@@ -668,17 +669,27 @@ router.get('/', async (req, res) => {
           { clientEmail: { $regex: new RegExp(`^${userEmailLower}$`, 'i') } } // Comparaison insensible à la casse
         ]
       };
-    } else if (userRole === 'admin' || userRole === 'superadmin') {
-      // Admins voient tous les dossiers (pas de filtre)
+    } else if (userRole === 'superadmin') {
+      // Superadmin : tous les dossiers (pas de filtre)
       filter = {};
     } else {
-      // Autres rôles : dossiers assignés
-      filter = {
-        $or: [
-          { user: targetUserId },
-          { assignedTo: targetUserId }
-        ]
-      };
+      // Staff (admin, assistant, comptable, ...) : accès complet si la permission
+      // "dossiers" est accordée, sinon accès restreint aux dossiers assignés.
+      const canViewAll = await userHasPermission(req.user, 'dossiers', 'consulter');
+      if (canViewAll) {
+        filter = {};
+      } else {
+        const assignedIds = await getAssignedDossierIds(targetUserId);
+        filter = {
+          $or: [
+            { user: targetUserId },
+            { assignedTo: targetUserId },
+            { teamMembers: targetUserId },
+            { teamLeader: targetUserId },
+            { _id: { $in: assignedIds } },
+          ],
+        };
+      }
     }
     
     console.log('🔍 Filtre de recherche:', JSON.stringify(filter, null, 2));
@@ -762,6 +773,31 @@ router.get(
         { clientEmail: { $regex: search, $options: 'i' } }
       ];
     }
+
+    // Accès restreint : un membre du staff sans la permission "dossiers" ne voit
+    // que les dossiers qui lui sont assignés (assignedTo / teamMembers / teamLeader).
+    if (req.user.role !== 'superadmin') {
+      const canViewAll = await userHasPermission(req.user, 'dossiers', 'consulter');
+      if (!canViewAll) {
+        const assignedIds = await getAssignedDossierIds(req.user.id);
+        const scopeFilter = {
+          $or: [
+            { assignedTo: req.user.id },
+            { teamMembers: req.user.id },
+            { teamLeader: req.user.id },
+            { _id: { $in: assignedIds } },
+          ],
+        };
+        // Combiner avec les filtres existants (dont un éventuel $or de recherche)
+        if (filter.$or) {
+          filter.$and = [{ $or: filter.$or }, scopeFilter];
+          delete filter.$or;
+        } else {
+          filter.$or = scopeFilter.$or;
+        }
+        console.log('🔒 Accès restreint dossiers (/admin) - dossiers assignés:', assignedIds.length);
+      }
+    }
     
     const dossiers = await Dossier.find(filter)
       .populate('user', 'firstName lastName email phone profilePhoto')
@@ -783,6 +819,74 @@ router.get(
     });
   }
 });
+
+// @route   GET /api/user/dossiers/stats/global
+// @desc    Statistiques globales (tous les dossiers du cabinet), indépendantes du
+//          périmètre de l'utilisateur. Les cartes de statistiques de la page
+//          /admin/dossiers doivent toujours refléter les totaux globaux, même
+//          pour un admin en accès restreint (qui ne voit que ses dossiers dans la
+//          liste). La classification reproduit exactement celle du front.
+// @access  Private — rôles staff
+router.get(
+  '/stats/global',
+  authorize('admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire', 'visiteur'),
+  async (req, res) => {
+    try {
+      const dossiers = await Dossier.find({})
+        .select('statut estArchive estCloture isStandby user')
+        .lean();
+
+      const rawStatut = (d) => String(d?.statut || '').trim();
+      const isArchived = (d) => !!d?.estArchive || rawStatut(d) === 'annule';
+      const isClosed = (d) => {
+        if (isArchived(d)) return false;
+        const s = rawStatut(d);
+        return (
+          !!d?.estCloture ||
+          s === 'decision_favorable' ||
+          s === 'decision_defavorable' ||
+          s === 'gain_cause' ||
+          s === 'rejet' ||
+          s === 'refuse'
+        );
+      };
+
+      const stats = { pending: 0, in_progress: 0, standby: 0, closed: 0, archived: 0, total: dossiers.length };
+
+      for (const d of dossiers) {
+        if (isArchived(d)) {
+          stats.archived += 1;
+          continue;
+        }
+        if (isClosed(d)) {
+          stats.closed += 1;
+          continue;
+        }
+        if (d.isStandby) {
+          stats.standby += 1;
+          continue;
+        }
+        const hasClient = !!d.user;
+        const s = rawStatut(d);
+        const initialStatut = !s || s === 'recu' || s === 'en_attente_onboarding';
+        if (hasClient && initialStatut) {
+          stats.pending += 1;
+        } else {
+          stats.in_progress += 1;
+        }
+      }
+
+      res.json({ success: true, stats });
+    } catch (error) {
+      console.error('Erreur lors du calcul des statistiques globales des dossiers:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: error.message,
+      });
+    }
+  }
+);
 
 // @route   POST /api/user/dossiers
 // @desc    Créer un nouveau dossier
@@ -3039,11 +3143,13 @@ router.get('/:id', async (req, res) => {
     // Vérifier chaque condition d'accès
     const isOwner = dossier.user && dossier.user._id && dossier.user._id.toString() === req.user.id.toString();
     const isClientByEmail = dossier.clientEmail && dossier.clientEmail.toLowerCase() === req.user.email.toLowerCase();
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    const isAssigned = dossier.assignedTo && dossier.assignedTo._id && dossier.assignedTo._id.toString() === req.user.id.toString();
+    const isSuperAdmin = req.user.role === 'superadmin';
+    const canViewAll = await userHasPermission(req.user, 'dossiers', 'consulter');
+    const isTeamAssigned = isUserOnDossierTeam(dossier, req.user.id);
+    const isAssigned = isTeamAssigned;
     const isTransmitted = isPartenaire && isTransmittedToPartenaire;
     
-    let hasAccess = isOwner || isClientByEmail || isAdmin || isAssigned || isTransmitted;
+    let hasAccess = isOwner || isClientByEmail || isSuperAdmin || canViewAll || isTeamAssigned || isTransmitted;
 
     console.log('🔐 Vérification d\'accès au dossier:', {
       dossierId: req.params.id,
@@ -3053,7 +3159,8 @@ router.get('/:id', async (req, res) => {
       checks: {
         isOwner,
         isClientByEmail,
-        isAdmin,
+        isSuperAdmin,
+        canViewAll,
         isAssigned,
         isTransmitted,
         isPartenaire
@@ -3079,7 +3186,8 @@ router.get('/:id', async (req, res) => {
           checks: {
             isOwner,
             isClientByEmail,
-            isAdmin,
+            isSuperAdmin,
+            canViewAll,
             isAssigned,
             isTransmitted
           }
@@ -3147,7 +3255,11 @@ router.put(
       // Vérifier les permissions
       const dossierUserId = dossier.user ? (dossier.user._id ? dossier.user._id.toString() : dossier.user.toString()) : null;
       let hasModifyPermission = false;
+      let scopedModifyOnly = false;
       const isPartenaire = req.user.role === 'partenaire';
+      const isSuperAdmin = req.user.role === 'superadmin';
+      const canModifyAll = await userHasPermission(req.user, 'dossiers', 'modifier');
+      const isTeamAssigned = isUserOnDossierTeam(dossier, req.user.id);
       const isTransmittedToPartenaire = isPartenaire && dossier.transmittedTo && dossier.transmittedTo.some(
         t => {
           if (!t.partenaire) return false;
@@ -3158,11 +3270,15 @@ router.put(
 
       // L'utilisateur peut modifier si :
       // 1. Il est le propriétaire du dossier
-      // 2. Il est admin/superadmin
-      // 3. Il est partenaire et le dossier lui a été transmis et accepté
+      // 2. Il est superadmin ou a la permission "dossiers" modifier (accès complet)
+      // 3. Il est assigné au dossier (mode restreint : statut, notes, etc.)
+      // 4. Il est partenaire et le dossier lui a été transmis et accepté
       if (dossierUserId && dossierUserId === req.user.id.toString()) {
         hasModifyPermission = true;
-      } else if (req.user.role === 'admin' || req.user.role === 'superadmin') {
+      } else if (isSuperAdmin || canModifyAll) {
+        hasModifyPermission = true;
+      } else if (isTeamAssigned) {
+        scopedModifyOnly = true;
         hasModifyPermission = true;
       } else if (isTransmittedToPartenaire) {
         hasModifyPermission = true;
@@ -3173,6 +3289,18 @@ router.put(
           success: false,
           message: 'Accès non autorisé à ce dossier'
         });
+      }
+
+      if (scopedModifyOnly) {
+        const violations = getScopedDossierModifyViolations(req.body);
+        if (violations.length > 0) {
+          return res.status(403).json({
+            success: false,
+            message:
+              'Accès restreint : vous pouvez uniquement modifier le statut, les notes et le mode veille sur les dossiers qui vous sont assignés.',
+            fields: violations,
+          });
+        }
       }
 
       // Partenaire : ne peut mettre à jour que les étapes supplémentaires

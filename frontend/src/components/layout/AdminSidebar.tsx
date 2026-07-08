@@ -76,10 +76,9 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
 
   const userRole = (session?.user as any)?.role || 'client';
 
-  const filteredMenuItems = adminMenuItems.filter(item => {
-    if (!item.roles) return true;
-    return item.roles.includes(userRole);
-  });
+  // Tous les éléments du menu sont toujours affichés. Le contrôle d'accès
+  // par domaine est géré par RouteProtection (message d'accès refusé au clic).
+  const filteredMenuItems = adminMenuItems;
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === href;
@@ -190,7 +189,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
               Ada Papers
             </Link>
             <span className="hidden md:inline ml-2 text-[10px] text-gray-500">
-              {userRole === 'superadmin' ? 'Super administration' : 'Panneau d&apos;administration'}
+              {userRole === 'superadmin' ? 'Super administration' : "Panneau d'administration"}
             </span>
           </div>
           {onClose && (

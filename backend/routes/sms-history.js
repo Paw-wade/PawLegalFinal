@@ -1,12 +1,12 @@
 const express = require('express');
 const SmsHistory = require('../models/SmsHistory');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorizePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification admin
 router.use(protect);
-router.use(authorize('admin', 'superadmin'));
+router.use(authorizePermission('sms', 'consulter'));
 
 // @route   GET /api/sms-history
 // @desc    Récupérer l'historique des SMS

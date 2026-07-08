@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorizePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -64,7 +64,7 @@ const upload = multer({
 });
 
 // Toutes les routes média nécessitent un admin
-router.use(protect, authorize('admin', 'superadmin'));
+router.use(protect, authorizePermission('cms', 'consulter'));
 
 // @route   POST /api/media/hero
 // @desc    Téléverser un média (image ou vidéo) pour le carrousel du hero

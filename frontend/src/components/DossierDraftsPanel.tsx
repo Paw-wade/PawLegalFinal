@@ -498,7 +498,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
                     placeholder="Titre du document"
                   />
                   <label className="sr-only" htmlFor="draft-due-date">
-                    Date d&apos;échéance
+                    Date d'échéance
                   </label>
                   <input
                     id="draft-due-date"
@@ -644,7 +644,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
               autoFocus
             />
             <div className="mt-3">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Date d&apos;échéance (optionnel)</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Date d'échéance (optionnel)</label>
               <input
                 type="date"
                 value={newDraftDueDate}
