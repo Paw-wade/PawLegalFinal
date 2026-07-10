@@ -18,6 +18,12 @@ const {
   isS3StoragePath,
 } = require('../utils/documentFileStorage');
 const {
+  resolveDocumentDownloadFileName,
+  resolveDocumentDisplayTitle,
+  buildContentDisposition,
+  pickFileExtension,
+} = require('../utils/documentDownloadName');
+const {
   deleteS3Object,
   archiveS3Object,
   tryServeDocumentFromS3,
@@ -258,17 +264,10 @@ async function sendDocumentToClient(document, res, { inline = false } = {}) {
   if (localPath) {
     const fileName = resolveDocumentDownloadFileName(document, localPath);
     const contentType = resolveDocumentResponseContentType(document);
-    if (inline) {
-      res.setHeader('Content-Type', contentType);
-      res.setHeader(
-        'Content-Disposition',
-        `inline; filename="${encodeURIComponent(document.nom || fileName)}"`
-      );
-      res.setHeader('Cache-Control', 'private, max-age=3600');
-      res.sendFile(localPath);
-    } else {
-      res.download(localPath, fileName);
-    }
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', buildContentDisposition(fileName, { inline }));
+    if (inline) res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.sendFile(localPath);
     return true;
   }
 
@@ -276,131 +275,6 @@ async function sendDocumentToClient(document, res, { inline = false } = {}) {
 }
 
 const isHttpLikeStoragePath = (value) => /^https?:\/\//i.test(String(value || '').trim());
-
-function extractStoredFileLabel(raw) {
-  const value = String(raw || '').trim();
-  if (!value) return '';
-  if (isHttpLikeStoragePath(value)) {
-    try {
-      const segments = new URL(value).pathname.split('/').filter(Boolean);
-      let last = segments[segments.length - 1] || '';
-      if (/^v\d+$/.test(last) && segments.length > 1) {
-        last = segments[segments.length - 2];
-      }
-      return last;
-    } catch {
-      // fall through
-    }
-  }
-  return path.basename(value.replace(/\\/g, '/'));
-}
-
-const sanitizeDownloadName = (raw) => {
-  const value = String(raw || '').trim();
-  if (!value) return '';
-  return extractStoredFileLabel(value);
-};
-
-function isInternalStorageFileName(name) {
-  const value = String(name || '').trim();
-  if (!value) return false;
-  if (isHttpLikeStoragePath(value)) return true;
-  const normalized = value.toLowerCase();
-  if (normalized.includes('cloudinary.com')) return true;
-  if (normalized.startsWith('s3://')) return true;
-  if (
-    normalized.includes('raw_upload') ||
-    normalized.includes('pawlegal_documents') ||
-    normalized.includes('pawlegal/')
-  ) {
-    return true;
-  }
-  if (/^\d{10,}-/.test(value)) return true;
-  return false;
-}
-
-function stripLeadingStorageTimestamp(name) {
-  const base = sanitizeDownloadName(name);
-  const matched = base.match(/^\d{10,}-(.+)$/);
-  return matched ? matched[1] : base;
-}
-
-const pickFileExtension = (...names) => {
-  for (const name of names) {
-    const ext = path.extname(String(name || '')).toLowerCase();
-    if (ext && ext.length > 1) return ext;
-  }
-  return '';
-};
-
-const pickMimeExtension = (mimeType) => {
-  const map = {
-    'application/pdf': '.pdf',
-    'application/msword': '.doc',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
-    'image/jpeg': '.jpg',
-    'image/png': '.png',
-  };
-  return map[String(mimeType || '').toLowerCase()] || '';
-};
-
-function resolveDocumentDownloadFileName(document, localPath) {
-  let displayName = sanitizeDownloadName(document?.nom);
-  if (isInternalStorageFileName(displayName)) displayName = '';
-
-  const storedName = sanitizeDownloadName(document?.nomFichier);
-  const pathName = sanitizeDownloadName(
-    localPath ? path.basename(localPath) : document?.cheminFichier
-  );
-  const extension =
-    pickFileExtension(storedName, pathName, displayName) ||
-    pickMimeExtension(document?.typeMime);
-
-  if (!displayName) {
-    const fallbackRaw = [storedName, pathName]
-      .map((name) => (isInternalStorageFileName(name) ? stripLeadingStorageTimestamp(name) : name))
-      .find((name) => name && !isInternalStorageFileName(name));
-    displayName = fallbackRaw ? stripLeadingStorageTimestamp(fallbackRaw) : '';
-    if (isInternalStorageFileName(displayName)) displayName = '';
-  }
-
-  if (displayName) {
-    const displayExt = path.extname(displayName).toLowerCase();
-    if (displayExt && extension && displayExt !== extension) {
-      const base = displayName.slice(0, -displayExt.length) || displayName;
-      return `${base}${extension}`;
-    }
-    if (!displayExt && extension) return `${displayName}${extension}`;
-    return displayName;
-  }
-
-  const storedFallback = [storedName, pathName]
-    .map((name) => stripLeadingStorageTimestamp(name))
-    .find((name) => name && !isInternalStorageFileName(name));
-  if (storedFallback) {
-    const storedExt = path.extname(storedFallback).toLowerCase();
-    if (!storedExt && extension) return `${storedFallback}${extension}`;
-    return storedFallback;
-  }
-
-  return extension ? `document${extension}` : 'document';
-}
-
-function resolveDocumentDisplayTitle(document, localPath) {
-  const displayName = sanitizeDownloadName(document?.nom);
-  if (displayName && !isInternalStorageFileName(displayName)) {
-    return displayName;
-  }
-
-  const fileName = resolveDocumentDownloadFileName(document, localPath);
-  if (!fileName || fileName === 'document') return 'Document';
-  const ext = path.extname(fileName);
-  if (ext) {
-    const base = fileName.slice(0, -ext.length);
-    return base || fileName;
-  }
-  return fileName;
-}
 
 // Normaliser la catégorie pour éviter les erreurs de validation Mongoose
 // lorsque la valeur vient d'écrans différents (libellés libres, accents, etc.).
@@ -833,6 +707,7 @@ router.post('/', (req, res, next) => {
       // `nomFichier` est indexé/unique côté DB : utiliser le nom de fichier généré par multer (timestamp)
       // pour éviter les doublons lorsque l'utilisateur upload plusieurs fois le même fichier original.
       nomFichier: req.file.filename,
+      originalName: req.file.originalname,
       cheminFichier,
       typeMime: req.file.mimetype,
       taille: req.file.size,
@@ -1277,7 +1152,18 @@ router.patch('/:id', async (req, res) => {
       if (!trimmed) {
         return res.status(400).json({ success: false, message: 'Le nom du document est requis' });
       }
-      document.nom = trimmed;
+      // Préserver l'extension réelle du fichier si le nouveau nom n'en a pas (ou une incorrecte)
+      const realExt =
+        pickFileExtension(document.originalName, document.nomFichier, document.cheminFichier) ||
+        pickFileExtension(document.nom);
+      const newExt = pickFileExtension(trimmed);
+      if (realExt && !newExt) {
+        document.nom = `${trimmed}${realExt}`;
+      } else if (realExt && newExt && newExt !== realExt) {
+        document.nom = `${trimmed.slice(0, -newExt.length)}${realExt}`;
+      } else {
+        document.nom = trimmed;
+      }
     }
     if (description !== undefined) {
       document.description = String(description || '').trim();

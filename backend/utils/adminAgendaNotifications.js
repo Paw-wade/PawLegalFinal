@@ -15,7 +15,17 @@ function toStartOfDay(value) {
 
 function isDossierExcluded(d) {
   const s = String(d?.statut || '');
-  return !!(d?.estCloture || d?.estArchive || s === 'annule' || s === 'refuse');
+  return !!(
+    d?.estCloture ||
+    d?.estArchive ||
+    s === 'annule' ||
+    s === 'refuse' ||
+    s === 'cloture' ||
+    s === 'decision_favorable' ||
+    s === 'decision_defavorable' ||
+    s === 'gain_cause' ||
+    s === 'rejet'
+  );
 }
 
 function isTaskOpen(task) {

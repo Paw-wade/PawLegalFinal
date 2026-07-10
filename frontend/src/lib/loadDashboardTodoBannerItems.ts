@@ -49,8 +49,35 @@ const safeString = (value: unknown): string => {
   return '';
 };
 
-const agendaLink = (userRole: DashboardTodoUserRole, date: string) =>
-  userRole === 'partenaire' ? `/partenaire/rendez-vous?date=${date}` : `/admin/rendez-vous?date=${date}`;
+const agendaLink = (userRole: DashboardTodoUserRole, date: string, appointmentId?: string) => {
+  const base = userRole === 'partenaire' ? '/partenaire/rendez-vous' : '/admin/rendez-vous';
+  const params = new URLSearchParams();
+  if (date) params.set('date', date);
+  if (appointmentId) params.set('appointmentId', appointmentId);
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
+};
+
+/** Lien exact vers la tâche (pas le dossier parent). */
+export const taskDeepLink = (
+  userRole: DashboardTodoUserRole,
+  taskId: string,
+  dossierId?: string
+): string => {
+  const id = encodeURIComponent(taskId || '');
+  if (userRole === 'admin') {
+    return taskId ? `/admin/taches?taskId=${id}` : '/admin/taches';
+  }
+  if (userRole === 'client') {
+    return taskId ? `/client/taches?taskId=${id}` : '/client/taches';
+  }
+  // Partenaire : les tâches sont affichées sur le dossier
+  if (dossierId && taskId) {
+    return `/partenaire/dossiers/${encodeURIComponent(dossierId)}?taskId=${id}`;
+  }
+  if (dossierId) return `/partenaire/dossiers/${encodeURIComponent(dossierId)}`;
+  return '/partenaire/dossiers';
+};
 
 async function loadAppointmentGroups(userRole: DashboardTodoUserRole): Promise<DashboardTodoAppointmentGroup[]> {
   if (userRole !== 'admin' && userRole !== 'partenaire') return [];
@@ -86,7 +113,7 @@ async function loadAppointmentGroups(userRole: DashboardTodoUserRole): Promise<D
         id: aptId || `apt-${Math.random()}`,
         time: heure || '—',
         name: clientName,
-        link: agendaLink(userRole, aptDate),
+        link: agendaLink(userRole, aptDate, aptId || undefined),
       };
     };
 
@@ -279,7 +306,7 @@ async function loadTaskItems(userRole: DashboardTodoUserRole, userId: string): P
             kind: 'task',
             title: isAssignedToMe ? 'Tâche assignée' : 'Tâche partenaire',
             subtitle: isAssignedToMe ? titre : `${creatorName} · ${titre}`,
-            link: dossierId ? `/admin/dossiers/${dossierId}` : '/admin/taches',
+            link: taskDeepLink('admin', taskId, dossierId || undefined),
             priority:
               safeString(task.priorite) === 'urgente' || safeString(task.priorite) === 'haute' ? 'high' : 'normal',
           });
@@ -297,13 +324,12 @@ async function loadTaskItems(userRole: DashboardTodoUserRole, userId: string): P
         const taskId = safeString(task._id) || safeString(task.id);
         const dossierId = safeString((task.dossier as Record<string, unknown> | undefined)?._id) || safeString(task.dossier);
         const titre = safeString(task.titre) || 'Sans titre';
-        const base = userRole === 'partenaire' ? '/partenaire' : '/client';
         items.push({
           id: `task-${taskId}`,
           kind: 'task',
           title: 'Tâche à faire',
           subtitle: titre,
-          link: dossierId ? `${base}/dossiers/${dossierId}` : `${base}/taches`,
+          link: taskDeepLink(userRole, taskId, dossierId || undefined),
           priority:
             safeString(task.priorite) === 'urgente' || safeString(task.priorite) === 'haute' ? 'high' : 'normal',
         });

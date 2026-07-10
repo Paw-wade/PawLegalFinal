@@ -265,15 +265,7 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
                   documentId={documentId || ''}
                   onDownload={async () => {
                     try {
-                      const response = await documentsAPI.downloadDocument(documentId || '');
-                      const url = window.URL.createObjectURL(new Blob([response.data]));
-                      const link = window.document.createElement('a');
-                      link.href = url;
-                      link.setAttribute('download', document.nom);
-                      window.document.body.appendChild(link);
-                      link.click();
-                      link.remove();
-                      window.URL.revokeObjectURL(url);
+                      await documentsAPI.downloadAndSave(documentId || '', document.nom);
                     } catch (err: unknown) {
                       console.error('Erreur lors du téléchargement:', err);
                       alert('Erreur lors du téléchargement du document');

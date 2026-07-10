@@ -206,14 +206,8 @@ function MessagesContent() {
   const handleDownloadAttachment = async (messageId: string, fileIndex: number, originalName: string) => {
     try {
       const response = await messagesAPI.downloadAttachment(messageId, fileIndex);
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', originalName);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      const { triggerBlobDownload } = await import('@/lib/downloadFile');
+      triggerBlobDownload(response, originalName);
     } catch (err: any) {
       console.error('Erreur lors du téléchargement:', err);
       setToast({ message: 'Erreur lors du téléchargement de la pièce jointe', type: 'error' });

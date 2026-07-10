@@ -65,16 +65,7 @@ export default function AdminDossierDocumentsPage() {
   const handleDownload = async (doc: any) => {
     try {
       const docId = doc._id || doc.id;
-      const response = await documentsAPI.downloadDocument(docId);
-      const blob = new Blob([response.data]);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = doc.nom || 'document';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      await documentsAPI.downloadAndSave(docId, doc.nom || doc.originalName || 'document');
     } catch (error: any) {
       console.error('Erreur lors du téléchargement:', error);
       setToast({ message: error.response?.data?.message || 'Erreur lors du téléchargement du document', type: 'error' });

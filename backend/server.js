@@ -43,6 +43,7 @@ app.use(
       'pragma',
       'x-forum-visitor-id',
     ],
+    exposedHeaders: ['Content-Disposition', 'Content-Type', 'Content-Length'],
     maxAge: 86400,
   })
 );

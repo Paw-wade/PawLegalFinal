@@ -342,15 +342,8 @@ export default function AdminMessageDetailPage() {
   const handleDownloadAttachment = async (messageId: string, index: number, filename: string) => {
     try {
       const response = await messagesAPI.downloadAttachment(messageId, index);
-      const blob = new Blob([response.data], { type: response.headers['content-type'] });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      const { triggerBlobDownload } = await import('@/lib/downloadFile');
+      triggerBlobDownload(response, filename);
     } catch (err) {
       console.error('Erreur lors du téléchargement:', err);
       alert('Erreur lors du téléchargement du fichier');
@@ -769,15 +762,8 @@ export default function AdminMessageDetailPage() {
                           if (isContactMessage) {
                             const { contactAPI } = await import('@/lib/api');
                             const response = await contactAPI.downloadDocument(message._id || message.id, pj._id || index.toString());
-                            const blob = new Blob([response.data], { type: response.headers['content-type'] });
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = pj.originalName;
-                            document.body.appendChild(a);
-                            a.click();
-                            window.URL.revokeObjectURL(url);
-                            document.body.removeChild(a);
+                            const { triggerBlobDownload } = await import('@/lib/downloadFile');
+                            triggerBlobDownload(response, pj.originalName);
                           } else {
                             handleDownloadAttachment(message._id || message.id, index, pj.originalName);
                           }

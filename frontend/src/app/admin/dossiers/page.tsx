@@ -21,7 +21,7 @@ import {
   parseMontantSaisieFlexible,
 } from '@/lib/montantTarification';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getDossierMinEtapeDateMs } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getDossierMinEtapeDateMs, isClosedDossier as isClosedDossierUtil, isArchivedDossier as isArchivedDossierUtil } from '@/lib/dossierUtils';
 import {
   collectAdminDossierAgendaItems,
   downloadAdminDossierAgendaPdf,
@@ -351,8 +351,9 @@ export default function AdminDossiersPage() {
   const DEFAULT_ADMIN_ETAPES: any[] = [
     { id: 'recu', label: 'Reçu', ordre: 0 },
     { id: 'en_cours', label: 'En cours', ordre: 1 },
-    { id: 'refuse', label: 'Refusé', ordre: 2 },
-    { id: 'annule', label: 'Archivé', ordre: 3 },
+    { id: 'cloture', label: 'Clôturé', ordre: 2 },
+    { id: 'refuse', label: 'Refusé', ordre: 3 },
+    { id: 'annule', label: 'Archivé', ordre: 4 },
   ];
   const DEFAULT_ADMIN_ETAPES_IDS = new Set(DEFAULT_ADMIN_ETAPES.map((s) => String(s.id)));
 
@@ -1566,7 +1567,7 @@ export default function AdminDossiersPage() {
         updateData.notificationMessage = notificationMessage.trim();
       }
 
-      // Les statuts par défaut (Reçu / En cours / Refusé / Archivé) ne doivent pas déclencher la tarification.
+      // Les statuts par défaut (Reçu / En cours / Clôturé / Refusé / Archivé) ne doivent pas déclencher la tarification.
       if (exonererFraisTarification && showStatutModal.newStatut === 'en_cours' && !DEFAULT_ADMIN_ETAPES_IDS.has(String(showStatutModal.newStatut))) {
         updateData.fraisExoneres = true;
         if (fraisExoneresMotifInput.trim()) {
@@ -1931,22 +1932,8 @@ export default function AdminDossiersPage() {
   }
 
   const getRawStatut = (d: any) => String(d?.statut || '').trim();
-  const isArchivedDossier = (d: any) => {
-    const rawStatut = getRawStatut(d);
-    return !!d?.estArchive || rawStatut === 'annule';
-  };
-  const isClosedDossier = (d: any) => {
-    const rawStatut = getRawStatut(d);
-    if (isArchivedDossier(d)) return false;
-    return (
-      !!d?.estCloture ||
-      rawStatut === 'decision_favorable' ||
-      rawStatut === 'decision_defavorable' ||
-      rawStatut === 'gain_cause' ||
-      rawStatut === 'rejet' ||
-      rawStatut === 'refuse'
-    );
-  };
+  const isArchivedDossier = (d: any) => isArchivedDossierUtil(d);
+  const isClosedDossier = (d: any) => isClosedDossierUtil(d);
 
   return (
     <div className="min-h-screen bg-background">
@@ -4113,16 +4100,7 @@ export default function AdminDossiersPage() {
                                                       (d._id || d.id).toString() === (request.document._id || request.document).toString()
                                                     );
                                                     if (doc) {
-                                                      const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                                                      const blob = new Blob([response.data]);
-                                                      const url = window.URL.createObjectURL(blob);
-                                                      const link = document.createElement('a');
-                                                      link.href = url;
-                                                      link.download = doc.nom;
-                                                      document.body.appendChild(link);
-                                                      link.click();
-                                                      document.body.removeChild(link);
-                                                      window.URL.revokeObjectURL(url);
+                                                      await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
                                                     }
                                                   }
                                                 } catch (err) {
@@ -4220,16 +4198,7 @@ export default function AdminDossiersPage() {
                                           onClick={async (e) => {
                                             e.stopPropagation();
                                             try {
-                                              const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                                              const blob = new Blob([response.data]);
-                                              const url = window.URL.createObjectURL(blob);
-                                              const link = document.createElement('a');
-                                              link.href = url;
-                                              link.download = doc.nom;
-                                              document.body.appendChild(link);
-                                              link.click();
-                                              document.body.removeChild(link);
-                                              window.URL.revokeObjectURL(url);
+                                              await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
                                             } catch (err) {
                                               console.error('Erreur lors du téléchargement:', err);
                                               alert('Erreur lors du téléchargement du document');
@@ -4361,16 +4330,7 @@ export default function AdminDossiersPage() {
                                                         e.preventDefault();
                                                         e.stopPropagation();
                                                         try {
-                                                          const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                                                          const blob = new Blob([response.data]);
-                                                          const url = window.URL.createObjectURL(blob);
-                                                          const link = document.createElement('a');
-                                                          link.href = url;
-                                                          link.download = doc.nom;
-                                                          document.body.appendChild(link);
-                                                          link.click();
-                                                          document.body.removeChild(link);
-                                                          window.URL.revokeObjectURL(url);
+                                                          await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
                                                         } catch (err) {
                                                           console.error('Erreur lors du téléchargement:', err);
                                                           alert('Erreur lors du téléchargement du document');

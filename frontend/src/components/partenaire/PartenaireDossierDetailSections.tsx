@@ -5,12 +5,7 @@ import Link from 'next/link';
 import { History, Clock } from 'lucide-react';
 import { DossierDetailView } from '@/components/DossierDetailView';
 import { documentsAPI } from '@/lib/api';
-import {
-  getStatutColor as getTaskStatutColor,
-  getStatutLabel as getTaskStatutLabel,
-  getPrioriteColor as getTaskPrioriteColor,
-  getPrioriteLabel as getTaskPrioriteLabel,
-} from '@/lib/taskUtils';
+import { TaskListItem } from '@/components/tasks/TaskListItem';
 
 type PartenaireDossierDetailSectionsProps = {
   dossier: any;
@@ -33,6 +28,7 @@ type PartenaireDossierDetailSectionsProps = {
   onPreviewDocument: (doc: any) => void;
   getHistoryTypeIcon: (type: string) => string;
   getHistoryTypeLabel: (type: string) => string;
+  highlightTaskId?: string | null;
 };
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
@@ -66,6 +62,7 @@ export function PartenaireDossierDetailSections({
   onPreviewDocument,
   getHistoryTypeIcon,
   getHistoryTypeLabel,
+  highlightTaskId = null,
 }: PartenaireDossierDetailSectionsProps) {
   const [detailSection, setDetailSection] = useState<'synthese' | 'documents' | 'messages' | 'client'>('synthese');
 
@@ -166,31 +163,27 @@ export function PartenaireDossierDetailSections({
           )}
 
           <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
-            <h2 className="text-xl font-bold mb-4">✅ Tâches du dossier</h2>
+            <h2 className="text-xl font-bold mb-4">Tâches du dossier</h2>
             {isLoadingTasks ? (
               <p className="text-sm text-muted-foreground">Chargement des tâches...</p>
             ) : tasks.length === 0 ? (
               <p className="text-sm text-muted-foreground">Aucune tâche pour ce dossier</p>
             ) : (
-              <div className="space-y-3">
-                {tasks.map((task: any) => (
-                  <div key={task._id || task.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <h3 className="font-semibold text-foreground">{task.titre}</h3>
-                      <span className={`text-xs px-2 py-1 rounded ${getTaskStatutColor(task.statut)}`}>
-                        {getTaskStatutLabel(task.statut)}
-                      </span>
-                      {task.priorite ? (
-                        <span className={`text-xs px-2 py-1 rounded ${getTaskPrioriteColor(task.priorite)}`}>
-                          {getTaskPrioriteLabel(task.priorite)}
-                        </span>
-                      ) : null}
-                    </div>
-                    {task.description ? (
-                      <p className="text-sm text-muted-foreground mb-2 line-clamp-3">{task.description}</p>
-                    ) : null}
-                  </div>
-                ))}
+              <div className="space-y-2">
+                {tasks.map((task: any) => {
+                  const tid = String(task._id || task.id || '');
+                  return (
+                  <TaskListItem
+                    key={tid}
+                    task={task}
+                    mode="readonly"
+                    variant="compact"
+                    expanded={!!task.description || highlightTaskId === tid}
+                    highlighted={highlightTaskId === tid}
+                    dossierBasePath="/partenaire/dossiers"
+                  />
+                  );
+                })}
               </div>
             )}
           </div>
@@ -317,16 +310,7 @@ export function PartenaireDossierDetailSections({
                         className="text-xs h-8 w-full sm:w-auto"
                         onClick={async () => {
                           try {
-                            const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                            const blob = new Blob([response.data]);
-                            const url = window.URL.createObjectURL(blob);
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.download = doc.nom;
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                            window.URL.revokeObjectURL(url);
+                            await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
                           } catch (error) {
                             console.error('Erreur lors du téléchargement:', error);
                             alert('Erreur lors du téléchargement du document');

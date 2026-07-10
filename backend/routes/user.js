@@ -613,6 +613,111 @@ router.put(
   }
 );
 
+// @route   GET /api/user/dashboard/stats/global
+// @desc    Statistiques globales du tableau de bord admin (totaux du cabinet),
+//          indépendantes du périmètre / des permissions de l'utilisateur connecté.
+//          Les cartes « Vue d'ensemble » doivent toujours afficher les mêmes
+//          chiffres qu'un superadmin ; le filtrage par affectation ne s'applique
+//          qu'à l'intérieur de chaque rubrique.
+// @access  Private — rôles staff
+router.get(
+  '/dashboard/stats/global',
+  authorize('admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire', 'visiteur'),
+  async (req, res) => {
+    try {
+      const Dossier = require('../models/Dossier');
+      const Document = require('../models/Document');
+      const Task = require('../models/Task');
+      const RendezVous = require('../models/RendezVous');
+      const Temoignage = require('../models/Temoignage');
+
+      const period = String(req.query.period || 'month').toLowerCase() === 'week' ? 'week' : 'month';
+      const now = new Date();
+      const periodStart =
+        period === 'week'
+          ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+          : new Date(now.getFullYear(), now.getMonth(), 1);
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const [
+        utilisateurs,
+        nouveauxClients,
+        dossiers,
+        documents,
+        tasks,
+        tasksEnCours,
+        rendezVous,
+        temoignages,
+        periodDossiers,
+      ] = await Promise.all([
+        User.countDocuments({}),
+        User.countDocuments({ createdAt: { $gte: thirtyDaysAgo } }),
+        Dossier.countDocuments({}),
+        Document.countDocuments({}),
+        Task.countDocuments({ archived: { $ne: true } }),
+        Task.countDocuments({
+          archived: { $ne: true },
+          statut: { $in: ['a_faire', 'en_cours', 'en_attente'] },
+        }),
+        RendezVous.countDocuments({}),
+        Temoignage.countDocuments({}),
+        Dossier.find({
+          $or: [
+            { createdAt: { $gte: periodStart } },
+            { updatedAt: { $gte: periodStart } },
+          ],
+        })
+          .select('statut transmittedTo createdAt updatedAt')
+          .lean(),
+      ]);
+
+      // Filtrer strictement sur la date de création pour coller au front actuel
+      const periodCreated = periodDossiers.filter((d) => {
+        const dossierDate = new Date(d.createdAt || d.updatedAt);
+        return dossierDate >= periodStart;
+      });
+
+      const dossiersTransmis = periodCreated.filter(
+        (d) => Array.isArray(d.transmittedTo) && d.transmittedTo.length > 0
+      ).length;
+
+      const dossiersEnCours = periodCreated.filter(
+        (d) => d.statut && !['termine', 'cloture', 'annule', 'refuse'].includes(d.statut)
+      ).length;
+
+      const tauxTransmission =
+        periodCreated.length > 0
+          ? Math.round((dossiersTransmis / periodCreated.length) * 100)
+          : 0;
+
+      return res.json({
+        success: true,
+        stats: {
+          utilisateurs,
+          nouveauxClients,
+          dossiers,
+          documents,
+          tasks,
+          tasksEnCours,
+          rendezVous,
+          temoignages,
+          dossiersEnCours,
+          dossiersTransmis,
+          tauxTransmission,
+          period,
+        },
+      });
+    } catch (error) {
+      console.error('Erreur stats dashboard globales:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur serveur',
+        error: error.message,
+      });
+    }
+  }
+);
+
 // @route   GET /api/user/:id
 // @desc    Récupérer un utilisateur par ID (Admin seulement)
 // @access  Private/Admin

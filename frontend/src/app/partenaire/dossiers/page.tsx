@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI, collaborativeDraftsAPI } from '@/lib/api';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, PARTENAIRE_FORM_STATUT_VALUES, isPartenaireFormStatutValue } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, PARTENAIRE_FORM_STATUT_VALUES, isPartenaireFormStatutValue, isClosedDossier, isArchivedDossier } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -1576,8 +1576,8 @@ export default function PartenaireDossiersPage() {
                       // Dossiers transmis au partenaire mais pas encore acceptés ni refusés
                       Array.isArray(d.transmittedTo) &&
                       d.transmittedTo.some((t: any) => t.status === 'pending') &&
-                      !d.estCloture &&
-                      !(d.estArchive || d.statut === 'annule')
+                      !isClosedDossier(d) &&
+                      !isArchivedDossier(d)
                     ).length}
                   </p>
         </button>
@@ -1596,8 +1596,8 @@ export default function PartenaireDossiersPage() {
                       // Dossiers acceptés par le partenaire et non clôturés / archivés
                       Array.isArray(d.transmittedTo) &&
                       d.transmittedTo.some((t: any) => t.status === 'accepted') &&
-                      !d.estCloture &&
-                      !(d.estArchive || d.statut === 'annule')
+                      !isClosedDossier(d) &&
+                      !isArchivedDossier(d)
                     ).length}
                   </p>
         </button>
@@ -1612,7 +1612,7 @@ export default function PartenaireDossiersPage() {
                 >
                   <p className="text-xs text-green-700 font-semibold mb-1 uppercase tracking-wide">Clôturés</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {dossiers.filter((d: any) => d.estCloture).length}
+                    {dossiers.filter((d: any) => isClosedDossier(d)).length}
                   </p>
                 </button>
                 <button
@@ -1627,8 +1627,7 @@ export default function PartenaireDossiersPage() {
                   <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
                   <p className="text-2xl font-bold text-red-900">
                     {dossiers.filter((d: any) =>
-                      d.estArchive ||
-                      d.statut === 'annule' ||
+                      isArchivedDossier(d) ||
                       (Array.isArray(d.transmittedTo) && d.transmittedTo.some((t: any) => t.status === 'refused'))
                     ).length}
                   </p>
@@ -1681,8 +1680,8 @@ export default function PartenaireDossiersPage() {
                     if (
                       !Array.isArray(d.transmittedTo) ||
                       !d.transmittedTo.some((t: any) => t.status === 'pending') ||
-                      d.estCloture ||
-                      (d.estArchive || d.statut === 'annule')
+                      isClosedDossier(d) ||
+                      isArchivedDossier(d)
                     ) {
                       return false;
                     }
@@ -1691,8 +1690,8 @@ export default function PartenaireDossiersPage() {
                     if (
                       !Array.isArray(d.transmittedTo) ||
                       !d.transmittedTo.some((t: any) => t.status === 'accepted') ||
-                      d.estCloture ||
-                      (d.estArchive || d.statut === 'annule')
+                      isClosedDossier(d) ||
+                      isArchivedDossier(d)
                     ) {
                       return false;
                     }
@@ -1701,20 +1700,19 @@ export default function PartenaireDossiersPage() {
                     if (
                       !Array.isArray(d.transmittedTo) ||
                       !d.transmittedTo.some((t: any) => t.status === 'refused') ||
-                      d.estCloture ||
-                      (d.estArchive || d.statut === 'annule')
+                      isClosedDossier(d) ||
+                      isArchivedDossier(d)
                     ) {
                       return false;
                     }
                   } else if (statusFilter === 'closed') {
                     // Dossiers clôturés
-                    if (!d.estCloture) return false;
+                    if (!isClosedDossier(d)) return false;
                   } else if (statusFilter === 'archived') {
                     // Dossiers archivés
                     if (
                       !(
-                        d.estArchive ||
-                        (d.statut || '') === 'annule' ||
+                        isArchivedDossier(d) ||
                         (Array.isArray(d.transmittedTo) && d.transmittedTo.some((t: any) => t.status === 'refused'))
                       )
                     )
@@ -2614,16 +2612,7 @@ export default function PartenaireDossiersPage() {
                                                       (d._id || d.id).toString() === (request.document._id || request.document).toString()
                                                     );
                                                     if (doc) {
-                                                      const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                                                      const blob = new Blob([response.data]);
-                                                      const url = window.URL.createObjectURL(blob);
-                                                      const link = document.createElement('a');
-                                                      link.href = url;
-                                                      link.download = doc.nom;
-                                                      document.body.appendChild(link);
-                                                      link.click();
-                                                      document.body.removeChild(link);
-                                                      window.URL.revokeObjectURL(url);
+                                                      await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
                                                     }
                                                   }
                                                 } catch (err) {
@@ -2691,16 +2680,7 @@ export default function PartenaireDossiersPage() {
                                           onClick={async (e) => {
                                             e.stopPropagation();
                                             try {
-                                              const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                                              const blob = new Blob([response.data]);
-                                              const url = window.URL.createObjectURL(blob);
-                                              const link = document.createElement('a');
-                                              link.href = url;
-                                              link.download = doc.nom;
-                                              document.body.appendChild(link);
-                                              link.click();
-                                              document.body.removeChild(link);
-                                              window.URL.revokeObjectURL(url);
+                                              await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
                                             } catch (err) {
                                               console.error('Erreur lors du téléchargement:', err);
                                               alert('Erreur lors du téléchargement du document');
@@ -2798,16 +2778,7 @@ export default function PartenaireDossiersPage() {
                                                         e.preventDefault();
                                                         e.stopPropagation();
                                                         try {
-                                                          const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                                                          const blob = new Blob([response.data]);
-                                                          const url = window.URL.createObjectURL(blob);
-                                                          const link = document.createElement('a');
-                                                          link.href = url;
-                                                          link.download = doc.nom;
-                                                          document.body.appendChild(link);
-                                                          link.click();
-                                                          document.body.removeChild(link);
-                                                          window.URL.revokeObjectURL(url);
+                                                          await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
                                                         } catch (err) {
                                                           console.error('Erreur lors du téléchargement:', err);
                                                           alert('Erreur lors du téléchargement du document');

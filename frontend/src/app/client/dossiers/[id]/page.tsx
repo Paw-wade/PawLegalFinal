@@ -1123,8 +1123,13 @@ export default function DossierDetailPage() {
                       for (const doc of documents) {
                         try {
                           const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                          const blob = await response.data;
-                          zip.file(doc.nom, blob);
+                          const { blobFromDownloadResponse, resolveFileNameFromDownloadResponse } = await import('@/lib/downloadFile');
+                          const blob = blobFromDownloadResponse(response);
+                          const fileName = resolveFileNameFromDownloadResponse(
+                            response,
+                            doc.originalName || doc.nom || doc.nomFichier || 'document'
+                          );
+                          zip.file(fileName, blob);
                         } catch (err) {
                           console.error(`Erreur lors du téléchargement de ${doc.nom}:`, err);
                         }
@@ -1297,16 +1302,7 @@ export default function DossierDetailPage() {
                               className="text-xs min-h-[40px] flex-1 sm:flex-none min-w-0"
                               onClick={async () => {
                                 try {
-                                  const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                                  const blob = new Blob([response.data]);
-                                  const url = window.URL.createObjectURL(blob);
-                                  const link = document.createElement('a');
-                                  link.href = url;
-                                  link.download = doc.nom;
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
-                                  window.URL.revokeObjectURL(url);
+                                  await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
                                 } catch (error) {
                                   console.error('Erreur lors du téléchargement:', error);
                                   alert('Erreur lors du téléchargement du document');

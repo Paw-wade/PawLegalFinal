@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { tasksAPI, userAPI, dossiersAPI } from '@/lib/api';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getPrioriteLabel } from '@/lib/taskUtils';
+import { TaskListItem } from '@/components/tasks/TaskListItem';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
@@ -70,8 +71,18 @@ function Textarea({ className = '', ...props }: any) {
 }
 
 export default function AdminTachesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background">Chargement...</div>}>
+      <AdminTachesPageContent />
+    </Suspense>
+  );
+}
+
+function AdminTachesPageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const deepLinkHandledRef = useRef<string | null>(null);
   const [tasks, setTasks] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [dossiers, setDossiers] = useState<any[]>([]);
@@ -81,6 +92,7 @@ export default function AdminTachesPage() {
   const [editingTask, setEditingTask] = useState<any>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'a_faire' | 'en_cours' | 'en_attente' | 'termine' | 'annule'>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'basse' | 'normale' | 'haute' | 'urgente'>('all');
@@ -97,6 +109,27 @@ export default function AdminTachesPage() {
     dossier: '',
     notes: '',
   });
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const resetTaskForm = () => {
+    setIsCreating(false);
+    setEditingTask(null);
+    setFormData({
+      titre: '',
+      description: '',
+      statut: 'a_faire',
+      priorite: 'normale',
+      assignedTo: [],
+      dateEcheance: '',
+      dateDebut: '',
+      dossier: '',
+      notes: '',
+    });
+  };
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -117,6 +150,33 @@ export default function AdminTachesPage() {
       loadDossiers();
     }
   }, [session, status]);
+
+  // Deep-link depuis la bannière « À traiter » : afficher la tâche exacte (sans ouvrir le formulaire)
+  useEffect(() => {
+    const taskId = searchParams.get('taskId')?.trim();
+    if (!taskId || isLoading || tasks.length === 0) return;
+    if (deepLinkHandledRef.current === taskId) return;
+
+    const match = tasks.find((t: any) => String(t._id || t.id) === taskId);
+    if (!match) return;
+
+    deepLinkHandledRef.current = taskId;
+    setStatusFilter('all');
+    setPriorityFilter('all');
+    setTaskCategoryFilter('all');
+    setSearchTerm('');
+    setExpandedTasks(new Set([taskId]));
+    setHighlightedTaskId(taskId);
+    setIsCreating(false);
+    setEditingTask(null);
+
+    requestAnimationFrame(() => {
+      document.getElementById(`task-${taskId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    const clearHighlight = window.setTimeout(() => setHighlightedTaskId(null), 4000);
+    return () => window.clearTimeout(clearHighlight);
+  }, [searchParams, tasks, isLoading]);
 
   // Les tâches sont pliées par défaut (expandedTasks reste vide)
 
@@ -412,24 +472,15 @@ export default function AdminTachesPage() {
     return true;
   });
 
-  const getDaysUntilDeadline = (dateEcheance: string | Date) => {
-    if (!dateEcheance) return null;
-    const deadline = new Date(dateEcheance);
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    deadline.setHours(0, 0, 0, 0);
-    const diffTime = deadline.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
   return (
     <div className="min-h-screen bg-background">
-      <main className="w-full px-4 py-8">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold mb-1 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">Gestion des Tâches</h1>
-            <p className="text-muted-foreground text-sm">
+      <main className="w-full px-3 sm:px-4 py-6 sm:py-8">
+        <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold mb-1 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+              Gestion des Tâches
+            </h1>
+            <p className="text-muted-foreground text-xs sm:text-sm">
               Gérez toutes les tâches de l'équipe
               {tasks.filter((t: any) => t.statut === 'a_faire' || t.statut === 'en_cours').length > 0 && (
                 <span className="ml-2 text-primary font-semibold">
@@ -438,7 +489,7 @@ export default function AdminTachesPage() {
               )}
             </p>
           </div>
-          <Button onClick={() => setIsCreating(true)} className="shadow-md hover:shadow-lg transition-shadow">
+          <Button onClick={() => setIsCreating(true)} className="shadow-md hover:shadow-lg transition-shadow w-full sm:w-auto shrink-0">
             + Créer une tâche
           </Button>
         </div>
@@ -449,210 +500,214 @@ export default function AdminTachesPage() {
           </div>
         )}
 
-        {/* Formulaire de création/modification - Modal */}
-        {isCreating && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto my-8">
-              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
-                <h2 className="text-2xl font-bold text-foreground">
-                  {editingTask ? 'Modifier la tâche' : 'Créer une nouvelle tâche'}
-                </h2>
-                <button
-                  onClick={() => {
-                    setIsCreating(false);
-                    setEditingTask(null);
-                    setFormData({
-                      titre: '',
-                      description: '',
-                      statut: 'a_faire',
-                      priorite: 'normale',
-                      assignedTo: [],
-                      dateEcheance: '',
-                      dateDebut: '',
-                      dossier: '',
-                      notes: '',
-                    });
-                  }}
-                  className="text-muted-foreground hover:text-foreground text-2xl leading-none transition-colors"
-                >
-                  ×
-                </button>
-              </div>
-              
-              <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                <div>
-                  <Label htmlFor="titre">Titre de la tâche (optionnel)</Label>
-                  <Input
-                    id="titre"
-                    value={formData.titre}
-                    onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
-                    className="mt-1"
-                    placeholder="Ex: Préparer le dossier de demande de titre de séjour (optionnel)"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="mt-1"
-                    rows={3}
-                    placeholder="Description détaillée de la tâche..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="statut">Statut</Label>
-                    <select
-                      id="statut"
-                      value={formData.statut}
-                      onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                    >
-                      <option value="a_faire">À faire</option>
-                      <option value="en_cours">En cours</option>
-                      <option value="en_attente">En attente</option>
-                      <option value="termine">Terminé</option>
-                      <option value="annule">Annulé</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="priorite">Priorité</Label>
-                    <select
-                      id="priorite"
-                      value={formData.priorite}
-                      onChange={(e) => setFormData({ ...formData, priorite: e.target.value })}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                    >
-                      <option value="basse">Basse</option>
-                      <option value="normale">Normale</option>
-                      <option value="haute">Haute</option>
-                      <option value="urgente">Urgente</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="assignedTo">Assigner à {!editingTask && '*'}</Label>
-                  <div className="mt-2 space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-md p-3">
-                    {teamMembers.map((member) => (
-                      <label key={member._id || member.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
-                        <input
-                          type="checkbox"
-                          checked={formData.assignedTo.includes(member._id || member.id)}
-                          onChange={() => toggleAssignee(member._id || member.id)}
-                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                        />
-                        <span className="text-sm">
-                          {member.firstName} {member.lastName} ({member.email})
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="dateDebut">Date de début</Label>
-                    <Input
-                      id="dateDebut"
-                      type="date"
-                      value={formData.dateDebut}
-                      onChange={(e) => setFormData({ ...formData, dateDebut: e.target.value })}
-                      className="mt-1"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="dateEcheance">Date d'échéance</Label>
-                    <Input
-                      id="dateEcheance"
-                      type="date"
-                      value={formData.dateEcheance}
-                      onChange={(e) => setFormData({ ...formData, dateEcheance: e.target.value })}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="dossier">Lier à un dossier (optionnel)</Label>
-                  <select
-                    id="dossier"
-                    value={formData.dossier}
-                    onChange={(e) => setFormData({ ...formData, dossier: e.target.value })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+        {/* Formulaire de création/modification — portal au-dessus de la sidebar (z-70) et du header (z-80) */}
+        {isMounted &&
+          isCreating &&
+          createPortal(
+            <div
+              className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) resetTaskForm();
+              }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="task-form-title"
+            >
+              <div className="bg-white w-full sm:max-w-2xl sm:rounded-xl shadow-2xl max-h-[100dvh] sm:max-h-[min(90dvh,880px)] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-xl">
+                <div className="shrink-0 border-b px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3 bg-white">
+                  <h2 id="task-form-title" className="text-lg sm:text-xl font-bold text-foreground truncate">
+                    {editingTask ? 'Modifier la tâche' : 'Créer une nouvelle tâche'}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={resetTaskForm}
+                    className="shrink-0 h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-slate-100 text-2xl leading-none transition-colors"
+                    aria-label="Fermer"
                   >
-                    <option value="">-- Aucun dossier --</option>
-                    {dossiers.map((dossier) => (
-                      <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
-                        {dossier.titre} - {dossier.user ? `${dossier.user.firstName} ${dossier.user.lastName}` : `${dossier.clientPrenom} ${dossier.clientNom}`}
-                      </option>
-                    ))}
-                  </select>
+                    ×
+                  </button>
                 </div>
 
-                <div>
-                  <Label htmlFor="notes">Notes internes</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    className="mt-1"
-                    rows={2}
-                    placeholder="Notes internes pour l'équipe..."
-                  />
-                </div>
+                <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+                  <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 py-4 space-y-4">
+                    <div>
+                      <Label htmlFor="titre">Titre de la tâche (optionnel)</Label>
+                      <Input
+                        id="titre"
+                        value={formData.titre}
+                        onChange={(e) => setFormData({ ...formData, titre: e.target.value })}
+                        className="mt-1"
+                        placeholder="Ex: Préparer le dossier de demande de titre de séjour"
+                      />
+                    </div>
 
-                <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex gap-3 justify-end mt-6">
-                  <Button type="button" variant="outline" onClick={() => {
-                    setIsCreating(false);
-                    setEditingTask(null);
-                    setFormData({
-                      titre: '',
-                      description: '',
-                      statut: 'a_faire',
-                      priorite: 'normale',
-                      assignedTo: [],
-                      dateEcheance: '',
-                      dateDebut: '',
-                      dossier: '',
-                      notes: '',
-                    });
-                  }} disabled={isLoading}>
-                    Annuler
-                  </Button>
-                  <Button type="submit" disabled={isLoading}>
-                    {isLoading ? (editingTask ? 'Mise à jour...' : 'Création...') : (editingTask ? 'Mettre à jour' : 'Créer la tâche')}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+                    <div>
+                      <Label htmlFor="description">Description</Label>
+                      <Textarea
+                        id="description"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        className="mt-1"
+                        rows={3}
+                        placeholder="Description détaillée de la tâche..."
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="statut">Statut</Label>
+                        <select
+                          id="statut"
+                          value={formData.statut}
+                          onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                        >
+                          <option value="a_faire">À faire</option>
+                          <option value="en_cours">En cours</option>
+                          <option value="en_attente">En attente</option>
+                          <option value="termine">Terminé</option>
+                          <option value="annule">Annulé</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="priorite">Priorité</Label>
+                        <select
+                          id="priorite"
+                          value={formData.priorite}
+                          onChange={(e) => setFormData({ ...formData, priorite: e.target.value })}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                        >
+                          <option value="basse">Basse</option>
+                          <option value="normale">Normale</option>
+                          <option value="haute">Haute</option>
+                          <option value="urgente">Urgente</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="assignedTo">Assigner à {!editingTask && '*'}</Label>
+                      <div className="mt-2 space-y-1 max-h-36 sm:max-h-44 overflow-y-auto border border-gray-200 rounded-md p-2">
+                        {teamMembers.map((member) => (
+                          <label
+                            key={member._id || member.id}
+                            className="flex items-start gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={formData.assignedTo.includes(member._id || member.id)}
+                              onChange={() => toggleAssignee(member._id || member.id)}
+                              className="mt-0.5 w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary shrink-0"
+                            />
+                            <span className="text-sm min-w-0 break-words">
+                              <span className="font-medium">
+                                {member.firstName} {member.lastName}
+                              </span>
+                              <span className="block sm:inline text-muted-foreground sm:before:content-['_('] sm:after:content-[')']">
+                                {member.email}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="dateDebut">Date de début</Label>
+                        <Input
+                          id="dateDebut"
+                          type="date"
+                          value={formData.dateDebut}
+                          onChange={(e) => setFormData({ ...formData, dateDebut: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="dateEcheance">Date d'échéance</Label>
+                        <Input
+                          id="dateEcheance"
+                          type="date"
+                          value={formData.dateEcheance}
+                          onChange={(e) => setFormData({ ...formData, dateEcheance: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="dossier">Lier à un dossier (optionnel)</Label>
+                      <select
+                        id="dossier"
+                        value={formData.dossier}
+                        onChange={(e) => setFormData({ ...formData, dossier: e.target.value })}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                      >
+                        <option value="">-- Aucun dossier --</option>
+                        {dossiers.map((dossier) => (
+                          <option key={dossier._id || dossier.id} value={dossier._id || dossier.id}>
+                            {dossier.titre} -{' '}
+                            {dossier.user
+                              ? `${dossier.user.firstName} ${dossier.user.lastName}`
+                              : `${dossier.clientPrenom} ${dossier.clientNom}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="notes">Notes internes</Label>
+                      <Textarea
+                        id="notes"
+                        value={formData.notes}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        className="mt-1"
+                        rows={2}
+                        placeholder="Notes internes pour l'équipe..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 border-t bg-white px-4 sm:px-6 py-3 flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end safe-bottom">
+                    <Button type="button" variant="outline" onClick={resetTaskForm} disabled={isLoading} className="w-full sm:w-auto">
+                      Annuler
+                    </Button>
+                    <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
+                      {isLoading
+                        ? editingTask
+                          ? 'Mise à jour...'
+                          : 'Création...'
+                        : editingTask
+                          ? 'Mettre à jour'
+                          : 'Créer la tâche'}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>,
+            document.body
+          )}
 
         {/* Liste des tâches */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-6">
           {/* Barre de recherche et filtres */}
-          <div className="mb-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div className="mb-4 sm:mb-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
             <div className="flex-1 w-full sm:max-w-md">
               <input
                 type="text"
-                placeholder="🔍 Rechercher une tâche..."
+                placeholder="Rechercher une tâche..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex h-10 w-full rounded-lg border border-gray-300 bg-background px-4 py-2 text-sm shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                className="flex h-10 w-full rounded-lg border border-gray-300 bg-background px-3 sm:px-4 py-2 text-sm shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
               />
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap w-full sm:w-auto">
               <select
                 value={taskCategoryFilter}
                 onChange={(e) => setTaskCategoryFilter(e.target.value as any)}
-                className="flex h-10 rounded-lg border border-gray-300 bg-background px-3 py-2 text-sm"
+                className="flex h-9 sm:h-10 min-w-0 flex-1 sm:flex-none rounded-lg border border-gray-300 bg-background px-2 sm:px-3 py-2 text-xs sm:text-sm"
               >
                 <option value="all">Toutes les tâches</option>
                 <option value="my">Mes tâches</option>
@@ -661,7 +716,7 @@ export default function AdminTachesPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="flex h-10 rounded-lg border border-gray-300 bg-background px-3 py-2 text-sm"
+                className="flex h-9 sm:h-10 min-w-0 flex-1 sm:flex-none rounded-lg border border-gray-300 bg-background px-2 sm:px-3 py-2 text-xs sm:text-sm"
               >
                 <option value="all">Tous les statuts</option>
                 <option value="a_faire">À faire</option>
@@ -673,7 +728,7 @@ export default function AdminTachesPage() {
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value as any)}
-                className="flex h-10 rounded-lg border border-gray-300 bg-background px-3 py-2 text-sm"
+                className="flex h-9 sm:h-10 min-w-0 flex-1 sm:flex-none rounded-lg border border-gray-300 bg-background px-2 sm:px-3 py-2 text-xs sm:text-sm"
               >
                 <option value="all">Toutes les priorités</option>
                 <option value="urgente">Urgente</option>
@@ -707,430 +762,35 @@ export default function AdminTachesPage() {
               )}
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {filteredTasks.map((task) => {
-                const assignedToArray = Array.isArray(task.assignedTo) 
-                  ? task.assignedTo 
-                  : [task.assignedTo].filter(Boolean);
-                const daysUntilDeadline = getDaysUntilDeadline(task.dateEcheance);
-                const isUrgent = daysUntilDeadline !== null && daysUntilDeadline <= 2 && daysUntilDeadline >= 0;
-                const isOverdue = daysUntilDeadline !== null && daysUntilDeadline < 0;
                 const taskId = task._id || task.id;
                 const isExpanded = expandedTasks.has(taskId);
 
-                // Couleurs de bordure selon le statut
-                const statusBorderColors = {
-                  'a_faire': 'border-l-[5px] border-l-slate-400',
-                  'en_cours': 'border-l-[5px] border-l-blue-500',
-                  'en_attente': 'border-l-[5px] border-l-amber-500',
-                  'termine': 'border-l-[5px] border-l-emerald-500',
-                  'annule': 'border-l-[5px] border-l-red-500',
-                };
-
                 return (
-                  <div
+                  <TaskListItem
                     key={taskId}
-                    className={`group bg-white rounded-2xl shadow-sm border border-gray-100/80 p-6 hover:shadow-lg hover:border-gray-200 transition-all duration-300 w-full ${statusBorderColors[task.statut as keyof typeof statusBorderColors] || statusBorderColors.a_faire} ${isUrgent || isOverdue ? 'ring-2 ring-red-200/60 ring-offset-1' : ''}`}
-                  >
-                    {/* En-tête de la carte avec bouton de pliage/dépliage */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1 min-w-0 pr-3">
-                        <div className="flex items-start gap-3 mb-2">
-                          <button
-                            onClick={() => {
-                              const newExpanded = new Set(expandedTasks);
-                              if (newExpanded.has(taskId)) {
-                                newExpanded.delete(taskId);
-                              } else {
-                                newExpanded.add(taskId);
-                              }
-                              setExpandedTasks(newExpanded);
-                            }}
-                            className="mt-0.5 p-1.5 rounded-lg hover:bg-gray-50 transition-all duration-200 text-gray-400 hover:text-gray-600 flex-shrink-0 group-hover:bg-gray-50"
-                            title={isExpanded ? 'Plier la tâche' : 'Déplier la tâche'}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-4 mb-1">
-                              <h3 className="font-semibold text-lg text-gray-900 line-clamp-2 leading-snug flex-1 min-w-0">
-                                {task.titre || <span className="text-gray-400 italic">Tâche sans titre</span>}
-                              </h3>
-                              {/* Échéance sur la même ligne à droite */}
-                              {task.dateEcheance && (
-                                <div className="flex-shrink-0 text-right">
-                                  <div className={`text-[10px] font-medium whitespace-nowrap ${isUrgent || (daysUntilDeadline !== null && daysUntilDeadline < 0) ? 'text-red-600' : daysUntilDeadline !== null && daysUntilDeadline <= 3 ? 'text-amber-600' : 'text-blue-600'}`}>
-                                    {new Date(task.dateEcheance).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                                  </div>
-                                  {daysUntilDeadline !== null && (
-                                    <div className={`text-[9px] font-semibold mt-0.5 whitespace-nowrap ${isUrgent || daysUntilDeadline < 0 ? 'text-red-600' : daysUntilDeadline <= 3 ? 'text-amber-600' : 'text-blue-600'}`}>
-                                      {daysUntilDeadline < 0 
-                                        ? `⚠️ ${Math.abs(daysUntilDeadline)}j`
-                                        : daysUntilDeadline === 0 
-                                        ? "Aujourd'hui"
-                                        : daysUntilDeadline === 1 
-                                        ? 'Demain'
-                                        : `${daysUntilDeadline}j`
-                                      }
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            {/* Résumé quand plié */}
-                            {!isExpanded && (
-                              <div className="mt-2.5 space-y-2">
-                                <div className="flex items-center gap-3 flex-wrap">
-                                  {assignedToArray.length > 0 && (
-                                    <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-md">
-                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                      </svg>
-                                      <span className="text-xs font-medium text-gray-700">{assignedToArray.length}</span>
-                                    </div>
-                                  )}
-                                  {task.dossier && (
-                                    <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 rounded-md">
-                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                                      </svg>
-                                      <span className="text-xs font-medium text-blue-700 truncate max-w-[140px]">{task.dossier.titre || 'Dossier lié'}</span>
-                                    </div>
-                                  )}
-                                  {task.createdBy && (
-                                    <div className="flex items-center gap-1.5 px-2 py-1 bg-purple-50 rounded-md">
-                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                      </svg>
-                                      <span className="text-xs font-medium text-purple-700 truncate max-w-[90px]">{task.createdBy.firstName || ''}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {isExpanded && task.description && (
-                          <div className="mt-3 ml-10 pr-4">
-                            <div className="text-xs font-medium text-gray-500 mb-1.5">Description</div>
-                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                              {task.description}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                        <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm ${getStatutColor(task.statut)}`}>
-                          {getStatutLabel(task.statut)}
-                        </span>
-                        <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm ${getPrioriteColor(task.priorite)}`}>
-                          {getPrioriteLabel(task.priorite)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Informations détaillées (affichées uniquement si la tâche est dépliée) */}
-                    {isExpanded && (
-                      <>
-                    {/* Informations de la tâche */}
-                    <div className="space-y-3 mb-4 ml-10">
-                      {assignedToArray.length > 0 && (
-                        <div className="flex items-start gap-3">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-medium text-gray-500 mb-1.5">Assigné à</div>
-                            <div className="flex flex-wrap gap-2">
-                              {assignedToArray.map((assigned: any, idx: number) => {
-                                const name = assigned?.firstName && assigned?.lastName
-                                  ? `${assigned.firstName} ${assigned.lastName}`
-                                  : assigned?.email || 'Utilisateur';
-                                const initials = assigned?.firstName && assigned?.lastName
-                                  ? `${assigned.firstName[0]}${assigned.lastName[0]}`
-                                  : assigned?.email?.[0].toUpperCase() || 'U';
-                                return (
-                                  <div key={idx} className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
-                                    <div className="h-6 w-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-[10px] font-semibold">
-                                      {initials}
-                                    </div>
-                                    <span className="text-sm font-medium text-gray-700">{name}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {task.dossier && (
-                        <div className="flex items-center gap-3">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                          </svg>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-medium text-gray-500 mb-0.5">Dossier lié</div>
-                            <span className="text-sm font-medium text-blue-600 truncate">{task.dossier.titre || 'Dossier lié'}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {task.dateEcheance && (
-                        <div className="flex items-start gap-3">
-                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 flex-shrink-0 mt-0.5 ${isUrgent || (daysUntilDeadline !== null && daysUntilDeadline < 0) ? 'text-red-500' : daysUntilDeadline !== null && daysUntilDeadline <= 3 ? 'text-amber-500' : 'text-blue-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-semibold text-gray-600 mb-1.5">📅 Date d'échéance</div>
-                            <div className={`text-base font-semibold mb-1 ${isUrgent || (daysUntilDeadline !== null && daysUntilDeadline < 0) ? 'text-red-600' : daysUntilDeadline !== null && daysUntilDeadline <= 3 ? 'text-amber-600' : 'text-blue-600'}`}>
-                              {new Date(task.dateEcheance).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                            </div>
-                            {daysUntilDeadline !== null && (
-                              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold ${
-                                daysUntilDeadline < 0 
-                                  ? 'bg-red-100 text-red-700 border border-red-300' 
-                                  : daysUntilDeadline === 0 
-                                  ? 'bg-red-100 text-red-700 border border-red-300'
-                                  : daysUntilDeadline === 1 
-                                  ? 'bg-amber-100 text-amber-700 border border-amber-300'
-                                  : daysUntilDeadline <= 3
-                                  ? 'bg-orange-100 text-orange-700 border border-orange-300'
-                                  : 'bg-blue-100 text-blue-700 border border-blue-300'
-                              }`}>
-                                <span>
-                                  {daysUntilDeadline < 0 
-                                    ? `⚠️ En retard de ${Math.abs(daysUntilDeadline)} jour${Math.abs(daysUntilDeadline) > 1 ? 's' : ''}`
-                                    : daysUntilDeadline === 0 
-                                    ? "🔴 Aujourd'hui"
-                                    : daysUntilDeadline === 1 
-                                    ? '🟡 Demain'
-                                    : `⏳ ${daysUntilDeadline} jour${daysUntilDeadline > 1 ? 's' : ''} restant${daysUntilDeadline > 1 ? 's' : ''}`
-                                  }
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {task.createdBy && (
-                        <div className="flex items-center gap-3">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-medium text-gray-500 mb-0.5">Créée par</div>
-                            <span className="text-sm font-medium text-gray-700">
-                              {task.createdBy.firstName} {task.createdBy.lastName}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Informations de complétion */}
-                    {task.effectue && task.completedBy && task.dateEffectue && (
-                      <div className="flex items-center gap-3 mb-4 ml-10 px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-100">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-emerald-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium text-emerald-700 mb-0.5">Tâche effectuée</div>
-                          <div className="text-sm text-emerald-800">
-                            Par <span className="font-semibold">
-                              {task.completedBy?.firstName} {task.completedBy?.lastName}
-                            </span> le {new Date(task.dateEffectue).toLocaleDateString('fr-FR', { 
-                              day: 'numeric', 
-                              month: 'long', 
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="pt-4 border-t border-gray-100 space-y-3 ml-10">
-                      <div className="flex gap-2">
-                        {!task.effectue && (
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => handleMarkAsDone(task._id || task.id, true)}
-                            className="flex-1 text-xs h-9 font-medium shadow-sm hover:shadow bg-emerald-500 hover:bg-emerald-600 text-white"
-                            disabled={isLoading}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Marquer comme effectuée
-                          </Button>
-                        )}
-                        {task.effectue && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleMarkAsDone(task._id || task.id, false)}
-                            className="flex-1 text-xs h-9 font-medium shadow-sm hover:shadow"
-                            disabled={isLoading}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Marquer comme non effectuée
-                          </Button>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditTask(task)}
-                          className="text-xs h-9 px-3 font-medium shadow-sm hover:shadow"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setShowDeleteConfirm(task._id || task.id)}
-                          className="text-xs h-9 px-3 shadow-sm hover:shadow"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1.5 block flex items-center gap-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Statut
-                          </label>
-                          <select
-                            value={task.statut}
-                            onChange={(e) => handleUpdateStatus(task._id || task.id, e.target.value)}
-                            className="text-sm px-3 py-2 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all w-full shadow-sm hover:border-gray-300"
-                            disabled={isLoading}
-                          >
-                            <option value="a_faire">À faire</option>
-                            <option value="en_cours">En cours</option>
-                            <option value="en_attente">En attente</option>
-                            <option value="termine">Terminé</option>
-                            <option value="annule">Annulé</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1.5 block flex items-center gap-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                            Priorité
-                          </label>
-                          <select
-                            value={task.priorite}
-                            onChange={(e) => handleUpdatePriority(task._id || task.id, e.target.value)}
-                            className="text-sm px-3 py-2 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all w-full shadow-sm hover:border-gray-300"
-                            disabled={isLoading}
-                          >
-                            <option value="basse">Basse</option>
-                            <option value="normale">Normale</option>
-                            <option value="haute">Haute</option>
-                            <option value="urgente">Urgente</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1.5 block flex items-center gap-1.5">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                          Assigner à
-                        </label>
-                        <details className="relative">
-                          <summary
-                            className="list-none cursor-pointer text-sm px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all w-full flex items-center justify-between gap-2 shadow-sm"
-                            onClick={(e) => {
-                              // empêcher le clic sur certains éléments enfants de fermer/ouvrir involontairement
-                              e.stopPropagation();
-                            }}
-                          >
-                            <span className="truncate text-gray-700">
-                              {assignedToArray.length === 0
-                                ? <span className="text-gray-400">Choisir...</span>
-                                : assignedToArray.length === 1
-                                ? (() => {
-                                    const a: any = assignedToArray[0];
-                                    const m = teamMembers.find((u) => (u._id || u.id) === (a?._id || a));
-                                    return m ? `${m.firstName} ${m.lastName}` : '1 sélectionné';
-                                  })()
-                                : `${assignedToArray.length} sélectionnés`}
-                            </span>
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </summary>
-
-                          <div
-                            className="absolute z-20 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-xl p-3 max-h-64 overflow-y-auto"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {teamMembers.length === 0 ? (
-                              <p className="text-sm text-gray-500 p-2 text-center">
-                                Aucun membre disponible
-                              </p>
-                            ) : (
-                              <div className="space-y-1">
-                                {teamMembers.map((member) => {
-                                  const memberId = (member._id || member.id)?.toString();
-                                  const currentIds = assignedToArray.map((a: any) => (a?._id || a)?.toString()).filter(Boolean);
-                                  const isChecked = currentIds.includes(memberId);
-                                  const initials = member.firstName && member.lastName
-                                    ? `${member.firstName[0]}${member.lastName[0]}`
-                                    : member.email?.[0].toUpperCase() || 'U';
-
-                                  return (
-                                    <label
-                                      key={memberId}
-                                      className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={isChecked}
-                                        disabled={isLoading}
-                                        onChange={() => {
-                                          const next = isChecked
-                                            ? currentIds.filter((id) => id !== memberId)
-                                            : [...currentIds, memberId];
-
-                                          handleUpdateAssignment(task._id || task.id, next);
-                                        }}
-                                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-2 focus:ring-primary/20 cursor-pointer"
-                                      />
-                                      <div className="h-7 w-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
-                                        {initials}
-                                      </div>
-                                      <span className="text-sm text-gray-700 font-medium flex-1">
-                                        {member.firstName} {member.lastName}
-                                      </span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </details>
-                      </div>
-                    </div>
-                    </>
-                    )}
-                  </div>
+                    task={task}
+                    mode="admin"
+                    variant="full"
+                    expanded={isExpanded}
+                    highlighted={highlightedTaskId === taskId}
+                    disabled={isLoading}
+                    teamMembers={teamMembers}
+                    dossierBasePath="/admin/dossiers"
+                    onToggleExpand={() => {
+                      const next = new Set(expandedTasks);
+                      if (next.has(taskId)) next.delete(taskId);
+                      else next.add(taskId);
+                      setExpandedTasks(next);
+                    }}
+                    onMarkDone={(done) => handleMarkAsDone(taskId, done)}
+                    onEdit={() => handleEditTask(task)}
+                    onDelete={() => setShowDeleteConfirm(taskId)}
+                    onUpdateStatus={(statut) => handleUpdateStatus(taskId, statut)}
+                    onUpdatePriority={(priorite) => handleUpdatePriority(taskId, priorite)}
+                    onUpdateAssignees={(ids) => handleUpdateAssignment(taskId, ids)}
+                  />
                 );
               })}
             </div>
@@ -1147,24 +807,27 @@ export default function AdminTachesPage() {
       </main>
 
       {/* Modal de confirmation de suppression */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Confirmer la suppression</h3>
-            <p className="text-muted-foreground mb-6">
-              Êtes-vous sûr de vouloir supprimer cette tâche ? Cette action est irréversible.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setShowDeleteConfirm(null)} disabled={isLoading}>
-                Annuler
-              </Button>
-              <Button variant="destructive" onClick={() => handleDeleteTask(showDeleteConfirm)} disabled={isLoading}>
-                {isLoading ? 'Suppression...' : 'Supprimer'}
-              </Button>
+      {isMounted &&
+        showDeleteConfirm &&
+        createPortal(
+          <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-2xl">
+              <h3 className="text-lg font-semibold mb-4">Confirmer la suppression</h3>
+              <p className="text-muted-foreground mb-6">
+                Êtes-vous sûr de vouloir supprimer cette tâche ? Cette action est irréversible.
+              </p>
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end">
+                <Button variant="outline" onClick={() => setShowDeleteConfirm(null)} disabled={isLoading} className="w-full sm:w-auto">
+                  Annuler
+                </Button>
+                <Button variant="destructive" onClick={() => handleDeleteTask(showDeleteConfirm)} disabled={isLoading} className="w-full sm:w-auto">
+                  {isLoading ? 'Suppression...' : 'Supprimer'}
+                </Button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

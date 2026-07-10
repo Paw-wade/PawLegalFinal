@@ -1824,15 +1824,11 @@ router.get('/:id/download/:fileIndex', async (req, res) => {
       });
     }
 
-    res.download(filePath, pieceJointe.originalName, (err) => {
-      if (err) {
-        console.error('Erreur lors du téléchargement:', err);
-        res.status(500).json({
-          success: false,
-          message: 'Erreur lors du téléchargement'
-        });
-      }
-    });
+    const { buildContentDisposition } = require('../utils/documentDownloadName');
+    const fileName = pieceJointe.originalName || path.basename(filePath) || 'fichier';
+    res.setHeader('Content-Type', pieceJointe.mimetype || 'application/octet-stream');
+    res.setHeader('Content-Disposition', buildContentDisposition(fileName, { inline: false }));
+    return res.sendFile(path.resolve(filePath));
   } catch (error) {
     console.error('Erreur lors du téléchargement de la pièce jointe:', error);
     res.status(500).json({

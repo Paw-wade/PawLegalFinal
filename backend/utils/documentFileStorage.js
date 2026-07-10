@@ -394,10 +394,9 @@ function pipeHttpDocumentUrl(fileUrl, res, document, { inline = false } = {}, re
                 remoteContentType || 'application/octet-stream'
               );
         res.setHeader('Content-Type', contentType);
-        res.setHeader(
-          'Content-Disposition',
-          `${inline ? 'inline' : 'attachment'}; filename="${encodeURIComponent(document.nom || 'document')}"`
-        );
+        const { buildContentDisposition, resolveDocumentDownloadFileName } = require('./documentDownloadName');
+        const fileName = resolveDocumentDownloadFileName(document);
+        res.setHeader('Content-Disposition', buildContentDisposition(fileName, { inline }));
         if (inline) res.setHeader('Cache-Control', 'private, max-age=3600');
         remoteRes.pipe(res);
         remoteRes.on('end', () => resolve(true));
@@ -567,11 +566,10 @@ async function tryServeDocumentFromProductionApi(document, res, { inline = false
   const hit = await fetchProductionApiDocumentBuffer(document);
   if (!hit?.buffer) return false;
   const contentType = resolveDocumentResponseContentType(document, hit.contentType || 'application/octet-stream');
+  const { buildContentDisposition, resolveDocumentDownloadFileName } = require('./documentDownloadName');
+  const fileName = resolveDocumentDownloadFileName(document);
   res.setHeader('Content-Type', contentType);
-  res.setHeader(
-    'Content-Disposition',
-    `${inline ? 'inline' : 'attachment'}; filename="${encodeURIComponent(document.nom || 'document')}"`
-  );
+  res.setHeader('Content-Disposition', buildContentDisposition(fileName, { inline }));
   res.send(hit.buffer);
   console.log('✅ Document — API production:', hit.url);
   return true;

@@ -216,15 +216,8 @@ export default function PartenaireMessageDetailPage() {
   const handleDownloadAttachment = async (messageId: string, index: number, filename: string) => {
     try {
       const response = await messagesAPI.downloadAttachment(messageId, index);
-      const blob = new Blob([response.data], { type: response.headers['content-type'] });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      const { triggerBlobDownload } = await import('@/lib/downloadFile');
+      triggerBlobDownload(response, filename);
     } catch (err) {
       console.error('Erreur lors du téléchargement:', err);
       setToast({ message: 'Erreur lors du téléchargement du fichier', type: 'error' });

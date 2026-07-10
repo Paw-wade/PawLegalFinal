@@ -295,32 +295,18 @@ export default function AdminDossierDetailPage() {
     try {
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
-      const extFromMime = (mime?: string) => {
-        const value = String(mime || '').toLowerCase();
-        if (value.includes('pdf')) return '.pdf';
-        if (value.includes('wordprocessingml')) return '.docx';
-        if (value.includes('msword')) return '.doc';
-        if (value.includes('spreadsheetml')) return '.xlsx';
-        if (value.includes('ms-excel')) return '.xls';
-        if (value.includes('jpeg')) return '.jpg';
-        if (value.includes('png')) return '.png';
-        return '';
-      };
-      const hasExtension = (name: string) => /\.[a-z0-9]{2,8}$/i.test(name);
 
       for (const doc of documents) {
         const docId = doc._id || doc.id;
         if (!docId) continue;
 
         const response = await documentsAPI.downloadDocument(docId);
-        const blob = new Blob([response.data]);
-        const fallbackName = `document-${docId}`;
-        const baseName = String(doc.nom || doc.nomFichier || fallbackName).trim() || fallbackName;
-        const sourceName = String(doc.nomFichier || '').trim();
-        const sourceExtMatch = sourceName.match(/(\.[a-z0-9]{2,8})$/i);
-        const sourceExt = sourceExtMatch ? sourceExtMatch[1] : '';
-        const inferredExt = sourceExt || extFromMime(doc.typeMime);
-        const fileName = hasExtension(baseName) ? baseName : `${baseName}${inferredExt}`;
+        const { blobFromDownloadResponse, resolveFileNameFromDownloadResponse } = await import('@/lib/downloadFile');
+        const blob = blobFromDownloadResponse(response);
+        const fileName = resolveFileNameFromDownloadResponse(
+          response,
+          doc.originalName || doc.nom || doc.nomFichier || `document-${docId}`
+        );
         zip.file(fileName, blob);
       }
 
@@ -1640,16 +1626,7 @@ export default function AdminDossierDetailPage() {
                         className="text-xs h-8 w-full sm:w-auto"
                         onClick={async () => {
                           try {
-                            const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                            const blob = new Blob([response.data]);
-                            const url = window.URL.createObjectURL(blob);
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.download = doc.nom;
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
-                            window.URL.revokeObjectURL(url);
+                            await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
                           } catch (error) {
                             console.error('Erreur lors du téléchargement:', error);
                             alert('Erreur lors du téléchargement du document');

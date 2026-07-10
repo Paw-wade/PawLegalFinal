@@ -20,6 +20,7 @@ export const getStatutColor = (statut: string): string => {
     gain_cause: 'bg-emerald-100 text-emerald-800',
     rejet: 'bg-red-200 text-red-900',
     decision_favorable: 'bg-green-200 text-green-900',
+    cloture: 'bg-green-100 text-green-800',
     autre: 'bg-slate-100 text-slate-800',
     // Anciens statuts pour compatibilité
     en_attente: 'bg-yellow-100 text-yellow-800',
@@ -51,6 +52,7 @@ export const getStatutLabel = (statut: string): string => {
     gain_cause: 'Gain de cause',
     rejet: 'Rejet',
     decision_favorable: 'Décision favorable',
+    cloture: 'Clôturé',
     autre: 'Autre (statut non prévu)',
     // Anciens statuts pour compatibilité
     en_attente: 'En attente',
@@ -137,8 +139,29 @@ export const getDossierProgress = (statut: string): number => {
   return progress;
 };
 
-/** Ids des trois étapes admin par défaut (hors barre d'avancement « étapes éditées ») */
-export const ADMIN_DEFAULT_ETAPE_IDS = new Set(['en_cours', 'refuse', 'annule']);
+/** Ids des étapes admin par défaut (hors barre d'avancement « étapes éditées ») */
+export const ADMIN_DEFAULT_ETAPE_IDS = new Set(['recu', 'en_cours', 'cloture', 'refuse', 'annule']);
+
+/** Statuts qui placent un dossier dans le filtre CLÔTURÉS (hors archivés). */
+export const CLOSED_DOSSIER_STATUTS = new Set([
+  'cloture',
+  'decision_favorable',
+  'decision_defavorable',
+  'gain_cause',
+  'rejet',
+  'refuse',
+]);
+
+export const isArchivedDossier = (d: { estArchive?: boolean; statut?: string } | null | undefined): boolean => {
+  const s = String(d?.statut || '').trim();
+  return !!d?.estArchive || s === 'annule';
+};
+
+export const isClosedDossier = (d: { estCloture?: boolean; estArchive?: boolean; statut?: string } | null | undefined): boolean => {
+  if (!d || isArchivedDossier(d)) return false;
+  const s = String(d.statut || '').trim();
+  return !!d.estCloture || CLOSED_DOSSIER_STATUTS.has(s);
+};
 
 export interface EditedEtapeItem {
   id: string;
@@ -147,7 +170,7 @@ export interface EditedEtapeItem {
 }
 
 /**
- * Étapes issues uniquement de l'édition (« étapes supplémentaires »), sans les 3 défauts.
+ * Étapes issues uniquement de l'édition (« étapes supplémentaires »), sans les étapes admin par défaut.
  */
 export const getEditedEtapesOnly = (etapesSupplementaires: unknown[] | null | undefined): EditedEtapeItem[] => {
   const raw = Array.isArray(etapesSupplementaires) ? etapesSupplementaires : [];
@@ -277,9 +300,10 @@ const ALL_DOSSIER_STEPS = [
   { key: 'refere_suspension_rep', label: 'Référé suspension et REP', order: 15 },
   { key: 'gain_cause', label: 'Gain de cause', order: 16 },
   { key: 'rejet', label: 'Rejet', order: 17 },
-  { key: 'refuse', label: 'Refusé', order: 18 },
-  { key: 'annule', label: 'Annulé', order: 19 },
-  { key: 'autre', label: 'Autre', order: 20 },
+  { key: 'cloture', label: 'Clôturé', order: 18 },
+  { key: 'refuse', label: 'Refusé', order: 19 },
+  { key: 'annule', label: 'Annulé', order: 20 },
+  { key: 'autre', label: 'Autre', order: 21 },
 ];
 
 // Obtenir l'ordre d'une étape

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { MessageNotificationModal } from '@/components/MessageNotificationModal';
 import { AppointmentBadgeModal } from '@/components/AppointmentBadgeModal';
-import { userAPI, appointmentsAPI, documentsAPI, tasksAPI, messagesAPI, dossiersAPI, notificationsAPI } from '@/lib/api';
+import { userAPI, appointmentsAPI, tasksAPI, messagesAPI, dossiersAPI, notificationsAPI } from '@/lib/api';
 import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
@@ -39,6 +39,7 @@ export default function AdminDashboardPage() {
     tasksEnCours: 0,
     dossiersTransmis: 0,
     tauxTransmission: 0,
+    temoignages: 0,
   });
   const [statsPeriod, setStatsPeriod] = useState<'week' | 'month'>('month');
   const [tasks, setTasks] = useState<any[]>([]);
@@ -372,143 +373,29 @@ export default function AdminDashboardPage() {
   };
 
 
-  const loadStats = async () => {
+  const loadStats = async (periodOverride?: 'week' | 'month') => {
     try {
-      const userRole = (session?.user as any)?.role;
-      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
-      
-      // Charger les utilisateurs (seulement pour les admins)
-      if (isAdmin) {
-        try {
-          const usersResponse = await userAPI.getAllUsers();
-          if (usersResponse.data.success) {
-            const users = usersResponse.data.users || [];
-            const totalUsers = users.length;
-            const newUsers = users.filter((user: any) => {
-              const createdAt = new Date(user.createdAt);
-              const now = new Date();
-              const daysDiff = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
-              return daysDiff <= 30; // Utilisateurs créés dans les 30 derniers jours
-            }).length;
-
-            setStats(prev => ({
-              ...prev,
-              utilisateurs: totalUsers,
-              nouveauxClients: newUsers,
-            }));
-          }
-        } catch (error) {
-          console.error('Erreur lors du chargement des utilisateurs:', error);
-          // Pour les professionnels, mettre à 0
-          if (!isAdmin) {
-            setStats(prev => ({
-              ...prev,
-              utilisateurs: 0,
-              nouveauxClients: 0,
-            }));
-          }
-        }
-      } else {
-        // Pour les professionnels, mettre à 0
-        setStats(prev => ({
+      const period = periodOverride || statsPeriod;
+      const response = await userAPI.getDashboardGlobalStats(period);
+      if (response.data?.success && response.data.stats) {
+        const s = response.data.stats;
+        setStats((prev) => ({
           ...prev,
-          utilisateurs: 0,
-          nouveauxClients: 0,
+          utilisateurs: s.utilisateurs ?? prev.utilisateurs,
+          nouveauxClients: s.nouveauxClients ?? prev.nouveauxClients,
+          dossiers: s.dossiers ?? prev.dossiers,
+          documents: s.documents ?? prev.documents,
+          tasks: s.tasks ?? prev.tasks,
+          tasksEnCours: s.tasksEnCours ?? prev.tasksEnCours,
+          rendezVous: s.rendezVous ?? prev.rendezVous,
+          temoignages: s.temoignages ?? prev.temoignages,
+          dossiersEnCours: s.dossiersEnCours ?? prev.dossiersEnCours,
+          dossiersTransmis: s.dossiersTransmis ?? prev.dossiersTransmis,
+          tauxTransmission: s.tauxTransmission ?? prev.tauxTransmission,
         }));
-      }
-
-      // Charger les rendez-vous
-      const appointmentsResponse = await appointmentsAPI.getAllAppointments();
-      if (appointmentsResponse.data.success) {
-        const appointments = appointmentsResponse.data.data || appointmentsResponse.data.appointments || [];
-        setStats(prev => ({
-          ...prev,
-          rendezVous: appointments.length,
-        }));
-      }
-
-      // Charger les documents
-      try {
-        console.log('📄 Chargement des documents pour le dashboard admin...');
-        const documentsResponse = await documentsAPI.getAllDocuments();
-        console.log('📄 Réponse getAllDocuments:', documentsResponse.data);
-        
-        if (documentsResponse.data.success) {
-          const documents = documentsResponse.data.documents || documentsResponse.data.data || [];
-          console.log('📄 Documents trouvés:', documents.length);
-          
-          setStats(prev => ({
-            ...prev,
-            documents: documents.length,
-          }));
-        } else {
-          console.error('❌ Erreur dans la réponse getAllDocuments:', documentsResponse.data.message);
-          // Mettre à jour avec 0 si erreur
-          setStats(prev => ({
-            ...prev,
-            documents: 0,
-          }));
-        }
-      } catch (docError: any) {
-        console.error('❌ Erreur lors du chargement des documents:', docError);
-        console.error('Détails:', {
-          message: docError.message,
-          response: docError.response?.data,
-          status: docError.response?.status
-        });
-        // Mettre à jour avec 0 si erreur
-        setStats(prev => ({
-          ...prev,
-          documents: 0,
-        }));
-      }
-
-      // Charger les dossiers pour calculer les statistiques de transmission
-      try {
-        const dossiersResponse = await dossiersAPI.getMyDossiers();
-        if (dossiersResponse.data.success) {
-          const allDossiers = dossiersResponse.data.dossiers || [];
-          const now = new Date();
-          
-          // Calculer les dates pour la période sélectionnée
-          const periodStart = statsPeriod === 'week' 
-            ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-            : new Date(now.getFullYear(), now.getMonth(), 1);
-          
-          // Filtrer les dossiers de la période
-          const periodDossiers = allDossiers.filter((d: any) => {
-            const dossierDate = new Date(d.createdAt || d.updatedAt);
-            return dossierDate >= periodStart;
-          });
-          
-          // Calculer les dossiers transmis
-          const dossiersTransmis = periodDossiers.filter((d: any) => 
-            d.transmittedTo && d.transmittedTo.length > 0
-          ).length;
-          
-          // Calculer le taux de transmission
-          const tauxTransmission = periodDossiers.length > 0 
-            ? Math.round((dossiersTransmis / periodDossiers.length) * 100) 
-            : 0;
-          
-          // Calculer les dossiers en cours
-          const dossiersEnCours = periodDossiers.filter((d: any) => 
-            d.statut && !['termine', 'cloture', 'annule', 'refuse'].includes(d.statut)
-          ).length;
-          
-          setStats(prev => ({
-            ...prev,
-            dossiers: allDossiers.length,
-            dossiersEnCours: dossiersEnCours,
-            dossiersTransmis: dossiersTransmis,
-            tauxTransmission: tauxTransmission,
-          }));
-        }
-      } catch (dossiersError) {
-        console.error('Erreur lors du chargement des dossiers:', dossiersError);
       }
     } catch (error) {
-      console.error('Erreur lors du chargement des statistiques:', error);
+      console.error('Erreur lors du chargement des statistiques globales:', error);
     }
   };
 
@@ -526,14 +413,8 @@ export default function AdminDashboardPage() {
       if (response.data.success) {
         const allTasks = response.data.tasks || [];
         setTasks(allTasks);
-        const tasksEnCours = allTasks.filter((t: any) => 
-          t.statut === 'a_faire' || t.statut === 'en_cours' || t.statut === 'en_attente'
-        ).length;
-        setStats(prev => ({
-          ...prev,
-          tasks: allTasks.length,
-          tasksEnCours,
-        }));
+        // Les compteurs de la carte « Tâches » viennent des stats globales
+        // (loadStats) pour rester identiques au superadmin.
       }
     } catch (error) {
       console.error('Erreur lors du chargement des tâches:', error);
@@ -1085,7 +966,7 @@ export default function AdminDashboardPage() {
                       <span className="text-2xl">⭐</span>
                     </div>
                     <div className="text-right">
-                      <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-yellow-600 transition-colors">-</p>
+                      <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-yellow-600 transition-colors">{stats.temoignages}</p>
                     </div>
                   </div>
                   <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Témoignages</h3>
@@ -1111,7 +992,10 @@ export default function AdminDashboardPage() {
                 </h2>
                 <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
                   <button
-                    onClick={() => setStatsPeriod('week')}
+                    onClick={() => {
+                      setStatsPeriod('week');
+                      loadStats('week');
+                    }}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                       statsPeriod === 'week'
                         ? 'bg-white text-blue-600 shadow-sm'
@@ -1121,7 +1005,10 @@ export default function AdminDashboardPage() {
                     Hebdomadaire
                   </button>
                   <button
-                    onClick={() => setStatsPeriod('month')}
+                    onClick={() => {
+                      setStatsPeriod('month');
+                      loadStats('month');
+                    }}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                       statsPeriod === 'month'
                         ? 'bg-white text-blue-600 shadow-sm'

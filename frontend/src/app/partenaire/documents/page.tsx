@@ -145,16 +145,7 @@ export default function PartenaireDocumentsPage() {
 
   const handleDownload = async (documentId: string, originalName: string) => {
     try {
-      const response = await documentsAPI.downloadDocument(documentId);
-      const blob = response.data;
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', originalName);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      await documentsAPI.downloadAndSave(documentId, originalName);
     } catch (error: any) {
       console.error('Erreur lors du téléchargement:', error);
       setToast({ message: error.response?.data?.message || 'Erreur lors du téléchargement du document', type: 'error' });

@@ -28,7 +28,17 @@ function isDossierExcludedFromAgenda(d: any): boolean {
   if (d.estCloture) return true;
   if (d.estArchive) return true;
   const s = String(d.statut || '');
-  if (s === 'annule' || s === 'refuse') return true;
+  if (
+    s === 'annule' ||
+    s === 'refuse' ||
+    s === 'cloture' ||
+    s === 'decision_favorable' ||
+    s === 'decision_defavorable' ||
+    s === 'gain_cause' ||
+    s === 'rejet'
+  ) {
+    return true;
+  }
   return false;
 }
 

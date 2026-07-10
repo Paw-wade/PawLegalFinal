@@ -121,7 +121,10 @@ export function TaskNotificationBanner({ userRole, userId }: TaskNotificationBan
               
               if (isAssignedToMe) {
                 message = `Nouvelle tâche assignée : "${task.titre || 'Sans titre'}"`;
-                link = '/admin/taches';
+                link = taskId ? `/admin/taches?taskId=${encodeURIComponent(taskId)}` : '/admin/taches';
+              } else if (taskId) {
+                message = `${creatorName} (partenaire) a créé une tâche : "${task.titre || 'Sans titre'}"`;
+                link = `/admin/taches?taskId=${encodeURIComponent(taskId)}`;
               } else if (dossierId) {
                 message = `${creatorName} (partenaire) a créé une tâche : "${task.titre || 'Sans titre'}"`;
                 link = `/admin/dossiers/${dossierId}`;
@@ -163,7 +166,11 @@ export function TaskNotificationBanner({ userRole, userId }: TaskNotificationBan
                 id: `task-${taskId}`,
                 taskId: taskId || '',
                 message: `Nouvelle tâche assignée : "${task.titre || 'Sans titre'}"`,
-                link: dossierId ? `/partenaire/dossiers/${dossierId}` : '/partenaire/dossiers',
+                link: dossierId && taskId
+                  ? `/partenaire/dossiers/${dossierId}?taskId=${encodeURIComponent(taskId)}`
+                  : dossierId
+                    ? `/partenaire/dossiers/${dossierId}`
+                    : '/partenaire/dossiers',
                 priority: task.priorite === 'urgente' || task.priorite === 'haute' ? 'high' : 'normal'
               });
             });
@@ -186,13 +193,12 @@ export function TaskNotificationBanner({ userRole, userId }: TaskNotificationBan
 
             relevantTasks.slice(0, 5).forEach((task: any) => {
               const taskId = task._id?.toString() || task.id;
-              const dossierId = task.dossier?._id?.toString() || task.dossier?.toString();
               
               items.push({
                 id: `task-${taskId}`,
                 taskId: taskId || '',
                 message: `Nouvelle tâche assignée : "${task.titre || 'Sans titre'}"`,
-                link: dossierId ? `/client/dossiers/${dossierId}` : '/client/taches',
+                link: taskId ? `/client/taches?taskId=${encodeURIComponent(taskId)}` : '/client/taches',
                 priority: task.priorite === 'urgente' || task.priorite === 'haute' ? 'high' : 'normal'
               });
             });

@@ -843,6 +843,7 @@ router.get(
         const s = rawStatut(d);
         return (
           !!d?.estCloture ||
+          s === 'cloture' ||
           s === 'decision_favorable' ||
           s === 'decision_defavorable' ||
           s === 'gain_cause' ||
@@ -896,7 +897,7 @@ router.post(
   [
     body('titre').optional().trim(),
     body('categorie').optional().isIn(['sejour_titres', 'contentieux_administratif', 'asile', 'regroupement_familial', 'nationalite_francaise', 'eloignement_urgence', 'constitution_societe', 'autre']),
-    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre']),
+    body('statut').optional().isIn(['recu', 'accepte', 'refuse', 'annule', 'cloture', 'en_attente_onboarding', 'en_cours_instruction', 'pieces_manquantes', 'dossier_complet', 'depose', 'reception_confirmee', 'complement_demande', 'decision_defavorable', 'communication_motifs', 'recours_preparation', 'refere_mesures_utiles', 'refere_suspension_rep', 'gain_cause', 'rejet', 'decision_favorable', 'autre', 'en_cours']),
     body('priorite').optional().isIn(['basse', 'normale', 'haute', 'urgente'])
   ],
   async (req, res) => {
@@ -3432,7 +3433,25 @@ router.put(
       if (description !== undefined) dossier.description = description;
       if (categorie) dossier.categorie = categorie;
       if (type !== undefined) dossier.type = type;
-      if (statut) dossier.statut = statut;
+      if (statut) {
+        dossier.statut = statut;
+        // Statut « Clôturé » (et décisions finales) → filtre CLÔTURÉS ; « Archivé » → ARCHIVÉS
+        const closedStatuts = new Set([
+          'cloture',
+          'decision_favorable',
+          'decision_defavorable',
+          'gain_cause',
+          'rejet',
+          'refuse',
+        ]);
+        if (statut === 'annule') {
+          dossier.estArchive = true;
+          dossier.estCloture = false;
+        } else {
+          dossier.estArchive = false;
+          dossier.estCloture = closedStatuts.has(statut);
+        }
+      }
 
       // Synchroniser le statut partenaire (tableau transmittedTo) quand l'admin change le statut du dossier.
       // Cela permet aux filtres des espaces client/partenaire de réagir immédiatement.
@@ -4055,6 +4074,9 @@ router.put(
             recu: 'Reçu',
             accepte: 'Accepté',
             refuse: 'Refusé',
+            en_cours: 'En cours',
+            cloture: 'Clôturé',
+            annule: 'Archivé',
             en_attente_onboarding: 'En attente d\'onboarding (RDV)',
             en_cours_instruction: 'En cours d\'instruction (constitution dossier)',
             pieces_manquantes: 'Pièces manquantes (relance client)',

@@ -217,6 +217,7 @@ router.post('/public/:token', (req, res, next) => {
       user: ownerUserId,
       nom: docNom,
       nomFichier: req.file.filename,
+      originalName: req.file.originalname,
       cheminFichier,
       typeMime: req.file.mimetype,
       taille: req.file.size,

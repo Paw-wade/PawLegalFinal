@@ -511,6 +511,13 @@ export const userAPI = {
   getAllUsers: () =>
     api.get('/user/all'),
 
+  // Admin - Stats globales du dashboard (indépendantes du périmètre d'accès)
+  getDashboardGlobalStats: (period: 'week' | 'month' = 'month') =>
+    api.get('/user/dashboard/stats/global', {
+      params: { period },
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    }),
+
   // Admin - Registre des expirations (clients)
   getClientExpirationsRegister: (params: { pastDays: number; futureDays: number }) =>
     api.get('/user/expirations', { params }),
@@ -1350,11 +1357,20 @@ export const documentsAPI = {
     return `${getApiBaseUrl()}/user/documents/${encodeURIComponent(id)}/preview`;
   },
   
-  // Télécharger un document
+  // Télécharger un document (blob brut — préférer downloadAndSave)
   downloadDocument: (id: string) =>
     api.get(`/user/documents/${id}/download`, {
       responseType: 'blob',
     }),
+
+  /** Télécharge et enregistre le fichier avec le nom/extension exacts du serveur. */
+  downloadAndSave: async (id: string, fallbackName?: string) => {
+    const { triggerBlobDownload } = await import('@/lib/downloadFile');
+    const response = await api.get(`/user/documents/${id}/download`, {
+      responseType: 'blob',
+    });
+    return triggerBlobDownload(response, fallbackName);
+  },
   
   // Supprimer un document
   deleteDocument: (id: string) =>

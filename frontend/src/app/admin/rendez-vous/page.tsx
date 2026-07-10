@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -229,6 +229,7 @@ export default function AdminRendezVousPage() {
   const [appointmentForDossier, setAppointmentForDossier] = useState<any | null>(null);
   /** Rattachement explicite du RDV en cours de création à un dossier (query ?dossierId=…) */
   const [appointmentLinkedDossierId, setAppointmentLinkedDossierId] = useState<string | null>(null);
+  const appointmentDeepLinkRef = useRef<string | null>(null);
   const [isCreatingDossier, setIsCreatingDossier] = useState(false);
   const [dossierFormData, setDossierFormData] = useState({
     titre: '',
@@ -337,6 +338,34 @@ export default function AdminRendezVousPage() {
       cancelled = true;
     };
   }, [status, session, router, searchParams]);
+
+  /** Deep-link bannière : ouvrir le RDV exact (`?appointmentId=…`) */
+  useEffect(() => {
+    if (status !== 'authenticated' || isLoading) return;
+    const appointmentId = searchParams.get('appointmentId')?.trim();
+    if (!appointmentId || rendezVous.length === 0) return;
+    if (appointmentDeepLinkRef.current === appointmentId) return;
+
+    const match = rendezVous.find((rdv: any) => String(rdv._id || rdv.id) === appointmentId);
+    if (!match) return;
+
+    appointmentDeepLinkRef.current = appointmentId;
+    const dateObj = match.date ? new Date(match.date) : new Date();
+    const formattedDate = dateObj.toISOString().split('T')[0];
+    setEditFormData({
+      statut: match.statut || 'en_attente',
+      date: formattedDate,
+      heure: match.heure || '',
+      motif: match.motif || '',
+      description: match.description || '',
+      notes: match.notes || '',
+    });
+    setEditingRdv(match);
+
+    requestAnimationFrame(() => {
+      document.getElementById(`appointment-${appointmentId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, [status, isLoading, rendezVous, searchParams]);
 
   const loadAppointments = async () => {
     setIsLoading(true);
@@ -975,6 +1004,7 @@ export default function AdminRendezVousPage() {
                 
                 return (
                   <div
+                    id={`appointment-${rdv._id || rdv.id}`}
                     key={rdv._id || rdv.id}
                     className={`rounded-xl p-5 transition-all duration-300 bg-white hover:-translate-y-0.5 ${getCardBorderStyle()}`}
                   >

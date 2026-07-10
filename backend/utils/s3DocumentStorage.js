@@ -293,11 +293,10 @@ async function tryServeDocumentFromS3(document, res, { inline = false } = {}) {
       document,
       resp.ContentType || 'application/octet-stream'
     );
+    const { buildContentDisposition, resolveDocumentDownloadFileName } = require('./documentDownloadName');
+    const fileName = resolveDocumentDownloadFileName(document);
     res.setHeader('Content-Type', contentType);
-    res.setHeader(
-      'Content-Disposition',
-      `${inline ? 'inline' : 'attachment'}; filename="${encodeURIComponent(document.nom || 'document')}"`
-    );
+    res.setHeader('Content-Disposition', buildContentDisposition(fileName, { inline }));
     if (inline) res.setHeader('Cache-Control', 'private, max-age=3600');
     if (resp.ContentLength) res.setHeader('Content-Length', String(resp.ContentLength));
 

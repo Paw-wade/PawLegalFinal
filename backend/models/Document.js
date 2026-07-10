@@ -16,6 +16,12 @@ const documentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  /** Nom exact du fichier à l'upload (extension préservée pour les téléchargements). */
+  originalName: {
+    type: String,
+    trim: true,
+    required: false
+  },
   cheminFichier: {
     type: String,
     required: true

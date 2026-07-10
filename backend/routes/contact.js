@@ -507,7 +507,11 @@ router.get(
         });
       }
 
-      res.download(document.path, document.originalName);
+      const { buildContentDisposition } = require('../utils/documentDownloadName');
+      const fileName = document.originalName || path.basename(document.path) || 'fichier';
+      res.setHeader('Content-Type', document.mimetype || 'application/octet-stream');
+      res.setHeader('Content-Disposition', buildContentDisposition(fileName, { inline: false }));
+      return res.sendFile(path.resolve(document.path));
     } catch (error) {
       console.error('Erreur lors du téléchargement du document:', error);
       res.status(500).json({

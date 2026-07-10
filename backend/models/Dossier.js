@@ -302,6 +302,15 @@ const dossierSchema = new mongoose.Schema({
     maxlength: 500,
     required: false
   },
+  // Clôture / archive (filtres CLÔTURÉS / ARCHIVÉS) — synchronisés avec le statut
+  estCloture: {
+    type: Boolean,
+    default: false
+  },
+  estArchive: {
+    type: Boolean,
+    default: false
+  },
   // Mise en stand-by : le dossier existe mais n'est pas traité temporairement
   isStandby: {
     type: Boolean,
@@ -378,7 +387,7 @@ dossierSchema.pre('save', async function(next) {
   this.updatedAt = Date.now();
   
   // Nettoyer les collaborateurs actifs si le dossier est clôturé ou annulé
-  const statutsFinaux = ['annule', 'decision_favorable', 'decision_defavorable', 'rejet', 'gain_cause'];
+  const statutsFinaux = ['annule', 'cloture', 'decision_favorable', 'decision_defavorable', 'rejet', 'gain_cause', 'refuse'];
   if (this.isModified('statut') && statutsFinaux.includes(this.statut)) {
     // Vider la liste des collaborateurs actifs
     this.activeCollaborators = [];

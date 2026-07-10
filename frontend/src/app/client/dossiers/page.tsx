@@ -1248,15 +1248,7 @@ function DossiersContent() {
                                               onClick={async (e) => {
                                                 e.stopPropagation();
                                                 try {
-                                                  const response = await documentsAPI.downloadDocument(doc._id || doc.id);
-                                                  const url = window.URL.createObjectURL(new Blob([response.data]));
-                                                  const link = document.createElement('a');
-                                                  link.href = url;
-                                                  link.setAttribute('download', doc.nom || 'document');
-                                                  document.body.appendChild(link);
-                                                  link.click();
-                                                  link.remove();
-                                                  window.URL.revokeObjectURL(url);
+                                                  await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom || 'document');
                                                 } catch (err) {
                                                   console.error('Erreur téléchargement document dossier:', err);
                                                 }

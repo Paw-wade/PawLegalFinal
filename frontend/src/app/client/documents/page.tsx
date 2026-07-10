@@ -189,15 +189,7 @@ export default function DocumentsPage() {
 
   const handleDownload = async (documentId: string, nom: string) => {
     try {
-      const response = await documentsAPI.downloadDocument(documentId);
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', nom);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      await documentsAPI.downloadAndSave(documentId, nom);
     } catch (err: any) {
       console.error('Erreur lors du téléchargement:', err);
       setError('Erreur lors du téléchargement du document');

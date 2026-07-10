@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { PartenaireDossierDetailSections } from '@/components/partenaire/PartenaireDossierDetailSections';
@@ -28,7 +28,10 @@ export default function PartenaireDossierDetailPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const dossierId = params?.id as string;
+  const highlightTaskId = searchParams.get('taskId')?.trim() || null;
+  const taskScrollDoneRef = useRef<string | null>(null);
   
   const [dossier, setDossier] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -236,6 +239,16 @@ export default function PartenaireDossierDetailPage() {
       setIsLoadingTasks(false);
     }
   };
+
+  useEffect(() => {
+    if (!highlightTaskId || isLoadingTasks || tasks.length === 0) return;
+    if (taskScrollDoneRef.current === highlightTaskId) return;
+    if (!tasks.some((t: any) => String(t._id || t.id) === highlightTaskId)) return;
+    taskScrollDoneRef.current = highlightTaskId;
+    requestAnimationFrame(() => {
+      document.getElementById(`task-${highlightTaskId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, [highlightTaskId, tasks, isLoadingTasks]);
 
   const getHistoryTypeIcon = (type: string) => {
     const icons: Record<string, string> = {
@@ -694,6 +707,7 @@ export default function PartenaireDossierDetailPage() {
           showHistory={showHistory}
           setShowHistory={setShowHistory}
           onLoadHistory={loadHistory}
+          highlightTaskId={highlightTaskId}
           onPreviewDocument={(doc) => {
             setSelectedDocumentForPreview(doc);
             setShowDocumentPreviewModal(true);
