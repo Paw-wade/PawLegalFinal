@@ -40,7 +40,7 @@ import {
   scrollToDossierListCard,
   clearDossierListFocus,
 } from '@/lib/dossierListFocus';
-import { Pin, ChevronDown, ChevronUp, FileDown } from 'lucide-react';
+import { Pin, ChevronDown, ChevronUp, FileDown, FileText, Mail, Plus, Info, Clock3 } from 'lucide-react';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -2873,6 +2873,9 @@ export default function AdminDossiersPage() {
                   const pendingDocumentRequestsCount = (documentRequests[dossierId] || []).filter(
                     (r: any) => r.status === 'pending'
                   ).length;
+                  const importantInfoCount = Array.isArray(dossier?.complementsRecit)
+                    ? dossier.complementsRecit.length
+                    : 0;
                   const tasksCount = (dossierTasks[dossierId] || []).length;
                   const draftsCount = dossierDrafts[dossierId]?.length ?? 0;
                   const transmittedPartners = getDossierTransmittedPartners(dossier);
@@ -3034,30 +3037,106 @@ export default function AdminDossiersPage() {
                               </p>
                             </button>
                             {!isExpanded ? (
-                              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                <button
-                                  type="button"
-                                  className="w-full min-h-0 text-left rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2 transition-colors hover:border-primary/35 hover:bg-gray-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    openAdminDossierQuickSection(dossierId, 'documents');
-                                  }}
-                                  aria-label="Déplier le dossier et afficher les documents demandés"
-                                >
-                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Documents</p>
-                                  <p className="text-sm font-semibold text-foreground">{totalDocuments}</p>
-                                  <p
-                                    className={`text-[10px] mt-0.5 leading-tight ${
-                                      pendingDocumentRequestsCount > 0 ? 'font-semibold text-amber-800' : 'text-muted-foreground'
-                                    }`}
-                                    title="Nombre de demandes de documents encore en attente de réception"
+                              <div className="mt-3 space-y-2">
+                                <div className="flex items-center gap-1.5 rounded-lg border border-gray-100 bg-gray-50/80 pl-2.5 pr-1 py-1 transition-colors hover:border-primary/35 hover:bg-gray-100/90">
+                                  <button
+                                    type="button"
+                                    className="flex min-w-0 flex-1 items-center gap-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      openAdminDossierQuickSection(dossierId, 'documents');
+                                    }}
+                                    aria-label="Déplier le dossier et afficher les documents demandés"
                                   >
-                                    {pendingDocumentRequestsCount === 0
-                                      ? '0 en attente'
-                                      : `${pendingDocumentRequestsCount} en attente`}
-                                  </p>
-                                </button>
+                                    <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                                    <span className="text-xs font-semibold text-foreground truncate">Documents</span>
+                                    <span className="text-[11px] font-semibold text-foreground tabular-nums">
+                                      {totalDocuments}
+                                    </span>
+                                    {pendingDocumentRequestsCount > 0 ? (
+                                      <span
+                                        className="inline-flex items-center gap-0.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 border border-amber-200"
+                                        title="Demandes de documents encore en attente"
+                                      >
+                                        <Clock3 className="h-3 w-3" aria-hidden />
+                                        {pendingDocumentRequestsCount}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-muted-foreground">0 en attente</span>
+                                    )}
+                                  </button>
+                                  <div className="flex shrink-0 items-center gap-0.5">
+                                    <button
+                                      type="button"
+                                      title="Inviter un tiers à déposer un document"
+                                      aria-label="Inviter un tiers à déposer un document"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:border-gray-200 hover:bg-white hover:text-foreground transition-colors"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setGuestInviteError(null);
+                                        setGuestInviteCreatedUrl(null);
+                                        setGuestInviteEmail('');
+                                        setGuestInviteMessage('');
+                                        setGuestInviteModalDossier(dossier);
+                                      }}
+                                    >
+                                      <Mail className="h-3.5 w-3.5" aria-hidden />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Ajouter un document"
+                                      aria-label="Ajouter un document"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:border-gray-200 hover:bg-white hover:text-foreground transition-colors"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setDirectUploadError(null);
+                                        openAdminDossierQuickSection(dossierId, 'documents');
+                                        setActiveDirectUploadDossierId(dossierId);
+                                      }}
+                                    >
+                                      <Plus className="h-3.5 w-3.5" aria-hidden />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Ajouter une info importante"
+                                      aria-label="Ajouter une info importante"
+                                      className="relative inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground hover:border-gray-200 hover:bg-white hover:text-foreground transition-colors"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        openQuickComplementEditor(dossier);
+                                      }}
+                                    >
+                                      <Info className="h-3.5 w-3.5" aria-hidden />
+                                      {importantInfoCount > 0 && (
+                                        <span
+                                          className={`absolute -top-1 -right-1 min-w-[14px] h-3.5 px-0.5 rounded-full text-[8px] leading-[14px] text-white text-center font-bold ring-1 ring-white ${
+                                            hasUnseenComplement(dossier) ? 'bg-red-500' : 'bg-blue-500'
+                                          }`}
+                                        >
+                                          {importantInfoCount > 99 ? '99+' : importantInfoCount}
+                                        </span>
+                                      )}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Ouvrir les documents"
+                                      aria-label="Ouvrir les documents"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-white hover:text-foreground transition-colors"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        openAdminDossierQuickSection(dossierId, 'documents');
+                                      }}
+                                    >
+                                      <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
                                 <button
                                   type="button"
                                   className="w-full min-h-0 text-left rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2 transition-colors hover:border-primary/35 hover:bg-gray-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -3099,6 +3178,7 @@ export default function AdminDossiersPage() {
                                     {transmissionSummary}
                                   </p>
                                 </button>
+                                </div>
                               </div>
                             ) : null}
                           </div>
@@ -3851,13 +3931,14 @@ export default function AdminDossiersPage() {
                               setExpandedDocumentSections(newExpanded);
                             }}
                           >
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">📄</span>
-                              <div>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                              <div className="min-w-0">
                                 <h4 className="text-sm font-semibold text-foreground">Documents demandés</h4>
                                 <p className="text-xs text-muted-foreground">
                                   {pendingRequests.length > 0 && (
-                                    <span className="text-orange-600 font-medium">
+                                    <span className="inline-flex items-center gap-0.5 text-orange-600 font-medium">
+                                      <Clock3 className="h-3 w-3" aria-hidden />
                                       {pendingRequests.length} en attente
                                     </span>
                                   )}
@@ -3870,13 +3951,13 @@ export default function AdminDossiersPage() {
                                 </p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                               <Button
                                 type="button"
                                 variant="outline"
                                 title="Inviter un tiers à déposer un document"
                                 aria-label="Inviter un tiers à déposer un document"
-                                className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                                className="h-7 w-7 p-0 shadow-none shrink-0"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setGuestInviteError(null);
@@ -3886,30 +3967,30 @@ export default function AdminDossiersPage() {
                                   setGuestInviteModalDossier(dossier);
                                 }}
                               >
-                                ✉️
+                                <Mail className="h-3.5 w-3.5" aria-hidden />
                               </Button>
                               <Button
                                 type="button"
                                 variant="outline"
                                 title="Ajouter un document"
                                 aria-label="Ajouter un document"
-                                className="h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                                className="h-7 w-7 p-0 shadow-none shrink-0"
                                 onClick={toggleDirectUpload}
                               >
-                                +
+                                <Plus className="h-3.5 w-3.5" aria-hidden />
                               </Button>
                               <Button
                                 type="button"
                                 variant="outline"
                                 title="Ajouter une info importante"
                                 aria-label="Ajouter une info importante"
-                                className="relative h-7 w-7 p-0 text-sm leading-none shadow-none shrink-0"
+                                className="relative h-7 w-7 p-0 shadow-none shrink-0"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openQuickComplementEditor(dossier);
                                 }}
                               >
-                                ℹ️
+                                <Info className="h-3.5 w-3.5" aria-hidden />
                                 {importantInfoCount > 0 && (
                                   <span
                                     className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] leading-4 text-white text-center font-bold ring-2 ring-white ${
@@ -3921,7 +4002,9 @@ export default function AdminDossiersPage() {
                                   </span>
                                 )}
                               </Button>
-                              <span className="text-muted-foreground text-sm">{isExpanded ? '▲' : '▼'}</span>
+                              <span className="text-muted-foreground inline-flex items-center justify-center w-6">
+                                {isExpanded ? <ChevronUp className="h-3.5 w-3.5" aria-hidden /> : <ChevronDown className="h-3.5 w-3.5" aria-hidden />}
+                              </span>
                             </div>
                           </div>
 
