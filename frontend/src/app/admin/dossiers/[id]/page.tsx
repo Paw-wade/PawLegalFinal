@@ -15,6 +15,7 @@ import { DocumentPreview } from '@/components/DocumentPreview';
 import { AdminBookingModal, buildAdminBookingFromDossier } from '@/components/AdminBookingModal';
 import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
 import { isDossierStaffRole } from '@/lib/dossierAccess';
+import { rememberDossierListFocus, dossierListFocusHref } from '@/lib/dossierListFocus';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
@@ -91,6 +92,10 @@ export default function AdminDossierDetailPage() {
     if (!strictPrivacyMode) return value || fallback;
     return value ? '••••••' : fallback;
   };
+
+  useEffect(() => {
+    if (dossierId) rememberDossierListFocus('admin', dossierId);
+  }, [dossierId]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -665,7 +670,7 @@ export default function AdminDossierDetailPage() {
         {/* En-tête amélioré */}
         <div className="mb-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between mb-4">
-            <Link href={`/admin/dossiers?dossierId=${encodeURIComponent(dossier._id || dossier.id || '')}`} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors">
+            <Link href={dossierListFocusHref('admin', dossier._id || dossier.id || dossierId || '')} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>

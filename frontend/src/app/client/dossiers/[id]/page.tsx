@@ -15,6 +15,7 @@ import {
   getDossierTransmittedPartners,
   getDossierTransmissionSummary,
 } from '@/lib/dossierListPresentation';
+import { rememberDossierListFocus, dossierListFocusHref } from '@/lib/dossierListFocus';
 import { History, Clock } from 'lucide-react';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
@@ -62,6 +63,10 @@ export default function DossierDetailPage() {
   const [directUploading, setDirectUploading] = useState(false);
   const [directUploadError, setDirectUploadError] = useState<string | null>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (dossierId) rememberDossierListFocus('client', dossierId);
+  }, [dossierId]);
 
   useEffect(() => {
     const shouldOpenUpload = searchParams?.get('openUpload') === '1';
@@ -397,7 +402,7 @@ export default function DossierDetailPage() {
       <div className="w-full max-w-[100vw] min-w-0 px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
         {/* En-tête — sur mobile: colonne, boutons en bas */}
         <div className="mb-4 sm:mb-6">
-          <Link href={`/client/dossiers?dossierId=${encodeURIComponent(dossierId)}`} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-3 sm:mb-4 transition-colors min-h-[44px] items-center">
+          <Link href={dossierListFocusHref('client', dossierId)} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-3 sm:mb-4 transition-colors min-h-[44px] items-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>

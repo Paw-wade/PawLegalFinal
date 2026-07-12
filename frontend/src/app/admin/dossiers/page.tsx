@@ -34,7 +34,13 @@ import { InlineDocumentRename } from '@/components/InlineDocumentRename';
 import { Toast } from '@/components/Toast';
 import { QuickComplementTabsForm } from '@/components/dossiers/QuickComplementTabsForm';
 import { isDossierStaffRole, normalizeDossierId, dossierListCardId } from '@/lib/dossierAccess';
-import { Pin } from 'lucide-react';
+import {
+  rememberDossierListFocus,
+  resolveDossierListFocusId,
+  scrollToDossierListCard,
+  clearDossierListFocus,
+} from '@/lib/dossierListFocus';
+import { Pin, ChevronDown, ChevronUp, FileDown } from 'lucide-react';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -513,6 +519,7 @@ export default function AdminDossiersPage() {
   const [newEtapeDate, setNewEtapeDate] = useState('');
   const [isAddingEtape, setIsAddingEtape] = useState(false);
   const searchParams = useSearchParams();
+  const listFocusHandledRef = useRef<string | null>(null);
 
   const openAdminDossierQuickSection = useCallback(
     (dossierId: string, section: 'documents' | 'drafts' | 'tasks' | 'transmission') => {
@@ -707,6 +714,38 @@ export default function AdminDossiersPage() {
 
     return () => window.clearTimeout(timer);
   }, [searchParams, dossiers, expandedDossiers, router]);
+
+  // Retour détail / historique navigateur : recentrer la carte pliée
+  useEffect(() => {
+    if (isLoading || dossiers.length === 0) return;
+    // Ne pas interférer avec l’ouverture expandée via ?dossierId=
+    if (searchParams?.get('dossierId')) return;
+
+    const resolved = resolveDossierListFocusId('admin', searchParams);
+    if (!resolved) return;
+    const focusId = resolved.dossierId;
+    if (listFocusHandledRef.current === focusId) return;
+    if (!dossiers.some((d: any) => normalizeDossierId(d._id || d.id) === focusId)) return;
+
+    setExpandedDossiers((prev) => {
+      if (!prev.has(focusId)) return prev;
+      const next = new Set(prev);
+      next.delete(focusId);
+      return next;
+    });
+
+    const timer = window.setTimeout(() => {
+      if (scrollToDossierListCard('admin', focusId)) {
+        listFocusHandledRef.current = focusId;
+        clearDossierListFocus();
+        if (resolved.fromQuery) {
+          router.replace('/admin/dossiers', { scroll: false });
+        }
+      }
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [searchParams, dossiers, isLoading, router]);
 
   const loadNotifications = async () => {
     try {
@@ -2384,47 +2423,54 @@ export default function AdminDossiersPage() {
           ) : (
             <>
               {/* Agenda : échéances, jalons datés, tâches — 15 jours + retards */}
-              <div className="mb-4 rounded-xl border border-primary/25 bg-gradient-to-br from-primary/5 to-background p-3 sm:p-4 shadow-sm">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="mb-3 rounded-lg border border-primary/20 bg-gradient-to-br from-primary/5 to-background px-2.5 py-2 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <h2 className="text-sm font-semibold text-foreground">
-                        Actions à prévoir (15 jours + retards)
-                      </h2>
-                      <button
-                        type="button"
-                        onClick={() => setIsAgendaCollapsed((v) => !v)}
-                        className="inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                        aria-expanded={!isAgendaCollapsed}
-                        aria-label={isAgendaCollapsed ? 'Déplier la section des actions à prévoir' : 'Replier la section des actions à prévoir'}
-                      >
-                        {isAgendaCollapsed ? '▾ Déplier' : '▴ Replier'}
-                      </button>
-                    </div>
-                    <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 break-words leading-snug">
-                      Synthèse des dates connues : échéance du dossier, jalons avec date dans les étapes, et
-                      tâches ouvertes avec échéance, ainsi que les documents en préparation (non terminés) avec
-                      date d’échéance. Les dossiers clôturés, archivés, refusés ou annulés sont exclus.
+                    <h2 className="text-xs sm:text-sm font-semibold text-foreground leading-tight">
+                      Actions à prévoir (15 j + retards)
+                    </h2>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate" title="Échéances dossier, jalons, tâches et docs en préparation — hors clôturés / archivés.">
+                      Échéances, jalons, tâches et docs en préparation.
                     </p>
-                    <p className="text-[11px] text-muted-foreground mt-1">
+                    <p className="text-[10px] text-muted-foreground">
                       {agendaItems.length === 0
-                        ? 'Aucune action dans la fenêtre.'
-                        : `${agendaItems.length} action${agendaItems.length > 1 ? 's' : ''} (${agendaItems.filter((i) => i.bucket === 'overdue').length} retard${agendaItems.filter((i) => i.bucket === 'overdue').length > 1 ? 's' : ''}, ${agendaItems.filter((i) => i.bucket === 'upcoming').length} à venir)`}
+                        ? 'Aucune action.'
+                        : `${agendaItems.length} action${agendaItems.length > 1 ? 's' : ''} · ${agendaItems.filter((i) => i.bucket === 'overdue').length} retard${agendaItems.filter((i) => i.bucket === 'overdue').length > 1 ? 's' : ''} · ${agendaItems.filter((i) => i.bucket === 'upcoming').length} à venir`}
                     </p>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0 w-full sm:w-auto text-xs h-9"
-                    disabled={agendaPdfLoading}
-                    onClick={handleDownloadAgendaPdf}
-                  >
-                    {agendaPdfLoading ? 'PDF…' : '📄 Télécharger PDF'}
-                  </Button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsAgendaCollapsed((v) => !v)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+                      aria-expanded={!isAgendaCollapsed}
+                      aria-label={isAgendaCollapsed ? 'Déplier la section des actions à prévoir' : 'Replier la section des actions à prévoir'}
+                      title={isAgendaCollapsed ? 'Déplier' : 'Replier'}
+                    >
+                      {isAgendaCollapsed ? (
+                        <ChevronDown className="h-4 w-4" aria-hidden />
+                      ) : (
+                        <ChevronUp className="h-4 w-4" aria-hidden />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                      disabled={agendaPdfLoading}
+                      onClick={handleDownloadAgendaPdf}
+                      aria-label="Télécharger le PDF des actions à prévoir"
+                      title="Télécharger PDF"
+                    >
+                      {agendaPdfLoading ? (
+                        <span className="text-[10px] font-medium">…</span>
+                      ) : (
+                        <FileDown className="h-4 w-4" aria-hidden />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 {!isAgendaCollapsed && agendaItems.length > 0 && (
-                  <div className="mt-3 max-h-52 sm:max-h-64 overflow-y-auto rounded-lg border border-border/70 bg-background/90 text-left">
+                  <div className="mt-2 max-h-52 sm:max-h-64 overflow-y-auto rounded-md border border-border/70 bg-background/90 text-left">
                     {(['overdue', 'upcoming'] as const).map((bucket) => {
                       const rows = agendaItems.filter((i) => i.bucket === bucket);
                       if (rows.length === 0) return null;
@@ -2444,6 +2490,7 @@ export default function AdminDossiersPage() {
                               <li key={`${bucket}-${it.dossierId}-${it.kind}-${it.eventDayMs}-${idx}`}>
                                 <Link
                                   href={`/admin/dossiers/${it.dossierId}`}
+                                  onClick={() => rememberDossierListFocus('admin', it.dossierId)}
                                   className="flex flex-col gap-0.5 px-3 py-2 hover:bg-muted/50 transition-colors min-w-0"
                                 >
                                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] min-w-0">
@@ -3136,6 +3183,7 @@ export default function AdminDossiersPage() {
                         <div className="flex flex-wrap items-center justify-end gap-2">
                         <Link
                           href={detailHref}
+                          onClick={() => rememberDossierListFocus('admin', dossierId)}
                           className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors"
                         >
                           Détails
@@ -4583,7 +4631,7 @@ export default function AdminDossiersPage() {
               <Link href={`/admin/notifications?dossierId=${dossierId}&filter=all`} onClick={() => setClientPopover(null)}>
                 <Button type="button" variant="outline" size="sm" className="text-xs">Voir notifications</Button>
               </Link>
-              <Link href={`/admin/dossiers/${dossierId}`} onClick={() => setClientPopover(null)}>
+              <Link href={`/admin/dossiers/${dossierId}`} onClick={() => { rememberDossierListFocus('admin', dossierId); setClientPopover(null); }}>
                 <Button type="button" variant="outline" size="sm" className="text-xs">Ouvrir dossier complet</Button>
               </Link>
             </div>

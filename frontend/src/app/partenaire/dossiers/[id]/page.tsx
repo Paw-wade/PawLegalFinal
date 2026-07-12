@@ -12,6 +12,7 @@ import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNo
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
+import { rememberDossierListFocus, dossierListFocusHref } from '@/lib/dossierListFocus';
 import { History, Clock, CheckCircle, XCircle } from 'lucide-react';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
@@ -32,6 +33,10 @@ export default function PartenaireDossierDetailPage() {
   const dossierId = params?.id as string;
   const highlightTaskId = searchParams.get('taskId')?.trim() || null;
   const taskScrollDoneRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (dossierId) rememberDossierListFocus('partenaire', dossierId);
+  }, [dossierId]);
   
   const [dossier, setDossier] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -426,7 +431,7 @@ export default function PartenaireDossierDetailPage() {
 
         {/* En-tête amélioré */}
         <div className="mb-6">
-          <Link href={`/partenaire/dossiers?dossierId=${encodeURIComponent(dossierId)}`} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
+          <Link href={dossierListFocusHref('partenaire', dossierId)} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-4 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>

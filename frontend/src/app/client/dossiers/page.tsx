@@ -13,6 +13,12 @@ import { Eye, Download } from 'lucide-react';
 import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getEditedEtapesOnly, customEtapeMatchesStatut, getDossierProgressFromEditedEtapes } from '@/lib/dossierUtils';
 import { normalizeDossierId, dossierListCardId } from '@/lib/dossierAccess';
 import {
+  rememberDossierListFocus,
+  resolveDossierListFocusId,
+  scrollToDossierListCard,
+  clearDossierListFocus,
+} from '@/lib/dossierListFocus';
+import {
   getDossierCustomStatutLabel,
   getDossierDisplayTitle,
   getDossierTransmittedPartners,
@@ -124,6 +130,7 @@ function DossiersContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const listFocusHandledRef = useRef<string | null>(null);
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -250,6 +257,36 @@ function DossiersContent() {
 
     return () => window.clearTimeout(timer);
   }, [searchParams, dossiers, expandedDossiers, router]);
+
+  useEffect(() => {
+    if (isLoading || dossiers.length === 0) return;
+    if (searchParams?.get('dossierId')) return;
+
+    const resolved = resolveDossierListFocusId('client', searchParams);
+    if (!resolved) return;
+    const focusId = resolved.dossierId;
+    if (listFocusHandledRef.current === focusId) return;
+    if (!dossiers.some((d: any) => normalizeDossierId(d._id || d.id) === focusId)) return;
+
+    setExpandedDossiers((prev) => {
+      if (!prev.has(focusId)) return prev;
+      const next = new Set(prev);
+      next.delete(focusId);
+      return next;
+    });
+
+    const timer = window.setTimeout(() => {
+      if (scrollToDossierListCard('client', focusId)) {
+        listFocusHandledRef.current = focusId;
+        clearDossierListFocus();
+        if (resolved.fromQuery) {
+          router.replace('/client/dossiers', { scroll: false });
+        }
+      }
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [searchParams, dossiers, isLoading, router]);
 
   // (Rafraîchissement automatique supprimé pour éviter les sursauts de page)
 
@@ -724,6 +761,7 @@ function DossiersContent() {
                       <div className="mt-3 flex flex-col gap-3 border-t border-gray-100 pt-3 sm:flex-row sm:items-center sm:justify-end">
                         <Link
                           href={detailHref}
+                          onClick={() => rememberDossierListFocus('client', dossierId)}
                           className="inline-flex items-center justify-center px-3 py-2 h-9 rounded-md bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors"
                         >
                           Détails

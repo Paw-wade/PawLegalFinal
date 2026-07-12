@@ -3776,11 +3776,27 @@ router.put(
         dossier.tarificationEcheances = [];
       }
 
-      // Gérer l'assignation
+      // Gérer l'assignation (référent) — synchroniser teamMembers pour l'accès restreint
       if (assignedTo !== undefined) {
         const previousAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
+        const leaderId = dossier.teamLeader
+          ? (dossier.teamLeader._id || dossier.teamLeader).toString()
+          : null;
+
+        const removeFromTeamMembersIfNotLeader = (userId) => {
+          if (!userId) return;
+          const id = userId.toString();
+          if (leaderId && leaderId === id) return;
+          if (!Array.isArray(dossier.teamMembers) || dossier.teamMembers.length === 0) return;
+          dossier.teamMembers = dossier.teamMembers.filter(
+            (m) => (m._id || m).toString() !== id
+          );
+        };
+
         if (assignedTo === '' || assignedTo === null) {
           dossier.assignedTo = null;
+          // Retrait de l'assignation → retirer aussi de l'équipe (sinon l'admin restreint garde l'accès)
+          removeFromTeamMembersIfNotLeader(previousAssignedTo);
         } else {
           const assignedUser = await User.findById(assignedTo);
           if (!assignedUser) {
@@ -3797,8 +3813,12 @@ router.put(
             });
           }
           dossier.assignedTo = assignedTo;
+          // Changement de référent : retirer l'ancien de l'équipe (sauf chef d'équipe)
+          if (previousAssignedTo && previousAssignedTo !== assignedTo.toString()) {
+            removeFromTeamMembersIfNotLeader(previousAssignedTo);
+          }
           // Un référent assigné doit aussi faire partie de l'équipe dossier.
-          const memberIds = (dossier.teamMembers || []).map((id) => id.toString());
+          const memberIds = (dossier.teamMembers || []).map((id) => (id._id || id).toString());
           if (!memberIds.includes(assignedTo.toString())) {
             dossier.teamMembers = [...(dossier.teamMembers || []), assignedTo];
           }
