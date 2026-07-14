@@ -103,6 +103,10 @@ const nextConfig = {
       },
     ],
   },
+  // Tree-shake lucide (gros catalogue) sans changer les imports existants
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
 };
 
 module.exports = nextConfig;
