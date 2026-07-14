@@ -1,7 +1,6 @@
-import NextAuth, { NextAuthOptions } from 'next-auth';
+import NextAuth, { type Account, type NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
-import type { Account } from 'next-auth/core/types';
 import { authApiPath } from '@/lib/publicApiUrl';
 
 /** Corps pour POST `/api/auth/google-login` — selon la version NextAuth, les clés peuvent varier. */
