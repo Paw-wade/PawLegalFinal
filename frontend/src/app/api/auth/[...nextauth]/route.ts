@@ -3,6 +3,33 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import { authApiPath } from '@/lib/publicApiUrl';
 
+/**
+ * NEXTAUTH_URL must be ONE origin (ex. https://www.adapapers.fr).
+ * A comma-separated list (often copied from FRONTEND_URL) produces an invalid
+ * Google redirect_uri → Error 400 invalid_request / OAuth policy block.
+ */
+(function sanitizeNextAuthUrl() {
+  const raw = String(process.env.NEXTAUTH_URL || '').trim();
+  if (!raw || !raw.includes(',')) return;
+  const parts = raw
+    .split(',')
+    .map((s) => s.trim().replace(/\/+$/, ''))
+    .filter(Boolean)
+    .map((s) => s.replace(/^http\/\//i, 'http://')); // common typo: http//host
+  const preferred =
+    parts.find((p) => /^https:\/\/www\.adapapers\.fr$/i.test(p)) ||
+    parts.find((p) => /^https:\/\/adapapers\.fr$/i.test(p)) ||
+    parts.find((p) => p.startsWith('https://') && !/sslip\.io/i.test(p)) ||
+    parts.find((p) => p.startsWith('https://')) ||
+    parts[0];
+  if (preferred) {
+    console.warn(
+      `[NextAuth] NEXTAUTH_URL was a list — using single URL: ${preferred} (fix Coolify env to this value only)`
+    );
+    process.env.NEXTAUTH_URL = preferred;
+  }
+})();
+
 /** Corps pour POST `/api/auth/google-login` — selon la version NextAuth, les clés peuvent varier. */
 function bodyForGoogleLogin(account: Account | null) {
   const a = account as Record<string, unknown> | null;
@@ -90,16 +117,25 @@ const providers: NextAuthOptions['providers'] = [
 ];
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  const googleAuthParams = {
+    prompt: 'select_account',
+    access_type: 'online' as const,
+    response_type: 'code' as const,
+  };
   providers.push(
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true,
+      authorization: { params: googleAuthParams },
     }),
     GoogleProvider({
       id: 'google-signup',
       name: 'Google Signup',
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true,
+      authorization: { params: googleAuthParams },
     })
   );
 }
@@ -282,6 +318,8 @@ const authOptions: NextAuthOptions = {
     // Réécrit la session au fil de l'eau pour conserver une expérience continue.
     updateAge: 24 * 60 * 60,
   },
+  // Coolify / reverse-proxy HTTPS : cookies Secure alignés sur NEXTAUTH_URL
+  useSecureCookies: String(process.env.NEXTAUTH_URL || '').startsWith('https://'),
   secret: process.env.NEXTAUTH_SECRET || 'your-secret-key-change-this-in-production',
 };
 

@@ -85,11 +85,22 @@ export default function SignInPage() {
       );
       return;
     }
+    if (authError === 'OAuthCallback' || authError === 'Callback' || authError === 'OAuthSignin') {
+      setError(
+        decodedMsg ||
+          'Échec du retour Google (OAuthCallback). Vérifiez dans Google Console les URI de redirection exactes pour cette URL (…/api/auth/callback/google et …/google-signup), que NEXTAUTH_URL = l’URL de la barre d’adresse, puis videz les cookies du site et réessayez en navigation privée.'
+      );
+      return;
+    }
     if (decodedMsg) {
       setError(decodedMsg);
       return;
     }
-    setError('La connexion externe a échoué. Veuillez réessayer.');
+    setError(
+      authError
+        ? `La connexion externe a échoué (${authError}). Veuillez réessayer.`
+        : 'La connexion externe a échoué. Veuillez réessayer.'
+    );
   }, []);
 
   const handleSubmit = async (e: any) => {

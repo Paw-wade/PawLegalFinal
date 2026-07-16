@@ -111,10 +111,12 @@ const nextConfig = {
 
 module.exports = nextConfig;
 
-// Bindings Cloudflare en `next dev` (Workers / OpenNext)
-try {
-  const { initOpenNextCloudflareForDev } = require('@opennextjs/cloudflare');
-  initOpenNextCloudflareForDev();
-} catch {
-  // Package absent hors install Workers — ignorer
+// Bindings Cloudflare en `next dev` (Workers / OpenNext) — opt-in (plante souvent sous Windows)
+if (process.env.OPENNEXT_CLOUDFLARE_DEV === '1') {
+  try {
+    const { initOpenNextCloudflareForDev } = require('@opennextjs/cloudflare');
+    initOpenNextCloudflareForDev();
+  } catch {
+    // Package absent hors install Workers — ignorer
+  }
 }

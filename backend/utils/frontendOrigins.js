@@ -104,12 +104,26 @@ function pickHttpsEmailBase(remoteHttps) {
 /**
  * Base URL pour les liens dans les e-mails (Brevo / SMTP).
  * Ne doit pas être confondue avec l’URL de l’API (api.adapapers.fr).
+ *
+ * Ordre : PUBLIC_APP_URL / CLIENT_URL (HTTPS distant), puis FRONTEND_URL.
+ * Un PUBLIC_APP_URL en localhost ne doit pas écraser un CLIENT_URL de prod
+ * (sinon les e-mails de reset pointent vers localhost et le parcours casse).
  */
 function getPrimaryFrontendUrl() {
-  const explicit = stripTrailingSlashes(process.env.PUBLIC_APP_URL || '');
-  if (explicit) {
-    return publicSiteUrlFromPossiblyApiUrl(explicit);
-  }
+  const envCandidates = [
+    process.env.PUBLIC_APP_URL,
+    process.env.CLIENT_URL,
+  ]
+    .map((u) => publicSiteUrlFromPossiblyApiUrl(stripTrailingSlashes(u || '')))
+    .filter(Boolean);
+
+  const remoteHttpsEnv = envCandidates.find(
+    (u) => u.toLowerCase().startsWith('https://') && !isLocalhostOrigin(u)
+  );
+  if (remoteHttpsEnv) return remoteHttpsEnv;
+
+  const remoteAnyEnv = envCandidates.find((u) => !isLocalhostOrigin(u));
+  if (remoteAnyEnv) return remoteAnyEnv;
 
   const list = getFrontendOriginsList();
   const normalized = list.map((u) => stripTrailingSlashes(u)).filter(Boolean);
@@ -129,6 +143,8 @@ function getPrimaryFrontendUrl() {
   if (remoteHttp.length > 0) {
     return remoteHttp[0];
   }
+
+  if (envCandidates.length > 0) return envCandidates[0];
 
   return normalized[0] || 'http://localhost:3004';
 }
