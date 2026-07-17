@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { forumAPI } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { ForumTextEditor, stripForumFormatting } from '@/components/forum/ForumRichText';
 import { FORUM_THEMES, getThemeLabel, type ForumThemeValue } from './forum-utils';
 
 interface ForumThread {
@@ -18,6 +19,8 @@ interface ForumThread {
   createdAt: string;
   status?: string;
   isPinned?: boolean;
+  isVerified?: boolean;
+  isRejected?: boolean;
   createdBy?: {
     prenom?: string;
     nom?: string;
@@ -214,7 +217,7 @@ export default function ForumPage() {
   };
 
   const getExcerpt = (raw: string, max = 180) => {
-    const normalized = (raw || '').replace(/\s+/g, ' ').trim();
+    const normalized = stripForumFormatting(raw || '').replace(/\s+/g, ' ').trim();
     if (normalized.length <= max) return normalized;
     return `${normalized.slice(0, max).trimEnd()}...`;
   };
@@ -237,7 +240,7 @@ export default function ForumPage() {
     <>
       <Header variant="home" />
       <main className="min-h-screen bg-gray-50">
-        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-6">
+        <div className="max-w-7xl mx-auto px-3 sm:px-5 py-4 sm:py-8 space-y-6">
         <header className="mb-8">
           <h1 className="text-2xl md:text-3xl font-bold">Forum Ada Papers</h1>
           <p className="text-sm md:text-base text-gray-600 mt-2">
@@ -333,7 +336,7 @@ export default function ForumPage() {
           )}
         </section>
 
-        <div className="lg:grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)] lg:gap-6 items-start">
+        <div className="lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(260px,0.9fr)] lg:gap-6 items-start">
           {/* Colonne principale */}
           <div className="space-y-8">
             {/* Création d'une nouvelle discussion — compact, champs un par un */}
@@ -405,11 +408,11 @@ export default function ForumPage() {
                         <label htmlFor="forum-body" className="block text-sm font-medium text-gray-700 mb-0.5">
                           Message
                         </label>
-                        <textarea
+                        <ForumTextEditor
                           id="forum-body"
                           value={body}
-                          onChange={(e) => setBody(e.target.value)}
-                          className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 min-h-[80px]"
+                          onChange={setBody}
+                          minHeightClass="min-h-[120px]"
                           placeholder="Décrivez votre situation (sans données sensibles)."
                         />
                       </div>
@@ -494,8 +497,8 @@ export default function ForumPage() {
                                 {thread.title}
                               </h3>
                             </div>
-                            <p className="mt-1 text-xs md:text-sm text-gray-600 line-clamp-2 break-words">
-                              {thread.body}
+                            <p className="mt-1 text-xs md:text-sm text-gray-600 line-clamp-2 break-words text-justify">
+                              {stripForumFormatting(thread.body)}
                             </p>
                             <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 text-[11px] md:text-xs text-gray-500">
                               <span className="break-words">
@@ -529,6 +532,16 @@ export default function ForumPage() {
                               {thread.isPinned && (
                                 <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
                                   Épinglée
+                                </span>
+                              )}
+                              {thread.isVerified && (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                  Vérifiée
+                                </span>
+                              )}
+                              {thread.isRejected && (
+                                <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-100">
+                                  Désapprouvée
                                 </span>
                               )}
                             </div>

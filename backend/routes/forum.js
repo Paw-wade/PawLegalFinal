@@ -143,10 +143,13 @@ router.get('/threads', optionalProtect, async (req, res) => {
 
     // Filtre thème : "autres" inclut aussi les documents sans thème (anciennes discussions)
     let filter = theme === null
-      ? {}
+      ? { isDeleted: { $ne: true } }
       : theme === 'autres'
-        ? { $or: [ { theme: 'autres' }, { theme: null }, { theme: { $exists: false } } ] }
-        : { theme };
+        ? {
+            isDeleted: { $ne: true },
+            $or: [ { theme: 'autres' }, { theme: null }, { theme: { $exists: false } } ],
+          }
+        : { theme, isDeleted: { $ne: true } };
 
     // Filtre statut : épinglées, résolues, archivées
     if (statusFilter === 'pinned') {
@@ -329,11 +332,14 @@ router.get('/threads/:id', optionalProtect, async (req, res) => {
   try {
     const threadId = req.params.id;
 
-    const thread = await ForumThread.findByIdAndUpdate(
-      threadId,
+    const thread = await ForumThread.findOneAndUpdate(
+      { _id: threadId, isDeleted: { $ne: true } },
       { $inc: { viewsCount: 1 } },
       { new: true }
-    ).populate('createdBy', 'prenom nom role');
+    )
+      .populate('createdBy', 'prenom nom role')
+      .populate('verifiedBy', 'prenom nom role')
+      .populate('rejectedBy', 'prenom nom role');
 
     if (!thread) {
       return res.status(404).json({ success: false, message: 'Discussion introuvable' });
@@ -382,7 +388,10 @@ router.post(
       const parentPostIdRaw = req.body.parentPostId;
       const parentPostId = typeof parentPostIdRaw === 'string' && parentPostIdRaw.trim() ? parentPostIdRaw.trim() : null;
 
-      const thread = await ForumThread.findById(threadId);
+      const thread = await ForumThread.findOne({
+        _id: threadId,
+        isDeleted: { $ne: true },
+      });
       if (!thread) {
         return res.status(404).json({ success: false, message: 'Discussion introuvable' });
       }
@@ -527,7 +536,7 @@ router.post(
   }
 );
 
-// PATCH /api/forum/threads/:id - Mise à jour par un administrateur (statut, épinglage)
+// PATCH /api/forum/threads/:id - Modifier une discussion (contenu + modération, admin)
 router.patch(
   '/threads/:id',
   protect,
@@ -541,6 +550,22 @@ router.patch(
       .optional()
       .isBoolean()
       .withMessage("Le champ isPinned doit être un booléen"),
+    body('title')
+      .optional()
+      .isString()
+      .trim()
+      .isLength({ min: 5, max: 200 })
+      .withMessage('Le titre doit contenir entre 5 et 200 caractères'),
+    body('body')
+      .optional()
+      .isString()
+      .trim()
+      .isLength({ min: 10 })
+      .withMessage('Le contenu doit contenir au moins 10 caractères'),
+    body('theme')
+      .optional()
+      .isIn(THEMES)
+      .withMessage('Thème invalide'),
   ],
   handleValidationErrors,
   async (req, res) => {
@@ -554,12 +579,24 @@ router.patch(
       if (typeof req.body.isPinned === 'boolean') {
         updates.isPinned = req.body.isPinned;
       }
+      if (typeof req.body.title === 'string') {
+        updates.title = req.body.title.trim();
+      }
+      if (typeof req.body.body === 'string') {
+        updates.body = req.body.body.trim();
+      }
+      if (typeof req.body.theme === 'string') {
+        updates.theme = req.body.theme;
+      }
+      updates.updatedAt = new Date();
 
-      const thread = await ForumThread.findByIdAndUpdate(
-        threadId,
+      const thread = await ForumThread.findOneAndUpdate(
+        { _id: threadId, isDeleted: { $ne: true } },
         { $set: updates },
         { new: true }
-      );
+      )
+        .populate('verifiedBy', 'prenom nom role')
+        .populate('rejectedBy', 'prenom nom role');
 
       if (!thread) {
         return res.status(404).json({ success: false, message: 'Discussion introuvable' });
@@ -569,6 +606,118 @@ router.patch(
     } catch (error) {
       console.error('Erreur lors de la mise à jour de la discussion (admin):', error);
       res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+  }
+);
+
+// DELETE /api/forum/threads/:id - Suppression douce d'une discussion et de ses réponses (admin)
+router.delete(
+  '/threads/:id',
+  protect,
+  authorize('admin', 'superadmin'),
+  async (req, res) => {
+    try {
+      const thread = await ForumThread.findOne({
+        _id: req.params.id,
+        isDeleted: { $ne: true },
+      });
+      if (!thread) {
+        return res.status(404).json({ success: false, message: 'Discussion introuvable' });
+      }
+
+      const now = new Date();
+      thread.isDeleted = true;
+      thread.deletedAt = now;
+      thread.deletedBy = req.user._id;
+      await thread.save();
+
+      await ForumPost.updateMany(
+        { thread: thread._id, isDeleted: false },
+        {
+          $set: {
+            isDeleted: true,
+            deletedAt: now,
+            deletedBy: req.user._id,
+          },
+        }
+      );
+
+      return res.json({ success: true, message: 'Discussion supprimée' });
+    } catch (error) {
+      console.error('Erreur lors de la suppression de la discussion (admin):', error);
+      return res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+  }
+);
+
+// PATCH /api/forum/threads/:id/verify - Approuver / désapprouver une discussion (admin)
+router.patch(
+  '/threads/:id/verify',
+  protect,
+  authorize('admin', 'superadmin'),
+  [
+    body('isVerified').optional().isBoolean().withMessage('isVerified doit être un booléen'),
+    body('isRejected').optional().isBoolean().withMessage('isRejected doit être un booléen'),
+  ],
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const hasVerified = typeof req.body.isVerified === 'boolean';
+      const hasRejected = typeof req.body.isRejected === 'boolean';
+      if (!hasVerified && !hasRejected) {
+        return res.status(400).json({
+          success: false,
+          message: 'Veuillez fournir isVerified ou isRejected.',
+        });
+      }
+      if (hasVerified && hasRejected && req.body.isVerified && req.body.isRejected) {
+        return res.status(400).json({
+          success: false,
+          message: 'Une discussion ne peut pas être approuvée et désapprouvée en même temps.',
+        });
+      }
+
+      const thread = await ForumThread.findOne({
+        _id: req.params.id,
+        isDeleted: { $ne: true },
+      });
+      if (!thread) {
+        return res.status(404).json({ success: false, message: 'Discussion introuvable' });
+      }
+
+      if (hasVerified) thread.isVerified = req.body.isVerified;
+      if (hasRejected) thread.isRejected = req.body.isRejected;
+
+      if (thread.isVerified) {
+        thread.verifiedAt = new Date();
+        thread.verifiedBy = req.user._id;
+        thread.isRejected = false;
+        thread.rejectedAt = null;
+        thread.rejectedBy = null;
+      } else {
+        thread.verifiedAt = null;
+        thread.verifiedBy = null;
+      }
+
+      if (thread.isRejected) {
+        thread.rejectedAt = new Date();
+        thread.rejectedBy = req.user._id;
+        thread.isVerified = false;
+        thread.verifiedAt = null;
+        thread.verifiedBy = null;
+      } else {
+        thread.rejectedAt = null;
+        thread.rejectedBy = null;
+      }
+
+      await thread.save();
+      await thread.populate('verifiedBy', 'prenom nom role');
+      await thread.populate('rejectedBy', 'prenom nom role');
+
+      return res.json({ success: true, data: thread });
+    } catch (error) {
+      console.error('Erreur lors de la modération de la discussion:', error);
+      return res.status(500).json({ success: false, message: 'Erreur serveur' });
     }
   }
 );
@@ -821,7 +970,10 @@ router.post('/threads/:id/like', optionalProtect, async (req, res) => {
       });
     }
 
-    const thread = await ForumThread.findById(threadId);
+    const thread = await ForumThread.findOne({
+      _id: threadId,
+      isDeleted: { $ne: true },
+    });
     if (!thread) {
       return res.status(404).json({ success: false, message: 'Discussion introuvable' });
     }
@@ -853,7 +1005,10 @@ router.post('/threads/:id/bookmark', protect, async (req, res) => {
     const threadId = req.params.id;
     const userId = req.user.id;
 
-    const thread = await ForumThread.findById(threadId);
+    const thread = await ForumThread.findOne({
+      _id: threadId,
+      isDeleted: { $ne: true },
+    });
     if (!thread) {
       return res.status(404).json({ success: false, message: 'Discussion introuvable' });
     }
@@ -900,6 +1055,7 @@ router.get('/bookmarks', protect, async (req, res) => {
     const user = await User.findById(req.user.id).populate({
       path: 'forumBookmarks.thread',
       select: 'title theme status isPinned lastReplyAt repliesCount',
+      match: { isDeleted: { $ne: true } },
     });
 
     if (!user) {
@@ -945,7 +1101,10 @@ router.get('/bookmarks', protect, async (req, res) => {
 router.post('/threads/:id/mark-read', protect, async (req, res) => {
   try {
     const threadId = req.params.id;
-    const thread = await ForumThread.findById(threadId).select('_id');
+    const thread = await ForumThread.findOne({
+      _id: threadId,
+      isDeleted: { $ne: true },
+    }).select('_id');
     if (!thread) {
       return res.status(404).json({ success: false, message: 'Discussion introuvable' });
     }
@@ -992,6 +1151,7 @@ router.get('/unread-count', protect, async (req, res) => {
     const myThreads = await ForumThread.find({
       createdBy: userId,
       repliesCount: { $gt: 0 },
+      isDeleted: { $ne: true },
     })
       .select('_id createdAt lastReplyAt')
       .lean();
@@ -1017,7 +1177,10 @@ router.get('/unread-count', protect, async (req, res) => {
             ? raw.toString()
             : '';
       if (!tid) continue;
-      const thread = await ForumThread.findById(tid).select('lastReplyAt lastReplyBy').lean();
+      const thread = await ForumThread.findOne({
+        _id: tid,
+        isDeleted: { $ne: true },
+      }).select('lastReplyAt lastReplyBy').lean();
       if (!thread || !thread.lastReplyAt) continue;
       const readAt = readsMap.get(tid) || new Date(0);
       const baseline = new Date(

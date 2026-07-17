@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { forumAPI } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { getThemeLabel } from '../forum-utils';
+import { ForumFormattedText, ForumTextEditor, stripForumFormatting } from '@/components/forum/ForumRichText';
+import { FORUM_THEMES, getThemeLabel, type ForumThemeValue } from '../forum-utils';
 
 interface ForumThread {
   _id: string;
@@ -19,6 +20,8 @@ interface ForumThread {
   createdAt: string;
   status?: string;
   isPinned?: boolean;
+  isVerified?: boolean;
+  isRejected?: boolean;
   createdBy?: {
     prenom?: string;
     nom?: string;
@@ -76,6 +79,7 @@ const getAuthorLabel = (user?: { prenom?: string; nom?: string; role?: string },
 
 export default function ForumThreadPage() {
   const params = useParams();
+  const router = useRouter();
   const { status, data: session } = useSession();
   const threadId = typeof params?.id === 'string' ? params.id : Array.isArray(params?.id) ? params.id[0] : '';
 
@@ -89,6 +93,12 @@ export default function ForumThreadPage() {
   const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [updatingThread, setUpdatingThread] = useState(false);
+  const [editingThread, setEditingThread] = useState(false);
+  const [editingThreadTitle, setEditingThreadTitle] = useState('');
+  const [editingThreadBody, setEditingThreadBody] = useState('');
+  const [editingThreadTheme, setEditingThreadTheme] = useState<ForumThemeValue>('autres');
+  const [deletingThread, setDeletingThread] = useState(false);
+  const [verifyingThread, setVerifyingThread] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [verifyingPostId, setVerifyingPostId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
@@ -96,7 +106,7 @@ export default function ForumThreadPage() {
   const [savingPostId, setSavingPostId] = useState<string | null>(null);
   const [openShareId, setOpenShareId] = useState<string | null>(null);
   const shareMenuRef = useRef<HTMLDivElement | null>(null);
-  const mainReplyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const mainReplyTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [allThreads, setAllThreads] = useState<ForumThread[]>([]);
   const [loadingThreads, setLoadingThreads] = useState<boolean>(true);
@@ -276,7 +286,7 @@ export default function ForumThreadPage() {
   };
 
   const getExcerpt = (raw: string, max = 180) => {
-    const normalized = (raw || '').replace(/\s+/g, ' ').trim();
+    const normalized = stripForumFormatting(raw || '').replace(/\s+/g, ' ').trim();
     if (normalized.length <= max) return normalized;
     return `${normalized.slice(0, max).trimEnd()}...`;
   };
@@ -324,7 +334,13 @@ export default function ForumThreadPage() {
     return idx >= 0 ? `Réponse #${idx + 1}` : 'cette réponse';
   }, [replyTargetId, threadedPosts]);
 
-  const handleAdminUpdateThread = async (updates: { status?: 'open' | 'closed' | 'archived' | 'resolved'; isPinned?: boolean }) => {
+  const handleAdminUpdateThread = async (updates: {
+    title?: string;
+    body?: string;
+    theme?: string;
+    status?: 'open' | 'closed' | 'archived' | 'resolved';
+    isPinned?: boolean;
+  }) => {
     if (!threadId) return;
     try {
       setUpdatingThread(true);
@@ -339,6 +355,62 @@ export default function ForumThreadPage() {
       setError("Impossible de mettre à jour la discussion.");
     } finally {
       setUpdatingThread(false);
+    }
+  };
+
+  const handleAdminStartEditThread = () => {
+    if (!thread) return;
+    setEditingThreadTitle(thread.title || '');
+    setEditingThreadBody(thread.body || '');
+    setEditingThreadTheme(
+      FORUM_THEMES.some((item) => item.value === thread.theme)
+        ? (thread.theme as ForumThemeValue)
+        : 'autres'
+    );
+    setEditingThread(true);
+  };
+
+  const handleAdminSaveThread = async () => {
+    if (!editingThreadTitle.trim() || !editingThreadBody.trim()) return;
+    await handleAdminUpdateThread({
+      title: editingThreadTitle.trim(),
+      body: editingThreadBody.trim(),
+      theme: editingThreadTheme,
+    });
+    setEditingThread(false);
+  };
+
+  const handleAdminDeleteThread = async () => {
+    if (!threadId || !window.confirm('Supprimer cette discussion et toutes ses réponses ?')) return;
+    try {
+      setDeletingThread(true);
+      setError(null);
+      await forumAPI.deleteThreadAsAdmin(threadId);
+      router.push('/forum');
+      router.refresh();
+    } catch (err) {
+      console.error('Erreur lors de la suppression de la discussion:', err);
+      setError('Impossible de supprimer la discussion.');
+      setDeletingThread(false);
+    }
+  };
+
+  const handleAdminVerifyThread = async (data: {
+    isVerified?: boolean;
+    isRejected?: boolean;
+  }) => {
+    if (!threadId) return;
+    try {
+      setVerifyingThread(true);
+      setError(null);
+      const response = await forumAPI.verifyThreadAsAdmin(threadId, data);
+      const updated = response.data?.data as ForumThread;
+      if (updated) setThread(updated);
+    } catch (err) {
+      console.error('Erreur lors de la modération de la discussion:', err);
+      setError("Impossible de mettre à jour l'état de validation de la discussion.");
+    } finally {
+      setVerifyingThread(false);
     }
   };
 
@@ -432,7 +504,7 @@ export default function ForumThreadPage() {
     <>
       <Header variant="home" />
       <main className="min-h-screen bg-gray-50">
-        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-5 py-4 sm:py-8">
           <div className="mb-4">
             <Link
               href="/forum"
@@ -464,7 +536,7 @@ export default function ForumThreadPage() {
             </section>
           )}
 
-          <div className="lg:grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)] lg:gap-6 items-start">
+          <div className="lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(260px,0.9fr)] lg:gap-6 items-start">
             {/* Colonne principale */}
             <div>
               {loading ? (
@@ -479,17 +551,91 @@ export default function ForumThreadPage() {
                   <section className="mb-4 sm:mb-6 rounded-xl border border-gray-200 bg-white shadow-sm p-4 sm:p-5">
                     <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
                       <div className="order-2 sm:order-1 flex-1 min-w-0">
-                        <div className="mb-2 flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs border border-slate-200">
-                            {getThemeLabel(thread.theme)}
-                          </span>
-                          <h1 className="text-xl md:text-2xl font-semibold text-gray-900 break-words">
-                            {thread.title}
-                          </h1>
-                        </div>
-                        <p className="mt-2 text-sm sm:text-[15px] text-gray-800 leading-relaxed">
-                          {thread.body}
-                        </p>
+                        {editingThread ? (
+                          <div className="space-y-3 rounded-lg border border-orange-200 bg-orange-50/30 p-3">
+                            <div>
+                              <label htmlFor="forum-thread-edit-theme" className="mb-1 block text-xs font-medium text-gray-700">
+                                Thème
+                              </label>
+                              <select
+                                id="forum-thread-edit-theme"
+                                value={editingThreadTheme}
+                                onChange={(event) => setEditingThreadTheme(event.target.value as ForumThemeValue)}
+                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                              >
+                                {FORUM_THEMES.map((item) => (
+                                  <option key={item.value} value={item.value}>{item.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label htmlFor="forum-thread-edit-title" className="mb-1 block text-xs font-medium text-gray-700">
+                                Titre
+                              </label>
+                              <input
+                                id="forum-thread-edit-title"
+                                value={editingThreadTitle}
+                                onChange={(event) => setEditingThreadTitle(event.target.value)}
+                                maxLength={200}
+                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor="forum-thread-edit-body" className="mb-1 block text-xs font-medium text-gray-700">
+                                Contenu
+                              </label>
+                              <ForumTextEditor
+                                id="forum-thread-edit-body"
+                                value={editingThreadBody}
+                                onChange={setEditingThreadBody}
+                                minHeightClass="min-h-[180px]"
+                              />
+                            </div>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingThread(false)}
+                                disabled={updatingThread}
+                                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100"
+                              >
+                                Annuler
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleAdminSaveThread}
+                                disabled={updatingThread || editingThreadTitle.trim().length < 5 || editingThreadBody.trim().length < 10}
+                                className="rounded-md bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+                              >
+                                {updatingThread ? 'Enregistrement...' : 'Enregistrer'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="mb-2 flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+                              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs border border-slate-200">
+                                {getThemeLabel(thread.theme)}
+                              </span>
+                              <h1 className="text-xl md:text-2xl font-semibold text-gray-900 break-words">
+                                {thread.title}
+                              </h1>
+                              {thread.isVerified && (
+                                <span className="rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+                                  ✓ Vérifiée
+                                </span>
+                              )}
+                              {thread.isRejected && (
+                                <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+                                  Désapprouvée
+                                </span>
+                              )}
+                            </div>
+                            <ForumFormattedText
+                              value={thread.body}
+                              className="mt-3 text-sm sm:text-[15px] text-gray-800 leading-7"
+                            />
+                          </>
+                        )}
                         <div className="mt-3 flex flex-col gap-2 text-[11px] md:text-xs text-gray-500">
                           <span className="break-words">
                             {thread.repliesCount || posts.length} réponse{(thread.repliesCount || posts.length) === 1 ? '' : 's'} •{' '}
@@ -638,6 +784,36 @@ export default function ForumThreadPage() {
                           <div className="mt-1 flex flex-wrap gap-1 justify-start sm:justify-end">
                             <button
                               type="button"
+                              disabled={updatingThread || deletingThread}
+                              onClick={() => editingThread ? setEditingThread(false) : handleAdminStartEditThread()}
+                              className="px-2 py-0.5 rounded border border-orange-300 bg-orange-50 text-orange-800 hover:bg-orange-100 disabled:opacity-50"
+                            >
+                              {editingThread ? 'Fermer édition' : 'Modifier'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={verifyingThread}
+                              onClick={() => handleAdminVerifyThread({
+                                isVerified: !thread.isVerified,
+                                isRejected: false,
+                              })}
+                              className="px-2 py-0.5 rounded border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                            >
+                              {thread.isVerified ? 'Retirer Vérifiée' : 'Marquer Vérifiée'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={verifyingThread}
+                              onClick={() => handleAdminVerifyThread({
+                                isRejected: !thread.isRejected,
+                                isVerified: false,
+                              })}
+                              className="px-2 py-0.5 rounded border border-red-300 bg-red-50 text-red-800 hover:bg-red-100 disabled:opacity-50"
+                            >
+                              {thread.isRejected ? 'Retirer Désapprouvée' : 'Désapprouver'}
+                            </button>
+                            <button
+                              type="button"
                               disabled={updatingThread}
                               onClick={() =>
                                 handleAdminUpdateThread({ isPinned: !thread.isPinned })
@@ -681,6 +857,14 @@ export default function ForumThreadPage() {
                               className="px-2 py-0.5 rounded border border-gray-300 bg-white hover:bg-gray-100"
                             >
                               {thread.status === 'resolved' ? 'Marquer comme non résolue' : 'Marquer comme résolue'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingThread}
+                              onClick={handleAdminDeleteThread}
+                              className="px-2 py-0.5 rounded border border-red-400 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                            >
+                              {deletingThread ? 'Suppression...' : 'Supprimer'}
                             </button>
                           </div>
                         )}
@@ -750,10 +934,10 @@ export default function ForumThreadPage() {
                                 </div>
                                 {canEditPost(post) && editingPostId === post._id ? (
                                   <div className="space-y-2">
-                                    <textarea
+                                    <ForumTextEditor
                                       value={editingBody}
-                                      onChange={(e) => setEditingBody(e.target.value)}
-                                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 min-h-[90px]"
+                                      onChange={setEditingBody}
+                                      minHeightClass="min-h-[120px]"
                                       placeholder="Modifier la réponse..."
                                     />
                                     <div className="flex flex-wrap items-center gap-2">
@@ -776,9 +960,10 @@ export default function ForumThreadPage() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <p className="text-gray-800 whitespace-pre-line break-words">
-                                    {post.body}
-                                  </p>
+                                  <ForumFormattedText
+                                    value={post.body}
+                                    className="text-gray-800 leading-6"
+                                  />
                                 )}
                                 <div className="mt-2 flex w-full flex-row flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500">
                                   <span className="break-words">
@@ -889,10 +1074,10 @@ export default function ForumThreadPage() {
                                         placeholder="Votre nom (optionnel)"
                                       />
                                     )}
-                                    <textarea
+                                    <ForumTextEditor
                                       value={replyBody}
-                                      onChange={(e) => setReplyBody(e.target.value)}
-                                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 min-h-[90px]"
+                                      onChange={setReplyBody}
+                                      minHeightClass="min-h-[110px]"
                                       placeholder="Écrivez votre réponse..."
                                     />
                                     <div className="flex justify-end">
@@ -1006,11 +1191,11 @@ export default function ForumThreadPage() {
                           </div>
                         )}
                         <div>
-                          <textarea
-                            ref={mainReplyTextareaRef}
+                          <ForumTextEditor
+                            textareaRef={mainReplyTextareaRef}
                             value={replyBody}
-                            onChange={(e) => setReplyBody(e.target.value)}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 min-h-[100px]"
+                            onChange={setReplyBody}
+                            minHeightClass="min-h-[140px]"
                             placeholder="Écrivez votre réponse en restant clair, respectueux et sans données trop personnelles."
                           />
                         </div>

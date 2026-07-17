@@ -1485,9 +1485,23 @@ export const forumAPI = {
   replyToThread: (id: string, data: { body: string; guestName?: string; parentPostId?: string }) =>
     api.post(`/forum/threads/${id}/posts`, data),
 
-  // Admin - mettre à jour une discussion (statut / épinglage)
-  updateThreadAsAdmin: (id: string, data: { status?: 'open' | 'closed' | 'archived' | 'resolved'; isPinned?: boolean }) =>
+  // Admin - modifier une discussion (contenu / thème / statut / épinglage)
+  updateThreadAsAdmin: (id: string, data: {
+    title?: string;
+    body?: string;
+    theme?: string;
+    status?: 'open' | 'closed' | 'archived' | 'resolved';
+    isPinned?: boolean;
+  }) =>
     api.patch(`/forum/threads/${id}`, data),
+
+  // Admin - supprimer une discussion et ses réponses
+  deleteThreadAsAdmin: (id: string) =>
+    api.delete(`/forum/threads/${id}`),
+
+  // Admin - approuver / désapprouver une discussion
+  verifyThreadAsAdmin: (id: string, data: { isVerified?: boolean; isRejected?: boolean }) =>
+    api.patch(`/forum/threads/${id}/verify`, data),
 
   // Admin - supprimer une réponse
   deletePostAsAdmin: (postId: string) =>
