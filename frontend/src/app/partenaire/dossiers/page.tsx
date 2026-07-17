@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { dossiersAPI, documentRequestsAPI, notificationsAPI, messagesAPI, documentsAPI, tasksAPI, collaborativeDraftsAPI } from '@/lib/api';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, PARTENAIRE_FORM_STATUT_VALUES, isPartenaireFormStatutValue, isClosedDossier, isArchivedDossier } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getStatutLabelWithEtapes, getPrioriteColor, getDossierProgress, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, PARTENAIRE_FORM_STATUT_VALUES, isPartenaireFormStatutValue, isClosedDossier, isArchivedDossier } from '@/lib/dossierUtils';
 import { getStatutColor as getTaskStatutColor, getStatutLabel as getTaskStatutLabel, getPrioriteColor as getTaskPrioriteColor, getPrioriteLabel as getTaskPrioriteLabel } from '@/lib/taskUtils';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -306,7 +306,7 @@ export default function PartenaireDossiersPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [showRefuseModal, setShowRefuseModal] = useState<{ dossierId: string; dossierTitre: string } | null>(null);
   const [motifRefus, setMotifRefus] = useState('');
-  const [showStatutModal, setShowStatutModal] = useState<{ dossierId: string; dossierTitre: string; currentStatut: string; newStatut: string } | null>(null);
+  const [showStatutModal, setShowStatutModal] = useState<{ dossierId: string; dossierTitre: string; currentStatut: string; newStatut: string; etapes?: any[] } | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'pending' | 'in_progress' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
@@ -1064,7 +1064,8 @@ export default function PartenaireDossiersPage() {
         dossierId,
         dossierTitre: dossier.titre,
         currentStatut: dossier.statut,
-        newStatut
+        newStatut,
+        etapes: dossier.etapesSupplementaires
       });
       setNotificationMessage(''); // Réinitialiser le message
     }
@@ -1437,7 +1438,7 @@ export default function PartenaireDossiersPage() {
                           formData.statut &&
                           !isPartenaireFormStatutValue(formData.statut) && (
                             <option value={formData.statut}>
-                              {getStatutLabel(formData.statut)} (statut actuel)
+                              {getStatutLabelWithEtapes(formData.statut, editingDossier?.etapesSupplementaires)} (statut actuel)
                             </option>
                           )}
                         {PARTENAIRE_FORM_STATUT_VALUES.map((value) => (
@@ -3063,10 +3064,10 @@ export default function PartenaireDossiersPage() {
             </p>
             <div className="mb-4">
               <p className="text-sm mb-2">
-                <span className="font-medium">Statut actuel :</span> {getStatutLabel(showStatutModal.currentStatut)}
+                <span className="font-medium">Statut actuel :</span> {getStatutLabelWithEtapes(showStatutModal.currentStatut, showStatutModal.etapes)}
               </p>
               <p className="text-sm mb-4">
-                <span className="font-medium">Nouveau statut :</span> <span className="text-primary font-semibold">{getStatutLabel(showStatutModal.newStatut)}</span>
+                <span className="font-medium">Nouveau statut :</span> <span className="text-primary font-semibold">{getStatutLabelWithEtapes(showStatutModal.newStatut, showStatutModal.etapes)}</span>
               </p>
             </div>
             <div className="mb-4">
@@ -3077,7 +3078,7 @@ export default function PartenaireDossiersPage() {
                 id="notificationMessage"
                 value={notificationMessage}
                 onChange={(e) => setNotificationMessage(e.target.value)}
-                placeholder={`Ex: Votre dossier "${showStatutModal.dossierTitre}" a été mis à jour. Le statut est maintenant "${getStatutLabel(showStatutModal.newStatut)}".`}
+                placeholder={`Ex: Votre dossier "${showStatutModal.dossierTitre}" a été mis à jour. Le statut est maintenant "${getStatutLabelWithEtapes(showStatutModal.newStatut, showStatutModal.etapes)}".`}
                 rows={5}
                 className="w-full"
               />

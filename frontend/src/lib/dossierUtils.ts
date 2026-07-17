@@ -61,8 +61,40 @@ export const getStatutLabel = (statut: string): string => {
     termine: 'Terminé',
     annule: 'Annulé',
   };
-  return labels[statut] || statut;
+  if (labels[statut]) return labels[statut];
+  // Étape personnalisée dont le libellé n'est pas résoluble ici (id technique custom_<timestamp>)
+  if (isCustomStatutId(statut)) return 'Étape personnalisée';
+  return statut;
 };
+
+/** Id technique d'étape personnalisée (ex. custom_1784307447137) — ne doit jamais être affiché tel quel. */
+export const isCustomStatutId = (statut: string | null | undefined): boolean =>
+  /^custom[_-]\d+$/i.test(String(statut || '').trim());
+
+/**
+ * Libellé du statut en tenant compte des étapes personnalisées du dossier.
+ * Si le statut correspond à une étape ajoutée à l'édition (id `custom_…` ou libellé),
+ * retourne le libellé exact choisi ; sinon retombe sur `getStatutLabel`.
+ * À utiliser partout où l'on affiche le statut d'un dossier.
+ */
+export const getStatutLabelWithEtapes = (
+  statut: string | null | undefined,
+  etapesSupplementaires?: unknown[] | null
+): string => {
+  const s = String(statut || '').trim();
+  if (!s) return '—';
+  const raw = Array.isArray(etapesSupplementaires) ? etapesSupplementaires : [];
+  const matched = raw.find(
+    (e: any) => e && (String(e.id ?? '') === s || String(e.label ?? '') === s)
+  ) as { label?: unknown } | undefined;
+  if (matched?.label) return String(matched.label);
+  return getStatutLabel(s);
+};
+
+/** Variante pratique : libellé du statut directement depuis l'objet dossier. */
+export const getDossierStatutLabel = (
+  dossier: { statut?: string | null; etapesSupplementaires?: unknown[] | null } | null | undefined
+): string => getStatutLabelWithEtapes(dossier?.statut, dossier?.etapesSupplementaires);
 
 export const getPrioriteColor = (priorite: string): string => {
   const colors: { [key: string]: string } = {

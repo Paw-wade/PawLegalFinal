@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { dossiersAPI } from '@/lib/api';
-import { getStatutLabel, getPrioriteLabel } from '@/lib/dossierUtils';
+import { getStatutLabelWithEtapes, getPrioriteLabel } from '@/lib/dossierUtils';
 
 // Mapping des catégories
 const categories = {
@@ -224,7 +224,7 @@ export default function DossierPDFPage() {
             </div>
             <div>
               <p style={{ fontWeight: 'bold', color: '#666', fontSize: '11px', margin: '0 0 5px 0', textTransform: 'uppercase' }}>Statut actuel</p>
-              <p style={{ margin: 0 }}>{getStatutLabel(dossier.statut)}</p>
+              <p style={{ margin: 0 }}>{getStatutLabelWithEtapes(dossier.statut, dossier.etapesSupplementaires)}</p>
             </div>
             <div>
               <p style={{ fontWeight: 'bold', color: '#666', fontSize: '11px', margin: '0 0 5px 0', textTransform: 'uppercase' }}>Catégorie</p>

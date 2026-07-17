@@ -8,7 +8,7 @@ import { DossierDetailView } from '@/components/DossierDetailView';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
-import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabelWithEtapes, getPrioriteColor, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import {
   getDossierCustomStatutLabel,
   getDossierDisplayTitle,
@@ -1005,8 +1005,8 @@ export default function DossierDetailPage() {
                                 <div className="mt-2 text-sm text-gray-600 space-y-1">
                                   {item.details.newStatut && item.details.oldStatut && (
                                     <p>
-                                      <span className="font-medium">Ancien statut:</span> {getStatutLabel(item.details.oldStatut)} → 
-                                      <span className="font-medium"> Nouveau statut:</span> {getStatutLabel(item.details.newStatut)}
+                                      <span className="font-medium">Ancien statut:</span> {getStatutLabelWithEtapes(item.details.oldStatut, dossier?.etapesSupplementaires)} →
+                                      <span className="font-medium"> Nouveau statut:</span> {getStatutLabelWithEtapes(item.details.newStatut, dossier?.etapesSupplementaires)}
                                     </p>
                                   )}
                                   {item.details.partenaire && (

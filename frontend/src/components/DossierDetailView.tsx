@@ -3,7 +3,7 @@
 import React, { useRef, useEffect } from 'react';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import Link from 'next/link';
-import { getStatutLabel, getStatutColor, getPrioriteColor, getPrioriteLabel } from '@/lib/dossierUtils';
+import { getStatutLabelWithEtapes, getStatutColor, getPrioriteColor, getPrioriteLabel } from '@/lib/dossierUtils';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -191,7 +191,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
           {/* Badges de statut */}
           <div className="flex flex-wrap gap-2 mt-4">
             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatutColor(dossier.statut)}`}>
-              Statut: {getStatutLabel(dossier.statut)}
+              Statut: {getStatutLabelWithEtapes(dossier.statut, dossier.etapesSupplementaires)}
             </span>
             {dossier.priorite && (
               <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPrioriteColor(dossier.priorite)}`}>
@@ -232,7 +232,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
               <p className="info-label">Statut</p>
               <p className="info-value">
                 <span className={`px-2 py-1 rounded text-xs font-medium ${getStatutColor(dossier.statut)}`}>
-                  {getStatutLabel(dossier.statut)}
+                  {getStatutLabelWithEtapes(dossier.statut, dossier.etapesSupplementaires)}
                 </span>
               </p>
             </div>

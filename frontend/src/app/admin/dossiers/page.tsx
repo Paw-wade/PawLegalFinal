@@ -21,7 +21,7 @@ import {
   parseMontantSaisieFlexible,
 } from '@/lib/montantTarification';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
-import { getStatutColor, getStatutLabel, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getDossierMinEtapeDateMs, isClosedDossier as isClosedDossierUtil, isArchivedDossier as isArchivedDossierUtil } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabel, getStatutLabelWithEtapes, getPrioriteColor, getEditedEtapesOnly, getDossierProgressFromEditedEtapes, customEtapeMatchesStatut, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom, getDossierMinEtapeDateMs, isClosedDossier as isClosedDossierUtil, isArchivedDossier as isArchivedDossierUtil } from '@/lib/dossierUtils';
 import {
   collectAdminDossierAgendaItems,
   downloadAdminDossierAgendaPdf,
@@ -326,7 +326,7 @@ export default function AdminDossiersPage() {
   const [pinningDossierId, setPinningDossierId] = useState<string | null>(null);
   const [showRefuseModal, setShowRefuseModal] = useState<{ dossierId: string; dossierTitre: string } | null>(null);
   const [motifRefus, setMotifRefus] = useState('');
-  const [showStatutModal, setShowStatutModal] = useState<{ dossierId: string; dossierTitre: string; currentStatut: string; newStatut: string } | null>(null);
+  const [showStatutModal, setShowStatutModal] = useState<{ dossierId: string; dossierTitre: string; currentStatut: string; newStatut: string; etapes?: any[] } | null>(null);
   const [notificationMessage, setNotificationMessage] = useState('');
   const [exonererFraisTarification, setExonererFraisTarification] = useState(false);
   const [fraisExoneresMotifInput, setFraisExoneresMotifInput] = useState('');
@@ -1583,7 +1583,8 @@ export default function AdminDossiersPage() {
         dossierId,
         dossierTitre: dossier.titre,
         currentStatut: dossier.statut,
-        newStatut
+        newStatut,
+        etapes: dossier.etapesSupplementaires
       });
       setNotificationMessage(''); // Réinitialiser le message
       setExonererFraisTarification(false);
@@ -4614,7 +4615,7 @@ export default function AdminDossiersPage() {
                                 <>
                                   {/* Si le statut actuel n'est pas dans les étapes (ex: "Reçu"), afficher une option dédiée */}
                                   {currentStatut && !hasCurrentOption && (
-                                    <option value={currentStatut}>{getStatutLabel(currentStatut)}</option>
+                                    <option value={currentStatut}>{getStatutLabelWithEtapes(currentStatut, dossier.etapesSupplementaires)}</option>
                                   )}
 
                                   {!currentStatut && <option value="">Sélectionner une étape</option>}
@@ -5123,10 +5124,10 @@ export default function AdminDossiersPage() {
             </p>
             <div className="mb-4">
               <p className="text-sm mb-2">
-                <span className="font-medium">Statut actuel :</span> {getStatutLabel(showStatutModal.currentStatut)}
+                <span className="font-medium">Statut actuel :</span> {getStatutLabelWithEtapes(showStatutModal.currentStatut, showStatutModal.etapes)}
               </p>
               <p className="text-sm mb-4">
-                <span className="font-medium">Nouveau statut :</span> <span className="text-primary font-semibold">{getStatutLabel(showStatutModal.newStatut)}</span>
+                <span className="font-medium">Nouveau statut :</span> <span className="text-primary font-semibold">{getStatutLabelWithEtapes(showStatutModal.newStatut, showStatutModal.etapes)}</span>
               </p>
             </div>
             {showStatutModal.newStatut === 'en_cours' && !DEFAULT_ADMIN_ETAPES_IDS.has(String(showStatutModal.newStatut)) && (
@@ -5171,7 +5172,7 @@ export default function AdminDossiersPage() {
                 id="notificationMessage"
                 value={notificationMessage}
                 onChange={(e) => setNotificationMessage(e.target.value)}
-                placeholder={`Ex: Votre dossier "${showStatutModal.dossierTitre}" a été mis à jour. Le statut est maintenant "${getStatutLabel(showStatutModal.newStatut)}".`}
+                placeholder={`Ex: Votre dossier "${showStatutModal.dossierTitre}" a été mis à jour. Le statut est maintenant "${getStatutLabelWithEtapes(showStatutModal.newStatut, showStatutModal.etapes)}".`}
                 rows={5}
                 className="w-full"
               />

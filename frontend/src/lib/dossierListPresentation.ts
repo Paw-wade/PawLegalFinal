@@ -1,4 +1,4 @@
-import { getStatutLabel } from '@/lib/dossierUtils';
+import { getStatutLabelWithEtapes } from '@/lib/dossierUtils';
 
 export function getDossierTransmittedPartners(dossier: any) {
   if (!Array.isArray(dossier?.transmittedTo) || dossier.transmittedTo.length === 0) return [];
@@ -40,11 +40,5 @@ export function getDossierClientDisplayName(dossier: any, strictPrivacyMode = fa
 }
 
 export function getDossierCustomStatutLabel(dossier: any) {
-  const statut = String(dossier?.statut || '').trim();
-  if (!statut) return '—';
-  const matched = (dossier?.etapesSupplementaires || []).find(
-    (etape: any) => etape?.id === statut || etape?.label === statut
-  );
-  if (matched?.label) return String(matched.label);
-  return getStatutLabel(statut);
+  return getStatutLabelWithEtapes(dossier?.statut, dossier?.etapesSupplementaires);
 }

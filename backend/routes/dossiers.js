@@ -181,6 +181,51 @@ function getTarificationLinkByRole(role) {
   return '/client/tarification';
 }
 
+const STANDARD_STATUT_LABELS = {
+  recu: 'Reçu',
+  accepte: 'Accepté',
+  refuse: 'Refusé',
+  en_cours: 'En cours',
+  cloture: 'Clôturé',
+  annule: 'Archivé',
+  en_attente: 'En attente',
+  en_attente_onboarding: 'En attente d\'onboarding (RDV)',
+  en_cours_instruction: 'En cours d\'instruction (constitution dossier)',
+  pieces_manquantes: 'Pièces manquantes (relance client)',
+  dossier_complet: 'Dossier Complet',
+  depose: 'Déposé',
+  reception_confirmee: 'Réception confirmée',
+  complement_demande: 'Complément demandé (avec date limite)',
+  decision_defavorable: 'Décision défavorable',
+  communication_motifs: 'Communication des Motifs',
+  recours_preparation: 'Recours en préparation',
+  refere_mesures_utiles: 'Référé Mesures Utiles',
+  refere_suspension_rep: 'Référé suspension et REP',
+  gain_cause: 'Gain de cause',
+  rejet: 'Rejet',
+  decision_favorable: 'Décision favorable',
+  autre: 'Autre',
+};
+
+/**
+ * Libellé d'un statut en tenant compte des étapes personnalisées du dossier :
+ * un id technique `custom_<timestamp>` est remplacé par le libellé exact choisi
+ * à l'édition des étapes (etapesSupplementaires). Jamais d'id brut dans les
+ * notifications / e-mails / historiques.
+ */
+function statutLabelForDossier(dossier, statut) {
+  const s = String(statut || '').trim();
+  if (!s) return s;
+  const etapes = Array.isArray(dossier?.etapesSupplementaires) ? dossier.etapesSupplementaires : [];
+  const matched = etapes.find(
+    (e) => e && (String(e.id || '') === s || String(e.label || '') === s)
+  );
+  if (matched && matched.label) return String(matched.label);
+  if (STANDARD_STATUT_LABELS[s]) return STANDARD_STATUT_LABELS[s];
+  if (/^custom[_-]\d+$/i.test(s)) return 'Étape personnalisée';
+  return s;
+}
+
 // Helper function pour notifier toutes les parties lors d'une modification de dossier
 const notifyDossierModification = async (dossier, modifier, changes = {}) => {
   try {
@@ -229,7 +274,7 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
     let qualityLabel = 'Administrateur';
     
     const notificationMessage = changes.newStatut && changes.oldStatut !== changes.newStatut
-      ? `Le dossier "${dossierTitle}" a été modifié par ${modifierName} (${qualityLabel}). Statut: ${changes.newStatut}`
+      ? `Le dossier "${dossierTitle}" a été modifié par ${modifierName} (${qualityLabel}). Statut: ${statutLabelForDossier(dossier, changes.newStatut)}`
       : `Le dossier "${dossierTitle}" a été modifié par ${modifierName} (${qualityLabel})`;
     
     for (const userInfo of usersToNotify) {
@@ -4090,36 +4135,15 @@ router.put(
         if (userId) {
           // Notification si le statut a changé
           if (statut && statut !== oldStatut) {
-          const statutLabels = {
-            recu: 'Reçu',
-            accepte: 'Accepté',
-            refuse: 'Refusé',
-            en_cours: 'En cours',
-            cloture: 'Clôturé',
-            annule: 'Archivé',
-            en_attente_onboarding: 'En attente d\'onboarding (RDV)',
-            en_cours_instruction: 'En cours d\'instruction (constitution dossier)',
-            pieces_manquantes: 'Pièces manquantes (relance client)',
-            dossier_complet: 'Dossier Complet',
-            depose: 'Déposé',
-            reception_confirmee: 'Réception confirmée',
-            complement_demande: 'Complément demandé (avec date limite)',
-            decision_defavorable: 'Décision défavorable',
-            communication_motifs: 'Communication des Motifs',
-            recours_preparation: 'Recours en préparation',
-            refere_mesures_utiles: 'Référé Mesures Utiles',
-            refere_suspension_rep: 'Référé suspension et REP',
-            gain_cause: 'Gain de cause',
-            rejet: 'Rejet',
-            decision_favorable: 'Décision favorable'
-          };
-          
+          const oldStatutLabel = statutLabelForDossier(dossierForNotification, oldStatut);
+          const newStatutLabel = statutLabelForDossier(dossierForNotification, statut);
+
           // Utiliser le message personnalisé si fourni, sinon générer un message par défaut
           const messageNotification = notificationMessage && notificationMessage.trim() 
             ? notificationMessage.trim()
-            : `Le statut de votre dossier "${dossierForNotification.titre}" a été modifié de "${statutLabels[oldStatut] || oldStatut}" à "${statutLabels[statut] || statut}".`;
+            : `Le statut de votre dossier "${dossierForNotification.titre}" a été modifié de "${oldStatutLabel}" à "${newStatutLabel}".`;
           
-          const titreNotification = `Statut du dossier modifié : ${statutLabels[statut] || statut}`;
+          const titreNotification = `Statut du dossier modifié : ${newStatutLabel}`;
           
           console.log('📧 Création de notification pour utilisateur:', userId, 'Message:', messageNotification);
           
@@ -5412,7 +5436,7 @@ router.get('/:id/history', async (req, res) => {
         type = 'modification';
         if (log.metadata?.newStatut && log.metadata?.oldStatut) {
           type = 'statut_change';
-          description = `Statut changé de "${log.metadata.oldStatut}" à "${log.metadata.newStatut}"`;
+          description = `Statut changé de "${statutLabelForDossier(dossier, log.metadata.oldStatut)}" à "${statutLabelForDossier(dossier, log.metadata.newStatut)}"`;
         }
       } else if (log.action === 'dossier_deleted') {
         type = 'suppression';
