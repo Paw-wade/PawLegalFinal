@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { contactAPI } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import DemandeWizard from '@/components/demande/DemandeWizard';
 import { useAutoFillDetection, getRealInputValues } from '@/hooks/useAutoFillDetection';
 
 function Button({ children, variant = 'default', className = '', disabled = false, type = 'button', ...props }: any) {
@@ -256,6 +257,23 @@ export default function ContactPage() {
               Une question ? Un projet ? Contactez notre équipe d'experts juridiques pour un accompagnement personnalisé
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* Démarrer une demande — accessible sans compte */}
+      <section id="demande" className="container mx-auto px-4 pt-12 scroll-mt-24">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-6">
+            <div className="inline-block mb-3 px-4 py-1.5 bg-primary/10 rounded-full border border-primary/20">
+              <span className="text-sm font-medium text-primary">Sans créer de compte</span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-bold mb-3 text-foreground">Démarrer une demande</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Accompagnement, recours ou constitution de société : choisissez votre situation, décrivez votre besoin
+              et laissez-nous vos coordonnées. Nous vous recontactons.
+            </p>
+          </div>
+          <DemandeWizard showBackLink={false} heading={null} className="w-full" />
         </div>
       </section>
 

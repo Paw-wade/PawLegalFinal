@@ -111,6 +111,16 @@ export default function SignupPage() {
     void loadProviders();
   }, []);
 
+  // Pré-remplir l'email depuis le lien d'invitation (?email=) reçu après une demande publique.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const emailParam = params.get('email');
+    if (emailParam) {
+      setFormData((prev) => (prev.email ? prev : { ...prev, email: emailParam }));
+    }
+  }, []);
+
   useEffect(() => {
     const user: any = session?.user;
     if (!user) return;

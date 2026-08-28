@@ -1086,7 +1086,10 @@ export const dossiersAPI = {
     notes?: string;
     assignedTo?: string;
   }) => api.post('/user/dossiers', data),
-  
+
+  // Prendre en compte (valider) une demande publique en attente → e-mail de confirmation au demandeur
+  validerDemande: (id: string) => api.patch(`/user/dossiers/${id}/valider`),
+
   // Récupérer un dossier par ID
   getDossierById: (id: string | any) => {
     // Protection : s'assurer que l'ID est une string

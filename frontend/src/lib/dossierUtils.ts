@@ -3,6 +3,7 @@
 export const getStatutColor = (statut: string): string => {
   const colors: { [key: string]: string } = {
     recu: 'bg-gray-100 text-gray-800',
+    en_attente_validation: 'bg-orange-100 text-orange-800',
     accepte: 'bg-green-100 text-green-800',
     refuse: 'bg-red-100 text-red-800',
     en_attente_onboarding: 'bg-yellow-100 text-yellow-800',
@@ -35,6 +36,7 @@ export const getStatutColor = (statut: string): string => {
 export const getStatutLabel = (statut: string): string => {
   const labels: { [key: string]: string } = {
     recu: 'Reçu',
+    en_attente_validation: 'Demande à valider',
     accepte: 'Accepté',
     refuse: 'Refusé',
     en_attente_onboarding: 'En attente d\'onboarding (RDV)',

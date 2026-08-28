@@ -339,6 +339,34 @@ router.post(
   }
 );
 
+/**
+ * Rattache au compte les demandes publiques déposées (avant inscription) avec le
+ * même e-mail. Appelé uniquement après vérification de l'e-mail (activation / Google),
+ * pour éviter qu'un tiers revendique un dossier en s'inscrivant avec l'e-mail d'autrui.
+ * @param {{ _id: any, email: string }} user
+ * @returns {Promise<number>} nombre de dossiers rattachés
+ */
+async function attachGuestDossiersToUser(user) {
+  if (!user || !user.email) return 0;
+  try {
+    const Dossier = require('../models/Dossier');
+    const esc = String(user.email).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const emailRegex = new RegExp(`^${esc}$`, 'i');
+    const orphans = await Dossier.find({ user: null, clientEmail: emailRegex });
+    for (const d of orphans) {
+      d.user = user._id;
+      await d.save();
+    }
+    if (orphans.length > 0) {
+      console.log(`✅ ${orphans.length} demande(s) publique(s) rattachée(s) au compte ${user.email}`);
+    }
+    return orphans.length;
+  } catch (attachErr) {
+    console.error('Erreur rattachement des demandes publiques au compte:', attachErr.message || attachErr);
+    return 0;
+  }
+}
+
 // @route   POST /api/auth/complete-signup
 // @desc    Définir le mot de passe après clic sur le lien signé reçu par email
 // @access  Public
@@ -397,6 +425,8 @@ router.post(
       user.password = password;
       user.needsPasswordSetup = false;
       await user.save();
+      // E-mail vérifié : rattacher les demandes publiques déposées avec ce même e-mail.
+      await attachGuestDossiersToUser(user);
       // Bienvenue uniquement après validation du compte par lien signé.
       await ensureWelcomeTemplateExists();
       await sendWelcomeEmailOnAccountCreated(user);

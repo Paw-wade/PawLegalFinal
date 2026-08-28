@@ -8,6 +8,8 @@ const StandaloneTarificationRequest = require('../models/StandaloneTarificationR
 const { protect, authorize } = require('../middleware/auth');
 const { getAssignedDossierIds, userHasPermission, isUserOnDossierTeam, getScopedDossierModifyViolations } = require('../utils/accessScope');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
+const { sendTemplatedTransactionalEmail } = require('../utils/emailTemplateMailer');
+const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const { sendSMS, formatPhoneNumber } = require('../sendSMS');
 
 const router = express.Router();
@@ -172,6 +174,144 @@ const createNotification = async (userId, type, titre, message, lien = null, met
     // Ne pas bloquer l'action principale si la notification échoue
     // Retourner null pour indiquer l'échec sans bloquer
     return null;
+  }
+};
+
+// Rôles du cabinet notifiés lors d'une nouvelle demande publique.
+const ADMIN_NOTIFY_ROLES = ['admin', 'superadmin'];
+
+// Récupère les adresses e-mail du cabinet depuis ADMIN_EMAILS (séparateurs , ; espace).
+function parseAdminEmails() {
+  const raw = process.env.ADMIN_EMAILS || '';
+  return raw
+    .split(/[,;\s]+/)
+    .map((e) => e.trim())
+    .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+}
+
+/**
+ * Notifie le cabinet et le demandeur lors du dépôt d'une demande publique
+ * (visiteur non connecté) : notif in-app aux admins, e-mail au cabinet, et
+ * e-mail au demandeur (invitation à créer un compte, ou accusé de réception).
+ */
+const handlePublicDemandeNotifications = async ({ dossier, existingUser, clientNom, clientPrenom, clientEmail, clientTelephone }) => {
+  const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+  const email = (clientEmail || '').trim();
+  const prenom = clientPrenom || existingUser?.firstName || '';
+  const nom = clientNom || existingUser?.lastName || '';
+  const fullName = `${prenom} ${nom}`.trim() || email || 'Demandeur';
+  const titre = dossier.titre || 'Nouvelle demande';
+  const adminUrl = `${frontUrl}/admin/dossiers`;
+
+  // 1) Notifications in-app à tous les admins/superadmins actifs.
+  try {
+    const admins = await User.find({ role: { $in: ADMIN_NOTIFY_ROLES }, isActive: true }).select('_id');
+    for (const admin of admins) {
+      await createNotification(
+        admin._id,
+        'dossier_created',
+        'Nouvelle demande à valider',
+        `Nouvelle demande "${titre}" déposée par ${fullName}. En attente de validation.`,
+        '/admin/dossiers',
+        { dossierId: dossier._id.toString(), estDemandePublique: true }
+      );
+    }
+  } catch (e) {
+    console.error('⚠️ Notif in-app admins (demande publique):', e.message || e);
+  }
+
+  // 2) E-mail groupé au cabinet (ADMIN_EMAILS).
+  const adminEmails = parseAdminEmails();
+  // Envoi individuel : le mailer n'accepte qu'un destinataire par appel.
+  for (const adminEmail of adminEmails) {
+    try {
+      await sendTemplatedTransactionalEmail({
+        templateCode: 'demande_publique_admin',
+        eventKey: 'demande_publique_admin',
+        to: adminEmail,
+        toName: 'Équipe Ada Papers',
+        variables: { fullName, email, telephone: clientTelephone || '', titre, categorie: dossier.categorie || '', adminUrl },
+        fallback: {
+          subject: `Nouvelle demande à valider — ${titre}`,
+          htmlContent: `<p>Une nouvelle demande a été déposée depuis le site :</p>
+<ul>
+<li><strong>Demandeur :</strong> ${escapeHtml(fullName)}</li>
+<li><strong>Email :</strong> ${escapeHtml(email)}</li>
+<li><strong>Téléphone :</strong> ${escapeHtml(clientTelephone || '—')}</li>
+<li><strong>Type :</strong> ${escapeHtml(dossier.categorie || '—')}</li>
+<li><strong>Objet :</strong> ${escapeHtml(titre)}</li>
+</ul>
+<p>Elle est en attente de validation dans le back-office : <a href="${escapeHtml(adminUrl)}">${escapeHtml(adminUrl)}</a></p>`,
+          textContent: `Nouvelle demande déposée depuis le site.
+Demandeur : ${fullName}
+Email : ${email}
+Téléphone : ${clientTelephone || '—'}
+Type : ${dossier.categorie || '—'}
+Objet : ${titre}
+À valider : ${adminUrl}`,
+        },
+      });
+    } catch (e) {
+      console.error('⚠️ Email cabinet (demande publique):', e.message || e);
+    }
+  }
+
+  // 3) Côté demandeur.
+  if (existingUser) {
+    // Compte déjà existant : notif in-app + accusé de réception par e-mail.
+    try {
+      await createNotification(
+        existingUser._id,
+        'dossier_created',
+        'Demande reçue',
+        `Votre demande "${titre}" a bien été reçue. Elle est en attente de validation par notre équipe.`,
+        '/client/dossiers',
+        { dossierId: dossier._id.toString() }
+      );
+    } catch (e) { console.error('⚠️ Notif client (demande publique):', e.message || e); }
+
+    if (email) {
+      try {
+        await sendTemplatedTransactionalEmail({
+          templateCode: 'demande_publique_recue',
+          eventKey: 'demande_publique_recue',
+          to: email,
+          toName: fullName,
+          variables: { prenom, titre, espaceUrl: `${frontUrl}/client/dossiers` },
+          fallback: {
+            subject: 'Votre demande a bien été reçue — Ada Papers',
+            htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Nous avons bien reçu votre demande « ${escapeHtml(titre)} ». Elle est en attente de validation par notre équipe.</p><p>Vous pouvez la suivre depuis votre espace : <a href="${escapeHtml(frontUrl)}/client/dossiers">${escapeHtml(frontUrl)}/client/dossiers</a></p>`,
+            textContent: `Bonjour ${prenom || ''},
+
+Nous avons bien reçu votre demande "${titre}". Elle est en attente de validation.
+Suivi : ${frontUrl}/client/dossiers`,
+          },
+        });
+      } catch (e) { console.error('⚠️ Email client existant (demande publique):', e.message || e); }
+    }
+  } else if (email) {
+    // Visiteur sans compte : invitation à créer un compte avec le même e-mail.
+    const signupUrl = `${frontUrl}/auth/signup?email=${encodeURIComponent(email)}`;
+    try {
+      await sendTemplatedTransactionalEmail({
+        templateCode: 'demande_publique_invitation',
+        eventKey: 'demande_publique_invitation',
+        to: email,
+        toName: fullName,
+        variables: { prenom, titre, signupUrl, email },
+        fallback: {
+          subject: 'Votre demande a bien été reçue — créez votre compte pour la suivre',
+          htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Nous avons bien reçu votre demande « ${escapeHtml(titre)} ». Notre équipe va l'étudier.</p><p>Pour <strong>suivre l'avancement de votre dossier</strong>, créez votre compte avec cette même adresse e-mail :</p><p><a href="${escapeHtml(signupUrl)}" style="display:inline-block;padding:10px 18px;background:#f97316;color:#fff;border-radius:6px;text-decoration:none;">Créer mon compte</a></p><p>Votre demande sera automatiquement rattachée à votre espace après vérification de votre e-mail.</p>`,
+          textContent: `Bonjour ${prenom || ''},
+
+Nous avons bien reçu votre demande "${titre}". Notre équipe va l'étudier.
+Pour suivre votre dossier, créez votre compte avec cette même adresse e-mail : ${signupUrl}
+Votre demande sera automatiquement rattachée à votre espace après vérification de votre e-mail.`,
+        },
+      });
+      dossier.invitationSentAt = new Date();
+      await dossier.save();
+    } catch (e) { console.error('⚠️ Email invitation (demande publique):', e.message || e); }
   }
 };
 
@@ -424,7 +564,32 @@ router.post(
         }
       }
 
-      // Tous les champs sont optionnels - pas de validation obligatoire pour les visiteurs
+      // Demande publique = soumission par un visiteur non authentifié.
+      const isPublicDemande = !req.user;
+      let publicDemandeExistingUser = null;
+      if (isPublicDemande) {
+        // Nom + adresse e-mail valide obligatoires (le suivi repose sur l'e-mail).
+        const nomOk = typeof clientNom === 'string' && clientNom.trim().length > 0;
+        const emailOk = typeof clientEmail === 'string'
+          && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail.trim());
+        if (!nomOk || !emailOk) {
+          return res.status(400).json({
+            success: false,
+            message: 'Le nom et une adresse e-mail valide sont requis pour déposer une demande.'
+          });
+        }
+        // Si l'e-mail correspond déjà à un compte, rattacher directement la demande à ce compte.
+        try {
+          const existing = await User.findOne({ email: clientEmail.trim().toLowerCase() });
+          if (existing) {
+            publicDemandeExistingUser = existing;
+            user = existing;
+            finalUserId = existing._id;
+          }
+        } catch (e) {
+          console.warn('Recherche compte existant (demande publique) impossible:', e.message || e);
+        }
+      }
 
       // Vérifier si un membre de l'équipe est assigné (seulement pour les admins)
       let assignedUser = null;
@@ -462,10 +627,11 @@ router.post(
         description: description || '',
         categorie: categorie || 'autre',
         type: type || '',
-        statut: statut || 'recu',
+        statut: isPublicDemande ? 'en_attente_validation' : (statut || 'recu'),
         priorite: priorite || 'normale',
         dateEcheance: dateEcheance || null,
         notes: notes || '',
+        estDemandePublique: isPublicDemande,
         createdBy: req.user ? req.user.id : null, // null si créé par un visiteur
         assignedTo: assignedTo || null,
         rendezVous: rendezVousId ? [rendezVousId] : []
@@ -474,6 +640,23 @@ router.post(
       if (assignedTo) {
         dossier.teamMembers = Array.from(new Set([...(dossier.teamMembers || []).map((id) => id.toString()), assignedTo.toString()]));
         await dossier.save();
+      }
+
+      // Demande publique : prévenir le cabinet (in-app + e-mail) et le demandeur.
+      if (isPublicDemande) {
+        try {
+          await handlePublicDemandeNotifications({
+            dossier,
+            existingUser: publicDemandeExistingUser,
+            clientNom,
+            clientPrenom,
+            clientEmail,
+            clientTelephone,
+          });
+        } catch (e) {
+          console.error('⚠️ Notifications demande publique:', e.message || e);
+          // Ne pas bloquer la création du dossier si les notifications échouent.
+        }
       }
 
       // Si le dossier est créé depuis un rendez-vous, lier le rendez-vous au dossier
@@ -672,6 +855,75 @@ Nos équipes reviendront vers vous en cas de pièce ou information complémentai
 
 // Toutes les autres routes nécessitent une authentification
 router.use(protect);
+
+// @route   PATCH /api/user/dossiers/:id/valider
+// @desc    Prendre en compte (valider) une demande publique en attente de validation
+// @access  Private (cabinet)
+router.patch(
+  '/:id/valider',
+  authorize('admin', 'superadmin', 'assistant', 'secretaire', 'juriste'),
+  async (req, res) => {
+    try {
+      const dossier = await Dossier.findById(req.params.id);
+      if (!dossier) {
+        return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+      }
+
+      dossier.statut = 'en_cours';
+      dossier.validatedAt = dossier.validatedAt || new Date();
+      dossier.validatedBy = req.user.id;
+      await dossier.save();
+
+      // E-mail de confirmation au demandeur (une seule fois).
+      const email = (dossier.clientEmail || '').trim();
+      const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+      let confirmationEmailSent = false;
+      if (email && !dossier.confirmationSentAt) {
+        const prenom = dossier.clientPrenom || '';
+        const signupUrl = `${frontUrl}/auth/signup?email=${encodeURIComponent(email)}`;
+        try {
+          await sendTemplatedTransactionalEmail({
+            templateCode: 'demande_publique_confirmation',
+            eventKey: 'demande_publique_confirmation',
+            to: email,
+            toName: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim() || email,
+            variables: { prenom, titre: dossier.titre || 'votre demande', espaceUrl: `${frontUrl}/client/dossiers`, signupUrl },
+            fallback: {
+              subject: 'Votre demande a été prise en compte — Ada Papers',
+              htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Bonne nouvelle : votre demande « ${escapeHtml(dossier.titre || '')} » a été <strong>prise en compte</strong> par notre équipe et est désormais en cours de traitement.</p><p>Pour suivre son avancement, connectez-vous à votre espace (ou créez votre compte avec cette même adresse e-mail) : <a href="${escapeHtml(frontUrl)}/client/dossiers">${escapeHtml(frontUrl)}/client/dossiers</a></p>`,
+              textContent: `Bonjour ${prenom || ''},
+
+Votre demande "${dossier.titre || ''}" a été prise en compte et est en cours de traitement.
+Suivi : ${frontUrl}/client/dossiers`,
+            },
+          });
+          dossier.confirmationSentAt = new Date();
+          await dossier.save();
+          confirmationEmailSent = true;
+        } catch (e) {
+          console.error('⚠️ Email confirmation (validation demande):', e.message || e);
+        }
+      }
+
+      // Notification in-app au client si un compte est rattaché.
+      if (dossier.user) {
+        await createNotification(
+          dossier.user,
+          'dossier_created',
+          'Demande prise en compte',
+          `Votre demande "${dossier.titre}" a été prise en compte et est en cours de traitement.`,
+          '/client/dossiers',
+          { dossierId: dossier._id.toString() }
+        );
+      }
+
+      return res.json({ success: true, message: 'Demande prise en compte', dossier, confirmationEmailSent });
+    } catch (error) {
+      console.error('Erreur validation demande:', error);
+      return res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+    }
+  }
+);
 
 // @route   GET /api/user/dossiers
 // @desc    Récupérer tous les dossiers de l'utilisateur connecté (tous les rôles)
@@ -915,7 +1167,9 @@ router.get(
         const hasClient = !!d.user;
         const s = rawStatut(d);
         const initialStatut = !s || s === 'recu' || s === 'en_attente_onboarding';
-        if (hasClient && initialStatut) {
+        // Demande publique (visiteur) à valider = en attente, même sans compte rattaché.
+        const isPublicPending = s === 'en_attente_validation';
+        if (isPublicPending || (hasClient && initialStatut)) {
           stats.pending += 1;
         } else {
           stats.in_progress += 1;
