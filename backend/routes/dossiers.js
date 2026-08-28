@@ -568,26 +568,30 @@ router.post(
       const isPublicDemande = !req.user;
       let publicDemandeExistingUser = null;
       if (isPublicDemande) {
-        // Nom + adresse e-mail valide obligatoires (le suivi repose sur l'e-mail).
+        // Nom, prénom et téléphone obligatoires ; l'e-mail est facultatif.
         const nomOk = typeof clientNom === 'string' && clientNom.trim().length > 0;
-        const emailOk = typeof clientEmail === 'string'
-          && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail.trim());
-        if (!nomOk || !emailOk) {
+        const prenomOk = typeof clientPrenom === 'string' && clientPrenom.trim().length > 0;
+        const telOk = typeof clientTelephone === 'string' && clientTelephone.trim().length > 0;
+        if (!nomOk || !prenomOk || !telOk) {
           return res.status(400).json({
             success: false,
-            message: 'Le nom et une adresse e-mail valide sont requis pour déposer une demande.'
+            message: 'Le nom, le prénom et le téléphone sont requis pour déposer une demande.'
           });
         }
-        // Si l'e-mail correspond déjà à un compte, rattacher directement la demande à ce compte.
-        try {
-          const existing = await User.findOne({ email: clientEmail.trim().toLowerCase() });
-          if (existing) {
-            publicDemandeExistingUser = existing;
-            user = existing;
-            finalUserId = existing._id;
+        // Si un e-mail valide est fourni et correspond à un compte, rattacher la demande à ce compte.
+        const emailOk = typeof clientEmail === 'string'
+          && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail.trim());
+        if (emailOk) {
+          try {
+            const existing = await User.findOne({ email: clientEmail.trim().toLowerCase() });
+            if (existing) {
+              publicDemandeExistingUser = existing;
+              user = existing;
+              finalUserId = existing._id;
+            }
+          } catch (e) {
+            console.warn('Recherche compte existant (demande publique) impossible:', e.message || e);
           }
-        } catch (e) {
-          console.warn('Recherche compte existant (demande publique) impossible:', e.message || e);
         }
       }
 

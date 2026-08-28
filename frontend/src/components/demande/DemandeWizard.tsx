@@ -456,30 +456,47 @@ export default function DemandeWizard({
       return;
     }
 
-    // Pour un visiteur non connecté : coordonnées obligatoires + consentement.
+    // Lecture des VRAIES valeurs des champs au moment de la soumission.
+    // Indispensable pour gérer l'autofill du navigateur, qui remplit le DOM sans
+    // toujours déclencher onChange : sinon l'état React resterait vide et la
+    // validation croirait à tort qu'un champ rempli est vide.
+    const readVal = (id: string): string => {
+      if (typeof document !== 'undefined') {
+        const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+        if (el && typeof (el as any).value === 'string') return (el as any).value;
+      }
+      const v = formData[id];
+      return typeof v === 'string' ? v : (v == null ? '' : String(v));
+    };
+
     const isGuest = !(session && (session.user as any)?.id);
+    const nomVal = readVal('nom').trim();
+    const prenomVal = readVal('prenom').trim();
+    const emailVal = readVal('email').trim();
+    const telephoneVal = readVal('telephone').trim();
+
+    // Visiteur non connecté : seuls le nom, le prénom et le téléphone sont obligatoires.
+    // Tous les autres champs (email, description, etc.) sont facultatifs.
     if (isGuest) {
-      const nomOk = !!(formData.nom && formData.nom.trim());
-      const emailVal = (formData.email || '').trim();
-      if (!nomOk) {
-        setError('Merci d’indiquer votre nom pour que nous puissions vous recontacter.');
+      if (!nomVal) {
+        setError('Merci d’indiquer votre nom.');
         return;
       }
-      if (!emailVal) {
-        setError('Merci d’indiquer votre adresse email : elle vous permettra de suivre votre demande.');
+      if (!prenomVal) {
+        setError('Merci d’indiquer votre prénom.');
         return;
       }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
+      if (!telephoneVal) {
+        setError('Merci d’indiquer votre numéro de téléphone.');
+        return;
+      }
+      if (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
         setError('L’adresse email ne semble pas valide.');
-        return;
-      }
-      if (!consent) {
-        setError('Merci d’accepter la politique de confidentialité pour envoyer votre demande.');
         return;
       }
     }
 
-    const titreTrimmed = formData.titre ? formData.titre.trim() : '';
+    const titreTrimmed = readVal('titre').trim();
 
     setIsSubmitting(true);
     setError(null);
@@ -493,14 +510,16 @@ export default function DemandeWizard({
         return;
       }
 
-      // Construire la description enrichie avec les champs spécifiques
-      let descriptionEnrichie = formData.description || '';
+      // Construire la description enrichie avec les champs spécifiques (valeurs réelles du DOM)
+      let descriptionEnrichie = readVal('description') || '';
       const specificFields = getSpecificFields(selectedOption);
       const champsSpecifiques: string[] = [];
 
       specificFields.forEach(field => {
-        if (formData[field.name] !== undefined && formData[field.name] !== '' && formData[field.name] !== null) {
-          champsSpecifiques.push(`${field.label}: ${formData[field.name]}`);
+        // Les champs date exposent un format d'affichage dans le DOM : on garde l'état React (ISO).
+        const val = field.type === 'date' ? (formData[field.name] || '') : readVal(field.name);
+        if (val !== undefined && val !== '' && val !== null) {
+          champsSpecifiques.push(`${field.label}: ${val}`);
         }
       });
 
@@ -510,13 +529,14 @@ export default function DemandeWizard({
           : `--- Informations spécifiques ---\n${champsSpecifiques.join('\n')}`;
       }
 
+      const urgenceVal = readVal('urgence');
       const dossierData: any = {
         titre: titreTrimmed, // Utiliser le titre trimé pour éviter les espaces
         description: descriptionEnrichie,
         categorie: mapping.categorie,
         type: mapping.type,
         statut: 'recu',
-        priorite: formData.urgence ? formData.urgence.toLowerCase() : 'normale',
+        priorite: urgenceVal ? urgenceVal.toLowerCase() : 'normale',
         dateEcheance: formData.dateEcheance || null,
         notes: formData.notes || '',
       };
@@ -525,11 +545,11 @@ export default function DemandeWizard({
       if (session && (session.user as any)?.id) {
         dossierData.userId = (session.user as any).id;
       } else {
-        // Sinon, utiliser les informations du visiteur
-        dossierData.clientNom = formData.nom || '';
-        dossierData.clientPrenom = formData.prenom || '';
-        dossierData.clientEmail = formData.email || '';
-        dossierData.clientTelephone = formData.telephone || '';
+        // Sinon, utiliser les informations du visiteur (valeurs réelles du DOM)
+        dossierData.clientNom = nomVal;
+        dossierData.clientPrenom = prenomVal;
+        dossierData.clientEmail = emailVal;
+        dossierData.clientTelephone = telephoneVal;
       }
 
       const response = await dossiersAPI.createDossier(dossierData);
@@ -784,7 +804,7 @@ export default function DemandeWizard({
                     <div className="border-t border-gray-100 pt-4">
                       <h3 className="mb-1 text-sm font-semibold text-foreground">Vos coordonnées</h3>
                       <p className="mb-3 text-xs text-muted-foreground">
-                        Le nom et une adresse email valide sont nécessaires : l’email vous permettra de suivre votre demande et de créer votre compte.
+                        Seuls le nom, le prénom et le téléphone sont nécessaires pour que nous puissions vous recontacter. Les autres champs sont facultatifs.
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div>
@@ -802,24 +822,12 @@ export default function DemandeWizard({
                         </div>
                         <div>
                           <Label htmlFor="prenom" className="mb-1 block text-sm font-medium">
-                            Prénom
+                            Prénom <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             id="prenom"
                             value={formData.prenom}
                             onChange={(e) => setFormData({ ...formData, prenom: e.target.value })}
-                            className="h-9 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="email" className="mb-1 block text-sm font-medium">
-                            Email <span className="text-red-500">*</span>
-                          </Label>
-                          <Input
-                            id="email"
-                            type="email"
-                            value={formData.email}
-                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                             className="h-9 text-sm"
                             required
                             aria-required="true"
@@ -827,13 +835,27 @@ export default function DemandeWizard({
                         </div>
                         <div>
                           <Label htmlFor="telephone" className="mb-1 block text-sm font-medium">
-                            Téléphone <span className="text-muted-foreground">(optionnel)</span>
+                            Téléphone <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             id="telephone"
                             type="tel"
                             value={formData.telephone}
                             onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
+                            className="h-9 text-sm"
+                            required
+                            aria-required="true"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="email" className="mb-1 block text-sm font-medium">
+                            Email <span className="text-muted-foreground">(facultatif)</span>
+                          </Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                             className="h-9 text-sm"
                           />
                         </div>
@@ -845,7 +867,6 @@ export default function DemandeWizard({
                           checked={consent}
                           onChange={(e) => setConsent(e.target.checked)}
                           className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer text-primary"
-                          aria-required="true"
                         />
                         <span className="leading-snug">
                           J’accepte que mes informations soient utilisées par Ada Papers pour traiter ma demande,
@@ -853,7 +874,7 @@ export default function DemandeWizard({
                           <Link href="/politique-confidentialite" className="text-primary hover:underline" target="_blank">
                             politique de confidentialité
                           </Link>
-                          . <span className="text-red-500">*</span>
+                          .
                         </span>
                       </label>
                     </div>
