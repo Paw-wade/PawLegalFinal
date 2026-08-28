@@ -1975,6 +1975,20 @@ export default function AdminDossiersPage() {
   const getRawStatut = (d: any) => String(d?.statut || '').trim();
   const isArchivedDossier = (d: any) => isArchivedDossierUtil(d);
   const isClosedDossier = (d: any) => isClosedDossierUtil(d);
+  // Demande publique (visiteur) déposée depuis le site, en attente de validation par le cabinet.
+  const isDemandePubliqueEnAttente = (d: any) => getRawStatut(d) === 'en_attente_validation';
+  // « En attente » : une demande publique à valider, OU un dossier client dont le statut
+  // initial n'a pas encore été édité par l'admin. Les demandes visiteur (sans compte) comptent.
+  const isPendingDossier = (d: any) => {
+    if (d?.isStandby || isClosedDossier(d) || isArchivedDossier(d)) return false;
+    if (isDemandePubliqueEnAttente(d)) return true;
+    const rawStatut = getRawStatut(d);
+    const initialStatut = !rawStatut || rawStatut === 'recu' || rawStatut === 'en_attente_onboarding';
+    return !!d.user && initialStatut;
+  };
+  // « En cours » : tout dossier actif qui n'est ni en attente, ni standby, ni clôturé/archivé.
+  const isInProgressDossier = (d: any) =>
+    !d?.isStandby && !isClosedDossier(d) && !isArchivedDossier(d) && !isPendingDossier(d);
 
   return (
     <div className="min-h-screen bg-background">
@@ -2557,21 +2571,7 @@ export default function AdminDossiersPage() {
                   <p className="text-2xl font-bold text-yellow-900">
                     {globalStats
                       ? globalStats.pending
-                      : dossiers.filter((d: any) => {
-                          const hasClient = !!d.user; // dossier créé par un utilisateur
-                          const rawStatut = getRawStatut(d);
-                          const initialStatut =
-                            !rawStatut ||
-                            rawStatut === 'recu' ||
-                            rawStatut === 'en_attente_onboarding';
-                          return (
-                            hasClient &&
-                            initialStatut &&
-                            !d.isStandby &&
-                            !isClosedDossier(d) &&
-                            !isArchivedDossier(d)
-                          );
-                        }).length}
+                      : dossiers.filter((d: any) => isPendingDossier(d)).length}
                   </p>
                 </button>
                 {/* En cours : tous les autres dossiers non clôturés / non archivés */}
@@ -2588,21 +2588,7 @@ export default function AdminDossiersPage() {
                   <p className="text-2xl font-bold text-blue-900">
                     {globalStats
                       ? globalStats.in_progress
-                      : dossiers.filter((d: any) => {
-                          const hasClient = !!d.user;
-                          const rawStatut = getRawStatut(d);
-                          const initialStatut =
-                            hasClient &&
-                            (!rawStatut ||
-                              rawStatut === 'recu' ||
-                              rawStatut === 'en_attente_onboarding');
-                          return (
-                            !d.isStandby &&
-                            !isClosedDossier(d) &&
-                            !isArchivedDossier(d) &&
-                            !initialStatut
-                          );
-                        }).length}
+                      : dossiers.filter((d: any) => isInProgressDossier(d)).length}
                   </p>
                 </button>
                 <button
@@ -2742,39 +2728,10 @@ export default function AdminDossiersPage() {
                 const filteredDossiers = dossiers.filter((d: any) => {
                   // Filtre par statut (logique simplifiée admin)
                   if (statusFilter === 'pending') {
-                    // Dossiers créés par un utilisateur dont le statut n'a pas encore été édité par l'admin
-                    const hasClient = !!d.user;
-                    const rawStatut = getRawStatut(d);
-                    const initialStatut =
-                      !rawStatut ||
-                      rawStatut === 'recu' ||
-                      rawStatut === 'en_attente_onboarding';
-                    if (
-                      !hasClient ||
-                      !initialStatut ||
-                      d.isStandby ||
-                      isClosedDossier(d) ||
-                      isArchivedDossier(d)
-                    ) {
-                      return false;
-                    }
+                    // Demandes publiques à valider + dossiers client au statut initial non édité
+                    if (!isPendingDossier(d)) return false;
                   } else if (statusFilter === 'in_progress') {
-                    // Tous les autres dossiers non clôturés / non archivés
-                    const hasClient = !!d.user;
-                    const rawStatut = getRawStatut(d);
-                    const initialStatut =
-                      hasClient &&
-                      (!rawStatut ||
-                        rawStatut === 'recu' ||
-                        rawStatut === 'en_attente_onboarding');
-                    if (
-                      initialStatut ||
-                      d.isStandby ||
-                      isClosedDossier(d) ||
-                      isArchivedDossier(d)
-                    ) {
-                      return false;
-                    }
+                    if (!isInProgressDossier(d)) return false;
                   } else if (statusFilter === 'standby') {
                     if (!d.isStandby || isClosedDossier(d) || isArchivedDossier(d)) return false;
                   } else if (statusFilter === 'closed') {
@@ -2808,6 +2765,10 @@ export default function AdminDossiersPage() {
                         const pta = a?.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
                         const ptb = b?.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
                         if (ptb !== pta) return ptb - pta;
+                        // Demandes publiques à valider remontées en tête (après les épinglés).
+                        const da = isDemandePubliqueEnAttente(a) ? 1 : 0;
+                        const db = isDemandePubliqueEnAttente(b) ? 1 : 0;
+                        if (db !== da) return db - da;
                         const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
                         const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
                         if (tb !== ta) return tb - ta;
@@ -2902,7 +2863,7 @@ export default function AdminDossiersPage() {
                     className={`relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 bg-gradient-to-r shadow-sm w-full min-w-0 ${
                       dossier.isStandby
                         ? 'from-violet-200/70 via-fuchsia-200/70 to-violet-200/70 group-hover:from-violet-400/70 group-hover:via-fuchsia-400/70 group-hover:to-violet-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(168,85,247,0.5)]'
-                        : dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding'
+                        : dossier.statut === 'recu' || dossier.statut === 'en_attente_onboarding' || dossier.statut === 'en_attente_validation'
                         ? 'from-yellow-200/70 via-amber-200/70 to-yellow-200/70 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(234,179,8,0.5)]'
                         : dossier.statut === 'decision_favorable' || dossier.statut === 'gain_cause'
                         ? 'from-green-200/70 via-emerald-200/70 to-green-200/70 group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70 group-hover:shadow-[0_10px_30px_-18px_rgba(34,197,94,0.5)]'

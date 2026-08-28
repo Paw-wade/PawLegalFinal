@@ -321,6 +321,12 @@ export default function HomePage() {
                 >
                   Calculateur
                 </Link>
+                <Link
+                  href="/nouvelle-demande"
+                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-orange-700 bg-orange-100 hover:bg-orange-200 whitespace-nowrap"
+                >
+                  Nouvelle demande
+                </Link>
               </div>
             </div>
           </div>
@@ -372,9 +378,18 @@ export default function HomePage() {
                     <span className="ml-2 group-hover:translate-x-0.5 inline-block">→</span>
                   </Button>
                 </Link>
+                <Link href="/nouvelle-demande">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="min-w-[180px] border-2 border-orange-300 text-orange-700 hover:border-orange-400 hover:bg-orange-50/70 transition-all duration-200"
+                  >
+                    Démarrer une demande
+                  </Button>
+                </Link>
                 <Link href="/contact">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="lg"
                     className="min-w-[180px] border-2 border-gray-300 text-gray-700 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50/50 transition-all duration-200"
                   >

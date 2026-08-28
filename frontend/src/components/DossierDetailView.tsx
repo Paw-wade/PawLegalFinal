@@ -4,6 +4,7 @@ import React, { useRef, useEffect } from 'react';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import Link from 'next/link';
 import { getStatutLabelWithEtapes, getStatutColor, getPrioriteColor, getPrioriteLabel } from '@/lib/dossierUtils';
+import { ValiderDemandeButton } from '@/components/demande/ValiderDemandeButton';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -204,6 +205,16 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
               </span>
             )}
           </div>
+
+          {/* Demande publique en attente : action de prise en compte (admin) */}
+          {variant === 'admin' && dossier.statut === 'en_attente_validation' && (dossier._id || dossier.id) ? (
+            <div className="mt-4 flex flex-col gap-2 rounded-lg border border-orange-200 bg-orange-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-orange-800">
+                Cette demande a été déposée depuis le site et attend votre validation.
+              </p>
+              <ValiderDemandeButton dossierId={dossier._id || dossier.id} />
+            </div>
+          ) : null}
         </div>
 
         {/* Informations générales */}

@@ -111,7 +111,32 @@ const dossierSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true // L'admin qui a créé le dossier
+    required: false // L'admin qui a créé le dossier (null si créé par un visiteur non connecté)
+  },
+  // Demande publique déposée par un visiteur non connecté (en attente de validation)
+  estDemandePublique: {
+    type: Boolean,
+    default: false
+  },
+  // E-mail d'invitation à créer un compte envoyé au demandeur
+  invitationSentAt: {
+    type: Date,
+    required: false
+  },
+  // E-mail de confirmation envoyé au demandeur lorsque la demande est prise en compte
+  confirmationSentAt: {
+    type: Date,
+    required: false
+  },
+  // Prise en compte / validation de la demande par un membre du cabinet
+  validatedAt: {
+    type: Date,
+    required: false
+  },
+  validatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
   },
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
