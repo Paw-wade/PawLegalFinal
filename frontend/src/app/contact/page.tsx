@@ -264,9 +264,6 @@ export default function ContactPage() {
       <section id="demande" className="container mx-auto px-4 pt-12 scroll-mt-24">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-6">
-            <div className="inline-block mb-3 px-4 py-1.5 bg-primary/10 rounded-full border border-primary/20">
-              <span className="text-sm font-medium text-primary">Sans créer de compte</span>
-            </div>
             <h2 className="text-3xl sm:text-4xl font-bold mb-3 text-foreground">Démarrer une demande</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
               Accompagnement, recours ou constitution de société : choisissez votre situation, décrivez votre besoin

@@ -236,7 +236,20 @@ export default function AdminDossierRecapPage() {
             {recap.dossier.description && (
               <div className="mt-4">
                 <p className="text-sm text-gray-500 mb-1">Description</p>
-                <p className="text-gray-700">{recap.dossier.description}</p>
+                <p className="text-gray-700 whitespace-pre-wrap">{recap.dossier.description}</p>
+              </div>
+            )}
+            {Array.isArray(recap.dossier.champsFormulaire) && recap.dossier.champsFormulaire.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm text-gray-500 mb-2">Informations du formulaire</p>
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                  {recap.dossier.champsFormulaire.map((c: any, i: number) => (
+                    <div key={i} className="min-w-0">
+                      <dt className="text-xs text-gray-500">{c.libelle || c.nom}</dt>
+                      <dd className="text-gray-800 break-words whitespace-pre-wrap">{c.valeur}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
             )}
           </section>

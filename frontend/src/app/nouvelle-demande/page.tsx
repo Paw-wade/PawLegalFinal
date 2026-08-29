@@ -14,9 +14,6 @@ export default function NouvelleDemandePage() {
         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
         <div className="container mx-auto px-4 relative z-10">
           <div className="text-center max-w-3xl mx-auto">
-            <div className="inline-block mb-3 px-4 py-1.5 bg-primary/10 rounded-full border border-primary/20">
-              <span className="text-sm font-medium text-primary">Sans créer de compte</span>
-            </div>
             <h1 className="text-4xl sm:text-5xl font-bold mb-4 text-foreground leading-tight">
               Démarrer ma <span className="text-primary">demande</span>
             </h1>

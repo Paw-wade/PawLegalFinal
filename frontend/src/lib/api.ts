@@ -1085,6 +1085,7 @@ export const dossiersAPI = {
     dateEcheance?: string;
     notes?: string;
     assignedTo?: string;
+    champsFormulaire?: Array<{ nom?: string; libelle?: string; valeur?: string }>;
   }) => api.post('/user/dossiers', data),
 
   // Prendre en compte (valider) une demande publique en attente → e-mail de confirmation au demandeur

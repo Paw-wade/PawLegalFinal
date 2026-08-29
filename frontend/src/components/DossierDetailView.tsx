@@ -5,6 +5,7 @@ import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import Link from 'next/link';
 import { getStatutLabelWithEtapes, getStatutColor, getPrioriteColor, getPrioriteLabel } from '@/lib/dossierUtils';
 import { ValiderDemandeButton } from '@/components/demande/ValiderDemandeButton';
+import { TelechargerDossierPdfButton } from '@/components/demande/TelechargerDossierPdfButton';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -91,7 +92,14 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
     return { mainDescription, specificFields };
   };
 
-  const { mainDescription, specificFields } = parseDescription(dossier.description || '');
+  // Nouveaux dossiers : les rubriques sont structurées (champsFormulaire) et la description est pure.
+  // Anciens dossiers : on retombe sur le parsing de l'ancien bloc « Informations spécifiques ».
+  const hasStructuredFields = Array.isArray(dossier.champsFormulaire) && dossier.champsFormulaire.length > 0;
+  const parsedDescription = parseDescription(dossier.description || '');
+  const mainDescription = hasStructuredFields ? (dossier.description || '').trim() : parsedDescription.mainDescription;
+  const specificFields = hasStructuredFields
+    ? dossier.champsFormulaire.map((c: any) => ({ label: c.libelle || c.nom || '', value: c.valeur || '' }))
+    : parsedDescription.specificFields;
 
   return (
     <div className="min-w-0 space-y-6">
@@ -116,24 +124,58 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
               )}
             </div>
           </div>
-          <div className="flex flex-shrink-0">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-shrink-0">
             {(() => {
               const dossierId = dossier._id || dossier.id;
               const basePath = variant === 'admin' ? '/admin' : variant === 'partenaire' ? '/partenaire' : '/client';
               return (
-                <Link
-                  href={`${basePath}/dossiers/${dossierId}/recap`}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] w-full sm:w-auto bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm text-sm font-medium"
-                  title="Voir le récit récapitulatif complet"
-                >
-                  <span>📋</span>
-                  Récit récapitulatif
-                </Link>
+                <>
+                  {variant === 'admin' && dossier.statut === 'en_attente_validation' && dossierId ? (
+                    <ValiderDemandeButton dossierId={dossierId} />
+                  ) : null}
+                  <TelechargerDossierPdfButton dossierId={dossierId} numero={dossier.numero} className="w-full sm:w-auto" />
+                  <Link
+                    href={`${basePath}/dossiers/${dossierId}/recap`}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] w-full sm:w-auto bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm text-sm font-medium"
+                    title="Voir le récit récapitulatif complet"
+                  >
+                    <span>📋</span>
+                    Récit récapitulatif
+                  </Link>
+                </>
               );
             })()}
           </div>
         </div>
       </div>
+
+      {/* Informations de la demande (visible) : description + rubriques du formulaire */}
+      {(mainDescription || specificFields.length > 0) && (
+        <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm">
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
+            Informations de la demande
+          </h3>
+          {mainDescription && (
+            <div className="mb-4">
+              <p className="mb-1 text-xs text-gray-500">Description</p>
+              <p className="whitespace-pre-wrap break-words text-sm text-foreground">{mainDescription}</p>
+            </div>
+          )}
+          {specificFields.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs text-gray-500">Informations du formulaire</p>
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                {specificFields.map((f, i) => (
+                  <div key={i} className="min-w-0">
+                    <dt className="text-xs text-gray-500">{f.label}</dt>
+                    <dd className="whitespace-pre-wrap break-words text-sm font-medium text-foreground">{f.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Formule tarifaire — visible uniquement côté admin (masquée pour client et partenaire) */}
       {variant === 'admin' && (
@@ -206,15 +248,6 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
             )}
           </div>
 
-          {/* Demande publique en attente : action de prise en compte (admin) */}
-          {variant === 'admin' && dossier.statut === 'en_attente_validation' && (dossier._id || dossier.id) ? (
-            <div className="mt-4 flex flex-col gap-2 rounded-lg border border-orange-200 bg-orange-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-orange-800">
-                Cette demande a été déposée depuis le site et attend votre validation.
-              </p>
-              <ValiderDemandeButton dossierId={dossier._id || dossier.id} />
-            </div>
-          ) : null}
         </div>
 
         {/* Informations générales */}
