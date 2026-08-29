@@ -118,6 +118,28 @@ const clientCategories = {
   }
 };
 
+// Indicatifs téléphoniques (diaspora : France, Sénégal et principaux pays).
+const INDICATIFS = [
+  { code: '+33', pays: 'France' },
+  { code: '+221', pays: 'Sénégal' },
+  { code: '+32', pays: 'Belgique' },
+  { code: '+41', pays: 'Suisse' },
+  { code: '+1', pays: 'USA / Canada' },
+  { code: '+44', pays: 'Royaume-Uni' },
+  { code: '+49', pays: 'Allemagne' },
+  { code: '+34', pays: 'Espagne' },
+  { code: '+39', pays: 'Italie' },
+  { code: '+351', pays: 'Portugal' },
+  { code: '+212', pays: 'Maroc' },
+  { code: '+225', pays: "Côte d'Ivoire" },
+  { code: '+223', pays: 'Mali' },
+  { code: '+224', pays: 'Guinée' },
+  { code: '+226', pays: 'Burkina Faso' },
+  { code: '+229', pays: 'Bénin' },
+  { code: '+237', pays: 'Cameroun' },
+  { code: '+241', pays: 'Gabon' },
+];
+
 export interface DemandeWizardProps {
   /** Affiche le lien « ← Retour » (par défaut true). */
   showBackLink?: boolean;
@@ -247,7 +269,7 @@ export default function DemandeWizard({
 
   // Définition des champs spécifiques pour chaque type de demande
   const getSpecificFields = (optionValue: string) => {
-    const fields: { [key: string]: Array<{ name: string; label: string; type: string; placeholder?: string; required?: boolean; options?: string[] }> } = {
+    const fields: { [key: string]: Array<{ name: string; label: string; type: string; placeholder?: string; required?: boolean; options?: string[]; showWhen?: { field: string }; fullWidth?: boolean }> } = {
       'premiere_demande_titre': [
         { name: 'etablissement', label: 'Établissement d\'enseignement', type: 'text', placeholder: 'Nom de l\'établissement', required: false },
         { name: 'niveau_etudes', label: 'Niveau d\'études', type: 'select', options: ['Licence', 'Master', 'Doctorat', 'Autre'], required: false },
@@ -339,11 +361,17 @@ export default function DemandeWizard({
       ],
       'constitution_societe_senegal': [
         { name: 'denomination_prevue', label: 'Dénomination sociale ou nom commercial envisagé', type: 'text', placeholder: 'Ex. Ma Société SARL', required: false },
-        { name: 'forme_juridique_sn', label: 'Forme juridique envisagée (Sénégal)', type: 'select', options: ['SARL', 'SA', 'SAS / SUARL', 'GIE', 'Entreprise individuelle', 'Autre / à définir'], required: false },
+        { name: 'forme_juridique_sn', label: 'Forme juridique envisagée (Sénégal)', type: 'select', options: ['SARL', 'SA', 'SAS', 'SUARL', 'GIE', 'Entreprise individuelle', 'Autre / à définir'], required: false },
         { name: 'siege_prevu_sn', label: 'Siège ou ville d’implantation prévue', type: 'text', placeholder: 'Région, ville', required: false },
         { name: 'activite_principale', label: 'Activité principale', type: 'textarea', placeholder: 'Secteur, objet social, clientèle visée…', required: false },
         { name: 'nombre_associes_sn', label: 'Nombre d’associés / fondateurs', type: 'text', placeholder: 'Ex. 2 associés', required: false },
-        { name: 'capital_prevu_sn', label: 'Capital social ou apports envisagés', type: 'text', placeholder: 'Montant ou fourchette (FCFA)', required: false },
+        { name: 'capital_social', label: 'Capital social', type: 'text', placeholder: 'Montant du capital social (FCFA)', required: false, fullWidth: true },
+        { name: 'apport_numeraire', label: 'Apport en numéraire', type: 'checkbox', required: false },
+        { name: 'montant_apport_numeraire', label: 'Montant de l’apport en numéraire', type: 'text', placeholder: 'Montant (FCFA)', required: false, showWhen: { field: 'apport_numeraire' } },
+        { name: 'apport_nature', label: 'Apport en nature', type: 'checkbox', required: false },
+        { name: 'montant_apport_nature', label: 'Valeur estimée de l’apport en nature', type: 'text', placeholder: 'Valeur estimée (FCFA)', required: false, showWhen: { field: 'apport_nature' } },
+        { name: 'apport_industrie', label: 'Apport en industrie', type: 'checkbox', required: false },
+        { name: 'montant_apport_industrie', label: 'Valeur estimée de l’apport en industrie', type: 'text', placeholder: 'Valeur estimée', required: false, showWhen: { field: 'apport_industrie' } },
       ],
       'constitution_societe_france': [
         { name: 'denomination_prevue', label: 'Dénomination sociale envisagée', type: 'text', placeholder: 'Ex. MA SOCIÉTÉ SAS', required: false },
@@ -351,7 +379,13 @@ export default function DemandeWizard({
         { name: 'departement_siege', label: 'Département ou ville du siège social', type: 'text', placeholder: 'Ex. Paris (75)', required: false },
         { name: 'activite_principale', label: 'Activité principale', type: 'textarea', placeholder: 'Secteur, code APE/NAF si connu, clientèle…', required: false },
         { name: 'nombre_associes_fr', label: 'Nombre d’associés / associés uniques', type: 'text', placeholder: 'Ex. associé unique', required: false },
-        { name: 'capital_prevu_fr', label: 'Capital social envisagé (€)', type: 'text', placeholder: 'Montant ou fourchette', required: false },
+        { name: 'capital_social', label: 'Capital social', type: 'text', placeholder: 'Montant du capital social (€)', required: false, fullWidth: true },
+        { name: 'apport_numeraire', label: 'Apport en numéraire', type: 'checkbox', required: false },
+        { name: 'montant_apport_numeraire', label: 'Montant de l’apport en numéraire', type: 'text', placeholder: 'Montant (€)', required: false, showWhen: { field: 'apport_numeraire' } },
+        { name: 'apport_nature', label: 'Apport en nature', type: 'checkbox', required: false },
+        { name: 'montant_apport_nature', label: 'Valeur estimée de l’apport en nature', type: 'text', placeholder: 'Valeur estimée (€)', required: false, showWhen: { field: 'apport_nature' } },
+        { name: 'apport_industrie', label: 'Apport en industrie', type: 'checkbox', required: false },
+        { name: 'montant_apport_industrie', label: 'Valeur estimée de l’apport en industrie', type: 'text', placeholder: 'Valeur estimée', required: false, showWhen: { field: 'apport_industrie' } },
       ],
     };
 
@@ -510,29 +544,34 @@ export default function DemandeWizard({
         return;
       }
 
-      // Construire la description enrichie avec les champs spécifiques (valeurs réelles du DOM)
-      let descriptionEnrichie = readVal('description') || '';
+      // La description reste le texte libre UNIQUEMENT. Les autres champs du formulaire
+      // sont envoyés de façon structurée (chacun sa rubrique : libellé + valeur).
+      const descriptionText = readVal('description') || '';
       const specificFields = getSpecificFields(selectedOption);
-      const champsSpecifiques: string[] = [];
+      const champsFormulaire: Array<{ nom: string; libelle: string; valeur: string }> = [];
 
       specificFields.forEach(field => {
-        // Les champs date exposent un format d'affichage dans le DOM : on garde l'état React (ISO).
-        const val = field.type === 'date' ? (formData[field.name] || '') : readVal(field.name);
-        if (val !== undefined && val !== '' && val !== null) {
-          champsSpecifiques.push(`${field.label}: ${val}`);
+        // Champ conditionnel masqué (ex. case décochée) : on ne l'enregistre pas.
+        if ((field as any).showWhen && !formData[(field as any).showWhen.field]) return;
+        let val: string;
+        if (field.type === 'checkbox') {
+          val = formData[field.name] ? 'Oui' : '';
+        } else if (field.type === 'date') {
+          // Les champs date exposent un format d'affichage dans le DOM : on garde l'état React (ISO).
+          val = formData[field.name] || '';
+        } else {
+          val = readVal(field.name);
+        }
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          champsFormulaire.push({ nom: field.name, libelle: field.label, valeur: String(val) });
         }
       });
-
-      if (champsSpecifiques.length > 0) {
-        descriptionEnrichie = descriptionEnrichie
-          ? `${descriptionEnrichie}\n\n--- Informations spécifiques ---\n${champsSpecifiques.join('\n')}`
-          : `--- Informations spécifiques ---\n${champsSpecifiques.join('\n')}`;
-      }
 
       const urgenceVal = readVal('urgence');
       const dossierData: any = {
         titre: titreTrimmed, // Utiliser le titre trimé pour éviter les espaces
-        description: descriptionEnrichie,
+        description: descriptionText,
+        champsFormulaire,
         categorie: mapping.categorie,
         type: mapping.type,
         statut: 'recu',
@@ -549,7 +588,7 @@ export default function DemandeWizard({
         dossierData.clientNom = nomVal;
         dossierData.clientPrenom = prenomVal;
         dossierData.clientEmail = emailVal;
-        dossierData.clientTelephone = telephoneVal;
+        dossierData.clientTelephone = telephoneVal ? `${formData.telephoneIndicatif || '+33'} ${telephoneVal}` : '';
       }
 
       const response = await dossiersAPI.createDossier(dossierData);
@@ -699,9 +738,6 @@ export default function DemandeWizard({
                 <>
                   <div>
                     <h2 className="text-base font-semibold text-foreground">Détails de la demande</h2>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Les champs utiles à votre situation peuvent rester vides.
-                    </p>
                   </div>
 
                   <div className="space-y-3">
@@ -733,10 +769,27 @@ export default function DemandeWizard({
 
                     {getSpecificFields(selectedOption).length > 0 ? (
                       <div className="grid gap-3 sm:grid-cols-2">
-                        {getSpecificFields(selectedOption).map((field) => (
+                        {getSpecificFields(selectedOption)
+                          .filter((field) => !field.showWhen || !!formData[field.showWhen.field])
+                          .map((field) => (
+                          field.type === 'checkbox' ? (
+                            <label
+                              key={field.name}
+                              className="sm:col-span-2 flex items-center gap-2 cursor-pointer"
+                            >
+                              <input
+                                id={field.name}
+                                type="checkbox"
+                                checked={!!formData[field.name]}
+                                onChange={(e) => setFormData({ ...formData, [field.name]: e.target.checked })}
+                                className="h-4 w-4 shrink-0 cursor-pointer text-primary"
+                              />
+                              <span className="text-sm font-medium">{field.label}</span>
+                            </label>
+                          ) : (
                           <div
                             key={field.name}
-                            className={field.type === 'textarea' ? 'sm:col-span-2' : undefined}
+                            className={field.type === 'textarea' || field.fullWidth ? 'sm:col-span-2' : undefined}
                           >
                             <Label htmlFor={field.name} className="mb-1 block text-sm font-medium">
                               {field.label}
@@ -782,6 +835,7 @@ export default function DemandeWizard({
                               />
                             )}
                           </div>
+                          )
                         ))}
                       </div>
                     ) : null}
@@ -803,9 +857,6 @@ export default function DemandeWizard({
                   {!(session && (session.user as any)?.id) ? (
                     <div className="border-t border-gray-100 pt-4">
                       <h3 className="mb-1 text-sm font-semibold text-foreground">Vos coordonnées</h3>
-                      <p className="mb-3 text-xs text-muted-foreground">
-                        Seuls le nom, le prénom et le téléphone sont nécessaires pour que nous puissions vous recontacter. Les autres champs sont facultatifs.
-                      </p>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div>
                           <Label htmlFor="nom" className="mb-1 block text-sm font-medium">
@@ -837,15 +888,28 @@ export default function DemandeWizard({
                           <Label htmlFor="telephone" className="mb-1 block text-sm font-medium">
                             Téléphone <span className="text-red-500">*</span>
                           </Label>
-                          <Input
-                            id="telephone"
-                            type="tel"
-                            value={formData.telephone}
-                            onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
-                            className="h-9 text-sm"
-                            required
-                            aria-required="true"
-                          />
+                          <div className="flex gap-2">
+                            <select
+                              aria-label="Indicatif pays"
+                              value={formData.telephoneIndicatif || '+33'}
+                              onChange={(e) => setFormData({ ...formData, telephoneIndicatif: e.target.value })}
+                              className="h-9 shrink-0 rounded-md border border-input bg-background px-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            >
+                              {INDICATIFS.map((i) => (
+                                <option key={i.code} value={i.code} title={i.pays}>{i.code}</option>
+                              ))}
+                            </select>
+                            <Input
+                              id="telephone"
+                              type="tel"
+                              value={formData.telephone}
+                              onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
+                              className="h-9 flex-1 text-sm"
+                              required
+                              aria-required="true"
+                              placeholder="Numéro"
+                            />
+                          </div>
                         </div>
                         <div>
                           <Label htmlFor="email" className="mb-1 block text-sm font-medium">

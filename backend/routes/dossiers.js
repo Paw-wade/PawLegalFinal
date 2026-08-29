@@ -279,11 +279,11 @@ Objet : ${titre}
           toName: fullName,
           variables: { prenom, titre, espaceUrl: `${frontUrl}/client/dossiers` },
           fallback: {
-            subject: 'Votre demande a bien été reçue — Ada Papers',
-            htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Nous avons bien reçu votre demande « ${escapeHtml(titre)} ». Elle est en attente de validation par notre équipe.</p><p>Vous pouvez la suivre depuis votre espace : <a href="${escapeHtml(frontUrl)}/client/dossiers">${escapeHtml(frontUrl)}/client/dossiers</a></p>`,
+            subject: 'Votre demande a bien été prise en compte — Ada Papers',
+            htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Votre demande « ${escapeHtml(titre)} » a bien été <strong>prise en compte</strong>. Notre équipe vous contactera dans les plus brefs délais.</p><p>Vous pouvez la suivre depuis votre espace : <a href="${escapeHtml(frontUrl)}/client/dossiers">${escapeHtml(frontUrl)}/client/dossiers</a></p>`,
             textContent: `Bonjour ${prenom || ''},
 
-Nous avons bien reçu votre demande "${titre}". Elle est en attente de validation.
+Votre demande "${titre}" a bien été prise en compte. Notre équipe vous contactera dans les plus brefs délais.
 Suivi : ${frontUrl}/client/dossiers`,
           },
         });
@@ -300,13 +300,12 @@ Suivi : ${frontUrl}/client/dossiers`,
         toName: fullName,
         variables: { prenom, titre, signupUrl, email },
         fallback: {
-          subject: 'Votre demande a bien été reçue — créez votre compte pour la suivre',
-          htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Nous avons bien reçu votre demande « ${escapeHtml(titre)} ». Notre équipe va l'étudier.</p><p>Pour <strong>suivre l'avancement de votre dossier</strong>, créez votre compte avec cette même adresse e-mail :</p><p><a href="${escapeHtml(signupUrl)}" style="display:inline-block;padding:10px 18px;background:#f97316;color:#fff;border-radius:6px;text-decoration:none;">Créer mon compte</a></p><p>Votre demande sera automatiquement rattachée à votre espace après vérification de votre e-mail.</p>`,
+          subject: 'Votre demande a bien été prise en compte — Ada Papers',
+          htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Votre demande « ${escapeHtml(titre)} » a bien été <strong>prise en compte</strong>. Notre équipe vous contactera dans les plus brefs délais.</p><p>Pour <strong>suivre l'avancement de votre dossier</strong>, vous pouvez créer votre compte avec cette même adresse e-mail :</p><p><a href="${escapeHtml(signupUrl)}" style="display:inline-block;padding:10px 18px;background:#f97316;color:#fff;border-radius:6px;text-decoration:none;">Créer mon compte</a></p><p>Votre demande sera automatiquement rattachée à votre espace après vérification de votre e-mail.</p>`,
           textContent: `Bonjour ${prenom || ''},
 
-Nous avons bien reçu votre demande "${titre}". Notre équipe va l'étudier.
-Pour suivre votre dossier, créez votre compte avec cette même adresse e-mail : ${signupUrl}
-Votre demande sera automatiquement rattachée à votre espace après vérification de votre e-mail.`,
+Votre demande "${titre}" a bien été prise en compte. Notre équipe vous contactera dans les plus brefs délais.
+Pour suivre votre dossier, vous pouvez créer votre compte avec cette même adresse e-mail : ${signupUrl}`,
         },
       });
       dossier.invitationSentAt = new Date();
@@ -564,6 +563,18 @@ router.post(
         }
       }
 
+      // Réponses structurées du formulaire (rubriques) — séparées de la description libre.
+      const champsFormulaireClean = Array.isArray(req.body.champsFormulaire)
+        ? req.body.champsFormulaire
+            .filter((c) => c && c.valeur !== undefined && c.valeur !== null && String(c.valeur).trim() !== '')
+            .slice(0, 100)
+            .map((c) => ({
+              nom: String(c.nom || '').slice(0, 120),
+              libelle: String(c.libelle || c.nom || '').slice(0, 200),
+              valeur: String(c.valeur).slice(0, 2000),
+            }))
+        : [];
+
       // Demande publique = soumission par un visiteur non authentifié.
       const isPublicDemande = !req.user;
       let publicDemandeExistingUser = null;
@@ -635,6 +646,7 @@ router.post(
         priorite: priorite || 'normale',
         dateEcheance: dateEcheance || null,
         notes: notes || '',
+        champsFormulaire: champsFormulaireClean,
         estDemandePublique: isPublicDemande,
         createdBy: req.user ? req.user.id : null, // null si créé par un visiteur
         assignedTo: assignedTo || null,
@@ -894,10 +906,11 @@ router.patch(
             variables: { prenom, titre: dossier.titre || 'votre demande', espaceUrl: `${frontUrl}/client/dossiers`, signupUrl },
             fallback: {
               subject: 'Votre demande a été prise en compte — Ada Papers',
-              htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Bonne nouvelle : votre demande « ${escapeHtml(dossier.titre || '')} » a été <strong>prise en compte</strong> par notre équipe et est désormais en cours de traitement.</p><p>Pour suivre son avancement, connectez-vous à votre espace (ou créez votre compte avec cette même adresse e-mail) : <a href="${escapeHtml(frontUrl)}/client/dossiers">${escapeHtml(frontUrl)}/client/dossiers</a></p>`,
+              htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Bonne nouvelle : votre demande « ${escapeHtml(dossier.titre || '')} » a été <strong>prise en compte</strong> par notre équipe. Nous vous <strong>contacterons rapidement</strong> afin de recueillir les informations complémentaires nécessaires au traitement de votre dossier.</p><p>Vous pouvez suivre son avancement depuis votre espace (ou créer votre compte avec cette même adresse e-mail) : <a href="${escapeHtml(frontUrl)}/client/dossiers">${escapeHtml(frontUrl)}/client/dossiers</a></p>`,
               textContent: `Bonjour ${prenom || ''},
 
-Votre demande "${dossier.titre || ''}" a été prise en compte et est en cours de traitement.
+Votre demande "${dossier.titre || ''}" a été prise en compte par notre équipe.
+Nous vous contacterons rapidement afin de recueillir les informations complémentaires nécessaires au traitement de votre dossier.
 Suivi : ${frontUrl}/client/dossiers`,
             },
           });
@@ -1538,6 +1551,7 @@ router.get('/:id/recap', protect, async (req, res) => {
         numero: dossier.numero,
         titre: dossier.titre,
         description: dossier.description,
+        champsFormulaire: Array.isArray(dossier.champsFormulaire) ? dossier.champsFormulaire : [],
         categorie: dossier.categorie,
         type: dossier.type,
         statut: dossier.statut,
@@ -2010,6 +2024,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         numero: dossier.numero,
         titre: dossier.titre,
         description: dossier.description,
+        champsFormulaire: Array.isArray(dossier.champsFormulaire) ? dossier.champsFormulaire : [],
         categorie: dossier.categorie,
         type: dossier.type,
         statut: dossier.statut,
@@ -2247,7 +2262,29 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       yPosition = addText(`Échéance : ${new Date(recap.dossier.dateEcheance).toLocaleDateString('fr-FR')}`, margin, yPosition);
     }
     yPosition += sectionSpacing;
-    
+
+    // Description (texte libre uniquement)
+    if (recap.dossier.description && String(recap.dossier.description).trim()) {
+      yPosition = addSection('DESCRIPTION', yPosition);
+      yPosition = addMultilineText(String(recap.dossier.description), margin, yPosition, { width: doc.page.width - 2 * margin, align: 'justify' });
+      yPosition += sectionSpacing;
+    }
+
+    // Informations du formulaire (chaque champ a sa rubrique)
+    if (Array.isArray(recap.dossier.champsFormulaire) && recap.dossier.champsFormulaire.length > 0) {
+      yPosition = addSection('INFORMATIONS DU FORMULAIRE', yPosition);
+      recap.dossier.champsFormulaire.forEach((c) => {
+        const libelle = (c && (c.libelle || c.nom)) || '';
+        const valeur = (c && c.valeur) || '';
+        doc.font('Helvetica-Bold');
+        yPosition = addText(`${libelle} :`, margin, yPosition, { continued: true, width: doc.page.width - 2 * margin });
+        doc.font('Helvetica');
+        yPosition = addText(` ${valeur}`, margin, yPosition, { width: doc.page.width - 2 * margin });
+        yPosition += lineHeight;
+      });
+      yPosition += sectionSpacing;
+    }
+
     // Informations client
     yPosition = addSection('INFORMATIONS CLIENT', yPosition);
     yPosition = addText(`Nom : ${recap.client.nom || 'N/A'}`, margin, yPosition);

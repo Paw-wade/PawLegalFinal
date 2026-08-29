@@ -38,6 +38,13 @@ const dossierSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // Réponses structurées du formulaire de demande : chaque champ garde sa rubrique
+  // (libellé) et sa valeur, séparément de la description libre.
+  champsFormulaire: [{
+    nom: { type: String, trim: true },       // clé technique (ex. "etablissement")
+    libelle: { type: String, trim: true },   // libellé affiché (ex. "Établissement d'enseignement")
+    valeur: { type: String, trim: true }     // valeur saisie
+  }],
   categorie: {
     type: String,
     enum: [
