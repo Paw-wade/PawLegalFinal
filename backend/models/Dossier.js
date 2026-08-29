@@ -45,6 +45,9 @@ const dossierSchema = new mongoose.Schema({
     libelle: { type: String, trim: true },   // libellé affiché (ex. "Établissement d'enseignement")
     valeur: { type: String, trim: true }     // valeur saisie
   }],
+  // Jeton de suivi public : permet à un demandeur sans compte de suivre son dossier
+  // et de déposer les documents demandés via un lien /suivi/<token>. Révocable.
+  suiviToken: { type: String, index: true, sparse: true },
   categorie: {
     type: String,
     enum: [

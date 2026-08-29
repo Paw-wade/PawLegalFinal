@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { body, validationResult } = require('express-validator');
 const DossierGuestUploadInvite = require('../models/DossierGuestUploadInvite');
+const DocumentRequest = require('../models/DocumentRequest');
 const Document = require('../models/Document');
 const Dossier = require('../models/Dossier');
 const User = require('../models/User');
@@ -272,6 +273,139 @@ router.post('/public/:token', (req, res, next) => {
     });
   } catch (err) {
     console.error('[dossier-guest-upload] POST public:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur lors du dépôt.' });
+  }
+});
+
+// ============ SUIVI PUBLIC (demande sans compte, via suiviToken du dossier) ============
+
+async function findDossierBySuiviToken(token) {
+  const clean = String(token || '').trim().replace(/[^a-f0-9]/gi, '');
+  if (clean.length < 32 || clean.length > 80) return null;
+  return Dossier.findOne({ suiviToken: clean });
+}
+
+// @route   GET /api/dossier-guest-upload/suivi/:token
+// @desc    Vue publique de suivi : statut, étapes, documents partagés, demandes de documents
+router.get('/suivi/:token', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+
+    const documents = await Document.find({ dossierId: dossier._id, visibleToClient: true })
+      .select('nom originalName createdAt').sort({ createdAt: -1 }).lean();
+    const demandes = await DocumentRequest.find({ dossier: dossier._id, status: { $in: ['pending', 'sent'] } })
+      .select('documentType documentTypeLabel description status createdAt').sort({ createdAt: 1 }).lean();
+
+    return res.json({
+      success: true,
+      dossier: {
+        id: String(dossier._id),
+        titre: dossier.titre,
+        numero: dossier.numero || null,
+        statut: dossier.statut,
+        etapesSupplementaires: dossier.etapesSupplementaires || [],
+        categorie: dossier.categorie,
+        createdAt: dossier.createdAt,
+        updatedAt: dossier.updatedAt,
+        clientPrenom: dossier.clientPrenom || '',
+      },
+      documents: documents.map((d) => ({ id: String(d._id), nom: d.nom || d.originalName || 'Document', createdAt: d.createdAt })),
+      documentRequests: demandes.map((r) => ({
+        id: String(r._id),
+        libelle: r.documentTypeLabel || r.documentType || 'Document',
+        description: r.description || '',
+        status: r.status,
+      })),
+    });
+  } catch (err) {
+    console.error('[suivi] GET:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route   POST /api/dossier-guest-upload/suivi/:token/documents
+// @desc    Le porteur du lien dépose un document (éventuellement pour une demande) → dossier
+router.post('/suivi/:token/documents', (req, res, next) => {
+  upload.single('document')(req, res, (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message || 'Fichier invalide.' });
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (!req.file) return res.status(400).json({ success: false, message: 'Aucun fichier téléversé.' });
+
+    const { requestId, nom, description } = req.body || {};
+    let demande = null;
+    if (requestId) {
+      demande = await DocumentRequest.findOne({ _id: requestId, dossier: dossier._id });
+    }
+
+    let ownerUserId = await resolveDossierOwnerUserId(dossier);
+    if (!ownerUserId) ownerUserId = dossier.createdBy || null;
+    if (!ownerUserId) {
+      const anAdmin = await User.findOne({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id').lean();
+      ownerUserId = anAdmin?._id || null;
+    }
+    const cabinet = await resolveCabinetForUser(ownerUserId);
+    const docNom = String(nom || (demande && (demande.documentTypeLabel || demande.documentType)) || req.file.originalname || 'Document').trim().slice(0, 500);
+
+    let cheminFichier;
+    try {
+      cheminFichier = await uploadDocumentToRemoteStorage(req.file, {
+        backendRoot: BACKEND_ROOT,
+        s3Prefix: cabinet?.s3Prefix || null,
+        uploadToCloudinary: () => uploadLocalFileToCloudinary(req.file),
+      });
+    } catch (uploadErr) {
+      removeLocalUploadTempFile(req.file);
+      console.error('[suivi] upload distant échoué:', uploadErr.message);
+      return res.status(503).json({ success: false, message: 'Impossible d\'enregistrer le fichier. Réessayez.' });
+    }
+
+    const document = await Document.create({
+      user: ownerUserId,
+      nom: docNom,
+      nomFichier: req.file.filename,
+      originalName: req.file.originalname,
+      cheminFichier,
+      typeMime: req.file.mimetype,
+      taille: req.file.size,
+      description: String(description || '').trim(),
+      categorie: demande ? normalizeCategorie(demande.documentType) : 'autre',
+      dossierId: dossier._id,
+      cabinetId: cabinet?._id || null,
+      visibleToClient: false,
+      confidentialReason: 'Document déposé par le demandeur via le lien de suivi — en attente de validation.',
+      uploadedViaGuestLink: true,
+      guestContributorName: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim().slice(0, 200),
+    });
+
+    // Marquer la demande de document comme satisfaite.
+    if (demande && demande.status !== 'received') {
+      demande.status = 'received';
+      demande.document = document._id;
+      try { await demande.save(); } catch (e) { console.error('[suivi] maj demande:', e.message || e); }
+    }
+
+    // Notifier les admins.
+    try {
+      const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id');
+      const dossierTitle = dossier.titre || dossier.numero || 'Dossier';
+      const msg = `Le demandeur a déposé « ${docNom} » sur le dossier « ${dossierTitle} » via son lien de suivi${demande ? ' (demande de document satisfaite)' : ''}.`;
+      for (const adm of admins) {
+        await Notification.create({
+          user: adm._id, type: 'document_uploaded', titre: 'Document reçu (suivi)', message: msg,
+          lien: '/admin/dossiers', metadata: { dossierId: String(dossier._id), documentId: String(document._id) },
+        });
+      }
+    } catch (e) { console.error('[suivi] notif admin:', e.message || e); }
+
+    return res.status(201).json({ success: true, message: 'Document transmis. Merci.', document: { id: String(document._id), nom: document.nom } });
+  } catch (err) {
+    console.error('[suivi] POST documents:', err?.message || err);
     return res.status(500).json({ success: false, message: 'Erreur serveur lors du dépôt.' });
   }
 });
