@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { getStatutLabelWithEtapes, getStatutColor, getPrioriteColor, getPrioriteLabel } from '@/lib/dossierUtils';
 import { ValiderDemandeButton } from '@/components/demande/ValiderDemandeButton';
 import { TelechargerDossierPdfButton } from '@/components/demande/TelechargerDossierPdfButton';
+import { LienSuivi } from '@/components/demande/LienSuivi';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -175,6 +176,11 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
             </div>
           )}
         </div>
+      )}
+
+      {/* Lien de suivi public — visible côté admin, pour les demandes sans compte */}
+      {variant === 'admin' && dossier.suiviToken && (
+        <LienSuivi token={dossier.suiviToken} />
       )}
 
       {/* Formule tarifaire — visible uniquement côté admin (masquée pour client et partenaire) */}

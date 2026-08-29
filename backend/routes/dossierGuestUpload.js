@@ -285,14 +285,26 @@ async function findDossierBySuiviToken(token) {
   return Dossier.findOne({ suiviToken: clean });
 }
 
+// Le lien de suivi n'expire que lorsque le dossier est clôturé.
+function isDossierClosed(dossier) {
+  const s = String(dossier?.statut || '').trim();
+  return dossier?.estCloture === true || s === 'cloture';
+}
+
 // @route   GET /api/dossier-guest-upload/suivi/:token
 // @desc    Vue publique de suivi : statut, étapes, documents partagés, demandes de documents
 router.get('/suivi/:token', async (req, res) => {
   try {
     const dossier = await findDossierBySuiviToken(req.params.token);
     if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) {
+      return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif : votre dossier a été clôturé.' });
+    }
 
     const documents = await Document.find({ dossierId: dossier._id, visibleToClient: true })
+      .select('nom originalName createdAt').sort({ createdAt: -1 }).lean();
+    // Documents déposés par le demandeur via ce lien (restent visibles/téléchargeables pour lui).
+    const mesDocuments = await Document.find({ dossierId: dossier._id, uploadedViaGuestLink: true })
       .select('nom originalName createdAt').sort({ createdAt: -1 }).lean();
     const demandes = await DocumentRequest.find({ dossier: dossier._id, status: { $in: ['pending', 'sent'] } })
       .select('documentType documentTypeLabel description status createdAt').sort({ createdAt: 1 }).lean();
@@ -311,6 +323,7 @@ router.get('/suivi/:token', async (req, res) => {
         clientPrenom: dossier.clientPrenom || '',
       },
       documents: documents.map((d) => ({ id: String(d._id), nom: d.nom || d.originalName || 'Document', createdAt: d.createdAt })),
+      mesDocuments: mesDocuments.map((d) => ({ id: String(d._id), nom: d.nom || d.originalName || 'Document', createdAt: d.createdAt })),
       documentRequests: demandes.map((r) => ({
         id: String(r._id),
         libelle: r.documentTypeLabel || r.documentType || 'Document',
@@ -335,6 +348,9 @@ router.post('/suivi/:token/documents', (req, res, next) => {
   try {
     const dossier = await findDossierBySuiviToken(req.params.token);
     if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) {
+      return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif : votre dossier a été clôturé.' });
+    }
     if (!req.file) return res.status(400).json({ success: false, message: 'Aucun fichier téléversé.' });
 
     const { requestId, nom, description } = req.body || {};
@@ -407,6 +423,28 @@ router.post('/suivi/:token/documents', (req, res, next) => {
   } catch (err) {
     console.error('[suivi] POST documents:', err?.message || err);
     return res.status(500).json({ success: false, message: 'Erreur serveur lors du dépôt.' });
+  }
+});
+
+// @route   GET /api/dossier-guest-upload/suivi/:token/documents/:docId/download
+// @desc    Télécharger un document du suivi (déposé par le demandeur ou partagé par le cabinet)
+router.get('/suivi/:token/documents/:docId/download', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) {
+      return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif : votre dossier a été clôturé.' });
+    }
+    const doc = await Document.findOne({ _id: req.params.docId, dossierId: dossier._id });
+    if (!doc || !(doc.uploadedViaGuestLink === true || doc.visibleToClient === true)) {
+      return res.status(404).json({ success: false, message: 'Document introuvable.' });
+    }
+    const { deliverDocumentFileResponse } = require('./documents');
+    return deliverDocumentFileResponse(doc, res);
+  } catch (err) {
+    console.error('[suivi] GET download:', err?.message || err);
+    if (!res.headersSent) return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+    return undefined;
   }
 });
 

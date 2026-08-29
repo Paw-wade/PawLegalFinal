@@ -648,7 +648,7 @@ router.post(
         dateEcheance: dateEcheance || null,
         notes: notes || '',
         champsFormulaire: champsFormulaireClean,
-        suiviToken: isPublicDemande ? require('crypto').randomBytes(24).toString('hex') : undefined,
+        suiviToken: require('crypto').randomBytes(24).toString('hex'),
         estDemandePublique: isPublicDemande,
         createdBy: req.user ? req.user.id : null, // null si créé par un visiteur
         assignedTo: assignedTo || null,
@@ -675,6 +675,28 @@ router.post(
           console.error('⚠️ Notifications demande publique:', e.message || e);
           // Ne pas bloquer la création du dossier si les notifications échouent.
         }
+      } else if (finalUserId && user && user.email) {
+        // Titulaire de compte : e-mail de création (suivi via l'espace personnel ET le lien de suivi).
+        try {
+          const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+          const suiviUrl = dossier.suiviToken ? `${frontUrl}/suivi/${dossier.suiviToken}` : '';
+          await sendTemplatedTransactionalEmail({
+            templateCode: 'dossier_cree_compte',
+            eventKey: 'dossier_cree_compte',
+            to: user.email,
+            toName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+            variables: { prenom: user.firstName || '', titre: dossier.titre || 'votre dossier', suiviUrl, espaceUrl: `${frontUrl}/client/dossiers` },
+            fallback: {
+              subject: 'Votre dossier a bien été créé — Ada Papers',
+              htmlContent: `<p>Bonjour ${escapeHtml(user.firstName || '')},</p><p>Votre dossier « ${escapeHtml(dossier.titre || '')} » a bien été créé.</p><p>Vous pouvez suivre son évolution :</p><ul><li>depuis votre <a href="${escapeHtml(frontUrl)}/client/dossiers">espace personnel</a> ;</li>${suiviUrl ? `<li>ou via votre <a href="${escapeHtml(suiviUrl)}">lien de suivi</a>.</li>` : ''}</ul>`,
+              textContent: `Bonjour ${user.firstName || ''},
+
+Votre dossier "${dossier.titre || ''}" a bien été créé.
+Suivi depuis votre espace : ${frontUrl}/client/dossiers${suiviUrl ? `
+Lien de suivi : ${suiviUrl}` : ''}`,
+            },
+          });
+        } catch (e) { console.error('⚠️ Email création (compte):', e.message || e); }
       }
 
       // Si le dossier est créé depuis un rendez-vous, lier le rendez-vous au dossier
@@ -892,12 +914,19 @@ router.patch(
       dossier.validatedBy = req.user.id;
       await dossier.save();
 
-      // E-mail de confirmation au demandeur (une seule fois).
-      const email = (dossier.clientEmail || '').trim();
+      // E-mail de confirmation au demandeur (une seule fois). Titulaire de compte : on
+      // utilise l'e-mail du compte rattaché si aucun clientEmail n'est renseigné.
       const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+      let email = (dossier.clientEmail || '').trim();
+      let prenom = dossier.clientPrenom || '';
+      if (!email && dossier.user) {
+        try {
+          const holder = await User.findById(dossier.user).select('email firstName').lean();
+          if (holder?.email) { email = holder.email; prenom = prenom || holder.firstName || ''; }
+        } catch (e) { /* ignore */ }
+      }
       let confirmationEmailSent = false;
       if (email && !dossier.confirmationSentAt) {
-        const prenom = dossier.clientPrenom || '';
         const signupUrl = `${frontUrl}/auth/signup?email=${encodeURIComponent(email)}`;
         const suiviUrl = dossier.suiviToken ? `${frontUrl}/suivi/${dossier.suiviToken}` : `${frontUrl}/client/dossiers`;
         try {
@@ -909,12 +938,13 @@ router.patch(
             variables: { prenom, titre: dossier.titre || 'votre demande', espaceUrl: `${frontUrl}/client/dossiers`, signupUrl, suiviUrl },
             fallback: {
               subject: 'Votre demande a été prise en compte — Ada Papers',
-              htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Bonne nouvelle : votre demande « ${escapeHtml(dossier.titre || '')} » a été <strong>prise en compte</strong> par notre équipe. Nous vous <strong>contacterons rapidement</strong> afin de recueillir les informations complémentaires nécessaires au traitement de votre dossier.</p><p>Suivez son avancement et déposez les documents demandés depuis votre lien de suivi : <a href="${escapeHtml(suiviUrl)}">${escapeHtml(suiviUrl)}</a></p>`,
+              htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Bonne nouvelle : votre demande « ${escapeHtml(dossier.titre || '')} » a été <strong>prise en compte</strong> par notre équipe. Nous vous <strong>contacterons rapidement</strong> afin de recueillir les informations complémentaires nécessaires au traitement de votre dossier.</p><p>Suivez son avancement et déposez les documents demandés :</p><ul><li>via votre <a href="${escapeHtml(suiviUrl)}">lien de suivi</a> ;</li><li>ou depuis votre <a href="${escapeHtml(frontUrl)}/client/dossiers">espace personnel</a> si vous avez un compte.</li></ul>`,
               textContent: `Bonjour ${prenom || ''},
 
 Votre demande "${dossier.titre || ''}" a été prise en compte par notre équipe.
 Nous vous contacterons rapidement afin de recueillir les informations complémentaires nécessaires au traitement de votre dossier.
-Suivi : ${suiviUrl}`,
+Lien de suivi : ${suiviUrl}
+Ou depuis votre espace personnel : ${frontUrl}/client/dossiers`,
             },
           });
           dossier.confirmationSentAt = new Date();
@@ -1317,6 +1347,7 @@ router.post(
         priorite: priorite || 'normale',
         dateEcheance: dateEcheance || null,
         notes: notes || '',
+        suiviToken: require('crypto').randomBytes(24).toString('hex'),
         createdBy: req.user.id,
         assignedTo: assignedTo || null,
         rendezVous: rendezVousId ? [rendezVousId] : []

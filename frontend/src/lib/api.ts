@@ -1097,6 +1097,8 @@ export const dossiersAPI = {
     api.post(`/dossier-guest-upload/suivi/${token}/documents`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  downloadSuiviDocument: (token: string, docId: string) =>
+    api.get(`/dossier-guest-upload/suivi/${token}/documents/${docId}/download`, { responseType: 'blob' }),
 
   // Récupérer un dossier par ID
   getDossierById: (id: string | any) => {

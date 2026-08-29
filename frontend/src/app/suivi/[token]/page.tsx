@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { dossiersAPI } from '@/lib/api';
-import { getStatutColor, getStatutLabelWithEtapes, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
+import { getStatutColor, getStatutLabelWithEtapes } from '@/lib/dossierUtils';
 
 interface SuiviData {
   dossier: {
@@ -20,6 +20,7 @@ interface SuiviData {
     clientPrenom: string;
   };
   documents: Array<{ id: string; nom: string; createdAt: string }>;
+  mesDocuments: Array<{ id: string; nom: string; createdAt: string }>;
   documentRequests: Array<{ id: string; libelle: string; description: string; status: string }>;
 }
 
@@ -43,7 +44,10 @@ export default function SuiviDossierPage() {
         setError('Lien de suivi introuvable.');
       }
     } catch (e: any) {
-      setError(e?.response?.status === 404 ? 'Lien de suivi introuvable ou expiré.' : 'Impossible de charger le suivi.');
+      setError(
+        e?.response?.data?.message ||
+          (e?.response?.status === 404 ? 'Lien de suivi introuvable ou expiré.' : 'Impossible de charger le suivi.')
+      );
     } finally {
       setLoading(false);
     }
@@ -84,7 +88,34 @@ export default function SuiviDossierPage() {
     }
   };
 
-  const steps = data ? getTimelineStepsWithCustom(data.dossier.statut, data.dossier.etapesSupplementaires) : [];
+  const handleDownload = async (docId: string, nom: string) => {
+    try {
+      const res = await dossiersAPI.downloadSuiviDocument(token, docId);
+      const blob = new Blob([res.data]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nom || 'document';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setMessage('Le téléchargement a échoué. Veuillez réessayer.');
+    }
+  };
+
+  const etapes = data
+    ? [...(data.dossier.etapesSupplementaires || [])].sort((a: any, b: any) => (a?.ordre ?? 0) - (b?.ordre ?? 0))
+    : [];
+  const fmtDate = (v: any) => {
+    if (!v) return '';
+    try {
+      return new Date(v).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+    } catch {
+      return '';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/10">
@@ -125,29 +156,30 @@ export default function SuiviDossierPage() {
             {/* Avancement */}
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
               <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-muted-foreground">Avancement</h2>
-              <ol className="space-y-3">
-                {steps.map((s) => (
-                  <li key={s.key} className="flex items-start gap-3">
-                    <span
-                      className={`mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full text-[10px] font-bold ${
-                        s.completed
-                          ? 'bg-primary text-white'
-                          : s.isCurrent
-                          ? 'bg-white text-primary ring-2 ring-primary'
-                          : 'bg-gray-100 text-gray-400 ring-1 ring-gray-200'
-                      }`}
-                    >
-                      {s.completed ? '✓' : ''}
-                    </span>
-                    <div className="min-w-0">
-                      <p className={`text-sm ${s.isCurrent ? 'font-semibold text-foreground' : s.completed ? 'text-foreground' : 'text-muted-foreground'}`}>
-                        {s.label}
-                      </p>
-                      {s.date && <p className="text-xs text-muted-foreground">{s.date}</p>}
-                    </div>
-                  </li>
-                ))}
-              </ol>
+              <div className="mb-4 flex items-center gap-3 rounded-lg bg-primary/5 p-3">
+                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-primary text-white">✓</span>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Statut actuel</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {getStatutLabelWithEtapes(data.dossier.statut, data.dossier.etapesSupplementaires)}
+                  </p>
+                </div>
+              </div>
+              {etapes.length > 0 ? (
+                <ol className="ml-1 space-y-4 border-l-2 border-primary/20 pl-5">
+                  {etapes.map((e: any, i: number) => (
+                    <li key={e.id || e._id || i} className="relative">
+                      <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full bg-primary ring-4 ring-white" />
+                      <p className="text-sm font-medium text-foreground">{e.label}</p>
+                      {e.date && <p className="text-xs text-muted-foreground">{fmtDate(e.date)}</p>}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Votre demande est bien enregistrée. Son avancement s'affichera ici au fur et à mesure du traitement.
+                </p>
+              )}
             </div>
 
             {/* Documents demandés */}
@@ -190,6 +222,30 @@ export default function SuiviDossierPage() {
               </div>
             </div>
 
+            {/* Vos documents transmis */}
+            {data.mesDocuments.length > 0 && (
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+                <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Vos documents transmis</h2>
+                <ul className="space-y-2">
+                  {data.mesDocuments.map((d) => (
+                    <li key={d.id} className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate text-sm text-foreground">📎 {d.nom}</span>
+                      <div className="flex flex-none items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{formatDate(d.createdAt)}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(d.id, d.nom)}
+                          className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          Télécharger
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Documents partagés */}
             {data.documents.length > 0 && (
               <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
@@ -198,7 +254,16 @@ export default function SuiviDossierPage() {
                   {data.documents.map((d) => (
                     <li key={d.id} className="flex items-center justify-between gap-3 text-sm">
                       <span className="min-w-0 truncate text-foreground">📄 {d.nom}</span>
-                      <span className="flex-none text-xs text-muted-foreground">{formatDate(d.createdAt)}</span>
+                      <div className="flex flex-none items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{formatDate(d.createdAt)}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(d.id, d.nom)}
+                          className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          Télécharger
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
