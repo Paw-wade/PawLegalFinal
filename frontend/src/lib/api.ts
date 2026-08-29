@@ -1091,6 +1091,13 @@ export const dossiersAPI = {
   // Prendre en compte (valider) une demande publique en attente → e-mail de confirmation au demandeur
   validerDemande: (id: string) => api.patch(`/user/dossiers/${id}/valider`),
 
+  // Suivi public (sans compte) via jeton de suivi
+  getSuivi: (token: string) => api.get(`/dossier-guest-upload/suivi/${token}`),
+  uploadSuiviDocument: (token: string, formData: FormData) =>
+    api.post(`/dossier-guest-upload/suivi/${token}/documents`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
   // Récupérer un dossier par ID
   getDossierById: (id: string | any) => {
     // Protection : s'assurer que l'ID est une string

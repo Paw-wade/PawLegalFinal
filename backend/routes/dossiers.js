@@ -202,6 +202,7 @@ const handlePublicDemandeNotifications = async ({ dossier, existingUser, clientN
   const fullName = `${prenom} ${nom}`.trim() || email || 'Demandeur';
   const titre = dossier.titre || 'Nouvelle demande';
   const adminUrl = `${frontUrl}/admin/dossiers`;
+  const suiviUrl = dossier.suiviToken ? `${frontUrl}/suivi/${dossier.suiviToken}` : '';
 
   // 1) Notifications in-app à tous les admins/superadmins actifs.
   try {
@@ -301,11 +302,11 @@ Suivi : ${frontUrl}/client/dossiers`,
         variables: { prenom, titre, signupUrl, email },
         fallback: {
           subject: 'Votre demande a bien été prise en compte — Ada Papers',
-          htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Votre demande « ${escapeHtml(titre)} » a bien été <strong>prise en compte</strong>. Notre équipe vous contactera dans les plus brefs délais.</p><p>Pour <strong>suivre l'avancement de votre dossier</strong>, vous pouvez créer votre compte avec cette même adresse e-mail :</p><p><a href="${escapeHtml(signupUrl)}" style="display:inline-block;padding:10px 18px;background:#f97316;color:#fff;border-radius:6px;text-decoration:none;">Créer mon compte</a></p><p>Votre demande sera automatiquement rattachée à votre espace après vérification de votre e-mail.</p>`,
+          htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Votre demande « ${escapeHtml(titre)} » a bien été <strong>prise en compte</strong>. Notre équipe vous contactera dans les plus brefs délais.</p>${suiviUrl ? `<p><strong>Suivez l'avancement de votre dossier</strong> et déposez les documents demandés directement depuis votre lien de suivi :</p><p><a href="${escapeHtml(suiviUrl)}" style="display:inline-block;padding:10px 18px;background:#f97316;color:#fff;border-radius:6px;text-decoration:none;">Suivre mon dossier</a></p>` : ''}<p>Vous pouvez aussi créer un compte avec cette même adresse e-mail pour un suivi permanent : <a href="${escapeHtml(signupUrl)}">créer mon compte</a>.</p>`,
           textContent: `Bonjour ${prenom || ''},
 
 Votre demande "${titre}" a bien été prise en compte. Notre équipe vous contactera dans les plus brefs délais.
-Pour suivre votre dossier, vous pouvez créer votre compte avec cette même adresse e-mail : ${signupUrl}`,
+${suiviUrl ? `Suivez votre dossier et déposez les documents demandés : ${suiviUrl}\n` : ''}Créer un compte pour un suivi permanent : ${signupUrl}`,
         },
       });
       dossier.invitationSentAt = new Date();
@@ -647,6 +648,7 @@ router.post(
         dateEcheance: dateEcheance || null,
         notes: notes || '',
         champsFormulaire: champsFormulaireClean,
+        suiviToken: isPublicDemande ? require('crypto').randomBytes(24).toString('hex') : undefined,
         estDemandePublique: isPublicDemande,
         createdBy: req.user ? req.user.id : null, // null si créé par un visiteur
         assignedTo: assignedTo || null,
@@ -897,21 +899,22 @@ router.patch(
       if (email && !dossier.confirmationSentAt) {
         const prenom = dossier.clientPrenom || '';
         const signupUrl = `${frontUrl}/auth/signup?email=${encodeURIComponent(email)}`;
+        const suiviUrl = dossier.suiviToken ? `${frontUrl}/suivi/${dossier.suiviToken}` : `${frontUrl}/client/dossiers`;
         try {
           await sendTemplatedTransactionalEmail({
             templateCode: 'demande_publique_confirmation',
             eventKey: 'demande_publique_confirmation',
             to: email,
             toName: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim() || email,
-            variables: { prenom, titre: dossier.titre || 'votre demande', espaceUrl: `${frontUrl}/client/dossiers`, signupUrl },
+            variables: { prenom, titre: dossier.titre || 'votre demande', espaceUrl: `${frontUrl}/client/dossiers`, signupUrl, suiviUrl },
             fallback: {
               subject: 'Votre demande a été prise en compte — Ada Papers',
-              htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Bonne nouvelle : votre demande « ${escapeHtml(dossier.titre || '')} » a été <strong>prise en compte</strong> par notre équipe. Nous vous <strong>contacterons rapidement</strong> afin de recueillir les informations complémentaires nécessaires au traitement de votre dossier.</p><p>Vous pouvez suivre son avancement depuis votre espace (ou créer votre compte avec cette même adresse e-mail) : <a href="${escapeHtml(frontUrl)}/client/dossiers">${escapeHtml(frontUrl)}/client/dossiers</a></p>`,
+              htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Bonne nouvelle : votre demande « ${escapeHtml(dossier.titre || '')} » a été <strong>prise en compte</strong> par notre équipe. Nous vous <strong>contacterons rapidement</strong> afin de recueillir les informations complémentaires nécessaires au traitement de votre dossier.</p><p>Suivez son avancement et déposez les documents demandés depuis votre lien de suivi : <a href="${escapeHtml(suiviUrl)}">${escapeHtml(suiviUrl)}</a></p>`,
               textContent: `Bonjour ${prenom || ''},
 
 Votre demande "${dossier.titre || ''}" a été prise en compte par notre équipe.
 Nous vous contacterons rapidement afin de recueillir les informations complémentaires nécessaires au traitement de votre dossier.
-Suivi : ${frontUrl}/client/dossiers`,
+Suivi : ${suiviUrl}`,
             },
           });
           dossier.confirmationSentAt = new Date();
@@ -4426,6 +4429,31 @@ router.put(
           }
         }
         
+        // Demande publique sans compte : e-mail de suivi à chaque changement de statut.
+        if (statut && statut !== oldStatut && dossierForNotification.suiviToken && dossierForNotification.clientEmail && !dossierForNotification.user) {
+          try {
+            const newStatutLabelGuest = statutLabelForDossier(dossierForNotification, statut);
+            const frontUrlGuest = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+            const suiviUrlGuest = `${frontUrlGuest}/suivi/${dossierForNotification.suiviToken}`;
+            const prenomGuest = dossierForNotification.clientPrenom || '';
+            await sendTemplatedTransactionalEmail({
+              templateCode: 'dossier_suivi_statut',
+              eventKey: 'dossier_suivi_statut',
+              to: dossierForNotification.clientEmail,
+              toName: `${dossierForNotification.clientPrenom || ''} ${dossierForNotification.clientNom || ''}`.trim() || dossierForNotification.clientEmail,
+              variables: { prenom: prenomGuest, titre: dossierForNotification.titre || 'votre dossier', statut: newStatutLabelGuest, suiviUrl: suiviUrlGuest },
+              fallback: {
+                subject: `Votre dossier a évolué : ${newStatutLabelGuest} — Ada Papers`,
+                htmlContent: `<p>Bonjour ${escapeHtml(prenomGuest || '')},</p><p>Votre dossier « ${escapeHtml(dossierForNotification.titre || '')} » est passé à l'étape : <strong>${escapeHtml(newStatutLabelGuest)}</strong>.</p><p>Suivez son avancement et déposez les documents demandés depuis votre lien de suivi : <a href="${escapeHtml(suiviUrlGuest)}">${escapeHtml(suiviUrlGuest)}</a></p>`,
+                textContent: `Bonjour ${prenomGuest || ''},
+
+Votre dossier "${dossierForNotification.titre || ''}" est passé à l'étape : ${newStatutLabelGuest}.
+Suivi : ${suiviUrlGuest}`,
+              },
+            });
+          } catch (e) { console.error('⚠️ Email suivi statut (guest):', e.message || e); }
+        }
+
         // Si on a trouvé un userId, créer les notifications
         if (userId) {
           // Notification si le statut a changé
