@@ -183,6 +183,40 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
         <LienSuivi token={dossier.suiviToken} />
       )}
 
+      {/* Messages du demandeur (envoyés depuis le lien de suivi) — visible côté admin */}
+      {variant === 'admin' && Array.isArray(dossier.messages) && (() => {
+        const msgs = (dossier.messages as any[])
+          .filter((m) => m && typeof m === 'object' && typeof m.message === 'string')
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        if (msgs.length === 0) return null;
+        return (
+          <div className="min-w-0 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 sm:p-5 shadow-sm">
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-900">
+              💬 Messages du demandeur
+            </h3>
+            <ul className="space-y-3">
+              {msgs.map((m, i) => (
+                <li key={m._id || m.id || i} className="rounded-lg border border-indigo-100 bg-white p-3">
+                  <p className="whitespace-pre-wrap break-words text-sm text-foreground">{m.message}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    {m.name && <span className="font-medium text-indigo-900">{m.name}</span>}
+                    {m.email && m.email !== 'non-renseigne@adapapers.fr' && (
+                      <a href={`mailto:${m.email}`} className="text-indigo-700 hover:underline">{m.email}</a>
+                    )}
+                    {m.phone && <span>{m.phone}</span>}
+                    {m.createdAt && (
+                      <span>
+                        {new Date(m.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })()}
+
       {/* Formule tarifaire — visible uniquement côté admin (masquée pour client et partenaire) */}
       {variant === 'admin' && (
         <div className="min-w-0 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50/80 p-4 sm:p-5 shadow-sm">
