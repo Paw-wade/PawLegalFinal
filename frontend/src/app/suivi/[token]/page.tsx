@@ -223,7 +223,7 @@ export default function SuiviDossierPage() {
         telephone: contactTel.trim() || undefined,
       });
       if (res.data?.success) {
-        flash('Votre message a bien été transmis au cabinet.');
+        flash('Votre message a bien été transmis à notre équipe.');
         setContactText('');
       } else {
         flash(null, "L'envoi du message a échoué.");
@@ -250,7 +250,7 @@ export default function SuiviDossierPage() {
   const nbDemandes = data?.documentRequests.length || 0;
 
   const validationBadge = (statut?: string) => {
-    if (statut === 'valide') return { label: '✓ Validé par le cabinet', cls: 'bg-green-100 text-green-800' };
+    if (statut === 'valide') return { label: '✓ Validé par notre équipe', cls: 'bg-green-100 text-green-800' };
     if (statut === 'refuse') return { label: '✕ Refusé', cls: 'bg-red-100 text-red-700' };
     return { label: 'En cours de vérification', cls: 'bg-amber-100 text-amber-800' };
   };
@@ -317,7 +317,7 @@ export default function SuiviDossierPage() {
                     Action requise : {nbDemandes} document{nbDemandes > 1 ? 's' : ''} à fournir
                   </p>
                   <p className="text-xs text-amber-800">
-                    Le cabinet attend {nbDemandes > 1 ? 'des documents' : 'un document'} pour faire avancer votre dossier. Cliquez pour les déposer.
+                    Notre équipe attend {nbDemandes > 1 ? 'des documents' : 'un document'} pour faire avancer votre dossier. Cliquez pour les déposer.
                   </p>
                 </div>
               </a>
@@ -481,7 +481,7 @@ export default function SuiviDossierPage() {
             {/* Documents partagés */}
             {data.documents.length > 0 && (
               <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-                <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Documents partagés par le cabinet</h2>
+                <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Documents partagés par notre équipe</h2>
                 <ul className="space-y-2">
                   {data.documents.map((d) => (
                     <li key={d.id} className="flex items-center justify-between gap-3 text-sm">
@@ -502,9 +502,9 @@ export default function SuiviDossierPage() {
               </div>
             )}
 
-            {/* Contacter le cabinet + coordonnées */}
+            {/* Contacter l'équipe + coordonnées */}
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Une question ? Contactez le cabinet</h2>
+              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Une question ? Contactez notre équipe</h2>
               {data.cabinet && (
                 <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
                   <span className="font-medium text-foreground">{data.cabinet.nom}</span>
@@ -549,7 +549,7 @@ export default function SuiviDossierPage() {
                 disabled={sendingContact}
                 className="mt-3 inline-flex items-center justify-center rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
               >
-                {sendingContact ? 'Envoi…' : 'Envoyer au cabinet'}
+                {sendingContact ? 'Envoi…' : 'Envoyer'}
               </button>
             </div>
 
