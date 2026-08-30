@@ -123,7 +123,7 @@ export default function PublicDownloadPage() {
               )}
               {info.message ? (
                 <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/80 p-4 text-sm text-blue-950">
-                  <p className="font-medium">Message du cabinet</p>
+                  <p className="font-medium">Message de notre équipe</p>
                   <p className="mt-1 whitespace-pre-wrap">{info.message}</p>
                 </div>
               ) : null}
