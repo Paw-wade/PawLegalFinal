@@ -1180,7 +1180,7 @@ router.get(
   async (req, res) => {
     try {
       const dossiers = await Dossier.find({})
-        .select('statut estArchive estCloture isStandby user')
+        .select('statut estArchive estCloture isStandby user categorie')
         .lean();
 
       const rawStatut = (d) => String(d?.statut || '').trim();
@@ -1199,9 +1199,12 @@ router.get(
         );
       };
 
-      const stats = { pending: 0, in_progress: 0, standby: 0, closed: 0, archived: 0, total: dossiers.length };
+      const stats = { pending: 0, in_progress: 0, standby: 0, closed: 0, archived: 0, constitution_societe: 0, total: dossiers.length };
 
       for (const d of dossiers) {
+        // Catégorie (indépendante du statut) : comptée pour tous les dossiers.
+        if (String(d.categorie || '') === 'constitution_societe') stats.constitution_societe += 1;
+
         if (isArchived(d)) {
           stats.archived += 1;
           continue;

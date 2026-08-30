@@ -2682,7 +2682,9 @@ export default function AdminDossiersPage() {
                 >
                   <p className="text-xs text-indigo-700 font-semibold mb-1 uppercase tracking-wide">🏢 Création d&apos;entreprise</p>
                   <p className="text-2xl font-bold text-indigo-900">
-                    {dossiers.filter((d: any) => String(d.categorie || '') === 'constitution_societe').length}
+                    {globalStats && typeof (globalStats as any).constitution_societe === 'number'
+                      ? (globalStats as any).constitution_societe
+                      : dossiers.filter((d: any) => String(d.categorie || '') === 'constitution_societe').length}
                   </p>
                 </button>
               </div>
