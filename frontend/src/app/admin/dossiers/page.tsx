@@ -2430,18 +2430,6 @@ export default function AdminDossiersPage() {
                   />
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:min-w-0 sm:flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setCategorieFilter((prev) => (prev === 'constitution_societe' ? 'all' : 'constitution_societe'))}
-                    title="N'afficher que les dossiers de création d'entreprise"
-                    className={`flex h-10 items-center justify-center gap-1.5 rounded-lg border px-3 sm:px-4 py-2 text-sm font-medium shadow-sm transition-colors whitespace-nowrap ${
-                      categorieFilter === 'constitution_societe'
-                        ? 'border-indigo-500 bg-indigo-600 text-white hover:bg-indigo-700'
-                        : 'border-gray-300 bg-background text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    🏢 Création d'entreprise
-                  </button>
                   <select
                     value={userFilter}
                     onChange={(e) => setUserFilter(e.target.value)}
@@ -2602,7 +2590,7 @@ export default function AdminDossiersPage() {
               </div>
 
               {/* Statistiques rapides (badges cliquables) */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-3">
                 {/* En attente : dossiers créés par un utilisateur dont le statut n'a pas encore été édité par l'admin */}
                 <button
                   type="button"
@@ -2679,6 +2667,22 @@ export default function AdminDossiersPage() {
                   <p className="text-xs text-red-700 font-semibold mb-1 uppercase tracking-wide">Archivés</p>
                   <p className="text-2xl font-bold text-red-900">
                     {globalStats ? globalStats.archived : dossiers.filter((d: any) => isArchivedDossier(d)).length}
+                  </p>
+                </button>
+                {/* Création d'entreprise : filtre par catégorie (indépendant du statut) */}
+                <button
+                  type="button"
+                  onClick={() => setCategorieFilter((prev) => (prev === 'constitution_societe' ? 'all' : 'constitution_societe'))}
+                  title="N'afficher que les dossiers de création d'entreprise"
+                  className={`text-left bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
+                    categorieFilter === 'constitution_societe'
+                      ? 'ring-2 ring-indigo-500/60 shadow-md'
+                      : 'hover:shadow-md hover:-translate-y-0.5'
+                  }`}
+                >
+                  <p className="text-xs text-indigo-700 font-semibold mb-1 uppercase tracking-wide">🏢 Création d&apos;entreprise</p>
+                  <p className="text-2xl font-bold text-indigo-900">
+                    {dossiers.filter((d: any) => String(d.categorie || '') === 'constitution_societe').length}
                   </p>
                 </button>
               </div>
