@@ -63,6 +63,27 @@ const documentSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  /** Validation d'un document déposé (par le client / via lien de suivi) par le cabinet. */
+  validationStatus: {
+    type: String,
+    enum: ['en_attente', 'valide', 'refuse'],
+    default: 'en_attente',
+    index: true,
+  },
+  validationMotif: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  validatedAt: {
+    type: Date,
+    default: null,
+  },
+  validatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
   /** Dépôt via lien public tiers (invitation admin). */
   uploadedViaGuestLink: {
     type: Boolean,

@@ -502,6 +502,7 @@ export default function AdminDossiersPage() {
   const [guestInviteError, setGuestInviteError] = useState<string | null>(null);
   const [guestInviteCreatedUrl, setGuestInviteCreatedUrl] = useState<string | null>(null);
   const [authorizingDocumentId, setAuthorizingDocumentId] = useState<string | null>(null);
+  const [validatingDocumentId, setValidatingDocumentId] = useState<string | null>(null);
   const [activeQuickComplementDossierId, setActiveQuickComplementDossierId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
   const directFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1547,6 +1548,36 @@ export default function AdminDossiersPage() {
       });
     } finally {
       setAuthorizingDocumentId(null);
+    }
+  };
+
+  const handleValidateGuestDocument = async (doc: any, statut: 'valide' | 'refuse') => {
+    const docId = String(doc?._id || doc?.id || '');
+    if (!docId) return;
+    let motif = '';
+    if (statut === 'refuse') {
+      const saisie = window.prompt('Motif du refus (communiqué au demandeur) :', '');
+      if (saisie === null) return; // annulé
+      motif = saisie.trim();
+    }
+    setValidatingDocumentId(docId);
+    try {
+      const response = await dossiersAPI.validerDocumentDepose(docId, statut, motif);
+      if (!response?.data?.success) {
+        throw new Error(response?.data?.message || 'Mise à jour impossible.');
+      }
+      setToast({
+        message: statut === 'valide' ? 'Document validé.' : 'Document refusé.',
+        type: 'success',
+      });
+      await loadDossierDocuments();
+    } catch (err: any) {
+      setToast({
+        message: err?.response?.data?.message || err?.message || 'Erreur lors de la validation.',
+        type: 'error',
+      });
+    } finally {
+      setValidatingDocumentId(null);
     }
   };
 
@@ -4294,6 +4325,16 @@ export default function AdminDossiersPage() {
                                         <span className="px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 bg-green-100 text-green-800">
                                           Reçu
                                         </span>
+                                        {doc.uploadedViaGuestLink && doc.validationStatus === 'valide' && (
+                                          <span className="px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 bg-emerald-100 text-emerald-800">
+                                            ✓ Validé
+                                          </span>
+                                        )}
+                                        {doc.uploadedViaGuestLink && doc.validationStatus === 'refuse' && (
+                                          <span className="px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 bg-red-100 text-red-700">
+                                            ✕ Refusé
+                                          </span>
+                                        )}
                                       </div>
                                       {doc.guestContributorName ? (
                                         <p className="text-xs text-muted-foreground mb-2 ml-7">
@@ -4351,6 +4392,32 @@ export default function AdminDossiersPage() {
                                             {authorizingDocumentId === String(doc._id || doc.id)
                                               ? '…'
                                               : 'Autoriser l’accès client'}
+                                          </button>
+                                        )}
+                                        {doc.uploadedViaGuestLink && doc.validationStatus !== 'valide' && (
+                                          <button
+                                            type="button"
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              await handleValidateGuestDocument(doc, 'valide');
+                                            }}
+                                            disabled={validatingDocumentId === String(doc._id || doc.id)}
+                                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded text-xs font-medium transition-colors disabled:opacity-60"
+                                          >
+                                            {validatingDocumentId === String(doc._id || doc.id) ? '…' : '✓ Valider'}
+                                          </button>
+                                        )}
+                                        {doc.uploadedViaGuestLink && doc.validationStatus !== 'refuse' && (
+                                          <button
+                                            type="button"
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              await handleValidateGuestDocument(doc, 'refuse');
+                                            }}
+                                            disabled={validatingDocumentId === String(doc._id || doc.id)}
+                                            className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded text-xs font-medium transition-colors disabled:opacity-60"
+                                          >
+                                            {validatingDocumentId === String(doc._id || doc.id) ? '…' : '✕ Refuser'}
                                           </button>
                                         )}
                                         <button

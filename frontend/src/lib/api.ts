@@ -1099,6 +1099,15 @@ export const dossiersAPI = {
     }),
   downloadSuiviDocument: (token: string, docId: string) =>
     api.get(`/dossier-guest-upload/suivi/${token}/documents/${docId}/download`, { responseType: 'blob' }),
+  deleteSuiviDocument: (token: string, docId: string) =>
+    api.delete(`/dossier-guest-upload/suivi/${token}/documents/${docId}`),
+  sendSuiviMessage: (token: string, payload: { contenu: string; email?: string; telephone?: string }) =>
+    api.post(`/dossier-guest-upload/suivi/${token}/message`, payload),
+  downloadSuiviRecapPdf: (token: string) =>
+    api.get(`/dossier-guest-upload/suivi/${token}/recap.pdf`, { responseType: 'blob' }),
+  // (Admin) valider / refuser un document déposé via le lien de suivi
+  validerDocumentDepose: (docId: string, statut: 'en_attente' | 'valide' | 'refuse', motif?: string) =>
+    api.patch(`/dossier-guest-upload/documents/${docId}/validation`, { statut, motif }),
 
   // Récupérer un dossier par ID
   getDossierById: (id: string | any) => {

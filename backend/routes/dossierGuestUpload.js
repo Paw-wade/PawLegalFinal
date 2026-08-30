@@ -9,6 +9,7 @@ const DocumentRequest = require('../models/DocumentRequest');
 const Document = require('../models/Document');
 const Dossier = require('../models/Dossier');
 const User = require('../models/User');
+const Message = require('../models/Message');
 const Notification = require('../models/Notification');
 const { protect, authorize } = require('../middleware/auth');
 const {
@@ -291,6 +292,40 @@ function isDossierClosed(dossier) {
   return dossier?.estCloture === true || s === 'cloture';
 }
 
+// Adresses e-mail du cabinet (ADMIN_EMAILS, séparateurs , ; espace).
+function parseAdminEmails() {
+  return String(process.env.ADMIN_EMAILS || '')
+    .split(/[,;\s]+/)
+    .map((e) => e.trim())
+    .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Coordonnées de contact affichées sur la page de suivi (surchargées par l'environnement).
+function getCabinetContact() {
+  return {
+    nom: (process.env.CABINET_CONTACT_NAME || 'Ada Papers').trim(),
+    telephone: (process.env.CABINET_CONTACT_PHONE || '+33 7 68 03 33 58').trim(),
+    email: (process.env.CABINET_CONTACT_EMAIL || 'contact@adapapers.fr').trim(),
+  };
+}
+
+// Prochaine étape prévue : première étape supplémentaire non encore datée/atteinte.
+function computeProchaineEtape(etapes) {
+  const list = Array.isArray(etapes) ? [...etapes] : [];
+  list.sort((a, b) => (a?.ordre ?? 0) - (b?.ordre ?? 0));
+  const next = list.find((e) => e && !e.date && (e.statut ? e.statut !== 'termine' : true));
+  return next?.label || null;
+}
+
 // @route   GET /api/dossier-guest-upload/suivi/:token
 // @desc    Vue publique de suivi : statut, étapes, documents partagés, demandes de documents
 router.get('/suivi/:token', async (req, res) => {
@@ -305,9 +340,9 @@ router.get('/suivi/:token', async (req, res) => {
       .select('nom originalName createdAt').sort({ createdAt: -1 }).lean();
     // Documents déposés par le demandeur via ce lien (restent visibles/téléchargeables pour lui).
     const mesDocuments = await Document.find({ dossierId: dossier._id, uploadedViaGuestLink: true })
-      .select('nom originalName createdAt').sort({ createdAt: -1 }).lean();
+      .select('nom originalName createdAt taille typeMime validationStatus validationMotif').sort({ createdAt: -1 }).lean();
     const demandes = await DocumentRequest.find({ dossier: dossier._id, status: { $in: ['pending', 'sent'] } })
-      .select('documentType documentTypeLabel description status createdAt').sort({ createdAt: 1 }).lean();
+      .select('documentType documentTypeLabel description message isUrgent status createdAt').sort({ createdAt: 1 }).lean();
 
     // Le demandeur a-t-il déjà un compte ? (dossier rattaché, ou compte avec le même e-mail)
     const clientEmail = (dossier.clientEmail || '').trim();
@@ -317,6 +352,12 @@ router.get('/suivi/:token', async (req, res) => {
       compteExiste = !!u;
     }
 
+    const champsFormulaire = Array.isArray(dossier.champsFormulaire)
+      ? dossier.champsFormulaire
+          .filter((c) => c && (c.valeur !== undefined && c.valeur !== null && String(c.valeur).trim() !== ''))
+          .map((c) => ({ libelle: c.libelle || c.nom || '', valeur: String(c.valeur) }))
+      : [];
+
     return res.json({
       success: true,
       dossier: {
@@ -325,18 +366,31 @@ router.get('/suivi/:token', async (req, res) => {
         numero: dossier.numero || null,
         statut: dossier.statut,
         etapesSupplementaires: dossier.etapesSupplementaires || [],
+        prochaineEtape: computeProchaineEtape(dossier.etapesSupplementaires),
         categorie: dossier.categorie,
+        description: dossier.description || '',
+        champsFormulaire,
         createdAt: dossier.createdAt,
         updatedAt: dossier.updatedAt,
         clientPrenom: dossier.clientPrenom || '',
       },
+      cabinet: getCabinetContact(),
       compte: { existe: compteExiste, email: clientEmail },
       documents: documents.map((d) => ({ id: String(d._id), nom: d.nom || d.originalName || 'Document', createdAt: d.createdAt })),
-      mesDocuments: mesDocuments.map((d) => ({ id: String(d._id), nom: d.nom || d.originalName || 'Document', createdAt: d.createdAt })),
+      mesDocuments: mesDocuments.map((d) => ({
+        id: String(d._id),
+        nom: d.nom || d.originalName || 'Document',
+        createdAt: d.createdAt,
+        taille: d.taille || 0,
+        validationStatus: d.validationStatus || 'en_attente',
+        validationMotif: d.validationMotif || '',
+      })),
       documentRequests: demandes.map((r) => ({
         id: String(r._id),
         libelle: r.documentTypeLabel || r.documentType || 'Document',
         description: r.description || '',
+        message: r.message || '',
+        isUrgent: r.isUrgent === true,
         status: r.status,
       })),
     });
@@ -454,6 +508,189 @@ router.get('/suivi/:token/documents/:docId/download', async (req, res) => {
     console.error('[suivi] GET download:', err?.message || err);
     if (!res.headersSent) return res.status(500).json({ success: false, message: 'Erreur serveur.' });
     return undefined;
+  }
+});
+
+// @route   POST /api/dossier-guest-upload/suivi/:token/message
+// @desc    Le porteur du lien envoie un message / une question au cabinet (→ note interne)
+router.post('/suivi/:token/message', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) {
+      return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif : votre dossier a été clôturé.' });
+    }
+
+    const contenu = String((req.body && req.body.contenu) || '').trim();
+    if (contenu.length < 2) return res.status(400).json({ success: false, message: 'Votre message est vide.' });
+    if (contenu.length > 5000) return res.status(400).json({ success: false, message: 'Message trop long (5000 caractères max).' });
+    const contactEmail = String((req.body && req.body.email) || dossier.clientEmail || '').trim().toLowerCase();
+    const contactTel = String((req.body && req.body.telephone) || dossier.clientTelephone || '').trim();
+
+    const auteur = `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim() || 'Le demandeur';
+    const dossierTitle = dossier.titre || dossier.numero || 'Dossier';
+    const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+    const dossierUrl = `${frontUrl}/admin/dossiers?dossier=${String(dossier._id)}`;
+
+    // 1) Rattacher le message au dossier (modèle Message → dossier.messages, visible côté admin).
+    const messageDoc = await Message.create({
+      name: auteur,
+      email: contactEmail || 'non-renseigne@adapapers.fr',
+      phone: contactTel,
+      subject: `Message via lien de suivi — ${dossierTitle}`.slice(0, 200),
+      message: contenu,
+    });
+    try {
+      await Dossier.updateOne({ _id: dossier._id }, { $push: { messages: messageDoc._id } });
+    } catch (e) { console.error('[suivi] rattachement message au dossier:', e.message || e); }
+
+    // 2) Notifications in-app aux admins/superadmins.
+    try {
+      const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id');
+      for (const adm of admins) {
+        await Notification.create({
+          user: adm._id, type: 'message_received', titre: 'Message via lien de suivi',
+          message: `${auteur} a envoyé un message sur le dossier « ${dossierTitle} ».`,
+          lien: '/admin/dossiers', metadata: { dossierId: String(dossier._id), messageId: String(messageDoc._id) },
+        });
+      }
+    } catch (e) { console.error('[suivi] notif message:', e.message || e); }
+
+    // 3) E-mail au cabinet (ADMIN_EMAILS), envoi individuel.
+    const coordTxt = [contactEmail && `E-mail : ${contactEmail}`, contactTel && `Tél. : ${contactTel}`].filter(Boolean).join('\n');
+    for (const adminEmail of parseAdminEmails()) {
+      try {
+        await sendTemplatedTransactionalEmail({
+          templateCode: 'dossier_suivi_message',
+          eventKey: 'dossier_suivi_message',
+          to: adminEmail,
+          toName: 'Équipe Ada Papers',
+          variables: { auteur, email: contactEmail, telephone: contactTel, titre: dossierTitle, contenu, dossierUrl },
+          fallback: {
+            subject: `Message du demandeur — ${dossierTitle}`,
+            htmlContent: `<p>${escapeHtml(auteur)} a envoyé un message via le lien de suivi du dossier <strong>${escapeHtml(dossierTitle)}</strong> :</p>
+<blockquote style="border-left:3px solid #cbd5e1;padding-left:12px;color:#334155">${escapeHtml(contenu).replace(/\n/g, '<br>')}</blockquote>
+<p><strong>Contact :</strong> ${escapeHtml(contactEmail || '—')}${contactTel ? ` · ${escapeHtml(contactTel)}` : ''}</p>
+<p>Ouvrir le dossier : <a href="${escapeHtml(dossierUrl)}">${escapeHtml(dossierUrl)}</a></p>`,
+            textContent: `${auteur} a envoyé un message via le lien de suivi du dossier « ${dossierTitle} » :\n\n${contenu}\n\n${coordTxt}\n\nDossier : ${dossierUrl}`,
+          },
+        });
+      } catch (e) { console.error('[suivi] email admin message:', e.message || e); }
+    }
+
+    return res.status(201).json({ success: true, message: 'Votre message a bien été transmis au cabinet.' });
+  } catch (err) {
+    console.error('[suivi] POST message:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route   DELETE /api/dossier-guest-upload/suivi/:token/documents/:docId
+// @desc    Le porteur du lien retire un document qu'il a déposé (tant qu'il n'est pas validé)
+router.delete('/suivi/:token/documents/:docId', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) {
+      return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif : votre dossier a été clôturé.' });
+    }
+    const doc = await Document.findOne({ _id: req.params.docId, dossierId: dossier._id, uploadedViaGuestLink: true });
+    if (!doc) return res.status(404).json({ success: false, message: 'Document introuvable.' });
+    if (doc.validationStatus === 'valide') {
+      return res.status(409).json({ success: false, message: 'Ce document a déjà été validé par le cabinet et ne peut plus être retiré.' });
+    }
+    // Rouvrir une éventuelle demande de document satisfaite par ce fichier.
+    try {
+      await DocumentRequest.updateMany(
+        { dossier: dossier._id, document: doc._id },
+        { $set: { status: 'pending', document: null, receivedAt: null } }
+      );
+    } catch (e) { console.error('[suivi] réouverture demande:', e.message || e); }
+    await Document.deleteOne({ _id: doc._id });
+    return res.json({ success: true, message: 'Document retiré.' });
+  } catch (err) {
+    console.error('[suivi] DELETE document:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route   GET /api/dossier-guest-upload/suivi/:token/recap.pdf
+// @desc    Accusé de réception / récapitulatif PDF téléchargeable par le porteur du lien
+router.get('/suivi/:token/recap.pdf', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+
+    const cabinet = getCabinetContact();
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="accuse-reception-${String(dossier.numero || dossier._id)}.pdf"`);
+    doc.pipe(res);
+
+    const fmt = (d) => { try { return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }); } catch { return ''; } };
+    doc.fontSize(20).fillColor('#1e3a8a').text(cabinet.nom, { align: 'left' });
+    doc.moveDown(0.3);
+    doc.fontSize(10).fillColor('#555').text('Accusé de réception de votre demande');
+    doc.moveDown(1);
+    doc.fontSize(14).fillColor('#111').text(dossier.titre || 'Votre dossier');
+    doc.moveDown(0.5);
+    doc.fontSize(10).fillColor('#333');
+    if (dossier.numero) doc.text(`Numéro de dossier : ${dossier.numero}`);
+    doc.text(`Statut actuel : ${dossier.statut || '—'}`);
+    doc.text(`Demande déposée le : ${fmt(dossier.createdAt)}`);
+    if (dossier.clientPrenom || dossier.clientNom) doc.text(`Demandeur : ${`${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim()}`);
+    doc.moveDown(1);
+
+    if (dossier.description) {
+      doc.fontSize(11).fillColor('#1e3a8a').text('Description');
+      doc.moveDown(0.2);
+      doc.fontSize(10).fillColor('#333').text(String(dossier.description));
+      doc.moveDown(1);
+    }
+
+    const champs = Array.isArray(dossier.champsFormulaire) ? dossier.champsFormulaire.filter((c) => c && String(c.valeur || '').trim() !== '') : [];
+    if (champs.length) {
+      doc.fontSize(11).fillColor('#1e3a8a').text('Informations du formulaire');
+      doc.moveDown(0.3);
+      doc.fontSize(10).fillColor('#333');
+      champs.forEach((c) => { doc.text(`• ${(c.libelle || c.nom || '').trim()} : ${String(c.valeur)}`); });
+      doc.moveDown(1);
+    }
+
+    doc.moveDown(1);
+    doc.fontSize(9).fillColor('#777').text(`Contact : ${cabinet.telephone} · ${cabinet.email}`);
+    doc.text(`Document généré le ${fmt(Date.now())}.`);
+    doc.end();
+  } catch (err) {
+    console.error('[suivi] GET recap.pdf:', err?.message || err);
+    if (!res.headersSent) return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+    return undefined;
+  }
+});
+
+// @route   PATCH /api/dossier-guest-upload/documents/:docId/validation
+// @desc    (Admin) Valider / refuser un document déposé, avec motif éventuel
+router.patch('/documents/:docId/validation', protect, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const statut = String((req.body && req.body.statut) || '').trim();
+    if (!['en_attente', 'valide', 'refuse'].includes(statut)) {
+      return res.status(400).json({ success: false, message: 'Statut de validation invalide.' });
+    }
+    const doc = await Document.findById(req.params.docId);
+    if (!doc) return res.status(404).json({ success: false, message: 'Document introuvable.' });
+    doc.validationStatus = statut;
+    doc.validationMotif = statut === 'refuse' ? String((req.body && req.body.motif) || '').trim().slice(0, 1000) : '';
+    doc.validatedAt = statut === 'en_attente' ? null : new Date();
+    doc.validatedBy = statut === 'en_attente' ? null : req.user.id;
+    await doc.save();
+    return res.json({
+      success: true,
+      document: { id: String(doc._id), validationStatus: doc.validationStatus, validationMotif: doc.validationMotif },
+    });
+  } catch (err) {
+    console.error('[suivi] PATCH validation:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
   }
 });
 

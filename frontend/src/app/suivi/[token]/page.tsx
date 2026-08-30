@@ -14,15 +14,60 @@ interface SuiviData {
     numero: string | null;
     statut: string;
     etapesSupplementaires: any[];
+    prochaineEtape: string | null;
     categorie: string;
+    description: string;
+    champsFormulaire: Array<{ libelle: string; valeur: string }>;
     createdAt: string;
     updatedAt: string;
     clientPrenom: string;
   };
+  cabinet?: { nom: string; telephone: string; email: string };
   compte?: { existe: boolean; email: string };
   documents: Array<{ id: string; nom: string; createdAt: string }>;
-  mesDocuments: Array<{ id: string; nom: string; createdAt: string }>;
-  documentRequests: Array<{ id: string; libelle: string; description: string; status: string }>;
+  mesDocuments: Array<{
+    id: string;
+    nom: string;
+    createdAt: string;
+    taille?: number;
+    validationStatus?: 'en_attente' | 'valide' | 'refuse';
+    validationMotif?: string;
+  }>;
+  documentRequests: Array<{
+    id: string;
+    libelle: string;
+    description: string;
+    message?: string;
+    isUrgent?: boolean;
+    status: string;
+  }>;
+}
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo (aligné sur le back)
+const ACCEPTED_FILES = '.pdf,.jpg,.jpeg,.png,.heic,.doc,.docx,.xls,.xlsx';
+
+const CATEGORIE_LABELS: Record<string, string> = {
+  constitution_societe: 'Création de société',
+  titre_sejour: 'Titre de séjour',
+  sejour_titres: 'Titre de séjour',
+  sejour: 'Titre de séjour',
+  oqtf: 'Recours OQTF',
+  visa: 'Recours visa',
+  naturalisation: 'Naturalisation',
+  regroupement_familial: 'Regroupement familial',
+  autre: 'Autre demande',
+};
+
+function categorieLabel(c: string): string {
+  if (!c) return 'Demande';
+  if (CATEGORIE_LABELS[c]) return CATEGORIE_LABELS[c];
+  return c.replace(/_/g, ' ').replace(/^\w/, (m) => m.toUpperCase());
+}
+
+function humanSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Ko`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
 export default function SuiviDossierPage() {
@@ -33,6 +78,13 @@ export default function SuiviDossierPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [downloadingRecap, setDownloadingRecap] = useState(false);
+  const [contactText, setContactText] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactTel, setContactTel] = useState('');
+  const [sendingContact, setSendingContact] = useState(false);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const load = useCallback(async () => {
@@ -66,26 +118,55 @@ export default function SuiviDossierPage() {
     }
   };
 
+  const flash = (ok: string | null, ko: string | null = null) => {
+    setMessage(ok);
+    setErrorMsg(ko);
+  };
+
   const handleUpload = async (file: File | undefined, requestId: string | null, key: string) => {
     if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      flash(null, `« ${file.name} » dépasse la taille maximale de 10 Mo.`);
+      if (fileInputs.current[key]) fileInputs.current[key]!.value = '';
+      return;
+    }
     setUploadingId(key);
-    setMessage(null);
+    flash(null, null);
     try {
       const fd = new FormData();
       fd.append('document', file);
       if (requestId) fd.append('requestId', requestId);
       const res = await dossiersAPI.uploadSuiviDocument(token, fd);
       if (res.data?.success) {
-        setMessage('Document transmis avec succès. Merci.');
+        flash('Document transmis avec succès. Merci.');
         await load();
       } else {
-        setMessage('Le dépôt a échoué. Veuillez réessayer.');
+        flash(null, 'Le dépôt a échoué. Veuillez réessayer.');
       }
     } catch {
-      setMessage('Le dépôt a échoué. Veuillez réessayer.');
+      flash(null, 'Le dépôt a échoué. Veuillez réessayer.');
     } finally {
       setUploadingId(null);
       if (fileInputs.current[key]) fileInputs.current[key]!.value = '';
+    }
+  };
+
+  const handleDelete = async (docId: string) => {
+    if (!window.confirm('Retirer ce document ? Cette action est définitive.')) return;
+    setDeletingId(docId);
+    flash(null, null);
+    try {
+      const res = await dossiersAPI.deleteSuiviDocument(token, docId);
+      if (res.data?.success) {
+        flash('Document retiré.');
+        await load();
+      } else {
+        flash(null, 'Le retrait a échoué.');
+      }
+    } catch (e: any) {
+      flash(null, e?.response?.data?.message || 'Le retrait a échoué.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -102,7 +183,55 @@ export default function SuiviDossierPage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      setMessage('Le téléchargement a échoué. Veuillez réessayer.');
+      flash(null, 'Le téléchargement a échoué. Veuillez réessayer.');
+    }
+  };
+
+  const handleDownloadRecap = async () => {
+    setDownloadingRecap(true);
+    flash(null, null);
+    try {
+      const res = await dossiersAPI.downloadSuiviRecapPdf(token);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'accuse-reception.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      flash(null, 'Le téléchargement du récapitulatif a échoué.');
+    } finally {
+      setDownloadingRecap(false);
+    }
+  };
+
+  const handleSendContact = async () => {
+    const contenu = contactText.trim();
+    if (contenu.length < 2) {
+      flash(null, 'Veuillez saisir votre message.');
+      return;
+    }
+    setSendingContact(true);
+    flash(null, null);
+    try {
+      const res = await dossiersAPI.sendSuiviMessage(token, {
+        contenu,
+        email: contactEmail.trim() || undefined,
+        telephone: contactTel.trim() || undefined,
+      });
+      if (res.data?.success) {
+        flash('Votre message a bien été transmis au cabinet.');
+        setContactText('');
+      } else {
+        flash(null, "L'envoi du message a échoué.");
+      }
+    } catch (e: any) {
+      flash(null, e?.response?.data?.message || "L'envoi du message a échoué.");
+    } finally {
+      setSendingContact(false);
     }
   };
 
@@ -116,6 +245,14 @@ export default function SuiviDossierPage() {
     } catch {
       return '';
     }
+  };
+
+  const nbDemandes = data?.documentRequests.length || 0;
+
+  const validationBadge = (statut?: string) => {
+    if (statut === 'valide') return { label: '✓ Validé par le cabinet', cls: 'bg-green-100 text-green-800' };
+    if (statut === 'refuse') return { label: '✕ Refusé', cls: 'bg-red-100 text-red-700' };
+    return { label: 'En cours de vérification', cls: 'bg-amber-100 text-amber-800' };
   };
 
   return (
@@ -139,6 +276,9 @@ export default function SuiviDossierPage() {
                 <span className={`rounded-full px-3 py-1 text-xs font-medium ${getStatutColor(data.dossier.statut)}`}>
                   Statut : {getStatutLabelWithEtapes(data.dossier.statut, data.dossier.etapesSupplementaires)}
                 </span>
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                  {categorieLabel(data.dossier.categorie)}
+                </span>
                 {data.dossier.numero && (
                   <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
                     Dossier n° {data.dossier.numero}
@@ -148,10 +288,59 @@ export default function SuiviDossierPage() {
               <p className="mt-3 text-xs text-muted-foreground">
                 Demande déposée le {formatDate(data.dossier.createdAt)}
               </p>
+              <button
+                type="button"
+                onClick={handleDownloadRecap}
+                disabled={downloadingRecap}
+                className="mt-4 inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                {downloadingRecap ? 'Génération…' : '⤓ Accusé de réception (PDF)'}
+              </button>
             </div>
 
             {message && (
               <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{message}</div>
+            )}
+            {errorMsg && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMsg}</div>
+            )}
+
+            {/* Bandeau action requise */}
+            {nbDemandes > 0 && (
+              <a
+                href="#documents-demandes"
+                className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 transition-colors hover:bg-amber-100"
+              >
+                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-amber-400 text-white">!</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-amber-900">
+                    Action requise : {nbDemandes} document{nbDemandes > 1 ? 's' : ''} à fournir
+                  </p>
+                  <p className="text-xs text-amber-800">
+                    Le cabinet attend {nbDemandes > 1 ? 'des documents' : 'un document'} pour faire avancer votre dossier. Cliquez pour les déposer.
+                  </p>
+                </div>
+              </a>
+            )}
+
+            {/* Nature de la demande */}
+            {(data.dossier.description || data.dossier.champsFormulaire.length > 0) && (
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+                <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Votre demande</h2>
+                {data.dossier.description && (
+                  <p className="mb-3 whitespace-pre-wrap text-sm text-foreground">{data.dossier.description}</p>
+                )}
+                {data.dossier.champsFormulaire.length > 0 && (
+                  <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                    {data.dossier.champsFormulaire.map((c, i) => (
+                      <div key={i} className="min-w-0">
+                        <dt className="text-xs text-muted-foreground">{c.libelle}</dt>
+                        <dd className="text-sm font-medium text-foreground">{c.valeur}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </div>
             )}
 
             {/* Avancement */}
@@ -181,10 +370,16 @@ export default function SuiviDossierPage() {
                   Votre demande est bien enregistrée. Son avancement s'affichera ici au fur et à mesure du traitement.
                 </p>
               )}
+              {data.dossier.prochaineEtape && (
+                <div className="mt-4 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+                  <p className="text-xs text-muted-foreground">Prochaine étape</p>
+                  <p className="text-sm font-medium text-foreground">{data.dossier.prochaineEtape}</p>
+                </div>
+              )}
             </div>
 
             {/* Documents demandés */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+            <div id="documents-demandes" className="scroll-mt-24 rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
               <h2 className="mb-1 text-sm font-bold uppercase tracking-wide text-muted-foreground">Documents demandés</h2>
               {data.documentRequests.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Aucun document n'est demandé pour l'instant.</p>
@@ -192,12 +387,21 @@ export default function SuiviDossierPage() {
                 <ul className="mt-2 space-y-3">
                   {data.documentRequests.map((r) => (
                     <li key={r.id} className="rounded-lg border border-gray-100 bg-gray-50/60 p-3">
-                      <p className="text-sm font-medium text-foreground">{r.libelle}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium text-foreground">{r.libelle}</p>
+                        {r.isUrgent && (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Urgent</span>
+                        )}
+                      </div>
                       {r.description && <p className="mt-0.5 text-xs text-muted-foreground">{r.description}</p>}
+                      {r.message && (
+                        <p className="mt-1 rounded bg-blue-50 px-2 py-1 text-xs text-blue-800">💬 {r.message}</p>
+                      )}
                       <div className="mt-2 flex items-center gap-2">
                         <input
                           ref={(el) => { fileInputs.current[r.id] = el; }}
                           type="file"
+                          accept={ACCEPTED_FILES}
                           disabled={uploadingId === r.id}
                           onChange={(e) => handleUpload(e.target.files?.[0], r.id, r.id)}
                           className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-primary/90"
@@ -215,11 +419,15 @@ export default function SuiviDossierPage() {
                 <input
                   ref={(el) => { fileInputs.current['__free'] = el; }}
                   type="file"
+                  accept={ACCEPTED_FILES}
                   disabled={uploadingId === '__free'}
                   onChange={(e) => handleUpload(e.target.files?.[0], null, '__free')}
                   className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-md file:border file:border-gray-300 file:bg-white file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-50"
                 />
                 {uploadingId === '__free' && <span className="text-xs text-muted-foreground">Envoi…</span>}
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Formats acceptés : PDF, images, Word, Excel · 10 Mo maximum par fichier.
+                </p>
               </div>
             </div>
 
@@ -227,22 +435,45 @@ export default function SuiviDossierPage() {
             {data.mesDocuments.length > 0 && (
               <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
                 <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Vos documents transmis</h2>
-                <ul className="space-y-2">
-                  {data.mesDocuments.map((d) => (
-                    <li key={d.id} className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 truncate text-sm text-foreground">📎 {d.nom}</span>
-                      <div className="flex flex-none items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{formatDate(d.createdAt)}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleDownload(d.id, d.nom)}
-                          className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                        >
-                          Télécharger
-                        </button>
-                      </div>
-                    </li>
-                  ))}
+                <ul className="space-y-3">
+                  {data.mesDocuments.map((d) => {
+                    const b = validationBadge(d.validationStatus);
+                    return (
+                      <li key={d.id} className="rounded-lg border border-gray-100 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="min-w-0 truncate text-sm text-foreground">📎 {d.nom}</span>
+                          <div className="flex flex-none items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleDownload(d.id, d.nom)}
+                              className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                              Télécharger
+                            </button>
+                            {d.validationStatus !== 'valide' && (
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(d.id)}
+                                disabled={deletingId === d.id}
+                                className="rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                              >
+                                {deletingId === d.id ? '…' : 'Retirer'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {formatDate(d.createdAt)}{d.taille ? ` · ${humanSize(d.taille)}` : ''}
+                          </span>
+                        </div>
+                        {d.validationStatus === 'refuse' && d.validationMotif && (
+                          <p className="mt-1 text-xs text-red-700">Motif : {d.validationMotif}. Merci de déposer un nouveau document.</p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
@@ -270,6 +501,57 @@ export default function SuiviDossierPage() {
                 </ul>
               </div>
             )}
+
+            {/* Contacter le cabinet + coordonnées */}
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">Une question ? Contactez le cabinet</h2>
+              {data.cabinet && (
+                <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                  <span className="font-medium text-foreground">{data.cabinet.nom}</span>
+                  {data.cabinet.telephone && (
+                    <a href={`tel:${data.cabinet.telephone.replace(/\s/g, '')}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+                      📞 {data.cabinet.telephone}
+                    </a>
+                  )}
+                  {data.cabinet.email && (
+                    <a href={`mailto:${data.cabinet.email}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+                      ✉️ {data.cabinet.email}
+                    </a>
+                  )}
+                </div>
+              )}
+              <textarea
+                value={contactText}
+                onChange={(e) => setContactText(e.target.value)}
+                rows={3}
+                placeholder="Votre message ou votre question au sujet de ce dossier…"
+                className="w-full rounded-lg border border-gray-300 p-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <input
+                  type="email"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  placeholder="Votre e-mail (facultatif)"
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <input
+                  type="tel"
+                  value={contactTel}
+                  onChange={(e) => setContactTel(e.target.value)}
+                  placeholder="Votre téléphone (facultatif)"
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSendContact}
+                disabled={sendingContact}
+                className="mt-3 inline-flex items-center justify-center rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+              >
+                {sendingContact ? 'Envoi…' : 'Envoyer au cabinet'}
+              </button>
+            </div>
 
             {/* Invitation compte / connexion */}
             {data.compte && (
@@ -305,7 +587,7 @@ export default function SuiviDossierPage() {
             )}
 
             <p className="text-center text-xs text-muted-foreground">
-              Conservez ce lien : il vous permet de suivre votre dossier et de déposer vos documents à tout moment.
+              Vous serez prévenu par e-mail à chaque évolution de votre dossier. Conservez ce lien : il vous permet de suivre votre dossier et de déposer vos documents à tout moment.
             </p>
           </div>
         ) : null}
