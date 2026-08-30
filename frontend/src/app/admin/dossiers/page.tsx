@@ -346,6 +346,8 @@ export default function AdminDossiersPage() {
     'all' | 'pending' | 'in_progress' | 'standby' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
   >('all');
   const [userFilter, setUserFilter] = useState<string>('all');
+  /** Filtre catégorie : 'all' ou une catégorie précise (ex. création d'entreprise). */
+  const [categorieFilter, setCategorieFilter] = useState<'all' | 'constitution_societe'>('all');
   /** Tri liste : jalons datés dans `etapesSupplementaires` (front uniquement). */
   const [dossierSortEtapes, setDossierSortEtapes] = useState<'default' | 'etape_date_asc' | 'etape_date_desc'>('default');
   /** Tarification : admin ou superadmin uniquement. */
@@ -660,6 +662,7 @@ export default function AdminDossiersPage() {
 
     setStatusFilter('all');
     setUserFilter('all');
+    setCategorieFilter('all');
     setDossierSortEtapes('default');
     setExpandedDossiers((prev) => {
       const next = new Set(Array.from(prev, normalizeDossierId));
@@ -2427,6 +2430,18 @@ export default function AdminDossiersPage() {
                   />
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:min-w-0 sm:flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setCategorieFilter((prev) => (prev === 'constitution_societe' ? 'all' : 'constitution_societe'))}
+                    title="N'afficher que les dossiers de création d'entreprise"
+                    className={`flex h-10 items-center justify-center gap-1.5 rounded-lg border px-3 sm:px-4 py-2 text-sm font-medium shadow-sm transition-colors whitespace-nowrap ${
+                      categorieFilter === 'constitution_societe'
+                        ? 'border-indigo-500 bg-indigo-600 text-white hover:bg-indigo-700'
+                        : 'border-gray-300 bg-background text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    🏢 Création d'entreprise
+                  </button>
                   <select
                     value={userFilter}
                     onChange={(e) => setUserFilter(e.target.value)}
@@ -2671,14 +2686,17 @@ export default function AdminDossiersPage() {
               {/* Indicateur de filtre actif et réinitialisation */}
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4 text-xs text-muted-foreground">
                 <div className="min-w-0">
-                  {statusFilter === 'all' && userFilter === 'all' && dossierSortEtapes === 'default' ? (
+                  {statusFilter === 'all' && userFilter === 'all' && categorieFilter === 'all' && dossierSortEtapes === 'default' ? (
                     <span>Tous les dossiers sont affichés.</span>
                   ) : (
                     <span className="break-words">
-                      {statusFilter !== 'all' || userFilter !== 'all' ? (
+                      {statusFilter !== 'all' || userFilter !== 'all' || categorieFilter !== 'all' ? (
                         <>
                           Filtre :{' '}
                           <span className="font-semibold text-primary">
+                            {categorieFilter === 'constitution_societe' && (
+                              <>Création d&apos;entreprise{(statusFilter !== 'all' || userFilter !== 'all') && ' • '}</>
+                            )}
                             {statusFilter !== 'all' && (
                               <>
                                 {statusFilter === 'pending' && 'En attente'}
@@ -2738,12 +2756,13 @@ export default function AdminDossiersPage() {
                   >
                     {strictPrivacyMode ? 'Confidentialité stricte: ON' : 'Confidentialité stricte: OFF'}
                   </button>
-                  {(statusFilter !== 'all' || userFilter !== 'all' || dossierSortEtapes !== 'default') && (
+                  {(statusFilter !== 'all' || userFilter !== 'all' || categorieFilter !== 'all' || dossierSortEtapes !== 'default') && (
                     <button
                       type="button"
                       onClick={() => {
                         setStatusFilter('all');
                         setUserFilter('all');
+                        setCategorieFilter('all');
                         setDossierSortEtapes('default');
                       }}
                       className="px-2 py-1 rounded-md border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors shrink-0 self-start sm:self-auto"
@@ -2781,6 +2800,11 @@ export default function AdminDossiersPage() {
                       // Filtrer par utilisateur spécifique
                       if (dossierUserId !== userFilter) return false;
                     }
+                  }
+
+                  // Filtre par catégorie (ex. création d'entreprise)
+                  if (categorieFilter !== 'all') {
+                    if (String(d.categorie || '') !== categorieFilter) return false;
                   }
 
                   return true;
