@@ -178,8 +178,8 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
         </div>
       )}
 
-      {/* Lien de suivi public — visible côté admin, pour les demandes sans compte */}
-      {variant === 'admin' && dossier.suiviToken && (
+      {/* Lien de suivi public — visible côté admin et client (à partager / suivi sans connexion) */}
+      {(variant === 'admin' || variant === 'client') && dossier.suiviToken && (
         <LienSuivi token={dossier.suiviToken} />
       )}
 

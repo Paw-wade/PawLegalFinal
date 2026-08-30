@@ -19,6 +19,7 @@ interface SuiviData {
     updatedAt: string;
     clientPrenom: string;
   };
+  compte?: { existe: boolean; email: string };
   documents: Array<{ id: string; nom: string; createdAt: string }>;
   mesDocuments: Array<{ id: string; nom: string; createdAt: string }>;
   documentRequests: Array<{ id: string; libelle: string; description: string; status: string }>;
@@ -118,10 +119,10 @@ export default function SuiviDossierPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/10">
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-secondary/10">
       <Header variant="home" />
 
-      <main className="container mx-auto max-w-3xl px-4 py-10">
+      <main className="container mx-auto w-full max-w-3xl flex-1 px-4 py-10">
         {loading ? (
           <p className="py-16 text-center text-muted-foreground">Chargement du suivi…</p>
         ) : error ? (
@@ -267,6 +268,39 @@ export default function SuiviDossierPage() {
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+
+            {/* Invitation compte / connexion */}
+            {data.compte && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 text-center sm:p-6">
+                {data.compte.existe ? (
+                  <>
+                    <p className="text-sm font-medium text-foreground">Vous avez déjà un compte Ada Papers.</p>
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Connectez-vous pour retrouver votre dossier et un suivi complet dans votre espace personnel.
+                    </p>
+                    <a
+                      href={`/auth/signin${data.compte.email ? `?email=${encodeURIComponent(data.compte.email)}` : ''}`}
+                      className="inline-flex items-center justify-center rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+                    >
+                      Se connecter
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-foreground">Suivez votre dossier en permanence.</p>
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Créez votre compte avec la même adresse e-mail : votre dossier y sera automatiquement rattaché.
+                    </p>
+                    <a
+                      href={`/auth/signup${data.compte.email ? `?email=${encodeURIComponent(data.compte.email)}` : ''}`}
+                      className="inline-flex items-center justify-center rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+                    >
+                      Créer mon compte
+                    </a>
+                  </>
+                )}
               </div>
             )}
 

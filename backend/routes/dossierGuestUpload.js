@@ -309,6 +309,14 @@ router.get('/suivi/:token', async (req, res) => {
     const demandes = await DocumentRequest.find({ dossier: dossier._id, status: { $in: ['pending', 'sent'] } })
       .select('documentType documentTypeLabel description status createdAt').sort({ createdAt: 1 }).lean();
 
+    // Le demandeur a-t-il déjà un compte ? (dossier rattaché, ou compte avec le même e-mail)
+    const clientEmail = (dossier.clientEmail || '').trim();
+    let compteExiste = !!dossier.user;
+    if (!compteExiste && clientEmail) {
+      const u = await User.findOne({ email: clientEmail.toLowerCase() }).select('_id').lean();
+      compteExiste = !!u;
+    }
+
     return res.json({
       success: true,
       dossier: {
@@ -322,6 +330,7 @@ router.get('/suivi/:token', async (req, res) => {
         updatedAt: dossier.updatedAt,
         clientPrenom: dossier.clientPrenom || '',
       },
+      compte: { existe: compteExiste, email: clientEmail },
       documents: documents.map((d) => ({ id: String(d._id), nom: d.nom || d.originalName || 'Document', createdAt: d.createdAt })),
       mesDocuments: mesDocuments.map((d) => ({ id: String(d._id), nom: d.nom || d.originalName || 'Document', createdAt: d.createdAt })),
       documentRequests: demandes.map((r) => ({
