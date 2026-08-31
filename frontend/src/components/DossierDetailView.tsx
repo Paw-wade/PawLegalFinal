@@ -7,6 +7,7 @@ import { getStatutLabelWithEtapes, getStatutColor, getPrioriteColor, getPriorite
 import { ValiderDemandeButton } from '@/components/demande/ValiderDemandeButton';
 import { TelechargerDossierPdfButton } from '@/components/demande/TelechargerDossierPdfButton';
 import { LienSuivi } from '@/components/demande/LienSuivi';
+import { RecommandationsPanel } from '@/components/demande/RecommandationsPanel';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -176,6 +177,16 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
             </div>
           )}
         </div>
+      )}
+
+      {/* Recommandations (création d'entreprise) — création admin, décision client */}
+      {(variant === 'admin' || variant === 'client') && dossier.categorie === 'constitution_societe' && (
+        <RecommandationsPanel
+          dossierId={String(dossier._id || dossier.id || '')}
+          categorie={dossier.categorie}
+          variant={variant}
+          recommandations={dossier.recommandations}
+        />
       )}
 
       {/* Lien de suivi public — visible côté admin et client (à partager / suivi sans connexion) */}

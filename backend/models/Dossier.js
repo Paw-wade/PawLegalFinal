@@ -48,6 +48,21 @@ const dossierSchema = new mongoose.Schema({
   // Jeton de suivi public : permet à un demandeur sans compte de suivre son dossier
   // et de déposer les documents demandés via un lien /suivi/<token>. Révocable.
   suiviToken: { type: String, index: true, sparse: true },
+  // Recommandations de l'équipe (création d'entreprise) : forme juridique et démarche
+  // conseillées lorsque la demande initiale n'est pas adaptée. Le demandeur accepte ou
+  // refuse chaque recommandation ; à l'acceptation, la description et la forme juridique
+  // structurée sont mises à jour (l'originale est conservée dans descriptionAvant).
+  recommandations: [{
+    formeJuridiqueRecommandee: { type: String, trim: true, default: '' },
+    demarcheRecommandee: { type: String, trim: true, default: '' },
+    motif: { type: String, trim: true, default: '' }, // pourquoi la demande initiale n'est pas adaptée
+    statut: { type: String, enum: ['en_attente', 'acceptee', 'refusee'], default: 'en_attente' },
+    motifRefus: { type: String, trim: true, default: '' },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    createdAt: { type: Date, default: Date.now },
+    decidedAt: { type: Date, default: null },
+    descriptionAvant: { type: String, default: '' }, // description au moment de l'acceptation (traçabilité)
+  }],
   categorie: {
     type: String,
     enum: [

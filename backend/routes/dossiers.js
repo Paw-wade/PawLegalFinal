@@ -975,6 +975,160 @@ Ou depuis votre espace personnel : ${frontUrl}/client/dossiers`,
   }
 );
 
+// @route   POST /api/user/dossiers/:id/recommandations
+// @desc    (Équipe) Ajouter une recommandation (forme juridique + démarche) à un dossier
+// @access  Private (équipe cabinet)
+router.post(
+  '/:id/recommandations',
+  authorize('admin', 'superadmin', 'assistant', 'secretaire', 'juriste'),
+  async (req, res) => {
+    try {
+      const dossier = await Dossier.findById(req.params.id);
+      if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+
+      const formeJuridiqueRecommandee = String((req.body && req.body.formeJuridiqueRecommandee) || '').trim();
+      const demarcheRecommandee = String((req.body && req.body.demarcheRecommandee) || '').trim();
+      const motif = String((req.body && req.body.motif) || '').trim();
+      if (!formeJuridiqueRecommandee && !demarcheRecommandee) {
+        return res.status(400).json({ success: false, message: 'Indiquez au moins une forme juridique ou une démarche recommandée.' });
+      }
+
+      dossier.recommandations = dossier.recommandations || [];
+      dossier.recommandations.push({
+        formeJuridiqueRecommandee,
+        demarcheRecommandee,
+        motif,
+        statut: 'en_attente',
+        createdBy: req.user.id,
+        createdAt: new Date(),
+      });
+      await dossier.save();
+      const created = dossier.recommandations[dossier.recommandations.length - 1];
+
+      // Notifier le demandeur : in-app (si compte) + e-mail (compte ou clientEmail).
+      const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+      const titre = dossier.titre || 'votre dossier';
+      let email = (dossier.clientEmail || '').trim();
+      let prenom = dossier.clientPrenom || '';
+      if (dossier.user) {
+        try {
+          const holder = await User.findById(dossier.user).select('email firstName').lean();
+          if (holder?.email && !email) email = holder.email;
+          if (holder?.firstName && !prenom) prenom = holder.firstName;
+        } catch (e) { /* ignore */ }
+        await createNotification(
+          dossier.user,
+          'dossier_updated',
+          'Recommandation de notre équipe',
+          `Notre équipe a émis une recommandation sur votre dossier « ${titre} ». Vous pouvez l'accepter ou la refuser.`,
+          '/client/dossiers',
+          { dossierId: dossier._id.toString(), recommandationId: created._id.toString() }
+        );
+      }
+      if (email) {
+        const suiviUrl = dossier.suiviToken ? `${frontUrl}/suivi/${dossier.suiviToken}` : '';
+        const espaceUrl = `${frontUrl}/client/dossiers`;
+        try {
+          await sendTemplatedTransactionalEmail({
+            templateCode: 'dossier_recommandation',
+            eventKey: 'dossier_recommandation',
+            to: email,
+            toName: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim() || email,
+            variables: { prenom, titre, formeJuridique: formeJuridiqueRecommandee, demarche: demarcheRecommandee, motif, suiviUrl, espaceUrl },
+            fallback: {
+              subject: `Une recommandation pour votre dossier — ${titre}`,
+              htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Après examen de votre demande « ${escapeHtml(titre)} », notre équipe vous propose une <strong>recommandation</strong> :</p><ul>${formeJuridiqueRecommandee ? `<li><strong>Forme juridique conseillée :</strong> ${escapeHtml(formeJuridiqueRecommandee)}</li>` : ''}${demarcheRecommandee ? `<li><strong>Démarche à suivre :</strong> ${escapeHtml(demarcheRecommandee)}</li>` : ''}${motif ? `<li><strong>Pourquoi :</strong> ${escapeHtml(motif)}</li>` : ''}</ul><p>Vous pouvez l'<strong>accepter</strong> ou la <strong>refuser</strong> :</p><p>${suiviUrl ? `via votre <a href="${escapeHtml(suiviUrl)}">lien de suivi</a>` : ''}${suiviUrl ? ' ou ' : ''}depuis votre <a href="${escapeHtml(espaceUrl)}">espace personnel</a> si vous avez un compte.</p>`,
+              textContent: `Bonjour ${prenom || ''},\n\nAprès examen de votre demande « ${titre} », notre équipe vous propose une recommandation :\n${formeJuridiqueRecommandee ? `- Forme juridique conseillée : ${formeJuridiqueRecommandee}\n` : ''}${demarcheRecommandee ? `- Démarche à suivre : ${demarcheRecommandee}\n` : ''}${motif ? `- Pourquoi : ${motif}\n` : ''}\nAcceptez ou refusez :\n${suiviUrl ? `Lien de suivi : ${suiviUrl}\n` : ''}Espace personnel : ${espaceUrl}`,
+            },
+          });
+        } catch (e) { console.error('⚠️ Email recommandation:', e.message || e); }
+      }
+
+      return res.status(201).json({ success: true, message: 'Recommandation envoyée au demandeur.', recommandation: created, dossier });
+    } catch (error) {
+      console.error('Erreur création recommandation:', error);
+      return res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+    }
+  }
+);
+
+// @route   PATCH /api/user/dossiers/:id/recommandations/:recId/decision
+// @desc    (Client propriétaire) Accepter ou refuser une recommandation
+// @access  Private (propriétaire du dossier)
+router.patch('/:id/recommandations/:recId/decision', async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    const ownerId = dossier.user ? dossier.user.toString() : null;
+    const isOwner = ownerId && ownerId === req.user.id.toString();
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ success: false, message: 'Accès non autorisé à ce dossier' });
+    }
+
+    const decision = String((req.body && req.body.decision) || '').trim();
+    if (!['acceptee', 'refusee'].includes(decision)) {
+      return res.status(400).json({ success: false, message: 'Décision invalide.' });
+    }
+    const rec = dossier.recommandations && dossier.recommandations.id(req.params.recId);
+    if (!rec) return res.status(404).json({ success: false, message: 'Recommandation introuvable.' });
+    if (rec.statut !== 'en_attente') {
+      return res.status(409).json({ success: false, message: 'Cette recommandation a déjà fait l\'objet d\'une décision.' });
+    }
+
+    rec.statut = decision;
+    rec.decidedAt = new Date();
+    if (decision === 'refusee') rec.motifRefus = String((req.body && req.body.motifRefus) || '').trim().slice(0, 1000);
+    if (decision === 'acceptee') {
+      const { applyAcceptedRecommendation } = require('../utils/recommandations');
+      applyAcceptedRecommendation(dossier, rec);
+    }
+    dossier.markModified('recommandations');
+    await dossier.save();
+
+    // Notifier l'équipe (in-app + e-mail).
+    const titre = dossier.titre || 'un dossier';
+    const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+    const dossierUrl = `${frontUrl}/admin/dossiers?dossierId=${dossier._id.toString()}`;
+    const verbe = decision === 'acceptee' ? 'accepté' : 'refusé';
+    try {
+      const admins = await User.find({ role: { $in: ADMIN_NOTIFY_ROLES }, isActive: true }).select('_id');
+      for (const adm of admins) {
+        await createNotification(
+          adm._id,
+          'dossier_updated',
+          `Recommandation ${verbe}e`,
+          `Le demandeur a ${verbe} une recommandation sur le dossier « ${titre} ».`,
+          '/admin/dossiers',
+          { dossierId: dossier._id.toString(), recommandationId: rec._id.toString() }
+        );
+      }
+    } catch (e) { console.error('⚠️ Notif décision recommandation:', e.message || e); }
+    for (const adminEmail of parseAdminEmails()) {
+      try {
+        await sendTemplatedTransactionalEmail({
+          templateCode: 'dossier_recommandation_decision',
+          eventKey: 'dossier_recommandation_decision',
+          to: adminEmail,
+          toName: 'Équipe Ada Papers',
+          variables: { titre, decision: verbe, dossierUrl },
+          fallback: {
+            subject: `Recommandation ${verbe}e — ${titre}`,
+            htmlContent: `<p>Le demandeur a <strong>${escapeHtml(verbe)}</strong> une recommandation sur le dossier « ${escapeHtml(titre)} ».</p><p>Ouvrir le dossier : <a href="${escapeHtml(dossierUrl)}">${escapeHtml(dossierUrl)}</a></p>`,
+            textContent: `Le demandeur a ${verbe} une recommandation sur le dossier « ${titre} ».\nDossier : ${dossierUrl}`,
+          },
+        });
+      } catch (e) { console.error('⚠️ Email décision recommandation:', e.message || e); }
+    }
+
+    return res.json({ success: true, message: decision === 'acceptee' ? 'Recommandation acceptée.' : 'Recommandation refusée.', recommandation: rec, dossier });
+  } catch (error) {
+    console.error('Erreur décision recommandation:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
 // @route   GET /api/user/dossiers
 // @desc    Récupérer tous les dossiers de l'utilisateur connecté (tous les rôles)
 // @access  Private (tous les rôles authentifiés)
@@ -1589,6 +1743,7 @@ router.get('/:id/recap', protect, async (req, res) => {
         titre: dossier.titre,
         description: dossier.description,
         champsFormulaire: Array.isArray(dossier.champsFormulaire) ? dossier.champsFormulaire : [],
+        recommandations: Array.isArray(dossier.recommandations) ? dossier.recommandations : [],
         categorie: dossier.categorie,
         type: dossier.type,
         statut: dossier.statut,
@@ -2062,6 +2217,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         titre: dossier.titre,
         description: dossier.description,
         champsFormulaire: Array.isArray(dossier.champsFormulaire) ? dossier.champsFormulaire : [],
+        recommandations: Array.isArray(dossier.recommandations) ? dossier.recommandations : [],
         categorie: dossier.categorie,
         type: dossier.type,
         statut: dossier.statut,
@@ -2317,6 +2473,24 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
         yPosition = addText(`${libelle} :`, margin, yPosition, { continued: true, width: doc.page.width - 2 * margin });
         doc.font('Helvetica');
         yPosition = addText(` ${valeur}`, margin, yPosition, { width: doc.page.width - 2 * margin });
+        yPosition += lineHeight;
+      });
+      yPosition += sectionSpacing;
+    }
+
+    // Recommandations & décisions (création d'entreprise)
+    if (Array.isArray(recap.dossier.recommandations) && recap.dossier.recommandations.length > 0) {
+      yPosition = addSection('RECOMMANDATIONS & DÉCISIONS', yPosition);
+      const statutLabel = (s) => (s === 'acceptee' ? 'Acceptée' : s === 'refusee' ? 'Refusée' : 'En attente');
+      recap.dossier.recommandations.forEach((r, idx) => {
+        doc.font('Helvetica-Bold');
+        yPosition = addText(`Recommandation ${idx + 1} — ${statutLabel(r.statut)}`, margin, yPosition, { width: doc.page.width - 2 * margin });
+        doc.font('Helvetica');
+        if (r.formeJuridiqueRecommandee) yPosition = addText(`Forme juridique conseillée : ${r.formeJuridiqueRecommandee}`, margin, yPosition, { width: doc.page.width - 2 * margin });
+        if (r.demarcheRecommandee) yPosition = addMultilineText(`Démarche : ${r.demarcheRecommandee}`, margin, yPosition, { width: doc.page.width - 2 * margin });
+        if (r.motif) yPosition = addMultilineText(`Motif : ${r.motif}`, margin, yPosition, { width: doc.page.width - 2 * margin });
+        if (r.statut === 'refusee' && r.motifRefus) yPosition = addMultilineText(`Motif du refus : ${r.motifRefus}`, margin, yPosition, { width: doc.page.width - 2 * margin });
+        if (r.decidedAt) yPosition = addText(`Décision le : ${new Date(r.decidedAt).toLocaleDateString('fr-FR')}`, margin, yPosition, { width: doc.page.width - 2 * margin });
         yPosition += lineHeight;
       });
       yPosition += sectionSpacing;

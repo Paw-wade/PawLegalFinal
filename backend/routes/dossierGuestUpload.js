@@ -370,6 +370,18 @@ router.get('/suivi/:token', async (req, res) => {
         categorie: dossier.categorie,
         description: dossier.description || '',
         champsFormulaire,
+        recommandations: Array.isArray(dossier.recommandations)
+          ? dossier.recommandations.map((r) => ({
+              id: String(r._id),
+              formeJuridiqueRecommandee: r.formeJuridiqueRecommandee || '',
+              demarcheRecommandee: r.demarcheRecommandee || '',
+              motif: r.motif || '',
+              statut: r.statut || 'en_attente',
+              motifRefus: r.motifRefus || '',
+              createdAt: r.createdAt,
+              decidedAt: r.decidedAt || null,
+            }))
+          : [],
         createdAt: dossier.createdAt,
         updatedAt: dossier.updatedAt,
         clientPrenom: dossier.clientPrenom || '',
@@ -614,6 +626,74 @@ router.delete('/suivi/:token/documents/:docId', async (req, res) => {
   }
 });
 
+// @route   POST /api/dossier-guest-upload/suivi/:token/recommandations/:recId/decision
+// @desc    Le porteur du lien accepte ou refuse une recommandation de l'équipe
+router.post('/suivi/:token/recommandations/:recId/decision', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) {
+      return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif : votre dossier a été clôturé.' });
+    }
+    const decision = String((req.body && req.body.decision) || '').trim();
+    if (!['acceptee', 'refusee'].includes(decision)) {
+      return res.status(400).json({ success: false, message: 'Décision invalide.' });
+    }
+    const rec = dossier.recommandations && dossier.recommandations.id(req.params.recId);
+    if (!rec) return res.status(404).json({ success: false, message: 'Recommandation introuvable.' });
+    if (rec.statut !== 'en_attente') {
+      return res.status(409).json({ success: false, message: 'Cette recommandation a déjà fait l\'objet d\'une décision.' });
+    }
+
+    rec.statut = decision;
+    rec.decidedAt = new Date();
+    if (decision === 'refusee') rec.motifRefus = String((req.body && req.body.motifRefus) || '').trim().slice(0, 1000);
+    if (decision === 'acceptee') {
+      const { applyAcceptedRecommendation } = require('../utils/recommandations');
+      applyAcceptedRecommendation(dossier, rec);
+    }
+    dossier.markModified('recommandations');
+    await dossier.save();
+
+    // Notifier l'équipe (in-app + e-mail).
+    const titre = dossier.titre || dossier.numero || 'un dossier';
+    const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+    const dossierUrl = `${frontUrl}/admin/dossiers?dossierId=${String(dossier._id)}`;
+    const verbe = decision === 'acceptee' ? 'accepté' : 'refusé';
+    try {
+      const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id');
+      for (const adm of admins) {
+        await Notification.create({
+          user: adm._id, type: 'dossier_updated', titre: `Recommandation ${verbe}e`,
+          message: `Le demandeur a ${verbe} une recommandation sur le dossier « ${titre} ».`,
+          lien: '/admin/dossiers', metadata: { dossierId: String(dossier._id), recommandationId: String(rec._id) },
+        });
+      }
+    } catch (e) { console.error('[suivi] notif décision recommandation:', e.message || e); }
+    for (const adminEmail of parseAdminEmails()) {
+      try {
+        await sendTemplatedTransactionalEmail({
+          templateCode: 'dossier_recommandation_decision',
+          eventKey: 'dossier_recommandation_decision',
+          to: adminEmail,
+          toName: 'Équipe Ada Papers',
+          variables: { titre, decision: verbe, dossierUrl },
+          fallback: {
+            subject: `Recommandation ${verbe}e — ${titre}`,
+            htmlContent: `<p>Le demandeur a <strong>${escapeHtml(verbe)}</strong> une recommandation sur le dossier « ${escapeHtml(titre)} » via son lien de suivi.</p><p>Ouvrir le dossier : <a href="${escapeHtml(dossierUrl)}">${escapeHtml(dossierUrl)}</a></p>`,
+            textContent: `Le demandeur a ${verbe} une recommandation sur le dossier « ${titre} » via son lien de suivi.\nDossier : ${dossierUrl}`,
+          },
+        });
+      } catch (e) { console.error('[suivi] email décision recommandation:', e.message || e); }
+    }
+
+    return res.json({ success: true, message: decision === 'acceptee' ? 'Recommandation acceptée.' : 'Recommandation refusée.' });
+  } catch (err) {
+    console.error('[suivi] POST décision recommandation:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
 // @route   GET /api/dossier-guest-upload/suivi/:token/recap.pdf
 // @desc    Accusé de réception / récapitulatif PDF téléchargeable par le porteur du lien
 router.get('/suivi/:token/recap.pdf', async (req, res) => {
@@ -655,6 +735,20 @@ router.get('/suivi/:token/recap.pdf', async (req, res) => {
       doc.moveDown(0.3);
       doc.fontSize(10).fillColor('#333');
       champs.forEach((c) => { doc.text(`• ${(c.libelle || c.nom || '').trim()} : ${String(c.valeur)}`); });
+      doc.moveDown(1);
+    }
+
+    const recos = Array.isArray(dossier.recommandations) ? dossier.recommandations : [];
+    if (recos.length) {
+      doc.fontSize(11).fillColor('#1e3a8a').text('Recommandations & décisions');
+      doc.moveDown(0.3);
+      doc.fontSize(10).fillColor('#333');
+      const statutLabel = (s) => (s === 'acceptee' ? 'Acceptée' : s === 'refusee' ? 'Refusée' : 'En attente');
+      recos.forEach((r, i) => {
+        doc.text(`• Recommandation ${i + 1} — ${statutLabel(r.statut)}`);
+        if (r.formeJuridiqueRecommandee) doc.text(`   Forme juridique conseillée : ${r.formeJuridiqueRecommandee}`);
+        if (r.demarcheRecommandee) doc.text(`   Démarche : ${r.demarcheRecommandee}`);
+      });
       doc.moveDown(1);
     }
 

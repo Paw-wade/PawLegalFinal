@@ -1109,6 +1109,17 @@ export const dossiersAPI = {
   validerDocumentDepose: (docId: string, statut: 'en_attente' | 'valide' | 'refuse', motif?: string) =>
     api.patch(`/dossier-guest-upload/documents/${docId}/validation`, { statut, motif }),
 
+  // Recommandations (création d'entreprise)
+  createRecommandation: (
+    id: string,
+    data: { formeJuridiqueRecommandee?: string; demarcheRecommandee?: string; motif?: string }
+  ) => api.post(`/user/dossiers/${id}/recommandations`, data),
+  decideRecommandation: (id: string, recId: string, decision: 'acceptee' | 'refusee', motifRefus?: string) =>
+    api.patch(`/user/dossiers/${id}/recommandations/${recId}/decision`, { decision, motifRefus }),
+  // Décision côté lien de suivi (sans compte)
+  decideSuiviRecommandation: (token: string, recId: string, decision: 'acceptee' | 'refusee', motifRefus?: string) =>
+    api.post(`/dossier-guest-upload/suivi/${token}/recommandations/${recId}/decision`, { decision, motifRefus }),
+
   // Récupérer un dossier par ID
   getDossierById: (id: string | any) => {
     // Protection : s'assurer que l'ID est une string

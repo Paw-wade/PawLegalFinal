@@ -18,6 +18,16 @@ interface SuiviData {
     categorie: string;
     description: string;
     champsFormulaire: Array<{ libelle: string; valeur: string }>;
+    recommandations: Array<{
+      id: string;
+      formeJuridiqueRecommandee: string;
+      demarcheRecommandee: string;
+      motif: string;
+      statut: 'en_attente' | 'acceptee' | 'refusee';
+      motifRefus: string;
+      createdAt: string;
+      decidedAt: string | null;
+    }>;
     createdAt: string;
     updatedAt: string;
     clientPrenom: string;
@@ -85,6 +95,7 @@ export default function SuiviDossierPage() {
   const [contactEmail, setContactEmail] = useState('');
   const [contactTel, setContactTel] = useState('');
   const [sendingContact, setSendingContact] = useState(false);
+  const [decidingRecId, setDecidingRecId] = useState<string | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const load = useCallback(async () => {
@@ -235,6 +246,38 @@ export default function SuiviDossierPage() {
     }
   };
 
+  const handleDecideRecommandation = async (recId: string, decision: 'acceptee' | 'refusee') => {
+    let motifRefus = '';
+    if (decision === 'refusee') {
+      const s = window.prompt('Souhaitez-vous préciser la raison du refus ? (facultatif)', '');
+      if (s === null) return;
+      motifRefus = s.trim();
+    } else if (!window.confirm('Accepter cette recommandation ? La description de votre dossier sera mise à jour en conséquence.')) {
+      return;
+    }
+    setDecidingRecId(recId);
+    flash(null, null);
+    try {
+      const res = await dossiersAPI.decideSuiviRecommandation(token, recId, decision, motifRefus);
+      if (res.data?.success) {
+        flash(decision === 'acceptee' ? 'Recommandation acceptée. Merci.' : 'Recommandation refusée.');
+        await load();
+      } else {
+        flash(null, 'La décision n\'a pas pu être enregistrée.');
+      }
+    } catch (e: any) {
+      flash(null, e?.response?.data?.message || 'La décision n\'a pas pu être enregistrée.');
+    } finally {
+      setDecidingRecId(null);
+    }
+  };
+
+  const recBadge = (s?: string) => {
+    if (s === 'acceptee') return { label: '✓ Acceptée', cls: 'bg-green-100 text-green-800' };
+    if (s === 'refusee') return { label: '✕ Refusée', cls: 'bg-red-100 text-red-700' };
+    return { label: 'En attente de votre décision', cls: 'bg-amber-100 text-amber-800' };
+  };
+
   const etapes = data
     ? [...(data.dossier.etapesSupplementaires || [])].sort((a: any, b: any) => (a?.ordre ?? 0) - (b?.ordre ?? 0))
     : [];
@@ -340,6 +383,63 @@ export default function SuiviDossierPage() {
                     ))}
                   </dl>
                 )}
+              </div>
+            )}
+
+            {/* Recommandations de l'équipe (création d'entreprise) */}
+            {data.dossier.recommandations && data.dossier.recommandations.length > 0 && (
+              <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-5 shadow-sm sm:p-6">
+                <h2 className="mb-1 text-sm font-bold uppercase tracking-wide text-purple-900">Recommandations de notre équipe</h2>
+                <p className="mb-3 text-xs text-purple-900/70">
+                  Nous vous conseillons sur la forme juridique et la démarche. Vous pouvez accepter ou refuser chaque recommandation.
+                </p>
+                <ul className="space-y-3">
+                  {data.dossier.recommandations.map((r) => {
+                    const b = recBadge(r.statut);
+                    return (
+                      <li key={r.id} className="rounded-lg border border-purple-100 bg-white p-3">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
+                          {r.createdAt && (
+                            <span className="text-[11px] text-muted-foreground">{formatDate(r.createdAt)}</span>
+                          )}
+                        </div>
+                        {r.formeJuridiqueRecommandee && (
+                          <p className="text-sm text-foreground"><span className="font-medium">Forme juridique conseillée :</span> {r.formeJuridiqueRecommandee}</p>
+                        )}
+                        {r.demarcheRecommandee && (
+                          <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground"><span className="font-medium">Démarche :</span> {r.demarcheRecommandee}</p>
+                        )}
+                        {r.motif && (
+                          <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground"><span className="font-medium">Pourquoi :</span> {r.motif}</p>
+                        )}
+                        {r.statut === 'refusee' && r.motifRefus && (
+                          <p className="mt-0.5 text-xs text-red-700">Motif du refus : {r.motifRefus}</p>
+                        )}
+                        {r.statut === 'en_attente' && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleDecideRecommandation(r.id, 'acceptee')}
+                              disabled={decidingRecId === r.id}
+                              className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-60"
+                            >
+                              {decidingRecId === r.id ? '…' : 'Accepter'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDecideRecommandation(r.id, 'refusee')}
+                              disabled={decidingRecId === r.id}
+                              className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                            >
+                              Refuser
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
 
