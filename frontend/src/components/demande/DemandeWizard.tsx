@@ -269,7 +269,7 @@ export default function DemandeWizard({
 
   // Définition des champs spécifiques pour chaque type de demande
   const getSpecificFields = (optionValue: string) => {
-    const fields: { [key: string]: Array<{ name: string; label: string; type: string; placeholder?: string; required?: boolean; options?: string[]; showWhen?: { field: string }; fullWidth?: boolean }> } = {
+    const fields: { [key: string]: Array<{ name: string; label: string; type: string; placeholder?: string; required?: boolean; options?: string[]; showWhen?: { field: string }; fullWidth?: boolean; recordFalse?: boolean }> } = {
       'premiere_demande_titre': [
         { name: 'etablissement', label: 'Établissement d\'enseignement', type: 'text', placeholder: 'Nom de l\'établissement', required: false },
         { name: 'niveau_etudes', label: 'Niveau d\'études', type: 'select', options: ['Licence', 'Master', 'Doctorat', 'Autre'], required: false },
@@ -372,6 +372,7 @@ export default function DemandeWizard({
         { name: 'montant_apport_nature', label: 'Valeur estimée de l’apport en nature', type: 'text', placeholder: 'Valeur estimée (FCFA)', required: false, showWhen: { field: 'apport_nature' } },
         { name: 'apport_industrie', label: 'Apport en industrie', type: 'checkbox', required: false },
         { name: 'montant_apport_industrie', label: 'Valeur estimée de l’apport en industrie', type: 'text', placeholder: 'Valeur estimée', required: false, showWhen: { field: 'apport_industrie' } },
+        { name: 'ouverture_compte_bancaire', label: 'Souhaite ouvrir un compte bancaire professionnel', type: 'checkbox', required: false, recordFalse: true, fullWidth: true },
       ],
       'constitution_societe_france': [
         { name: 'denomination_prevue', label: 'Dénomination sociale envisagée', type: 'text', placeholder: 'Ex. MA SOCIÉTÉ SAS', required: false },
@@ -386,6 +387,7 @@ export default function DemandeWizard({
         { name: 'montant_apport_nature', label: 'Valeur estimée de l’apport en nature', type: 'text', placeholder: 'Valeur estimée (€)', required: false, showWhen: { field: 'apport_nature' } },
         { name: 'apport_industrie', label: 'Apport en industrie', type: 'checkbox', required: false },
         { name: 'montant_apport_industrie', label: 'Valeur estimée de l’apport en industrie', type: 'text', placeholder: 'Valeur estimée', required: false, showWhen: { field: 'apport_industrie' } },
+        { name: 'ouverture_compte_bancaire', label: 'Souhaite ouvrir un compte bancaire professionnel', type: 'checkbox', required: false, recordFalse: true, fullWidth: true },
       ],
     };
 
@@ -555,7 +557,8 @@ export default function DemandeWizard({
         if ((field as any).showWhen && !formData[(field as any).showWhen.field]) return;
         let val: string;
         if (field.type === 'checkbox') {
-          val = formData[field.name] ? 'Oui' : '';
+          // recordFalse : on enregistre explicitement « Non » quand la case est décochée.
+          val = formData[field.name] ? 'Oui' : ((field as any).recordFalse ? 'Non' : '');
         } else if (field.type === 'date') {
           // Les champs date exposent un format d'affichage dans le DOM : on garde l'état React (ISO).
           val = formData[field.name] || '';
