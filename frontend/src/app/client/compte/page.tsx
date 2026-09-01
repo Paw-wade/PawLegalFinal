@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRef } from 'react';
 import Link from 'next/link';
 import { userAPI, smsPreferencesAPI, pushAPI } from '@/lib/api';
+import { FloatingField } from '@/components/ui/FloatingField';
 import { ensurePushSubscription } from '@/lib/pushClient';
 import { mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
@@ -606,52 +607,12 @@ export default function ComptePage() {
                   <h3 className="text-lg font-semibold text-foreground">Informations de base</h3>
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName" className="text-sm font-semibold">Prénom</Label>
-                    <Input
-                      id="firstName"
-                      type="text"
-                      value={profileData.firstName}
-                      onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="Votre prénom"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-sm font-semibold">Nom</Label>
-                    <Input
-                      id="lastName"
-                      type="text"
-                      value={profileData.lastName}
-                      onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="Votre nom"
-                    />
-                  </div>
+                  <FloatingField label="Prénom" value={profileData.firstName} onChange={(v) => setProfileData({ ...profileData, firstName: v })} />
+                  <FloatingField label="Nom" value={profileData.lastName} onChange={(v) => setProfileData({ ...profileData, lastName: v })} />
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="email" className="text-sm font-semibold">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={profileData.email}
-                      onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="votre@email.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone" className="text-sm font-semibold">Téléphone</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={profileData.phone}
-                      onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="+33 6 12 34 56 78"
-                    />
-                  </div>
+                  <FloatingField label="Email" type="email" value={profileData.email} onChange={(v) => setProfileData({ ...profileData, email: v })} />
+                  <FloatingField label="Téléphone" type="tel" value={profileData.phone} onChange={(v) => setProfileData({ ...profileData, phone: v })} />
                 </div>
               </div>
 
@@ -667,54 +628,13 @@ export default function ComptePage() {
                   <h3 className="text-lg font-semibold text-foreground">Informations personnelles</h3>
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="dateNaissance" className="text-sm font-semibold">Date de naissance</Label>
-                    <Input
-                      id="dateNaissance"
-                      type="date"
-                      value={profileData.dateNaissance}
-                      onChange={(e) => setProfileData({ ...profileData, dateNaissance: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lieuNaissance" className="text-sm font-semibold">Lieu de naissance</Label>
-                    <Input
-                      id="lieuNaissance"
-                      type="text"
-                      value={profileData.lieuNaissance}
-                      onChange={(e) => setProfileData({ ...profileData, lieuNaissance: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="Ville, Pays"
-                    />
-                  </div>
+                  <FloatingField label="Date de naissance" type="date" value={profileData.dateNaissance} onChange={(v) => setProfileData({ ...profileData, dateNaissance: v })} />
+                  <FloatingField label="Lieu de naissance" value={profileData.lieuNaissance} onChange={(v) => setProfileData({ ...profileData, lieuNaissance: v })} placeholder="Ville, Pays" />
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="nationalite" className="text-sm font-semibold">Nationalité</Label>
-                    <Input
-                      id="nationalite"
-                      type="text"
-                      value={profileData.nationalite}
-                      onChange={(e) => setProfileData({ ...profileData, nationalite: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="Ex: Française, Algérienne..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sexe" className="text-sm font-semibold">Sexe</Label>
-                    <select
-                      id="sexe"
-                      value={profileData.sexe}
-                      onChange={(e) => setProfileData({ ...profileData, sexe: e.target.value })}
-                      className="mt-1 flex h-11 w-full rounded-md border-2 border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus:border-primary transition-colors"
-                    >
-                      <option value="">Sélectionner</option>
-                      <option value="M">Masculin</option>
-                      <option value="F">Féminin</option>
-                      <option value="Autre">Autre</option>
-                    </select>
-                  </div>
+                  <FloatingField label="Nationalité" value={profileData.nationalite} onChange={(v) => setProfileData({ ...profileData, nationalite: v })} placeholder="Ex: Française, Algérienne..." />
+                  <FloatingField label="Sexe" type="select" value={profileData.sexe} onChange={(v) => setProfileData({ ...profileData, sexe: v })}
+                    options={[{ value: 'M', label: 'Masculin' }, { value: 'F', label: 'Féminin' }, { value: 'Autre', label: 'Autre' }]} />
                 </div>
               </div>
 
@@ -731,57 +651,13 @@ export default function ComptePage() {
                     <h3 className="text-lg font-semibold text-foreground">Informations de séjour</h3>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="numeroEtranger" className="text-sm font-semibold">Numéro d'étranger</Label>
-                  <Input
-                    id="numeroEtranger"
-                    type="text"
-                    value={profileData.numeroEtranger}
-                    onChange={(e) => setProfileData({ ...profileData, numeroEtranger: e.target.value })}
-                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                    placeholder="Ex: 12AB34567"
-                  />
+                <FloatingField label="Numéro d'étranger" value={profileData.numeroEtranger} onChange={(v) => setProfileData({ ...profileData, numeroEtranger: v })} placeholder="Ex: 12AB34567" />
+                <div className="grid md:grid-cols-2 gap-6">
+                  <FloatingField label="Type de titre" value={profileData.typeTitre} onChange={(v) => setProfileData({ ...profileData, typeTitre: v })} placeholder="Ex: Carte de séjour, Visa, etc." />
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="typeTitre" className="text-sm font-semibold">
-                      Type de titre
-                    </Label>
-                    <Input
-                      id="typeTitre"
-                      type="text"
-                      value={profileData.typeTitre}
-                      onChange={(e) => setProfileData({ ...profileData, typeTitre: e.target.value })}
-                      placeholder="Ex: Carte de séjour, Visa, etc."
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                    />
-                  </div>
-                </div>
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="dateDelivrance" className="text-sm font-semibold">
-                      Date de délivrance
-                    </Label>
-                    <Input
-                      id="dateDelivrance"
-                      type="date"
-                      value={profileData.dateDelivrance}
-                      onChange={(e) => setProfileData({ ...profileData, dateDelivrance: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="dateExpiration" className="text-sm font-semibold">
-                      Date d'expiration
-                    </Label>
-                    <Input
-                      id="dateExpiration"
-                      type="date"
-                      value={profileData.dateExpiration}
-                      onChange={(e) => setProfileData({ ...profileData, dateExpiration: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                    />
-                  </div>
+                  <FloatingField label="Date de délivrance" type="date" value={profileData.dateDelivrance} onChange={(v) => setProfileData({ ...profileData, dateDelivrance: v })} />
+                  <FloatingField label="Date d'expiration" type="date" value={profileData.dateExpiration} onChange={(v) => setProfileData({ ...profileData, dateExpiration: v })} />
                 </div>
               </div>
 
@@ -796,51 +672,11 @@ export default function ComptePage() {
                   </div>
                   <h3 className="text-lg font-semibold text-foreground">Adresse</h3>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="adressePostale" className="text-sm font-semibold">Adresse postale</Label>
-                  <Input
-                    id="adressePostale"
-                    type="text"
-                    value={profileData.adressePostale}
-                    onChange={(e) => setProfileData({ ...profileData, adressePostale: e.target.value })}
-                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                    placeholder="Numéro et nom de rue"
-                  />
-                </div>
+                <FloatingField label="Adresse postale" value={profileData.adressePostale} onChange={(v) => setProfileData({ ...profileData, adressePostale: v })} placeholder="Numéro et nom de rue" />
                 <div className="grid md:grid-cols-3 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="ville" className="text-sm font-semibold">Ville</Label>
-                    <Input
-                      id="ville"
-                      type="text"
-                      value={profileData.ville}
-                      onChange={(e) => setProfileData({ ...profileData, ville: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="Ville"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="codePostal" className="text-sm font-semibold">Code postal</Label>
-                    <Input
-                      id="codePostal"
-                      type="text"
-                      value={profileData.codePostal}
-                      onChange={(e) => setProfileData({ ...profileData, codePostal: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="75001"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pays" className="text-sm font-semibold">Pays</Label>
-                    <Input
-                      id="pays"
-                      type="text"
-                      value={profileData.pays}
-                      onChange={(e) => setProfileData({ ...profileData, pays: e.target.value })}
-                      className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                      placeholder="France"
-                    />
-                  </div>
+                  <FloatingField label="Ville" value={profileData.ville} onChange={(v) => setProfileData({ ...profileData, ville: v })} />
+                  <FloatingField label="Code postal" value={profileData.codePostal} onChange={(v) => setProfileData({ ...profileData, codePostal: v })} placeholder="75001" />
+                  <FloatingField label="Pays" value={profileData.pays} onChange={(v) => setProfileData({ ...profileData, pays: v })} placeholder="France" />
                 </div>
               </div>
               </fieldset>
@@ -926,50 +762,20 @@ export default function ComptePage() {
                   </p>
                 </div>
                 
-                <div className="space-y-2">
-                  <Label htmlFor="currentPassword" className="text-sm font-semibold">Mot de passe actuel *</Label>
-                  <Input
-                    id="currentPassword"
-                    type="password"
-                    autoComplete="current-password"
-                    value={passwordData.currentPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                    required
-                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                    placeholder="Entrez votre mot de passe actuel"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="newPassword" className="text-sm font-semibold">Nouveau mot de passe *</Label>
-                  <Input
-                    id="newPassword"
-                    type="password"
-                    autoComplete="new-password"
-                    value={passwordData.newPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                    required
-                    minLength={8}
-                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                    placeholder="Minimum 8 caractères"
-                  />
+                <FloatingField label="Mot de passe actuel" required type="password" autoComplete="current-password"
+                  value={passwordData.currentPassword} onChange={(v) => setPasswordData({ ...passwordData, currentPassword: v })} />
+
+                <div className="space-y-1">
+                  <FloatingField label="Nouveau mot de passe" required type="password" autoComplete="new-password"
+                    value={passwordData.newPassword} onChange={(v) => setPasswordData({ ...passwordData, newPassword: v })} />
                   <p className="text-xs text-muted-foreground mt-1">
                     Le mot de passe doit contenir au moins 8 caractères
                   </p>
                 </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-sm font-semibold">Confirmer le nouveau mot de passe *</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    autoComplete="new-password"
-                    value={passwordData.confirmPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                    required
-                    className="mt-1 h-11 border-2 focus:border-primary transition-colors"
-                    placeholder="Confirmez votre nouveau mot de passe"
-                  />
+
+                <div className="space-y-1">
+                  <FloatingField label="Confirmer le nouveau mot de passe" required type="password" autoComplete="new-password"
+                    value={passwordData.confirmPassword} onChange={(v) => setPasswordData({ ...passwordData, confirmPassword: v })} />
                   {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
                     <p className="text-xs text-red-600 mt-1">⚠️ Les mots de passe ne correspondent pas</p>
                   )}
