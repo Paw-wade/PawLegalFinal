@@ -82,6 +82,16 @@ export default function DossierDetailPage() {
     }, 120);
   }, [searchParams]);
 
+  // Redirection exacte depuis une notification : ?doc=<id> scrolle sur le document ciblé.
+  const targetDocId = searchParams?.get('doc') || null;
+  useEffect(() => {
+    if (!targetDocId || documents.length === 0) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(`doc-${targetDocId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [targetDocId, documents]);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     
@@ -1278,7 +1288,12 @@ export default function DossierDetailPage() {
                     return (
                       <div
                         key={doc._id || doc.id}
-                        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                        id={`doc-${doc._id || doc.id}`}
+                        className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg border transition-colors ${
+                          targetDocId === String(doc._id || doc.id)
+                            ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300'
+                            : 'bg-gray-50 border-gray-200'
+                        }`}
                       >
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           <span className="text-lg flex-shrink-0">📄</span>

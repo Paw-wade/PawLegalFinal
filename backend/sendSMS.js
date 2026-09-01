@@ -250,15 +250,20 @@ function resolvePushUrl(type, data = {}, options = {}) {
   if (data.url && typeof data.url === 'string') return data.url;
 
   const context = String(options.context || '').toLowerCase();
+  // Identifiants précis : depuis data, ou depuis options.contextId selon le contexte.
+  const dossierId = data.dossierId || (context === 'dossier' ? options.contextId : null) || null;
+  const documentId = data.documentId || (context === 'document' ? options.contextId : null) || null;
+  const dossierUrl = () => (dossierId ? `/client/dossiers/${dossierId}${documentId ? `?doc=${documentId}` : ''}` : (documentId ? '/client/documents' : '/client/dossiers'));
+
   if (context === 'message') return '/client/messages';
   if (context === 'appointment') return '/client/rendez-vous';
-  if (context === 'dossier' || context === 'document') return '/client/dossiers';
+  if (context === 'dossier' || context === 'document') return dossierUrl();
   if (context === 'task') return '/admin/tasks';
 
   if (type && type.startsWith('appointment_')) return '/client/rendez-vous';
   if (type === 'message_received') return '/client/messages';
   if (type && (type.startsWith('dossier_') || type.startsWith('document_') || type.startsWith('tarification_') || type === 'frais_tarification_exoneres')) {
-    return '/client/dossiers';
+    return dossierUrl();
   }
   if (type && type.startsWith('task_')) return '/admin/tasks';
 

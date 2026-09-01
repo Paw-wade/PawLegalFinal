@@ -80,6 +80,22 @@ export default function AdminDossierDetailPage() {
   const [descriptionEditError, setDescriptionEditError] = useState<string | null>(null);
   const [strictPrivacyMode, setStrictPrivacyMode] = useState(false);
   const [detailSection, setDetailSection] = useState<'synthese' | 'documents' | 'messages' | 'client'>('synthese');
+  const [targetDocId, setTargetDocId] = useState<string | null>(null);
+
+  // Redirection exacte depuis une notification : ?doc=<id> ouvre l'onglet documents et cible le document.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const doc = new URLSearchParams(window.location.search).get('doc');
+    if (doc) { setTargetDocId(doc); setDetailSection('documents'); }
+  }, []);
+
+  useEffect(() => {
+    if (!targetDocId || detailSection !== 'documents' || documents.length === 0) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(`doc-${targetDocId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [targetDocId, detailSection, documents]);
   const [showAdminBookingModal, setShowAdminBookingModal] = useState(false);
   const [bookingFeedbackMessage, setBookingFeedbackMessage] = useState<string | null>(null);
 
@@ -1607,7 +1623,12 @@ export default function AdminDossierDetailPage() {
                 {documents.map((doc: any) => (
                   <div
                     key={doc._id || doc.id}
-                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 min-w-0"
+                    id={`doc-${doc._id || doc.id}`}
+                    className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg border min-w-0 transition-colors ${
+                      targetDocId === String(doc._id || doc.id)
+                        ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <span className="text-lg flex-shrink-0">📄</span>

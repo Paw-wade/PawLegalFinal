@@ -91,6 +91,18 @@ notificationSchema.pre('validate', function (next) {
   if ((!this.metadata || Object.keys(this.metadata || {}).length === 0) && this.data) {
     this.metadata = this.data;
   }
+  // Redirection exacte : si le lien est un lien "dossiers" générique et qu'un dossier
+  // (et éventuellement un document) figure dans metadata, on cible précisément le dossier
+  // et le document concernés. Les liens déjà précis ne sont pas modifiés.
+  try {
+    const md = this.metadata || {};
+    const dossierId = md.dossierId || md.dossier;
+    const documentId = md.documentId || md.document;
+    const GENERIC = ['/admin/dossiers', '/client/dossiers', '/partenaire/dossiers'];
+    if (dossierId && typeof this.lien === 'string' && GENERIC.includes(this.lien)) {
+      this.lien = `${this.lien}/${dossierId}` + (documentId ? `?doc=${documentId}` : '');
+    }
+  } catch (e) { /* ne jamais bloquer la validation */ }
   next();
 });
 

@@ -1028,7 +1028,7 @@ router.post(
       }
       if (email) {
         const suiviUrl = dossier.suiviToken ? `${frontUrl}/suivi/${dossier.suiviToken}` : '';
-        const espaceUrl = `${frontUrl}/client/dossiers`;
+        const espaceUrl = `${frontUrl}/client/dossiers/${dossier._id}`;
         try {
           await sendTemplatedTransactionalEmail({
             templateCode: 'dossier_recommandation',
@@ -1166,7 +1166,7 @@ router.post('/:id/fiche-requests', authorize('admin', 'superadmin', 'assistant',
     }
     if (email) {
       const suiviUrl = dossier.suiviToken ? `${frontUrl}/suivi/${dossier.suiviToken}` : '';
-      const espaceUrl = `${frontUrl}/client/dossiers`;
+      const espaceUrl = `${frontUrl}/client/dossiers/${dossier._id}`;
       try {
         await sendTemplatedTransactionalEmail({
           templateCode: 'dossier_fiche_request', eventKey: 'dossier_fiche_request', to: email,
