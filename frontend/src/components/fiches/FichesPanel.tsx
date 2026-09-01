@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { dossiersAPI } from '@/lib/api';
 import { FicheForm } from '@/components/fiches/FicheForm';
 
@@ -12,6 +12,7 @@ interface Props {
 
 interface FRequest { _id: string; typeFiche: string; titre: string; statut: string; fiche?: string | null; message?: string; pourPersonne?: string }
 interface Fiche { _id: string; typeFiche: string; titre: string; createdAt: string }
+interface Piece { _id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string }
 
 const statutBadge = (s: string) =>
   s === 'remplie'
@@ -23,6 +24,9 @@ const statutBadge = (s: string) =>
 export function FichesPanel({ dossierId, categorie, variant }: Props) {
   const [requests, setRequests] = useState<FRequest[]>([]);
   const [fiches, setFiches] = useState<Fiche[]>([]);
+  const [pieces, setPieces] = useState<Piece[]>([]);
+  const [uploadingPiece, setUploadingPiece] = useState<string | null>(null);
+  const pieceInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const [types, setTypes] = useState<Array<{ type: string; titre: string }>>([]);
   const [selType, setSelType] = useState('');
   const [busy, setBusy] = useState(false);
@@ -41,6 +45,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
       if (res.data?.success) {
         setRequests(res.data.requests || []);
         setFiches(res.data.fiches || []);
+        setPieces(res.data.pieces || []);
       }
     } catch (e) { /* silencieux */ }
   }, [dossierId]);
@@ -102,6 +107,31 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     } catch (e: any) {
       setMsg(e?.response?.data?.message || "La génération du lien a échoué.");
     } finally { setInvitingId(null); }
+  };
+
+  const uploadPiece = async (pieceId: string, file?: File) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setMsg('Fichier trop volumineux (10 Mo max).'); return; }
+    setUploadingPiece(pieceId); setMsg(null);
+    try {
+      const fd = new FormData(); fd.append('document', file);
+      await dossiersAPI.fournirPiece(dossierId, pieceId, fd);
+      setMsg('Pièce transmise.'); await load();
+    } catch (e: any) {
+      setMsg(e?.response?.data?.message || 'Le dépôt a échoué.');
+    } finally { setUploadingPiece(null); if (pieceInputs.current[pieceId]) pieceInputs.current[pieceId]!.value = ''; }
+  };
+
+  const addPieceManual = async () => {
+    const libelle = window.prompt('Intitulé de la pièce à fournir (ex. Statuts + RC + PV de l’associé personne morale ; Procuration de l’associé absent) :', '');
+    if (libelle === null || !libelle.trim()) return;
+    setBusy(true); setMsg(null);
+    try {
+      await dossiersAPI.addPiece(dossierId, libelle.trim());
+      setMsg('Pièce ajoutée.'); await load();
+    } catch (e: any) {
+      setMsg(e?.response?.data?.message || "L'ajout a échoué.");
+    } finally { setBusy(false); }
   };
 
   const submitFill = async (data: any) => {
@@ -208,6 +238,38 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
           + Ajouter une fiche d’identification (autre associé / gérant)
         </button>
       )}
+
+      {/* Documents à fournir */}
+      <div className="mt-4 border-t border-teal-100 pt-3">
+        <p className="mb-2 text-xs font-semibold text-teal-900">Documents à fournir</p>
+        {pieces.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Aucun document requis pour l’instant.</p>
+        ) : (
+          <ul className="space-y-2">
+            {pieces.map((p) => (
+              <li key={p._id} className="rounded-lg border border-teal-100 bg-white p-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-sm text-foreground">{p.libelle}</span>
+                    <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.statut === 'fourni' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                      {p.statut === 'fourni' ? '✓ Fourni' : 'À fournir'}
+                    </span>
+                    {p.note && <p className="text-[11px] text-muted-foreground">{p.note}</p>}
+                  </div>
+                  {p.statut !== 'fourni' && (
+                    <input ref={(el) => { pieceInputs.current[p._id] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
+                      disabled={uploadingPiece === p._id} onChange={(e) => uploadPiece(p._id, e.target.files?.[0])}
+                      className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button type="button" onClick={addPieceManual} disabled={busy} className="mt-2 text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
+          + Ajouter une pièce (associé personne morale, procuration…)
+        </button>
+      </div>
 
       {/* Fiches remplies (téléchargement direct) */}
       {fiches.length > 0 && (

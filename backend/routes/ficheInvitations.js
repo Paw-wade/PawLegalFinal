@@ -64,12 +64,15 @@ router.get('/:token', async (req, res) => {
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable.' });
     if (isDossierClosed(dossier)) return res.status(410).json({ success: false, message: 'Ce lien n\'est plus actif.' });
     const reqs = await FicheRequest.find({ _id: { $in: inv.ficheRequests }, dossier: inv.dossier }).lean();
+    const PieceRequest = require('../models/PieceRequest');
+    const pieces = await PieceRequest.find({ _id: { $in: inv.pieceRequests || [] }, dossier: inv.dossier }).lean();
     return res.json({
       success: true,
       societe: dossier.titre || dossier.numero || 'Dossier',
       personne: inv.personne || '',
       allowUpload: inv.allowUpload !== false,
       requests: reqs.map((r) => ({ id: String(r._id), typeFiche: r.typeFiche, titre: r.titre, statut: r.statut, ficheId: r.fiche ? String(r.fiche) : null })),
+      pieces: pieces.map((p) => ({ id: String(p._id), libelle: p.libelle, note: p.note || '', statut: p.statut })),
     });
   } catch (err) {
     console.error('[invitation] GET:', err?.message || err);
@@ -140,6 +143,43 @@ router.post('/:token/documents', (req, res, next) => {
     return res.status(201).json({ success: true, message: 'Document transmis. Merci.' });
   } catch (err) {
     console.error('[invitation] documents:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route POST /api/fiche-invitations/:token/piece-requests/:pieceId/fournir — dépôt d'une pièce scopée
+router.post('/:token/piece-requests/:pieceId/fournir', (req, res, next) => {
+  upload.single('document')(req, res, (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message || 'Fichier invalide.' });
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const inv = await findInvite(req.params.token);
+    if (!inv) return res.status(404).json({ success: false, message: 'Invitation introuvable.' });
+    if (!(inv.pieceRequests || []).map(String).includes(String(req.params.pieceId))) {
+      return res.status(403).json({ success: false, message: 'Cette pièce n\'est pas autorisée par cette invitation.' });
+    }
+    const dossier = await Dossier.findById(inv.dossier).select('titre numero statut estCloture user clientEmail createdBy').lean();
+    if (!dossier || isDossierClosed(dossier)) return res.status(410).json({ success: false, message: 'Ce lien n\'est plus actif.' });
+    if (!req.file) return res.status(400).json({ success: false, message: 'Aucun fichier.' });
+    const PieceRequest = require('../models/PieceRequest');
+    const piece = await PieceRequest.findOne({ _id: req.params.pieceId, dossier: inv.dossier });
+    if (!piece) return res.status(404).json({ success: false, message: 'Pièce introuvable.' });
+    const ownerUserId = await resolveOwnerUserId(dossier);
+    const { persistDocumentForDossier } = require('../utils/pieceUpload');
+    let doc;
+    try {
+      doc = await persistDocumentForDossier(req.file, { dossierId: inv.dossier, ownerUserId, contributorName: inv.personne || piece.pourPersonne, nom: piece.libelle });
+    } catch (e) {
+      return res.status(503).json({ success: false, message: 'Enregistrement du fichier impossible. Réessayez.' });
+    }
+    piece.statut = 'fourni'; piece.document = doc._id; piece.fourniAt = new Date();
+    await piece.save();
+    await notifyAdmins(dossier, 'Pièce reçue (invitation)', `${inv.personne || 'Une personne invitée'} a déposé « ${piece.libelle} » (dossier « ${dossier.titre || ''} »).`, { dossierId: String(inv.dossier), documentId: String(doc._id) });
+    return res.status(201).json({ success: true, message: 'Pièce transmise. Merci.' });
+  } catch (err) {
+    console.error('[invitation] piece fournir:', err?.message || err);
     return res.status(500).json({ success: false, message: 'Erreur serveur.' });
   }
 });

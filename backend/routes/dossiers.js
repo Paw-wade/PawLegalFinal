@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const StandaloneTarificationRequest = require('../models/StandaloneTarificationRequest');
 const { protect, authorize } = require('../middleware/auth');
+const pieceUpload = require('../utils/pieceUpload');
 const { getAssignedDossierIds, userHasPermission, isUserOnDossierTeam, getScopedDossierModifyViolations } = require('../utils/accessScope');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const { sendTemplatedTransactionalEmail } = require('../utils/emailTemplateMailer');
@@ -1205,9 +1206,11 @@ router.get('/:id/fiches', async (req, res) => {
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     const FicheRequest = require('../models/FicheRequest');
     const FicheConstitution = require('../models/FicheConstitution');
+    const PieceRequest = require('../models/PieceRequest');
     const requests = await FicheRequest.find({ dossier: dossier._id }).sort({ createdAt: -1 }).lean();
     const fiches = await FicheConstitution.find({ dossier: dossier._id }).select('typeFiche titre createdAt viaGuestLink').sort({ createdAt: -1 }).lean();
-    return res.json({ success: true, requests, fiches });
+    const pieces = await PieceRequest.find({ dossier: dossier._id, statut: { $ne: 'annulee' } }).sort({ createdAt: 1 }).lean();
+    return res.json({ success: true, requests, fiches, pieces });
   } catch (error) {
     console.error('Erreur liste fiches:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -1234,11 +1237,11 @@ router.post('/:id/fiche-requests/:reqId/remplir', async (req, res) => {
     fr.statut = 'remplie'; fr.fiche = fiche._id; fr.remplieAt = new Date();
     await fr.save();
 
-    // Générer une fiche d'état civil par associé de la société remplie.
+    // Générer la checklist de constitution (états civils, pièces d'identité, casiers/déclarations).
     try {
-      const { ensureEtatCivilRequestsPerAssocie } = require('../fiches/etatCivilRequests');
-      await ensureEtatCivilRequestsPerAssocie(dossier._id, schema, fiche.data, req.user.id);
-    } catch (e) { console.error('⚠️ Génération états civils:', e.message || e); }
+      const { ensureConstitutionChecklist } = require('../fiches/checklist');
+      await ensureConstitutionChecklist(dossier._id, schema, fiche.data, req.user.id);
+    } catch (e) { console.error('⚠️ Génération checklist constitution:', e.message || e); }
 
     // Notifier l'équipe.
     try {
@@ -1279,6 +1282,60 @@ router.post('/:id/etat-civil-request', async (req, res) => {
   }
 });
 
+// @route   POST /api/user/dossiers/:id/piece-requests
+// @desc    Ajouter une pièce à fournir (document à téléverser)
+router.post('/:id/piece-requests', async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    const libelle = String((req.body && req.body.libelle) || '').trim();
+    if (!libelle) return res.status(400).json({ success: false, message: 'Libellé requis.' });
+    const PieceRequest = require('../models/PieceRequest');
+    const natures = ['identite', 'casier', 'statuts', 'procuration', 'autre'];
+    const nature = natures.includes(req.body && req.body.nature) ? req.body.nature : 'autre';
+    const piece = await PieceRequest.create({
+      dossier: dossier._id, libelle, nature, pourPersonne: String((req.body && req.body.pourPersonne) || '').trim(), createdBy: req.user.id,
+    });
+    return res.status(201).json({ success: true, piece });
+  } catch (error) {
+    console.error('Erreur ajout pièce:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   POST /api/user/dossiers/:id/piece-requests/:pieceId/fournir
+// @desc    Téléverser le document d'une pièce à fournir
+router.post('/:id/piece-requests/:pieceId/fournir', (req, res, next) => {
+  pieceUpload.upload.single('document')(req, res, (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message || 'Fichier invalide.' });
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    if (!req.file) return res.status(400).json({ success: false, message: 'Aucun fichier.' });
+    const PieceRequest = require('../models/PieceRequest');
+    const piece = await PieceRequest.findOne({ _id: req.params.pieceId, dossier: dossier._id });
+    if (!piece) return res.status(404).json({ success: false, message: 'Pièce introuvable.' });
+    const ownerUserId = dossier.user || req.user.id;
+    let doc;
+    try {
+      doc = await pieceUpload.persistDocumentForDossier(req.file, { dossierId: dossier._id, ownerUserId, contributorName: piece.pourPersonne, nom: piece.libelle });
+    } catch (e) {
+      return res.status(503).json({ success: false, message: 'Enregistrement du fichier impossible. Réessayez.' });
+    }
+    piece.statut = 'fourni'; piece.document = doc._id; piece.fourniAt = new Date();
+    await piece.save();
+    return res.status(201).json({ success: true, message: 'Pièce transmise.' });
+  } catch (error) {
+    console.error('Erreur dépôt pièce:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // @route   POST /api/user/dossiers/:id/fiche-invites
 // @desc    Générer un lien d'invitation ciblé (une personne → fiches/document précis)
 router.post('/:id/fiche-invites', async (req, res) => {
@@ -1290,9 +1347,13 @@ router.post('/:id/fiche-invites', async (req, res) => {
     const ids = Array.isArray(req.body && req.body.ficheRequestIds) ? req.body.ficheRequestIds : [];
     if (ids.length === 0) return res.status(400).json({ success: false, message: 'Aucune fiche sélectionnée.' });
     const token = require('crypto').randomBytes(24).toString('hex');
+    const personne = String((req.body && req.body.personne) || '').trim();
+    const PieceRequest = require('../models/PieceRequest');
+    const pieceIds = personne
+      ? (await PieceRequest.find({ dossier: dossier._id, pourPersonne: personne, statut: 'a_fournir' }).select('_id').lean()).map((p) => p._id)
+      : [];
     await FicheInvite.create({
-      token, dossier: dossier._id, ficheRequests: ids,
-      personne: String((req.body && req.body.personne) || '').trim(),
+      token, dossier: dossier._id, ficheRequests: ids, pieceRequests: pieceIds, personne,
       allowUpload: (req.body && req.body.allowUpload) !== false, createdBy: req.user.id,
     });
     const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');

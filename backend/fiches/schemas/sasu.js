@@ -8,6 +8,7 @@ module.exports = {
   titre: 'Fiche de renseignements — SASU',
   sousTitre: 'Société par Actions Simplifiée Unipersonnelle',
   associesSource: { field: 'associe_unique' },
+  gerantsSource: { fields: ['president_nom', 'dg_nom'] },
   sections: [
     sectionObjet(),
     sectionIdentite(),

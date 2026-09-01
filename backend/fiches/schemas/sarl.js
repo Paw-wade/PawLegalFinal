@@ -16,6 +16,7 @@ module.exports = {
   titre: 'Fiche de renseignements — SARL',
   sousTitre: 'Société à Responsabilité Limitée',
   associesSource: { section: 'repartition', field: 'nom' },
+  gerantsSource: { section: 'gerance', field: 'nom' },
   sections: [
     {
       id: 'objet',

@@ -62,6 +62,7 @@ interface SuiviData {
     ficheId: string | null;
   }>;
   fiches?: Array<{ id: string; typeFiche: string; titre: string; createdAt: string }>;
+  pieceRequests?: Array<{ id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string }>;
 }
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo (aligné sur le back)
@@ -112,6 +113,7 @@ export default function SuiviDossierPage() {
   const [submittingFiche, setSubmittingFiche] = useState(false);
   const [inviteUrls, setInviteUrls] = useState<Record<string, string>>({});
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [uploadingPieceId, setUploadingPieceId] = useState<string | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const load = useCallback(async () => {
@@ -307,6 +309,31 @@ export default function SuiviDossierPage() {
     } finally {
       setSubmittingFiche(false);
     }
+  };
+
+  const handleUploadPiece = async (pieceId: string, file?: File) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { flash(null, 'Fichier trop volumineux (10 Mo max).'); return; }
+    setUploadingPieceId(pieceId); flash(null, null);
+    try {
+      const fd = new FormData(); fd.append('document', file);
+      const res = await dossiersAPI.fournirSuiviPiece(token, pieceId, fd);
+      if (res.data?.success) { flash('Pièce transmise. Merci.'); await load(); }
+      else flash(null, 'Le dépôt a échoué.');
+    } catch (e: any) {
+      flash(null, e?.response?.data?.message || 'Le dépôt a échoué.');
+    } finally { setUploadingPieceId(null); if (fileInputs.current[`piece_${pieceId}`]) fileInputs.current[`piece_${pieceId}`]!.value = ''; }
+  };
+
+  const handleAddPieceSuivi = async () => {
+    const libelle = window.prompt('Intitulé de la pièce à fournir (ex. Statuts + RC + PV de l’associé personne morale ; Procuration de l’associé absent) :', '');
+    if (libelle === null || !libelle.trim()) return;
+    flash(null, null);
+    try {
+      const res = await dossiersAPI.addSuiviPiece(token, libelle.trim());
+      if (res.data?.success) { flash('Pièce ajoutée.'); await load(); }
+      else flash(null, "L'ajout a échoué.");
+    } catch (e: any) { flash(null, e?.response?.data?.message || "L'ajout a échoué."); }
   };
 
   const inviterSuivi = async (reqId: string, personne?: string) => {
@@ -522,7 +549,7 @@ export default function SuiviDossierPage() {
             )}
 
             {/* Fiches de constitution à remplir (création d'entreprise) */}
-            {((data.ficheRequests && data.ficheRequests.length > 0) || (data.fiches && data.fiches.length > 0)) && (
+            {((data.ficheRequests && data.ficheRequests.length > 0) || (data.fiches && data.fiches.length > 0) || (data.pieceRequests && data.pieceRequests.length > 0)) && (
               <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-5 shadow-sm sm:p-6">
                 <h2 className="mb-1 text-sm font-bold uppercase tracking-wide text-teal-900">Fiches à remplir</h2>
                 <p className="mb-3 text-xs text-teal-900/70">
@@ -584,6 +611,38 @@ export default function SuiviDossierPage() {
                     + Ajouter une fiche d’identification (autre associé / gérant)
                   </button>
                 )}
+
+                {/* Documents à fournir */}
+                <div className="mt-4 border-t border-teal-100 pt-3">
+                  <p className="mb-2 text-xs font-semibold text-teal-900">Documents à fournir</p>
+                  {(data.pieceRequests && data.pieceRequests.length > 0) ? (
+                    <ul className="space-y-2">
+                      {data.pieceRequests.map((p) => (
+                        <li key={p.id} className="rounded-lg border border-teal-100 bg-white p-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="text-sm text-foreground">{p.libelle}</span>
+                              <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.statut === 'fourni' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                                {p.statut === 'fourni' ? '✓ Fourni' : 'À fournir'}
+                              </span>
+                              {p.note && <p className="text-[11px] text-muted-foreground">{p.note}</p>}
+                            </div>
+                            {p.statut !== 'fourni' && (
+                              <input ref={(el) => { fileInputs.current[`piece_${p.id}`] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
+                                disabled={uploadingPieceId === p.id} onChange={(e) => handleUploadPiece(p.id, e.target.files?.[0])}
+                                className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Aucun document requis pour l’instant.</p>
+                  )}
+                  <button type="button" onClick={handleAddPieceSuivi} className="mt-2 text-xs font-medium text-teal-700 hover:underline">
+                    + Ajouter une pièce (associé personne morale, procuration…)
+                  </button>
+                </div>
                 {data.fiches && data.fiches.length > 0 && (
                   <div className="mt-3 border-t border-teal-100 pt-3">
                     <p className="mb-2 text-xs font-semibold text-teal-900">Documents générés</p>

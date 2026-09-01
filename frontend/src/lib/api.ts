@@ -1143,6 +1143,17 @@ export const dossiersAPI = {
     api.post(`/user/dossiers/${dossierId}/fiche-invites`, { ficheRequestIds, personne, allowUpload }),
   createSuiviFicheInvite: (token: string, ficheRequestIds: string[], personne?: string, allowUpload = true) =>
     api.post(`/dossier-guest-upload/suivi/${token}/fiche-invites`, { ficheRequestIds, personne, allowUpload }),
+  // Pièces à fournir (checklist)
+  addPiece: (dossierId: string, libelle: string, nature?: string, pourPersonne?: string) =>
+    api.post(`/user/dossiers/${dossierId}/piece-requests`, { libelle, nature, pourPersonne }),
+  fournirPiece: (dossierId: string, pieceId: string, formData: FormData) =>
+    api.post(`/user/dossiers/${dossierId}/piece-requests/${pieceId}/fournir`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  addSuiviPiece: (token: string, libelle: string, nature?: string, pourPersonne?: string) =>
+    api.post(`/dossier-guest-upload/suivi/${token}/piece-requests`, { libelle, nature, pourPersonne }),
+  fournirSuiviPiece: (token: string, pieceId: string, formData: FormData) =>
+    api.post(`/dossier-guest-upload/suivi/${token}/piece-requests/${pieceId}/fournir`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  fournirInvitationPiece: (token: string, pieceId: string, formData: FormData) =>
+    api.post(`/fiche-invitations/${token}/piece-requests/${pieceId}/fournir`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   getInvitation: (token: string) => api.get(`/fiche-invitations/${token}`),
   remplirInvitationFiche: (token: string, reqId: string, data: any) =>
     api.post(`/fiche-invitations/${token}/fiche-requests/${reqId}/remplir`, { data }),

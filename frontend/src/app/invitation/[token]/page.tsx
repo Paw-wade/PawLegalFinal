@@ -12,6 +12,7 @@ interface InvData {
   personne: string;
   allowUpload: boolean;
   requests: Array<{ id: string; typeFiche: string; titre: string; statut: string; ficheId: string | null }>;
+  pieces?: Array<{ id: string; libelle: string; note?: string; statut: string }>;
 }
 
 export default function InvitationPage() {
@@ -52,6 +53,20 @@ export default function InvitationPage() {
     } catch (e: any) {
       flash(null, e?.response?.data?.message || "L'enregistrement a échoué.");
     } finally { setSubmitting(false); }
+  };
+
+  const [uploadingPieceId, setUploadingPieceId] = useState<string | null>(null);
+  const handleUploadPiece = async (pieceId: string, file?: File) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { flash(null, 'Fichier trop volumineux (10 Mo max).'); return; }
+    setUploadingPieceId(pieceId); flash(null, null);
+    try {
+      const fd = new FormData(); fd.append('document', file);
+      const res = await dossiersAPI.fournirInvitationPiece(token, pieceId, fd);
+      if (res.data?.success) { flash('Pièce transmise. Merci.'); await load(); }
+      else flash(null, 'Le dépôt a échoué.');
+    } catch (e: any) { flash(null, e?.response?.data?.message || 'Le dépôt a échoué.'); }
+    finally { setUploadingPieceId(null); }
   };
 
   const handleUpload = async (file: File | undefined) => {
@@ -111,9 +126,35 @@ export default function InvitationPage() {
               </div>
             ))}
 
+            {data.pieces && data.pieces.length > 0 && (
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+                <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">Documents à fournir</h2>
+                <ul className="space-y-2">
+                  {data.pieces.map((p) => (
+                    <li key={p.id} className="rounded-lg border border-gray-100 p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-sm text-foreground">{p.libelle}</span>
+                          <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.statut === 'fourni' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {p.statut === 'fourni' ? '✓ Fourni' : 'À fournir'}
+                          </span>
+                          {p.note && <p className="text-[11px] text-muted-foreground">{p.note}</p>}
+                        </div>
+                        {p.statut !== 'fourni' && (
+                          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx" disabled={uploadingPieceId === p.id}
+                            onChange={(e) => handleUploadPiece(p.id, e.target.files?.[0])}
+                            className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-primary file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-primary/90" />
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {data.allowUpload && (
               <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-                <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">Déposer un document</h2>
+                <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">Déposer un autre document</h2>
                 <p className="mb-2 text-xs text-muted-foreground">Ex. copie de votre pièce d'identité ou passeport.</p>
                 <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx" disabled={uploading}
                   onChange={(e) => handleUpload(e.target.files?.[0])}

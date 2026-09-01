@@ -12,6 +12,7 @@ module.exports = {
   titre: 'Fiche de renseignements — SA (Administrateur Général)',
   sousTitre: 'Société Anonyme avec Administrateur Général',
   associesSource: { section: 'souscription', field: 'nom' },
+  gerantsSource: { fields: ['administrateur_general', 'administrateur_general_adjoint'] },
   sections: [
     sectionObjet(),
     sectionIdentite(),

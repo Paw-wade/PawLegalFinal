@@ -8,6 +8,7 @@ module.exports = {
   titre: 'Fiche de renseignements — SAS',
   sousTitre: 'Société par Actions Simplifiée',
   associesSource: { section: 'repartition', field: 'nom' },
+  gerantsSource: { fields: ['president_nom', 'dg_nom'] },
   sections: [
     sectionObjet(),
     sectionIdentite(),

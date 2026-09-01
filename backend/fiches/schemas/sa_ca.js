@@ -12,6 +12,7 @@ module.exports = {
   titre: "Fiche de renseignements — SA (Conseil d'Administration)",
   sousTitre: "Société Anonyme avec Conseil d'Administration (PCA et Directeur Général)",
   associesSource: { section: 'repartition', field: 'nom' },
+  gerantsSource: { section: 'administrateurs', field: 'nom', fields: ['pca', 'dg'] },
   sections: [
     sectionObjet(),
     sectionIdentite(),

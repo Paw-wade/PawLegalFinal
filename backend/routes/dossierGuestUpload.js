@@ -346,8 +346,10 @@ router.get('/suivi/:token', async (req, res) => {
     // Fiches de constitution : demandes (à remplir) + fiches déjà remplies.
     const FicheRequest = require('../models/FicheRequest');
     const FicheConstitution = require('../models/FicheConstitution');
+    const PieceRequest = require('../models/PieceRequest');
     const ficheRequests = await FicheRequest.find({ dossier: dossier._id }).sort({ createdAt: 1 }).lean();
     const fichesRemplies = await FicheConstitution.find({ dossier: dossier._id }).select('typeFiche titre createdAt').sort({ createdAt: -1 }).lean();
+    const pieceRequestsList = await PieceRequest.find({ dossier: dossier._id, statut: { $ne: 'annulee' } }).sort({ createdAt: 1 }).lean();
 
     // Le demandeur a-t-il déjà un compte ? (dossier rattaché, ou compte avec le même e-mail)
     const clientEmail = (dossier.clientEmail || '').trim();
@@ -420,6 +422,7 @@ router.get('/suivi/:token', async (req, res) => {
         ficheId: r.fiche ? String(r.fiche) : null,
       })),
       fiches: fichesRemplies.map((f) => ({ id: String(f._id), typeFiche: f.typeFiche, titre: f.titre || '', createdAt: f.createdAt })),
+      pieceRequests: pieceRequestsList.map((p) => ({ id: String(p._id), libelle: p.libelle, nature: p.nature, pourPersonne: p.pourPersonne || '', note: p.note || '', statut: p.statut })),
     });
   } catch (err) {
     console.error('[suivi] GET:', err?.message || err);
@@ -731,11 +734,11 @@ router.post('/suivi/:token/fiche-requests/:reqId/remplir', async (req, res) => {
     fr.statut = 'remplie'; fr.fiche = fiche._id; fr.remplieAt = new Date();
     await fr.save();
 
-    // Générer une fiche d'état civil par associé de la société remplie.
+    // Générer la checklist de constitution (états civils, pièces d'identité, casiers/déclarations).
     try {
-      const { ensureEtatCivilRequestsPerAssocie } = require('../fiches/etatCivilRequests');
-      await ensureEtatCivilRequestsPerAssocie(dossier._id, schema, fiche.data, null);
-    } catch (e) { console.error('[suivi] génération états civils:', e.message || e); }
+      const { ensureConstitutionChecklist } = require('../fiches/checklist');
+      await ensureConstitutionChecklist(dossier._id, schema, fiche.data, null);
+    } catch (e) { console.error('[suivi] génération checklist:', e.message || e); }
 
     // Notifier l'équipe (in-app + e-mail).
     const titre = dossier.titre || dossier.numero || 'un dossier';
@@ -796,6 +799,67 @@ router.post('/suivi/:token/etat-civil-request', async (req, res) => {
   }
 });
 
+// @route   POST /api/dossier-guest-upload/suivi/:token/piece-requests
+// @desc    Le porteur du lien ajoute une pièce à fournir
+router.post('/suivi/:token/piece-requests', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif.' });
+    const libelle = String((req.body && req.body.libelle) || '').trim();
+    if (!libelle) return res.status(400).json({ success: false, message: 'Libellé requis.' });
+    const PieceRequest = require('../models/PieceRequest');
+    const natures = ['identite', 'casier', 'statuts', 'procuration', 'autre'];
+    const nature = natures.includes(req.body && req.body.nature) ? req.body.nature : 'autre';
+    await PieceRequest.create({ dossier: dossier._id, libelle, nature, pourPersonne: String((req.body && req.body.pourPersonne) || '').trim() });
+    return res.status(201).json({ success: true, message: 'Pièce ajoutée.' });
+  } catch (err) {
+    console.error('[suivi] POST piece-requests:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route   POST /api/dossier-guest-upload/suivi/:token/piece-requests/:pieceId/fournir
+router.post('/suivi/:token/piece-requests/:pieceId/fournir', (req, res, next) => {
+  upload.single('document')(req, res, (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message || 'Fichier invalide.' });
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif.' });
+    if (!req.file) return res.status(400).json({ success: false, message: 'Aucun fichier.' });
+    const PieceRequest = require('../models/PieceRequest');
+    const piece = await PieceRequest.findOne({ _id: req.params.pieceId, dossier: dossier._id });
+    if (!piece) return res.status(404).json({ success: false, message: 'Pièce introuvable.' });
+    let ownerUserId = await resolveDossierOwnerUserId(dossier);
+    if (!ownerUserId) ownerUserId = dossier.createdBy || null;
+    if (!ownerUserId) {
+      const anAdmin = await User.findOne({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id').lean();
+      ownerUserId = anAdmin?._id || null;
+    }
+    const { persistDocumentForDossier } = require('../utils/pieceUpload');
+    let doc;
+    try {
+      doc = await persistDocumentForDossier(req.file, { dossierId: dossier._id, ownerUserId, contributorName: piece.pourPersonne || `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim(), nom: piece.libelle });
+    } catch (e) {
+      return res.status(503).json({ success: false, message: 'Enregistrement du fichier impossible. Réessayez.' });
+    }
+    piece.statut = 'fourni'; piece.document = doc._id; piece.fourniAt = new Date();
+    await piece.save();
+    try {
+      const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id');
+      for (const a of admins) await Notification.create({ user: a._id, type: 'document_received', titre: 'Pièce reçue', message: `« ${piece.libelle} » déposée sur le dossier « ${dossier.titre || ''} ».`, lien: '/admin/dossiers', metadata: { dossierId: String(dossier._id), documentId: String(doc._id) } });
+    } catch (e) { /* ignore */ }
+    return res.status(201).json({ success: true, message: 'Pièce transmise. Merci.' });
+  } catch (err) {
+    console.error('[suivi] POST piece fournir:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
 // @route   POST /api/dossier-guest-upload/suivi/:token/fiche-invites
 // @desc    Le porteur du lien de suivi génère un lien d'invitation ciblé pour une personne
 router.post('/suivi/:token/fiche-invites', async (req, res) => {
@@ -807,9 +871,13 @@ router.post('/suivi/:token/fiche-invites', async (req, res) => {
     const ids = Array.isArray(req.body && req.body.ficheRequestIds) ? req.body.ficheRequestIds : [];
     if (ids.length === 0) return res.status(400).json({ success: false, message: 'Aucune fiche sélectionnée.' });
     const token = crypto.randomBytes(24).toString('hex');
+    const personne = String((req.body && req.body.personne) || '').trim();
+    const PieceRequest = require('../models/PieceRequest');
+    const pieceIds = personne
+      ? (await PieceRequest.find({ dossier: dossier._id, pourPersonne: personne, statut: 'a_fournir' }).select('_id').lean()).map((p) => p._id)
+      : [];
     await FicheInvite.create({
-      token, dossier: dossier._id, ficheRequests: ids,
-      personne: String((req.body && req.body.personne) || '').trim(),
+      token, dossier: dossier._id, ficheRequests: ids, pieceRequests: pieceIds, personne,
       allowUpload: (req.body && req.body.allowUpload) !== false, createdViaGuest: true,
     });
     const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');

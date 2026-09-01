@@ -15,6 +15,7 @@ module.exports = {
   titre: 'Fiche de renseignements — SCI',
   sousTitre: 'Société Civile Immobilière (COCC, art. 765 à 810)',
   associesSource: { section: 'repartition', field: 'nom' },
+  gerantsSource: { section: 'gerance', field: 'nom' },
   sections: [
     sectionObjet(),
     sectionIdentite(),

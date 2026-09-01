@@ -10,6 +10,7 @@ const ficheInviteSchema = new mongoose.Schema({
   dossier: { type: mongoose.Schema.Types.ObjectId, ref: 'Dossier', required: true, index: true },
   personne: { type: String, trim: true, default: '' },
   ficheRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'FicheRequest' }],
+  pieceRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PieceRequest' }],
   allowUpload: { type: Boolean, default: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   createdViaGuest: { type: Boolean, default: false }, // généré depuis le lien de suivi
