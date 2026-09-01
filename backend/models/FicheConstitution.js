@@ -8,6 +8,7 @@ const ficheConstitutionSchema = new mongoose.Schema({
   data: { type: mongoose.Schema.Types.Mixed, default: {} },
   filledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, // client connecté (si compte)
   viaGuestLink: { type: Boolean, default: false }, // rempli via le lien de suivi (sans compte)
+  document: { type: mongoose.Schema.Types.ObjectId, ref: 'Document', default: null }, // PDF généré rattaché au dossier
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

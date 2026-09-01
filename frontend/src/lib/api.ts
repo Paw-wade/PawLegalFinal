@@ -1143,6 +1143,11 @@ export const dossiersAPI = {
     api.post(`/user/dossiers/${dossierId}/fiche-invites`, { ficheRequestIds, personne, allowUpload }),
   createSuiviFicheInvite: (token: string, ficheRequestIds: string[], personne?: string, allowUpload = true) =>
     api.post(`/dossier-guest-upload/suivi/${token}/fiche-invites`, { ficheRequestIds, personne, allowUpload }),
+  // (Admin) validation des fiches remplies et des pièces
+  validerFicheRemplie: (dossierId: string, reqId: string, statut: 'en_attente' | 'valide' | 'refuse', motif?: string) =>
+    api.patch(`/user/dossiers/${dossierId}/fiche-requests/${reqId}/validation`, { statut, motif }),
+  validerPiece: (dossierId: string, pieceId: string, statut: 'en_attente' | 'valide' | 'refuse', motif?: string) =>
+    api.patch(`/user/dossiers/${dossierId}/piece-requests/${pieceId}/validation`, { statut, motif }),
   // Pièces à fournir (checklist)
   addPiece: (dossierId: string, libelle: string, nature?: string, pourPersonne?: string) =>
     api.post(`/user/dossiers/${dossierId}/piece-requests`, { libelle, nature, pourPersonne }),

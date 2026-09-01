@@ -8,6 +8,8 @@ const ficheRequestSchema = new mongoose.Schema({
   pourPersonne: { type: String, trim: true, default: '' },  // état civil : nom de la personne concernée
   message: { type: String, trim: true, default: '' },       // consigne éventuelle
   statut: { type: String, enum: ['a_remplir', 'remplie', 'annulee'], default: 'a_remplir', index: true },
+  validationStatus: { type: String, enum: ['en_attente', 'valide', 'refuse'], default: 'en_attente' },
+  validationMotif: { type: String, trim: true, default: '' },
   requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   fiche: { type: mongoose.Schema.Types.ObjectId, ref: 'FicheConstitution', default: null }, // fiche remplie liée
   createdAt: { type: Date, default: Date.now },

@@ -71,8 +71,8 @@ router.get('/:token', async (req, res) => {
       societe: dossier.titre || dossier.numero || 'Dossier',
       personne: inv.personne || '',
       allowUpload: inv.allowUpload !== false,
-      requests: reqs.map((r) => ({ id: String(r._id), typeFiche: r.typeFiche, titre: r.titre, statut: r.statut, ficheId: r.fiche ? String(r.fiche) : null })),
-      pieces: pieces.map((p) => ({ id: String(p._id), libelle: p.libelle, note: p.note || '', statut: p.statut })),
+      requests: reqs.map((r) => ({ id: String(r._id), typeFiche: r.typeFiche, titre: r.titre, statut: r.statut, validationStatus: r.validationStatus || 'en_attente', validationMotif: r.validationMotif || '', ficheId: r.fiche ? String(r.fiche) : null })),
+      pieces: pieces.map((p) => ({ id: String(p._id), libelle: p.libelle, note: p.note || '', statut: p.statut, validationStatus: p.validationStatus || 'en_attente', validationMotif: p.validationMotif || '' })),
     });
   } catch (err) {
     console.error('[invitation] GET:', err?.message || err);
@@ -88,7 +88,7 @@ router.post('/:token/fiche-requests/:reqId/remplir', async (req, res) => {
     if (!inv.ficheRequests.map(String).includes(String(req.params.reqId))) {
       return res.status(403).json({ success: false, message: 'Cette fiche n\'est pas autorisée par cette invitation.' });
     }
-    const dossier = await Dossier.findById(inv.dossier).select('titre numero statut estCloture').lean();
+    const dossier = await Dossier.findById(inv.dossier).select('titre numero statut estCloture user clientEmail createdBy').lean();
     if (!dossier || isDossierClosed(dossier)) return res.status(410).json({ success: false, message: 'Ce lien n\'est plus actif.' });
     const fr = await FicheRequest.findOne({ _id: req.params.reqId, dossier: inv.dossier });
     if (!fr) return res.status(404).json({ success: false, message: 'Fiche introuvable.' });
@@ -99,6 +99,12 @@ router.post('/:token/fiche-requests/:reqId/remplir', async (req, res) => {
     });
     fr.statut = 'remplie'; fr.fiche = fiche._id; fr.remplieAt = new Date();
     await fr.save();
+    try {
+      const ownerId = await resolveOwnerUserId(dossier);
+      const { persistFichePdfAsDocument } = require('../fiches/persistFichePdf');
+      const doc = await persistFichePdfAsDocument(fiche, dossier, ownerId);
+      fiche.document = doc._id; await fiche.save();
+    } catch (e) { console.error('[invitation] PDF fiche → document:', e.message || e); }
     await notifyAdmins(dossier, 'Fiche remplie (invitation)', `${inv.personne || 'Une personne invitée'} a rempli « ${fiche.titre} » (dossier « ${dossier.titre || ''} »).`, { dossierId: String(inv.dossier), ficheId: String(fiche._id) });
     return res.status(201).json({ success: true, message: 'Fiche enregistrée. Merci.', fiche: { id: String(fiche._id), typeFiche: fiche.typeFiche } });
   } catch (err) {

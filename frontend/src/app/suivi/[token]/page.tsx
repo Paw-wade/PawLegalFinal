@@ -59,10 +59,12 @@ interface SuiviData {
     pourPersonne?: string;
     message?: string;
     statut: 'a_remplir' | 'remplie' | 'annulee';
+    validationStatus?: string;
+    validationMotif?: string;
     ficheId: string | null;
   }>;
   fiches?: Array<{ id: string; typeFiche: string; titre: string; createdAt: string }>;
-  pieceRequests?: Array<{ id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string }>;
+  pieceRequests?: Array<{ id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string; validationStatus?: string; validationMotif?: string }>;
 }
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo (aligné sur le back)
@@ -372,6 +374,11 @@ export default function SuiviDossierPage() {
     }
   };
 
+  const valBadgeSuivi = (s?: string) =>
+    s === 'valide' ? { label: '✓ Validé par notre équipe', cls: 'bg-emerald-100 text-emerald-800' }
+      : s === 'refuse' ? { label: '✕ Refusé', cls: 'bg-red-100 text-red-700' }
+      : { label: 'En cours de vérification', cls: 'bg-slate-100 text-slate-700' };
+
   const ficheBadge = (s?: string) =>
     s === 'remplie' ? { label: '✓ Remplie', cls: 'bg-green-100 text-green-800' }
       : s === 'annulee' ? { label: 'Annulée', cls: 'bg-gray-100 text-gray-600' }
@@ -578,6 +585,12 @@ export default function SuiviDossierPage() {
                             )}
                           </div>
                         </div>
+                        {r.statut === 'remplie' && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadgeSuivi(r.validationStatus).cls}`}>{valBadgeSuivi(r.validationStatus).label}</span>
+                            {r.validationStatus === 'refuse' && r.validationMotif && <span className="text-[11px] text-red-700">Motif : {r.validationMotif}. Merci de refaire la fiche.</span>}
+                          </div>
+                        )}
                         {canFill && fillingFicheReqId === r.id && (
                           <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
                             <FicheForm type={fillingFicheType} submitting={submittingFiche} onSubmit={handleFillFiche} onCancel={() => setFillingFicheReqId(null)} />
@@ -633,6 +646,12 @@ export default function SuiviDossierPage() {
                                 className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
                             )}
                           </div>
+                          {p.statut === 'fourni' && (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadgeSuivi(p.validationStatus).cls}`}>{valBadgeSuivi(p.validationStatus).label}</span>
+                              {p.validationStatus === 'refuse' && p.validationMotif && <span className="text-[11px] text-red-700">Motif : {p.validationMotif}. Merci de redéposer.</span>}
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>

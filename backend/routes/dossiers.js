@@ -1237,6 +1237,13 @@ router.post('/:id/fiche-requests/:reqId/remplir', async (req, res) => {
     fr.statut = 'remplie'; fr.fiche = fiche._id; fr.remplieAt = new Date();
     await fr.save();
 
+    // Enregistrer le PDF de la fiche comme document du dossier (best-effort).
+    try {
+      const { persistFichePdfAsDocument } = require('../fiches/persistFichePdf');
+      const doc = await persistFichePdfAsDocument(fiche, dossier, dossier.user || req.user.id);
+      fiche.document = doc._id; await fiche.save();
+    } catch (e) { console.error('⚠️ PDF fiche → document:', e.message || e); }
+
     // Générer la checklist de constitution (états civils, pièces d'identité, casiers/déclarations).
     try {
       const { ensureConstitutionChecklist } = require('../fiches/checklist');
@@ -1332,6 +1339,46 @@ router.post('/:id/piece-requests/:pieceId/fournir', (req, res, next) => {
     return res.status(201).json({ success: true, message: 'Pièce transmise.' });
   } catch (error) {
     console.error('Erreur dépôt pièce:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   PATCH /api/user/dossiers/:id/piece-requests/:pieceId/validation
+// @desc    (Équipe) Valider / refuser une pièce fournie
+router.patch('/:id/piece-requests/:pieceId/validation', authorize('admin', 'superadmin', 'assistant', 'secretaire', 'juriste'), async (req, res) => {
+  try {
+    const statut = String((req.body && req.body.statut) || '').trim();
+    if (!['en_attente', 'valide', 'refuse'].includes(statut)) return res.status(400).json({ success: false, message: 'Statut invalide.' });
+    const PieceRequest = require('../models/PieceRequest');
+    const piece = await PieceRequest.findOne({ _id: req.params.pieceId, dossier: req.params.id });
+    if (!piece) return res.status(404).json({ success: false, message: 'Pièce introuvable.' });
+    piece.validationStatus = statut;
+    piece.validationMotif = statut === 'refuse' ? String((req.body && req.body.motif) || '').trim().slice(0, 1000) : '';
+    if (statut === 'refuse') piece.statut = 'a_fournir'; // à redéposer
+    await piece.save();
+    return res.json({ success: true, piece: { id: String(piece._id), validationStatus: piece.validationStatus, validationMotif: piece.validationMotif } });
+  } catch (error) {
+    console.error('Erreur validation pièce:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   PATCH /api/user/dossiers/:id/fiche-requests/:reqId/validation
+// @desc    (Équipe) Valider / refuser une fiche remplie
+router.patch('/:id/fiche-requests/:reqId/validation', authorize('admin', 'superadmin', 'assistant', 'secretaire', 'juriste'), async (req, res) => {
+  try {
+    const statut = String((req.body && req.body.statut) || '').trim();
+    if (!['en_attente', 'valide', 'refuse'].includes(statut)) return res.status(400).json({ success: false, message: 'Statut invalide.' });
+    const FicheRequest = require('../models/FicheRequest');
+    const fr = await FicheRequest.findOne({ _id: req.params.reqId, dossier: req.params.id });
+    if (!fr) return res.status(404).json({ success: false, message: 'Fiche introuvable.' });
+    fr.validationStatus = statut;
+    fr.validationMotif = statut === 'refuse' ? String((req.body && req.body.motif) || '').trim().slice(0, 1000) : '';
+    if (statut === 'refuse') fr.statut = 'a_remplir'; // à refaire
+    await fr.save();
+    return res.json({ success: true, ficheRequest: { id: String(fr._id), validationStatus: fr.validationStatus, validationMotif: fr.validationMotif, statut: fr.statut } });
+  } catch (error) {
+    console.error('Erreur validation fiche:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

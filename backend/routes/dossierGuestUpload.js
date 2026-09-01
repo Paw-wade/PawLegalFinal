@@ -419,10 +419,12 @@ router.get('/suivi/:token', async (req, res) => {
         pourPersonne: r.pourPersonne || '',
         message: r.message || '',
         statut: r.statut,
+        validationStatus: r.validationStatus || 'en_attente',
+        validationMotif: r.validationMotif || '',
         ficheId: r.fiche ? String(r.fiche) : null,
       })),
       fiches: fichesRemplies.map((f) => ({ id: String(f._id), typeFiche: f.typeFiche, titre: f.titre || '', createdAt: f.createdAt })),
-      pieceRequests: pieceRequestsList.map((p) => ({ id: String(p._id), libelle: p.libelle, nature: p.nature, pourPersonne: p.pourPersonne || '', note: p.note || '', statut: p.statut })),
+      pieceRequests: pieceRequestsList.map((p) => ({ id: String(p._id), libelle: p.libelle, nature: p.nature, pourPersonne: p.pourPersonne || '', note: p.note || '', statut: p.statut, validationStatus: p.validationStatus || 'en_attente', validationMotif: p.validationMotif || '' })),
     });
   } catch (err) {
     console.error('[suivi] GET:', err?.message || err);
@@ -733,6 +735,15 @@ router.post('/suivi/:token/fiche-requests/:reqId/remplir', async (req, res) => {
     });
     fr.statut = 'remplie'; fr.fiche = fiche._id; fr.remplieAt = new Date();
     await fr.save();
+
+    // Enregistrer le PDF de la fiche comme document du dossier (best-effort).
+    try {
+      let ownerId = await resolveDossierOwnerUserId(dossier);
+      if (!ownerId) ownerId = dossier.createdBy || null;
+      const { persistFichePdfAsDocument } = require('../fiches/persistFichePdf');
+      const doc = await persistFichePdfAsDocument(fiche, dossier, ownerId);
+      fiche.document = doc._id; await fiche.save();
+    } catch (e) { console.error('[suivi] PDF fiche → document:', e.message || e); }
 
     // Générer la checklist de constitution (états civils, pièces d'identité, casiers/déclarations).
     try {

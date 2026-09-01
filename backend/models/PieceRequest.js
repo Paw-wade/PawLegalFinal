@@ -8,6 +8,8 @@ const pieceRequestSchema = new mongoose.Schema({
   pourPersonne: { type: String, trim: true, default: '' },
   note: { type: String, trim: true, default: '' },
   statut: { type: String, enum: ['a_fournir', 'fourni', 'annulee'], default: 'a_fournir', index: true },
+  validationStatus: { type: String, enum: ['en_attente', 'valide', 'refuse'], default: 'en_attente' },
+  validationMotif: { type: String, trim: true, default: '' },
   document: { type: mongoose.Schema.Types.ObjectId, ref: 'Document', default: null },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   createdAt: { type: Date, default: Date.now },

@@ -10,9 +10,14 @@ interface Props {
   variant: 'client' | 'admin' | 'partenaire';
 }
 
-interface FRequest { _id: string; typeFiche: string; titre: string; statut: string; fiche?: string | null; message?: string; pourPersonne?: string }
+interface FRequest { _id: string; typeFiche: string; titre: string; statut: string; fiche?: string | null; message?: string; pourPersonne?: string; validationStatus?: string; validationMotif?: string }
 interface Fiche { _id: string; typeFiche: string; titre: string; createdAt: string }
-interface Piece { _id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string }
+interface Piece { _id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string; validationStatus?: string; validationMotif?: string }
+
+const valBadge = (s?: string) =>
+  s === 'valide' ? { label: '✓ Validé', cls: 'bg-emerald-100 text-emerald-800' }
+    : s === 'refuse' ? { label: '✕ Refusé', cls: 'bg-red-100 text-red-700' }
+    : { label: 'En vérification', cls: 'bg-slate-100 text-slate-700' };
 
 const statutBadge = (s: string) =>
   s === 'remplie'
@@ -109,6 +114,21 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     } finally { setInvitingId(null); }
   };
 
+  const validerFiche = async (reqId: string, statut: 'valide' | 'refuse') => {
+    let motif = '';
+    if (statut === 'refuse') { const s = window.prompt('Motif du refus (communiqué au demandeur) :', ''); if (s === null) return; motif = s.trim(); }
+    setMsg(null);
+    try { await dossiersAPI.validerFicheRemplie(dossierId, reqId, statut, motif); setMsg(statut === 'valide' ? 'Fiche validée.' : 'Fiche refusée.'); await load(); }
+    catch (e: any) { setMsg(e?.response?.data?.message || 'Action impossible.'); }
+  };
+  const validerPieceAdmin = async (pieceId: string, statut: 'valide' | 'refuse') => {
+    let motif = '';
+    if (statut === 'refuse') { const s = window.prompt('Motif du refus (communiqué au demandeur) :', ''); if (s === null) return; motif = s.trim(); }
+    setMsg(null);
+    try { await dossiersAPI.validerPiece(dossierId, pieceId, statut, motif); setMsg(statut === 'valide' ? 'Pièce validée.' : 'Pièce refusée.'); await load(); }
+    catch (e: any) { setMsg(e?.response?.data?.message || 'Action impossible.'); }
+  };
+
   const uploadPiece = async (pieceId: string, file?: File) => {
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) { setMsg('Fichier trop volumineux (10 Mo max).'); return; }
@@ -197,6 +217,20 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
                   </div>
                 </div>
 
+                {/* Validation (fiche remplie) */}
+                {r.statut === 'remplie' && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadge(r.validationStatus).cls}`}>{valBadge(r.validationStatus).label}</span>
+                    {r.validationStatus === 'refuse' && r.validationMotif && <span className="text-[11px] text-red-700">Motif : {r.validationMotif}</span>}
+                    {isAdmin && r.validationStatus !== 'valide' && (
+                      <button type="button" onClick={() => validerFiche(r._id, 'valide')} className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100">✓ Valider</button>
+                    )}
+                    {isAdmin && r.validationStatus !== 'refuse' && (
+                      <button type="button" onClick={() => validerFiche(r._id, 'refuse')} className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100">✕ Refuser</button>
+                    )}
+                  </div>
+                )}
+
                 {/* Inviter une autre personne à remplir cette fiche (état civil) */}
                 {!isAdmin && r.typeFiche === 'etat_civil' && r.statut !== 'remplie' && (
                   <div className="mt-2">
@@ -262,6 +296,18 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
                       className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
                   )}
                 </div>
+                {p.statut === 'fourni' && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadge(p.validationStatus).cls}`}>{valBadge(p.validationStatus).label}</span>
+                    {p.validationStatus === 'refuse' && p.validationMotif && <span className="text-[11px] text-red-700">Motif : {p.validationMotif}</span>}
+                    {isAdmin && p.validationStatus !== 'valide' && (
+                      <button type="button" onClick={() => validerPieceAdmin(p._id, 'valide')} className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100">✓ Valider</button>
+                    )}
+                    {isAdmin && p.validationStatus !== 'refuse' && (
+                      <button type="button" onClick={() => validerPieceAdmin(p._id, 'refuse')} className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100">✕ Refuser</button>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
