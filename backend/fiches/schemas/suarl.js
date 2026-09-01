@@ -5,6 +5,7 @@ module.exports = {
   type: 'suarl',
   titre: 'Fiche de renseignements — SUARL',
   sousTitre: 'Société Unipersonnelle à Responsabilité Limitée',
+  associesSource: { field: 'associe_unique' },
   sections: [
     sectionObjet(),
     sectionIdentite(),

@@ -306,6 +306,19 @@ export default function SuiviDossierPage() {
     }
   };
 
+  const handleAddPersonFiche = async () => {
+    const nom = window.prompt('Nom de la personne (associé / gérant) dont il faut la fiche d’identification :', '');
+    if (nom === null) return;
+    flash(null, null);
+    try {
+      const res = await dossiersAPI.addSuiviEtatCivilRequest(token, nom.trim());
+      if (res.data?.success) { flash('Fiche d’identification ajoutée.'); await load(); }
+      else flash(null, "L'ajout a échoué.");
+    } catch (e: any) {
+      flash(null, e?.response?.data?.message || "L'ajout a échoué.");
+    }
+  };
+
   const handleDownloadFiche = async (ficheId: string, typeFiche: string) => {
     try {
       const res = await dossiersAPI.downloadSuiviFichePdf(token, ficheId);
@@ -533,6 +546,12 @@ export default function SuiviDossierPage() {
                     );
                   })}
                 </ul>
+                {(data.ficheRequests && data.ficheRequests.length > 0) && (
+                  <button type="button" onClick={handleAddPersonFiche}
+                    className="mt-2 text-xs font-medium text-teal-700 hover:underline">
+                    + Ajouter une fiche d’identification (autre associé / gérant)
+                  </button>
+                )}
                 {data.fiches && data.fiches.length > 0 && (
                   <div className="mt-3 border-t border-teal-100 pt-3">
                     <p className="mb-2 text-xs font-semibold text-teal-900">Documents générés</p>

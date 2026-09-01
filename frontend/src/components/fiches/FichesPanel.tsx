@@ -78,6 +78,19 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     } catch (e) { setMsg('Le téléchargement a échoué.'); }
   };
 
+  const addPerson = async () => {
+    const nom = window.prompt('Nom de la personne (associé / gérant) dont il faut la fiche d’identification :', '');
+    if (nom === null) return;
+    setBusy(true); setMsg(null);
+    try {
+      await dossiersAPI.addEtatCivilRequest(dossierId, nom.trim());
+      setMsg('Fiche d’identification ajoutée.');
+      await load();
+    } catch (e: any) {
+      setMsg(e?.response?.data?.message || "L'ajout a échoué.");
+    } finally { setBusy(false); }
+  };
+
   const submitFill = async (data: any) => {
     if (!fillingReqId) return;
     setSubmitting(true); setMsg(null);
@@ -153,6 +166,14 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
         </ul>
       ) : (
         <p className="text-xs text-muted-foreground">Aucune fiche demandée pour l’instant.</p>
+      )}
+
+      {/* Ajouter une personne (état civil) — côté demandeur */}
+      {!isAdmin && requests.length > 0 && (
+        <button type="button" onClick={addPerson} disabled={busy}
+          className="mt-2 text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
+          + Ajouter une fiche d’identification (autre associé / gérant)
+        </button>
       )}
 
       {/* Fiches remplies (téléchargement direct) */}

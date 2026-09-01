@@ -730,6 +730,12 @@ router.post('/suivi/:token/fiche-requests/:reqId/remplir', async (req, res) => {
     fr.statut = 'remplie'; fr.fiche = fiche._id; fr.remplieAt = new Date();
     await fr.save();
 
+    // Générer une fiche d'état civil par associé de la société remplie.
+    try {
+      const { ensureEtatCivilRequestsPerAssocie } = require('../fiches/etatCivilRequests');
+      await ensureEtatCivilRequestsPerAssocie(dossier._id, schema, fiche.data, null);
+    } catch (e) { console.error('[suivi] génération états civils:', e.message || e); }
+
     // Notifier l'équipe (in-app + e-mail).
     const titre = dossier.titre || dossier.numero || 'un dossier';
     const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
@@ -761,6 +767,30 @@ router.post('/suivi/:token/fiche-requests/:reqId/remplir', async (req, res) => {
     return res.status(201).json({ success: true, message: 'Fiche enregistrée. Merci.', fiche: { id: String(fiche._id), typeFiche: fiche.typeFiche, titre: fiche.titre } });
   } catch (err) {
     console.error('[suivi] POST remplir fiche:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route   POST /api/dossier-guest-upload/suivi/:token/etat-civil-request
+// @desc    Le porteur du lien ajoute une fiche d'état civil pour une personne supplémentaire
+router.post('/suivi/:token/etat-civil-request', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) {
+      return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif : votre dossier a été clôturé.' });
+    }
+    const FicheRequest = require('../models/FicheRequest');
+    const { getSchema } = require('../fiches/registry');
+    const ec = getSchema('etat_civil');
+    const nom = String((req.body && req.body.pourPersonne) || '').trim();
+    await FicheRequest.create({
+      dossier: dossier._id, typeFiche: 'etat_civil',
+      titre: nom ? `${ec.titre} — ${nom}` : ec.titre, pourPersonne: nom,
+    });
+    return res.status(201).json({ success: true, message: 'Fiche d\'état civil ajoutée.' });
+  } catch (err) {
+    console.error('[suivi] POST etat-civil-request:', err?.message || err);
     return res.status(500).json({ success: false, message: 'Erreur serveur.' });
   }
 });

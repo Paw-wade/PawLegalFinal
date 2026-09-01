@@ -1130,9 +1130,13 @@ export const dossiersAPI = {
     api.post(`/user/dossiers/${dossierId}/fiche-requests/${reqId}/remplir`, { data }),
   downloadFichePdf: (dossierId: string, ficheId: string) =>
     api.get(`/user/dossiers/${dossierId}/fiches/${ficheId}/pdf`, { responseType: 'blob' }),
+  addEtatCivilRequest: (dossierId: string, pourPersonne?: string) =>
+    api.post(`/user/dossiers/${dossierId}/etat-civil-request`, { pourPersonne }),
   // Côté lien de suivi (sans compte)
   remplirSuiviFiche: (token: string, reqId: string, data: any) =>
     api.post(`/dossier-guest-upload/suivi/${token}/fiche-requests/${reqId}/remplir`, { data }),
+  addSuiviEtatCivilRequest: (token: string, pourPersonne?: string) =>
+    api.post(`/dossier-guest-upload/suivi/${token}/etat-civil-request`, { pourPersonne }),
   downloadSuiviFichePdf: (token: string, ficheId: string) =>
     api.get(`/dossier-guest-upload/suivi/${token}/fiches/${ficheId}/pdf`, { responseType: 'blob' }),
 

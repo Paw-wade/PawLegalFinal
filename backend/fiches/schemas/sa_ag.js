@@ -11,6 +11,7 @@ module.exports = {
   type: 'sa_ag',
   titre: 'Fiche de renseignements — SA (Administrateur Général)',
   sousTitre: 'Société Anonyme avec Administrateur Général',
+  associesSource: { section: 'souscription', field: 'nom' },
   sections: [
     sectionObjet(),
     sectionIdentite(),

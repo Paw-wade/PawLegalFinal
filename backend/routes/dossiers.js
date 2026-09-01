@@ -1148,18 +1148,6 @@ router.post('/:id/fiche-requests', authorize('admin', 'superadmin', 'assistant',
       message: String((req.body && req.body.message) || '').trim(), requestedBy: req.user.id,
     });
 
-    // La fiche d'identification (état civil) est requise dans tous les cas : on l'ajoute
-    // automatiquement au dossier si elle n'y figure pas déjà (sauf si c'est elle qui est demandée).
-    if (typeFiche !== 'etat_civil') {
-      const dejaEtatCivil = await FicheRequest.findOne({ dossier: dossier._id, typeFiche: 'etat_civil', statut: { $ne: 'annulee' } }).lean();
-      if (!dejaEtatCivil) {
-        const ecSchema = getSchema('etat_civil');
-        if (ecSchema) {
-          await FicheRequest.create({ dossier: dossier._id, typeFiche: 'etat_civil', titre: ecSchema.titre, requestedBy: req.user.id });
-        }
-      }
-    }
-
     // Notifier le demandeur : in-app (compte) + e-mail (compte ou clientEmail).
     const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
     const titreDossier = dossier.titre || 'votre dossier';
@@ -1246,6 +1234,12 @@ router.post('/:id/fiche-requests/:reqId/remplir', async (req, res) => {
     fr.statut = 'remplie'; fr.fiche = fiche._id; fr.remplieAt = new Date();
     await fr.save();
 
+    // Générer une fiche d'état civil par associé de la société remplie.
+    try {
+      const { ensureEtatCivilRequestsPerAssocie } = require('../fiches/etatCivilRequests');
+      await ensureEtatCivilRequestsPerAssocie(dossier._id, schema, fiche.data, req.user.id);
+    } catch (e) { console.error('⚠️ Génération états civils:', e.message || e); }
+
     // Notifier l'équipe.
     try {
       const admins = await User.find({ role: { $in: ADMIN_NOTIFY_ROLES }, isActive: true }).select('_id');
@@ -1260,6 +1254,28 @@ router.post('/:id/fiche-requests/:reqId/remplir', async (req, res) => {
   } catch (error) {
     console.error('Erreur remplissage fiche:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// @route   POST /api/user/dossiers/:id/etat-civil-request
+// @desc    Ajouter une fiche d'état civil pour une personne supplémentaire
+router.post('/:id/etat-civil-request', async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    const FicheRequest = require('../models/FicheRequest');
+    const { getSchema } = require('../fiches/registry');
+    const ec = getSchema('etat_civil');
+    const nom = String((req.body && req.body.pourPersonne) || '').trim();
+    const fr = await FicheRequest.create({
+      dossier: dossier._id, typeFiche: 'etat_civil',
+      titre: nom ? `${ec.titre} — ${nom}` : ec.titre, pourPersonne: nom, requestedBy: req.user.id,
+    });
+    return res.status(201).json({ success: true, ficheRequest: fr });
+  } catch (error) {
+    console.error('Erreur ajout état civil:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
