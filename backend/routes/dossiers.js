@@ -1279,6 +1279,30 @@ router.post('/:id/etat-civil-request', async (req, res) => {
   }
 });
 
+// @route   POST /api/user/dossiers/:id/fiche-invites
+// @desc    Générer un lien d'invitation ciblé (une personne → fiches/document précis)
+router.post('/:id/fiche-invites', async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    const FicheInvite = require('../models/FicheInvite');
+    const ids = Array.isArray(req.body && req.body.ficheRequestIds) ? req.body.ficheRequestIds : [];
+    if (ids.length === 0) return res.status(400).json({ success: false, message: 'Aucune fiche sélectionnée.' });
+    const token = require('crypto').randomBytes(24).toString('hex');
+    await FicheInvite.create({
+      token, dossier: dossier._id, ficheRequests: ids,
+      personne: String((req.body && req.body.personne) || '').trim(),
+      allowUpload: (req.body && req.body.allowUpload) !== false, createdBy: req.user.id,
+    });
+    const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+    return res.status(201).json({ success: true, token, url: `${frontUrl}/invitation/${token}` });
+  } catch (error) {
+    console.error('Erreur création invitation:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // @route   GET /api/user/dossiers/:id/fiches/:ficheId/pdf
 // @desc    Télécharger le PDF d'une fiche remplie
 router.get('/:id/fiches/:ficheId/pdf', async (req, res) => {

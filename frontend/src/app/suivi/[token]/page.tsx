@@ -56,6 +56,7 @@ interface SuiviData {
     id: string;
     typeFiche: string;
     titre: string;
+    pourPersonne?: string;
     message?: string;
     statut: 'a_remplir' | 'remplie' | 'annulee';
     ficheId: string | null;
@@ -109,6 +110,8 @@ export default function SuiviDossierPage() {
   const [fillingFicheReqId, setFillingFicheReqId] = useState<string | null>(null);
   const [fillingFicheType, setFillingFicheType] = useState<string>('');
   const [submittingFiche, setSubmittingFiche] = useState(false);
+  const [inviteUrls, setInviteUrls] = useState<Record<string, string>>({});
+  const [invitingId, setInvitingId] = useState<string | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const load = useCallback(async () => {
@@ -304,6 +307,17 @@ export default function SuiviDossierPage() {
     } finally {
       setSubmittingFiche(false);
     }
+  };
+
+  const inviterSuivi = async (reqId: string, personne?: string) => {
+    setInvitingId(reqId); flash(null, null);
+    try {
+      const res = await dossiersAPI.createSuiviFicheInvite(token, [reqId], personne || '', true);
+      if (res.data?.success) setInviteUrls((m) => ({ ...m, [reqId]: res.data.url }));
+      else flash(null, "La génération du lien a échoué.");
+    } catch (e: any) {
+      flash(null, e?.response?.data?.message || "La génération du lien a échoué.");
+    } finally { setInvitingId(null); }
   };
 
   const handleAddPersonFiche = async () => {
@@ -540,6 +554,24 @@ export default function SuiviDossierPage() {
                         {canFill && fillingFicheReqId === r.id && (
                           <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
                             <FicheForm type={fillingFicheType} submitting={submittingFiche} onSubmit={handleFillFiche} onCancel={() => setFillingFicheReqId(null)} />
+                          </div>
+                        )}
+                        {r.typeFiche === 'etat_civil' && r.statut !== 'remplie' && (
+                          <div className="mt-2">
+                            {inviteUrls[r.id] ? (
+                              <div className="rounded-md border border-teal-200 bg-teal-50 p-2">
+                                <p className="mb-1 text-[11px] text-teal-900">Lien à envoyer à cette personne (accès à cette fiche uniquement) :</p>
+                                <div className="flex items-center gap-2">
+                                  <input readOnly value={inviteUrls[r.id]} onFocus={(e) => e.currentTarget.select()} className="w-full rounded border border-teal-200 bg-white px-2 py-1 text-[11px]" />
+                                  <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrls[r.id])} className="rounded bg-teal-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-700">Copier</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => inviterSuivi(r.id, r.pourPersonne || r.titre)} disabled={invitingId === r.id}
+                                className="text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
+                                {invitingId === r.id ? '…' : '🔗 Inviter cette personne à remplir'}
+                              </button>
+                            )}
                           </div>
                         )}
                       </li>

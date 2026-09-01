@@ -1137,6 +1137,17 @@ export const dossiersAPI = {
     api.post(`/dossier-guest-upload/suivi/${token}/fiche-requests/${reqId}/remplir`, { data }),
   addSuiviEtatCivilRequest: (token: string, pourPersonne?: string) =>
     api.post(`/dossier-guest-upload/suivi/${token}/etat-civil-request`, { pourPersonne }),
+
+  // Liens d'invitation ciblés (déléguer le remplissage d'une fiche à une personne)
+  createFicheInvite: (dossierId: string, ficheRequestIds: string[], personne?: string, allowUpload = true) =>
+    api.post(`/user/dossiers/${dossierId}/fiche-invites`, { ficheRequestIds, personne, allowUpload }),
+  createSuiviFicheInvite: (token: string, ficheRequestIds: string[], personne?: string, allowUpload = true) =>
+    api.post(`/dossier-guest-upload/suivi/${token}/fiche-invites`, { ficheRequestIds, personne, allowUpload }),
+  getInvitation: (token: string) => api.get(`/fiche-invitations/${token}`),
+  remplirInvitationFiche: (token: string, reqId: string, data: any) =>
+    api.post(`/fiche-invitations/${token}/fiche-requests/${reqId}/remplir`, { data }),
+  uploadInvitationDocument: (token: string, formData: FormData) =>
+    api.post(`/fiche-invitations/${token}/documents`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   downloadSuiviFichePdf: (token: string, ficheId: string) =>
     api.get(`/dossier-guest-upload/suivi/${token}/fiches/${ficheId}/pdf`, { responseType: 'blob' }),
 

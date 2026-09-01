@@ -10,7 +10,7 @@ interface Props {
   variant: 'client' | 'admin' | 'partenaire';
 }
 
-interface FRequest { _id: string; typeFiche: string; titre: string; statut: string; fiche?: string | null; message?: string }
+interface FRequest { _id: string; typeFiche: string; titre: string; statut: string; fiche?: string | null; message?: string; pourPersonne?: string }
 interface Fiche { _id: string; typeFiche: string; titre: string; createdAt: string }
 
 const statutBadge = (s: string) =>
@@ -30,6 +30,8 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   const [fillingReqId, setFillingReqId] = useState<string | null>(null);
   const [fillingType, setFillingType] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+  const [inviteUrls, setInviteUrls] = useState<Record<string, string>>({});
+  const [invitingId, setInvitingId] = useState<string | null>(null);
 
   const isAdmin = variant === 'admin';
 
@@ -89,6 +91,17 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     } catch (e: any) {
       setMsg(e?.response?.data?.message || "L'ajout a échoué.");
     } finally { setBusy(false); }
+  };
+
+  const inviter = async (reqId: string, personne?: string) => {
+    setInvitingId(reqId); setMsg(null);
+    try {
+      const res = await dossiersAPI.createFicheInvite(dossierId, [reqId], personne || '', true);
+      if (res.data?.success) setInviteUrls((m) => ({ ...m, [reqId]: res.data.url }));
+      else setMsg("La génération du lien a échoué.");
+    } catch (e: any) {
+      setMsg(e?.response?.data?.message || "La génération du lien a échoué.");
+    } finally { setInvitingId(null); }
   };
 
   const submitFill = async (data: any) => {
@@ -153,6 +166,26 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
                     )}
                   </div>
                 </div>
+
+                {/* Inviter une autre personne à remplir cette fiche (état civil) */}
+                {!isAdmin && r.typeFiche === 'etat_civil' && r.statut !== 'remplie' && (
+                  <div className="mt-2">
+                    {inviteUrls[r._id] ? (
+                      <div className="rounded-md border border-teal-200 bg-teal-50 p-2">
+                        <p className="mb-1 text-[11px] text-teal-900">Lien à envoyer à cette personne (accès à cette fiche uniquement) :</p>
+                        <div className="flex items-center gap-2">
+                          <input readOnly value={inviteUrls[r._id]} className="w-full rounded border border-teal-200 bg-white px-2 py-1 text-[11px]" onFocus={(e) => e.currentTarget.select()} />
+                          <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrls[r._id])} className="rounded bg-teal-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-700">Copier</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => inviter(r._id, r.pourPersonne || r.titre)} disabled={invitingId === r._id}
+                        className="text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
+                        {invitingId === r._id ? '…' : '🔗 Inviter cette personne à remplir'}
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* Formulaire de remplissage inline (client) */}
                 {canFill && fillingReqId === r._id && (

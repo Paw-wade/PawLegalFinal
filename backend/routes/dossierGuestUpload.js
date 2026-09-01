@@ -414,6 +414,7 @@ router.get('/suivi/:token', async (req, res) => {
         id: String(r._id),
         typeFiche: r.typeFiche,
         titre: r.titre || '',
+        pourPersonne: r.pourPersonne || '',
         message: r.message || '',
         statut: r.statut,
         ficheId: r.fiche ? String(r.fiche) : null,
@@ -791,6 +792,30 @@ router.post('/suivi/:token/etat-civil-request', async (req, res) => {
     return res.status(201).json({ success: true, message: 'Fiche d\'état civil ajoutée.' });
   } catch (err) {
     console.error('[suivi] POST etat-civil-request:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route   POST /api/dossier-guest-upload/suivi/:token/fiche-invites
+// @desc    Le porteur du lien de suivi génère un lien d'invitation ciblé pour une personne
+router.post('/suivi/:token/fiche-invites', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif.' });
+    const FicheInvite = require('../models/FicheInvite');
+    const ids = Array.isArray(req.body && req.body.ficheRequestIds) ? req.body.ficheRequestIds : [];
+    if (ids.length === 0) return res.status(400).json({ success: false, message: 'Aucune fiche sélectionnée.' });
+    const token = crypto.randomBytes(24).toString('hex');
+    await FicheInvite.create({
+      token, dossier: dossier._id, ficheRequests: ids,
+      personne: String((req.body && req.body.personne) || '').trim(),
+      allowUpload: (req.body && req.body.allowUpload) !== false, createdViaGuest: true,
+    });
+    const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+    return res.status(201).json({ success: true, token, url: `${frontUrl}/invitation/${token}` });
+  } catch (err) {
+    console.error('[suivi] POST fiche-invites:', err?.message || err);
     return res.status(500).json({ success: false, message: 'Erreur serveur.' });
   }
 });

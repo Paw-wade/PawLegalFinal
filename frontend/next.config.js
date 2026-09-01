@@ -57,6 +57,7 @@ function devApiRewriteRules(backendOrigin) {
     'drafts',
     'recours',
     'fiches',
+    'fiche-invitations',
   ];
 
   const rules = [];

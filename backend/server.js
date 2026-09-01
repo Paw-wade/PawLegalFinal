@@ -143,6 +143,7 @@ try {
   app.use('/api/user/dossiers', require('./routes/dossiers'));
 } catch (e) {}
 try { app.use('/api/fiches', require('./routes/fiches')); } catch (e) {}
+try { app.use('/api/fiche-invitations', require('./routes/ficheInvitations')); } catch (e) {}
 
 try {
   app.use('/api/user/documents', require('./routes/documents'));
