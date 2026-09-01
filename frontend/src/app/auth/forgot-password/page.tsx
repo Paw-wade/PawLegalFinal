@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { authAPI } from '@/lib/api';
+import { FloatingField } from '@/components/ui/FloatingField';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses =
@@ -148,76 +149,19 @@ export default function ForgotPasswordPage() {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 {method === 'email' ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email associé au compte *</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      value={email}
-                      onChange={(e: any) => setEmail(e.target.value)}
-                      placeholder="vous@exemple.com"
-                      required
-                      disabled={isSubmitting}
-                    />
-                  </div>
+                  <FloatingField label="Email associé au compte" required type="email" autoComplete="email" disabled={isSubmitting}
+                    value={email} onChange={(v) => setEmail(v)} />
                 ) : (
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Numéro de téléphone associé au compte *</Label>
-                    <Input
-                      id="phone"
-                      name="phone"
-                      type="tel"
-                      autoComplete="tel"
-                      value={phone}
-                      onChange={(e: any) => setPhone(e.target.value)}
-                      placeholder="07 68 03 33 58"
-                      required
-                      disabled={isSubmitting || step === 2}
-                    />
-                  </div>
+                  <FloatingField label="Numéro de téléphone associé au compte" required type="tel" autoComplete="tel" disabled={isSubmitting || step === 2}
+                    value={phone} onChange={(v) => setPhone(v)} />
                 )}
 
                 {method === 'sms' && step === 2 && (
                   <>
-                    <div className="space-y-2">
-                      <Label htmlFor="code">Code de vérification reçu par SMS *</Label>
-                      <Input
-                        id="code"
-                        name="code"
-                        type="text"
-                        value={code}
-                        onChange={(e: any) => setCode(e.target.value)}
-                        placeholder="Code à 6 chiffres"
-                        required
-                        disabled={isSubmitting}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="password">Nouveau mot de passe *</Label>
-                      <div className="relative">
-                        <Input
-                          id="password"
-                          name="password"
-                          type={showPassword ? 'text' : 'password'}
-                          value={password}
-                          onChange={(e: any) => setPassword(e.target.value)}
-                          placeholder="Au moins 8 caractères"
-                          required
-                          disabled={isSubmitting}
-                          className="pr-24"
-                        />
-                        <button
-                          type="button"
-                          className="absolute inset-y-0 right-3 my-auto h-7 text-xs text-primary hover:underline"
-                          onClick={() => setShowPassword((v) => !v)}
-                          aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                        >
-                          {showPassword ? 'Masquer' : 'Afficher'}
-                        </button>
-                      </div>
-                    </div>
+                    <FloatingField label="Code de vérification reçu par SMS" required disabled={isSubmitting}
+                      value={code} onChange={(v) => setCode(v)} placeholder="Code à 6 chiffres" />
+                    <FloatingField label="Nouveau mot de passe" required type="password" disabled={isSubmitting}
+                      value={password} onChange={(v) => setPassword(v)} />
                   </>
                 )}
 

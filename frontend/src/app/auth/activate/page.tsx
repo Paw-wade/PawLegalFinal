@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSession, signIn } from 'next-auth/react';
 import { authAPI } from '@/lib/api';
+import { FloatingField } from '@/components/ui/FloatingField';
 
 function Button({
   children,
@@ -193,51 +194,10 @@ function ActivateForm() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="password">Mot de passe *</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Minimum 8 caractères"
-                    autoComplete="new-password"
-                    className="pr-12"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
-                  >
-                    {showPassword ? 'Masquer' : 'Afficher'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirmer le mot de passe *</Label>
-                <div className="relative">
-                  <Input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Répétez le mot de passe"
-                    autoComplete="new-password"
-                    className="pr-12"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
-                  >
-                    {showConfirmPassword ? 'Masquer' : 'Afficher'}
-                  </button>
-                </div>
-              </div>
+              <FloatingField label="Mot de passe" required type="password" autoComplete="new-password"
+                value={password} onChange={(v) => setPassword(v)} />
+              <FloatingField label="Confirmer le mot de passe" required type="password" autoComplete="new-password"
+                value={confirmPassword} onChange={(v) => setConfirmPassword(v)} />
 
               <Button type="submit" className="w-full h-12 text-base font-semibold" disabled={isLoading}>
                 {isLoading ? 'Activation…' : 'Activer mon compte'}

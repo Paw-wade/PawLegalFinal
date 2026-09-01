@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { authAPI } from '@/lib/api';
+import { FloatingField } from '@/components/ui/FloatingField';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses =
@@ -148,56 +149,10 @@ function ResetPasswordContent() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Nouveau mot de passe *</Label>
-                    <div className="relative">
-                      <Input
-                        id="password"
-                        name="password"
-                        type={showPassword ? 'text' : 'password'}
-                        autoComplete="new-password"
-                        value={password}
-                        onChange={(e: any) => setPassword(e.target.value)}
-                        placeholder="Au moins 8 caractères"
-                        required
-                        disabled={isSubmitting}
-                        className="pr-24"
-                      />
-                      <button
-                        type="button"
-                        className="absolute inset-y-0 right-3 my-auto h-7 text-xs text-primary hover:underline"
-                        onClick={() => setShowPassword((v) => !v)}
-                        aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                      >
-                        {showPassword ? 'Masquer' : 'Afficher'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirmer le nouveau mot de passe *</Label>
-                    <div className="relative">
-                      <Input
-                        id="confirmPassword"
-                        name="confirmPassword"
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        autoComplete="new-password"
-                        value={confirmPassword}
-                        onChange={(e: any) => setConfirmPassword(e.target.value)}
-                        required
-                        disabled={isSubmitting}
-                        className="pr-24"
-                      />
-                      <button
-                        type="button"
-                        className="absolute inset-y-0 right-3 my-auto h-7 text-xs text-primary hover:underline"
-                        onClick={() => setShowConfirmPassword((v) => !v)}
-                        aria-label={showConfirmPassword ? 'Masquer la confirmation du mot de passe' : 'Afficher la confirmation du mot de passe'}
-                      >
-                        {showConfirmPassword ? 'Masquer' : 'Afficher'}
-                      </button>
-                    </div>
-                  </div>
+                  <FloatingField label="Nouveau mot de passe" required type="password" autoComplete="new-password" disabled={isSubmitting}
+                    value={password} onChange={(v) => setPassword(v)} />
+                  <FloatingField label="Confirmer le nouveau mot de passe" required type="password" autoComplete="new-password" disabled={isSubmitting}
+                    value={confirmPassword} onChange={(v) => setConfirmPassword(v)} />
 
                   <Button
                     type="submit"

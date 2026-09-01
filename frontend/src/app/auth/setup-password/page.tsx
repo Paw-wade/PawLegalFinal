@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
+import { FloatingField } from '@/components/ui/FloatingField';
 import { authAPI } from '@/lib/api';
 import { useAutoFillDetection, getRealInputValues } from '@/hooks/useAutoFillDetection';
 
@@ -256,68 +257,16 @@ export default function SetupPasswordPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="password">Mot de passe *</Label>
-                <div className="relative">
-                  <Input
-                    ref={passwordInputRef}
-                    id="password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={formData.password}
-                    onChange={handleChange}
-                    onBlur={(e) => validateField('password', e.target.value)}
-                    placeholder="Minimum 8 caractères"
-                    autoComplete="new-password"
-                    className={`pr-12 ${fieldErrors.password ? 'border-red-500 focus:border-red-500' : ''}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                  >
-                    {showPassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
-                </div>
-                {fieldErrors.password && (
-                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                    <span>⚠️</span>
-                    <span>{fieldErrors.password}</span>
-                  </p>
-                )}
-              </div>
+              <FloatingField label="Mot de passe" required type="password" name="password" autoComplete="new-password" inputRef={passwordInputRef}
+                value={formData.password}
+                onChange={(v) => handleChange({ target: { name: 'password', value: v } } as any)}
+                onBlur={(v) => validateField('password', v)} error={fieldErrors.password} />
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirmer le mot de passe *</Label>
-                <div className="relative">
-                  <Input
-                    ref={confirmPasswordInputRef}
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    onBlur={(e) => validateField('confirmPassword', e.target.value)}
-                    placeholder="Répétez le mot de passe"
-                    autoComplete="new-password"
-                    className={`pr-12 ${fieldErrors.confirmPassword ? 'border-red-500 focus:border-red-500' : ''}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label={showConfirmPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                  >
-                    {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
-                  </button>
-                </div>
-                {fieldErrors.confirmPassword && (
-                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                    <span>⚠️</span>
-                    <span>{fieldErrors.confirmPassword}</span>
-                  </p>
-                )}
+              <div className="space-y-1">
+                <FloatingField label="Confirmer le mot de passe" required type="password" name="confirmPassword" autoComplete="new-password" inputRef={confirmPasswordInputRef}
+                  value={formData.confirmPassword}
+                  onChange={(v) => handleChange({ target: { name: 'confirmPassword', value: v } } as any)}
+                  onBlur={(v) => validateField('confirmPassword', v)} error={fieldErrors.confirmPassword} />
                 {formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword && (
                   <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
                     <span>⚠️</span>
