@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { contactAPI } from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { FloatingField } from '@/components/ui/FloatingField';
 import DemandeWizard from '@/components/demande/DemandeWizard';
 import { useAutoFillDetection, getRealInputValues } from '@/hooks/useAutoFillDetection';
 
@@ -363,75 +364,21 @@ export default function ContactPage() {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="grid md:grid-cols-2 gap-6">
-                    <div>
-                      <Label htmlFor="name" required>Nom complet</Label>
-                      <Input 
-                        ref={nameInputRef}
-                        id="name" 
-                        name="name" 
-                        value={formData.name} 
-                        onChange={handleChange} 
-                        placeholder="Votre nom complet"
-                        autoComplete="name"
-                        required 
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="email" required>Email</Label>
-                      <Input 
-                        ref={emailInputRef}
-                        id="email" 
-                        name="email" 
-                        type="email" 
-                        value={formData.email} 
-                        onChange={handleChange} 
-                        placeholder="votre@email.com"
-                        autoComplete="email"
-                        required 
-                      />
-                    </div>
+                    <FloatingField label="Nom complet" required name="name" autoComplete="name" inputRef={nameInputRef}
+                      value={formData.name} onChange={(v) => setFormData((p: any) => ({ ...p, name: v }))} />
+                    <FloatingField label="Email" required type="email" name="email" autoComplete="email" inputRef={emailInputRef}
+                      value={formData.email} onChange={(v) => setFormData((p: any) => ({ ...p, email: v }))} />
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-6">
-                    <div>
-                      <Label htmlFor="phone">Téléphone</Label>
-                      <Input 
-                        ref={phoneInputRef}
-                        id="phone" 
-                        name="phone" 
-                        type="tel" 
-                        value={formData.phone} 
-                        onChange={handleChange} 
-                        placeholder="06 12 34 56 78"
-                        autoComplete="tel"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="subject" required>Sujet</Label>
-                      <Input 
-                        ref={subjectInputRef}
-                        id="subject" 
-                        name="subject" 
-                        value={formData.subject} 
-                        onChange={handleChange} 
-                        placeholder="Objet de votre message"
-                        required 
-                      />
-                    </div>
+                    <FloatingField label="Téléphone" type="tel" name="phone" autoComplete="tel" inputRef={phoneInputRef}
+                      value={formData.phone} onChange={(v) => setFormData((p: any) => ({ ...p, phone: v }))} />
+                    <FloatingField label="Sujet" required name="subject" inputRef={subjectInputRef}
+                      value={formData.subject} onChange={(v) => setFormData((p: any) => ({ ...p, subject: v }))} />
                   </div>
 
-                  <div>
-                    <Label htmlFor="message" required>Message</Label>
-                    <Textarea 
-                      ref={messageInputRef}
-                      id="message" 
-                      name="message" 
-                      value={formData.message} 
-                      onChange={handleChange} 
-                      placeholder="Décrivez votre demande ou votre question..."
-                      required 
-                    />
-                  </div>
+                  <FloatingField label="Message" required type="textarea" rows={5} name="message" inputRef={messageInputRef}
+                    value={formData.message} onChange={(v) => setFormData((p: any) => ({ ...p, message: v }))} />
 
                   {/* Upload de documents */}
                   <div>

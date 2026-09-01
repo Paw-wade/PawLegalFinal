@@ -7,12 +7,17 @@ interface Props {
   label: string;
   value: any;
   onChange: (v: any) => void;
-  type?: string; // text, number, montant, percent, date, email, tel, textarea, select
+  type?: string; // text, number, montant, percent, date, email, tel, password, textarea, select
   options?: Option[];
   required?: boolean;
   suffix?: string;
   rows?: number;
   placeholder?: string;
+  disabled?: boolean;
+  name?: string;
+  autoComplete?: string;
+  inputMode?: any;
+  inputRef?: any;
 }
 
 /**
@@ -21,17 +26,19 @@ interface Props {
  * - Au focus ou si le champ contient une valeur : le label s'anime vers la bordure
  *   supérieure, avec un petit fond blanc derrière le texte (effet de bordure interrompue).
  */
-export function FloatingField({ label, value, onChange, type = 'text', options, required, suffix, rows, placeholder }: Props) {
+export function FloatingField({ label, value, onChange, type = 'text', options, required, suffix, rows, placeholder, disabled, name, autoComplete, inputMode, inputRef }: Props) {
   const [focused, setFocused] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
   const id = useId();
   const isTextarea = type === 'textarea';
   const isSelect = type === 'select';
+  const isPassword = type === 'password';
   const hasValue = value !== undefined && value !== null && String(value) !== '';
   // Les champs date affichent toujours un gabarit : on garde le label flottant.
   const floated = focused || hasValue || type === 'date';
 
   const controlBase =
-    'peer block w-full rounded-md border bg-white text-sm text-foreground transition-colors focus:outline-none ' +
+    'peer block w-full rounded-md border bg-white text-sm text-foreground transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 ' +
     (focused ? 'border-primary ring-1 ring-primary ' : 'border-gray-300 ');
 
   const labelBase =
@@ -41,13 +48,13 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
     ? 'top-3 text-sm text-gray-400'
     : 'top-1/2 -translate-y-1/2 text-sm text-gray-400';
 
-  const htmlType = ['date', 'email', 'tel'].includes(type) ? type : 'text';
+  const htmlType = isPassword ? (showPwd ? 'text' : 'password') : ['date', 'email', 'tel'].includes(type) ? type : 'text';
 
   return (
     <div className="relative">
       {isTextarea ? (
         <textarea
-          id={id}
+          id={id} ref={inputRef} name={name} disabled={disabled}
           value={value || ''}
           rows={rows || 3}
           placeholder={focused ? placeholder || '' : ''}
@@ -58,7 +65,7 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
         />
       ) : isSelect ? (
         <select
-          id={id}
+          id={id} ref={inputRef} name={name} disabled={disabled}
           value={value || ''}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
@@ -70,14 +77,14 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
         </select>
       ) : (
         <input
-          id={id}
+          id={id} ref={inputRef} name={name} disabled={disabled} autoComplete={autoComplete} inputMode={inputMode}
           type={htmlType}
           value={value || ''}
           placeholder={focused ? placeholder || '' : ''}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onChange={(e) => onChange(e.target.value)}
-          className={`${controlBase} h-11 px-3 ${suffix ? 'pr-14' : ''}`}
+          className={`${controlBase} h-11 px-3 ${suffix || isPassword ? 'pr-11' : ''}`}
         />
       )}
 
@@ -85,7 +92,14 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
         {label}{required ? ' *' : ''}
       </label>
 
-      {suffix && !isTextarea && !isSelect && (
+      {isPassword && (
+        <button type="button" tabIndex={-1} onClick={() => setShowPwd((s) => !s)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-xs text-muted-foreground hover:text-foreground">
+          {showPwd ? '🙈' : '👁️'}
+        </button>
+      )}
+
+      {suffix && !isTextarea && !isSelect && !isPassword && (
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{suffix}</span>
       )}
     </div>

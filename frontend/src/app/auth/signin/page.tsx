@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { signIn, getSession, getProviders } from 'next-auth/react';
+import { FloatingField } from '@/components/ui/FloatingField';
 
 // Composants simplifiés
 function Button({ children, variant = 'default', size = 'default', className = '', disabled = false, type = 'button', ...props }: any) {
@@ -323,47 +324,8 @@ export default function SignInPage() {
               </div>
 
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email *</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e: any) => setEmail(e.target.value)}
-                    placeholder="votre@email.com"
-                    required
-                    disabled={isLoading || isGoogleLoading || isRedirecting.current}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password">Mot de passe *</Label>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      name="password"
-                      type={showPassword ? 'text' : 'password'}
-                      autoComplete="current-password"
-                      value={password}
-                      onChange={(e: any) => setPassword(e.target.value)}
-                      placeholder="Votre mot de passe"
-                      required
-                      className="pr-12"
-                      disabled={isLoading || isGoogleLoading || isRedirecting.current}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                      disabled={isLoading || isGoogleLoading || isRedirecting.current}
-                    >
-                      {showPassword ? '👁️' : '👁️‍🗨️'}
-                    </button>
-                  </div>
-                </div>
+                <FloatingField label="Email" required type="email" value={email} onChange={(v) => setEmail(v)} />
+                <FloatingField label="Mot de passe" required type="password" value={password} onChange={(v) => setPassword(v)} />
 
                 <div className="flex items-center justify-between">
                   <Link href="/auth/forgot-password" className="text-sm text-primary hover:underline font-medium">
