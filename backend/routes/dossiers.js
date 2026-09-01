@@ -1148,6 +1148,18 @@ router.post('/:id/fiche-requests', authorize('admin', 'superadmin', 'assistant',
       message: String((req.body && req.body.message) || '').trim(), requestedBy: req.user.id,
     });
 
+    // La fiche d'identification (état civil) est requise dans tous les cas : on l'ajoute
+    // automatiquement au dossier si elle n'y figure pas déjà (sauf si c'est elle qui est demandée).
+    if (typeFiche !== 'etat_civil') {
+      const dejaEtatCivil = await FicheRequest.findOne({ dossier: dossier._id, typeFiche: 'etat_civil', statut: { $ne: 'annulee' } }).lean();
+      if (!dejaEtatCivil) {
+        const ecSchema = getSchema('etat_civil');
+        if (ecSchema) {
+          await FicheRequest.create({ dossier: dossier._id, typeFiche: 'etat_civil', titre: ecSchema.titre, requestedBy: req.user.id });
+        }
+      }
+    }
+
     // Notifier le demandeur : in-app (compte) + e-mail (compte ou clientEmail).
     const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
     const titreDossier = dossier.titre || 'votre dossier';
