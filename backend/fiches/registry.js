@@ -9,6 +9,9 @@ const sasu = require('./schemas/sasu');
 const sa_ag = require('./schemas/sa_ag');
 const sa_ca = require('./schemas/sa_ca');
 const sci = require('./schemas/sci');
+const etat_civil = require('./schemas/etat_civil');
+const declaration_honneur = require('./schemas/declaration_honneur');
+const procuration = require('./schemas/procuration');
 
 const SCHEMAS = {
   sarl,
@@ -18,6 +21,9 @@ const SCHEMAS = {
   sa_ag,
   sa_ca,
   sci,
+  etat_civil,
+  declaration_honneur,
+  procuration,
 };
 
 function getSchema(type) {

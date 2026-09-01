@@ -97,7 +97,10 @@ function renderFicheHtml(schema, data, opts = {}) {
   const logo = opts.logoDataUri
     ? `<img class="logo" src="${opts.logoDataUri}" alt="logo">`
     : `<div class="logo-txt">ADA&nbsp;PAPERS</div>`;
-  const sections = (schema.sections || []).map((s) => renderSection(s, data)).join('');
+  // Mode « document » (lettre / acte en prose) : le schéma fournit une fonction document(data, helpers).
+  const sections = typeof schema.document === 'function'
+    ? `<div class="doc-body">${schema.document(data, { esc, nl2br, fmtMontant })}</div>`
+    : (schema.sections || []).map((s) => renderSection(s, data)).join('');
   const signature = schema.signature
     ? `<div class="sign"><div class="sign-line">Fait à ……………………, le ……… / ……… / …………</div><div class="sign-line">Signature :</div><div class="sign-box"></div></div>`
     : '';
@@ -134,6 +137,12 @@ function renderFicheHtml(schema, data, opts = {}) {
   table.rep th, table.rep td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; font-size: 10.5px; }
   table.rep th { background: #fdf1e8; }
   table.rep td.idx, table.rep th.idx { width: 26px; text-align: center; color: #666; }
+  .doc-body { font-size: 12px; line-height: 1.6; text-align: justify; }
+  .doc-body p { margin: 8px 0; }
+  .doc-body .right { text-align: right; }
+  .doc-body .center { text-align: center; font-weight: 700; text-transform: uppercase; margin: 14px 0; }
+  .doc-body ul { margin: 8px 0; padding-left: 20px; }
+  .doc-body li { margin: 5px 0; }
   .sign { margin-top: 24px; }
   .sign-line { margin: 6px 0; }
   .sign-box { height: 60px; border: 1px dashed #bbb; border-radius: 4px; max-width: 240px; }
