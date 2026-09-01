@@ -18,6 +18,8 @@ interface Props {
   autoComplete?: string;
   inputMode?: any;
   inputRef?: any;
+  error?: string;
+  onBlur?: (v: any) => void;
 }
 
 /**
@@ -26,7 +28,7 @@ interface Props {
  * - Au focus ou si le champ contient une valeur : le label s'anime vers la bordure
  *   supérieure, avec un petit fond blanc derrière le texte (effet de bordure interrompue).
  */
-export function FloatingField({ label, value, onChange, type = 'text', options, required, suffix, rows, placeholder, disabled, name, autoComplete, inputMode, inputRef }: Props) {
+export function FloatingField({ label, value, onChange, type = 'text', options, required, suffix, rows, placeholder, disabled, name, autoComplete, inputMode, inputRef, error, onBlur }: Props) {
   const [focused, setFocused] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const id = useId();
@@ -39,11 +41,12 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
 
   const controlBase =
     'peer block w-full rounded-md border bg-white text-sm text-foreground transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 ' +
-    (focused ? 'border-primary ring-1 ring-primary ' : 'border-gray-300 ');
+    (error ? 'border-red-500 ' : focused ? 'border-primary ring-1 ring-primary ' : 'border-gray-300 ');
 
   const labelBase =
     'pointer-events-none absolute left-2.5 z-10 bg-white px-1 transition-all duration-150 ';
-  const labelFloated = `-top-2 text-[11px] ${focused ? 'text-primary' : 'text-gray-600'}`;
+  const labelFloated = `-top-2 text-[11px] ${error ? 'text-red-600' : focused ? 'text-primary' : 'text-gray-600'}`;
+  const handleBlur = () => { setFocused(false); if (onBlur) onBlur(value); };
   const labelResting = isTextarea
     ? 'top-3 text-sm text-gray-400'
     : 'top-1/2 -translate-y-1/2 text-sm text-gray-400';
@@ -59,7 +62,7 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
           rows={rows || 3}
           placeholder={focused ? placeholder || '' : ''}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={handleBlur}
           onChange={(e) => onChange(e.target.value)}
           className={`${controlBase} px-3 pt-3 pb-2`}
         />
@@ -68,7 +71,7 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
           id={id} ref={inputRef} name={name} disabled={disabled}
           value={value || ''}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={handleBlur}
           onChange={(e) => onChange(e.target.value)}
           className={`${controlBase} h-11 px-3`}
         >
@@ -82,7 +85,7 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
           value={value || ''}
           placeholder={focused ? placeholder || '' : ''}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={handleBlur}
           onChange={(e) => onChange(e.target.value)}
           className={`${controlBase} h-11 px-3 ${suffix || isPassword ? 'pr-11' : ''}`}
         />
@@ -102,6 +105,8 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
       {suffix && !isTextarea && !isSelect && !isPassword && (
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{suffix}</span>
       )}
+
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   );
 }

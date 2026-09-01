@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getProviders, signIn, useSession } from 'next-auth/react';
 import { authAPI } from '@/lib/api';
+import { FloatingField } from '@/components/ui/FloatingField';
 
 function Button({ 
   children, 
@@ -491,79 +492,28 @@ export default function SignupPage() {
 
                 <div className="space-y-4 sm:space-y-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName">Prénom *</Label>
-                      <Input
-                        id="firstName"
-                        name="firstName"
-                        type="text"
-                        value={formData.firstName}
-                        onChange={handleChange}
-                        onBlur={(e) => validateField('firstName', e.target.value)}
-                        placeholder="Votre prénom"
-                        autoComplete="given-name"
-                        disabled={!!success}
-                        className={fieldErrors.firstName ? 'border-red-500 focus:border-red-500' : ''}
-                      />
-                      {fieldErrors.firstName && (
-                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                          <span>⚠️</span>
-                          <span>{fieldErrors.firstName}</span>
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName">Nom *</Label>
-                      <Input
-                        id="lastName"
-                        name="lastName"
-                        type="text"
-                        value={formData.lastName}
-                        onChange={handleChange}
-                        onBlur={(e) => validateField('lastName', e.target.value)}
-                        placeholder="Votre nom"
-                        autoComplete="family-name"
-                        disabled={!!success}
-                        className={fieldErrors.lastName ? 'border-red-500 focus:border-red-500' : ''}
-                      />
-                      {fieldErrors.lastName && (
-                        <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                          <span>⚠️</span>
-                          <span>{fieldErrors.lastName}</span>
-                        </p>
-                      )}
-                    </div>
+                    <FloatingField label="Prénom" required name="firstName" autoComplete="given-name" disabled={!!success}
+                      value={formData.firstName}
+                      onChange={(v) => handleChange({ target: { name: 'firstName', value: v } } as any)}
+                      onBlur={(v) => validateField('firstName', v)} error={fieldErrors.firstName} />
+                    <FloatingField label="Nom" required name="lastName" autoComplete="family-name" disabled={!!success}
+                      value={formData.lastName}
+                      onChange={(v) => handleChange({ target: { name: 'lastName', value: v } } as any)}
+                      onBlur={(v) => validateField('lastName', v)} error={fieldErrors.lastName} />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      placeholder="votre.email@exemple.com"
-                      autoComplete="email"
-                      required
-                      disabled={!!success}
-                    />
-                  </div>
+                  <FloatingField label="Email" required type="email" name="email" autoComplete="email" disabled={!!success}
+                    value={formData.email}
+                    onChange={(v) => handleChange({ target: { name: 'email', value: v } } as any)} />
 
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Numéro de téléphone *</Label>
                     <div className="flex gap-2">
                       <select
                         aria-label="Indicatif téléphonique"
                         value={phoneCountryCode}
-                        onChange={(e) => {
-                          const nextCode = e.target.value;
-                          setPhoneCountryCode(nextCode);
-                          validateField('phone', formData.phone);
-                        }}
+                        onChange={(e) => { setPhoneCountryCode(e.target.value); validateField('phone', formData.phone); }}
                         disabled={!!success}
-                        className="h-10 sm:h-11 w-28 rounded-md border-2 border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus:border-primary"
+                        className="h-11 w-28 shrink-0 rounded-md border border-gray-300 bg-white px-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                       >
                         <option value="+33">+33 (FR)</option>
                         <option value="+32">+32 (BE)</option>
@@ -576,25 +526,14 @@ export default function SignupPage() {
                         <option value="+228">+228 (TG)</option>
                         <option value="+229">+229 (BJ)</option>
                       </select>
-                      <Input
-                        id="phone"
-                        name="phone"
-                        type="tel"
-                        value={formData.phone}
-                        onChange={handleChange}
-                        onBlur={(e) => validateField('phone', e.target.value)}
-                        placeholder={phoneCountryCode === '+33' ? '07 68 03 33 58' : 'Numéro local'}
-                        autoComplete="tel-national"
-                        disabled={!!success}
-                        className={fieldErrors.phone ? 'border-red-500 focus:border-red-500' : ''}
-                      />
+                      <div className="flex-1">
+                        <FloatingField label="Numéro de téléphone" required type="tel" name="phone" autoComplete="tel-national" disabled={!!success}
+                          value={formData.phone}
+                          onChange={(v) => handleChange({ target: { name: 'phone', value: v } } as any)}
+                          onBlur={(v) => validateField('phone', v)} error={fieldErrors.phone}
+                          placeholder={phoneCountryCode === '+33' ? '07 68 03 33 58' : 'Numéro local'} />
+                      </div>
                     </div>
-                    {fieldErrors.phone && (
-                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                        <span>⚠️</span>
-                        <span>{fieldErrors.phone}</span>
-                      </p>
-                    )}
                     <p className="text-xs text-muted-foreground">
                       Les numéros en <strong>+33</strong> peuvent recevoir des SMS. Pour les autres indicatifs, la validation se fait par email uniquement.
                     </p>
