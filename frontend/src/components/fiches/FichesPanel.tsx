@@ -107,8 +107,11 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     setInvitingId(reqId); setMsg(null);
     try {
       const res = await dossiersAPI.createFicheInvite(dossierId, [reqId], personne || '', true);
-      if (res.data?.success) setInviteUrls((m) => ({ ...m, [reqId]: res.data.url }));
-      else setMsg("La génération du lien a échoué.");
+      if (res.data?.success) {
+        const token = res.data.token;
+        const url = token ? `${window.location.origin}/invitation/${token}` : res.data.url;
+        setInviteUrls((m) => ({ ...m, [reqId]: url }));
+      } else setMsg("La génération du lien a échoué.");
     } catch (e: any) {
       setMsg(e?.response?.data?.message || "La génération du lien a échoué.");
     } finally { setInvitingId(null); }

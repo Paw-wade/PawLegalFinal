@@ -342,8 +342,11 @@ export default function SuiviDossierPage() {
     setInvitingId(reqId); flash(null, null);
     try {
       const res = await dossiersAPI.createSuiviFicheInvite(token, [reqId], personne || '', true);
-      if (res.data?.success) setInviteUrls((m) => ({ ...m, [reqId]: res.data.url }));
-      else flash(null, "La génération du lien a échoué.");
+      if (res.data?.success) {
+        const invToken = res.data.token;
+        const url = invToken ? `${window.location.origin}/invitation/${invToken}` : res.data.url;
+        setInviteUrls((m) => ({ ...m, [reqId]: url }));
+      } else flash(null, "La génération du lien a échoué.");
     } catch (e: any) {
       flash(null, e?.response?.data?.message || "La génération du lien a échoué.");
     } finally { setInvitingId(null); }
