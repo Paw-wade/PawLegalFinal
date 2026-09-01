@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { dossiersAPI } from '@/lib/api';
+import { FloatingField } from '@/components/ui/FloatingField';
 
 interface FieldDef {
   name: string;
@@ -188,15 +189,15 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
               {s.note && <p className="mb-2 text-xs italic text-muted-foreground">{s.note}</p>}
               <div className="space-y-2">
                 {rows.map((row: any, idx: number) => (
-                  <div key={idx} className="flex flex-wrap items-end gap-2 rounded-lg border border-gray-100 bg-gray-50/60 p-2">
-                    <span className="pb-2 text-xs font-semibold text-muted-foreground">{s.repeatable!.itemLabel} {idx + 1}</span>
+                  <div key={idx} className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/60 p-2">
+                    <span className="text-xs font-semibold text-muted-foreground">{s.repeatable!.itemLabel} {idx + 1}</span>
                     {s.repeatable!.fields.map((f) => (
-                      <div key={f.name} className="min-w-[140px] flex-1">
-                        <label className="mb-0.5 block text-xs text-muted-foreground">{f.label}{f.required && ' *'}</label>
-                        {renderInput(f, row[f.name], (v) => setRepeat(s.id, idx, f.name, v))}
+                      <div key={f.name} className="min-w-[150px] flex-1">
+                        <FloatingField label={f.label} required={f.required} type={f.type} options={f.options}
+                          suffix={f.suffix} placeholder={f.placeholder} value={row[f.name]} onChange={(v) => setRepeat(s.id, idx, f.name, v)} />
                       </div>
                     ))}
-                    <button type="button" onClick={() => removeRow(s.id, idx)} className="pb-2 text-xs font-medium text-red-600 hover:underline">Retirer</button>
+                    <button type="button" onClick={() => removeRow(s.id, idx)} className="text-xs font-medium text-red-600 hover:underline">Retirer</button>
                   </div>
                 ))}
               </div>
@@ -207,13 +208,24 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
         return (
           <div key={s.id}>
             {s.titre && <h4 className="mb-2 text-sm font-bold uppercase tracking-wide text-primary">{s.titre}</h4>}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {(s.fields || []).map((f) => (
-                <div key={f.name} className={f.fullWidth || f.type === 'textarea' || f.type === 'radio' || f.type === 'checkboxes' ? 'sm:col-span-2' : ''}>
-                  <label className="mb-1 block text-sm font-medium text-foreground">{f.label}{f.required && ' *'}</label>
-                  {renderInput(f, data[f.name], (v) => setField(f.name, v))}
-                </div>
-              ))}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {(s.fields || []).map((f) => {
+                const isOption = f.type === 'radio' || f.type === 'checkboxes';
+                const colSpan = f.fullWidth || f.type === 'textarea' || isOption ? 'sm:col-span-2' : '';
+                return (
+                  <div key={f.name} className={colSpan}>
+                    {isOption ? (
+                      <>
+                        <label className="mb-1 block text-sm font-medium text-foreground">{f.label}{f.required && ' *'}</label>
+                        {renderInput(f, data[f.name], (v) => setField(f.name, v))}
+                      </>
+                    ) : (
+                      <FloatingField label={f.label} required={f.required} type={f.type} options={f.options}
+                        suffix={f.suffix} rows={3} placeholder={f.placeholder} value={data[f.name]} onChange={(v) => setField(f.name, v)} />
+                    )}
+                  </div>
+                );
+              })}
             </div>
             {s.note && <p className="mt-2 text-xs italic text-muted-foreground">{s.note}</p>}
           </div>
