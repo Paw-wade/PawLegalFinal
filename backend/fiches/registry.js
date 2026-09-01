@@ -3,9 +3,15 @@
  * Ajouter une forme = ajouter un schéma ici (source de vérité unique).
  */
 const sarl = require('./schemas/sarl');
+const suarl = require('./schemas/suarl');
+const sas = require('./schemas/sas');
+const sasu = require('./schemas/sasu');
 
 const SCHEMAS = {
   sarl,
+  suarl,
+  sas,
+  sasu,
 };
 
 function getSchema(type) {
