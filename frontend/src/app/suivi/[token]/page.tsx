@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { dossiersAPI } from '@/lib/api';
 import { getStatutColor, getStatutLabelWithEtapes } from '@/lib/dossierUtils';
+import { FicheForm } from '@/components/fiches/FicheForm';
 
 interface SuiviData {
   dossier: {
@@ -51,6 +52,15 @@ interface SuiviData {
     isUrgent?: boolean;
     status: string;
   }>;
+  ficheRequests?: Array<{
+    id: string;
+    typeFiche: string;
+    titre: string;
+    message?: string;
+    statut: 'a_remplir' | 'remplie' | 'annulee';
+    ficheId: string | null;
+  }>;
+  fiches?: Array<{ id: string; typeFiche: string; titre: string; createdAt: string }>;
 }
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo (aligné sur le back)
@@ -96,6 +106,9 @@ export default function SuiviDossierPage() {
   const [contactTel, setContactTel] = useState('');
   const [sendingContact, setSendingContact] = useState(false);
   const [decidingRecId, setDecidingRecId] = useState<string | null>(null);
+  const [fillingFicheReqId, setFillingFicheReqId] = useState<string | null>(null);
+  const [fillingFicheType, setFillingFicheType] = useState<string>('');
+  const [submittingFiche, setSubmittingFiche] = useState(false);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const load = useCallback(async () => {
@@ -272,6 +285,44 @@ export default function SuiviDossierPage() {
     }
   };
 
+  const handleFillFiche = async (data: any) => {
+    if (!fillingFicheReqId) return;
+    setSubmittingFiche(true);
+    flash(null, null);
+    try {
+      const res = await dossiersAPI.remplirSuiviFiche(token, fillingFicheReqId, data);
+      if (res.data?.success) {
+        flash('Fiche enregistrée. Le document a été généré.');
+        setFillingFicheReqId(null);
+        setFillingFicheType('');
+        await load();
+      } else {
+        flash(null, "L'enregistrement de la fiche a échoué.");
+      }
+    } catch (e: any) {
+      flash(null, e?.response?.data?.message || "L'enregistrement de la fiche a échoué.");
+    } finally {
+      setSubmittingFiche(false);
+    }
+  };
+
+  const handleDownloadFiche = async (ficheId: string, typeFiche: string) => {
+    try {
+      const res = await dossiersAPI.downloadSuiviFichePdf(token, ficheId);
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = `fiche-${typeFiche}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } catch {
+      flash(null, 'Le téléchargement a échoué.');
+    }
+  };
+
+  const ficheBadge = (s?: string) =>
+    s === 'remplie' ? { label: '✓ Remplie', cls: 'bg-green-100 text-green-800' }
+      : s === 'annulee' ? { label: 'Annulée', cls: 'bg-gray-100 text-gray-600' }
+      : { label: 'À remplir', cls: 'bg-amber-100 text-amber-800' };
+
   const recBadge = (s?: string) => {
     if (s === 'acceptee') return { label: '✓ Acceptée', cls: 'bg-green-100 text-green-800' };
     if (s === 'refusee') return { label: '✕ Refusée', cls: 'bg-red-100 text-red-700' };
@@ -440,6 +491,62 @@ export default function SuiviDossierPage() {
                     );
                   })}
                 </ul>
+              </div>
+            )}
+
+            {/* Fiches de constitution à remplir (création d'entreprise) */}
+            {((data.ficheRequests && data.ficheRequests.length > 0) || (data.fiches && data.fiches.length > 0)) && (
+              <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-5 shadow-sm sm:p-6">
+                <h2 className="mb-1 text-sm font-bold uppercase tracking-wide text-teal-900">Fiches à remplir</h2>
+                <p className="mb-3 text-xs text-teal-900/70">
+                  Remplissez la fiche demandée par notre équipe ; le document est généré automatiquement et rattaché à votre dossier.
+                </p>
+                <ul className="space-y-2">
+                  {(data.ficheRequests || []).map((r) => {
+                    const b = ficheBadge(r.statut);
+                    const canFill = r.statut === 'a_remplir';
+                    return (
+                      <li key={r.id} className="rounded-lg border border-teal-100 bg-white p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="text-sm font-medium text-foreground">{r.titre}</span>
+                            <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
+                            {r.message && <p className="mt-0.5 text-xs text-muted-foreground">{r.message}</p>}
+                          </div>
+                          <div className="flex flex-none gap-2">
+                            {canFill && (
+                              <button type="button" onClick={() => { setFillingFicheReqId(r.id); setFillingFicheType(r.typeFiche); flash(null, null); }}
+                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90">Remplir</button>
+                            )}
+                            {r.statut === 'remplie' && r.ficheId && (
+                              <button type="button" onClick={() => handleDownloadFiche(r.ficheId as string, r.typeFiche)}
+                                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">PDF</button>
+                            )}
+                          </div>
+                        </div>
+                        {canFill && fillingFicheReqId === r.id && (
+                          <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
+                            <FicheForm type={fillingFicheType} submitting={submittingFiche} onSubmit={handleFillFiche} onCancel={() => setFillingFicheReqId(null)} />
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {data.fiches && data.fiches.length > 0 && (
+                  <div className="mt-3 border-t border-teal-100 pt-3">
+                    <p className="mb-2 text-xs font-semibold text-teal-900">Documents générés</p>
+                    <ul className="space-y-1">
+                      {data.fiches.map((f) => (
+                        <li key={f.id} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="min-w-0 truncate text-foreground">📄 {f.titre}</span>
+                          <button type="button" onClick={() => handleDownloadFiche(f.id, f.typeFiche)}
+                            className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Télécharger</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 

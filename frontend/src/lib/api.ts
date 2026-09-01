@@ -1120,6 +1120,22 @@ export const dossiersAPI = {
   decideSuiviRecommandation: (token: string, recId: string, decision: 'acceptee' | 'refusee', motifRefus?: string) =>
     api.post(`/dossier-guest-upload/suivi/${token}/recommandations/${recId}/decision`, { decision, motifRefus }),
 
+  // Fiches de constitution (création d'entreprise)
+  getFicheSchema: (type: string) => api.get(`/fiches/schema/${type}`),
+  getFicheTypes: () => api.get('/fiches/types'),
+  requestFiche: (dossierId: string, typeFiche: string, message?: string) =>
+    api.post(`/user/dossiers/${dossierId}/fiche-requests`, { typeFiche, message }),
+  getDossierFiches: (dossierId: string) => api.get(`/user/dossiers/${dossierId}/fiches`),
+  remplirFiche: (dossierId: string, reqId: string, data: any) =>
+    api.post(`/user/dossiers/${dossierId}/fiche-requests/${reqId}/remplir`, { data }),
+  downloadFichePdf: (dossierId: string, ficheId: string) =>
+    api.get(`/user/dossiers/${dossierId}/fiches/${ficheId}/pdf`, { responseType: 'blob' }),
+  // Côté lien de suivi (sans compte)
+  remplirSuiviFiche: (token: string, reqId: string, data: any) =>
+    api.post(`/dossier-guest-upload/suivi/${token}/fiche-requests/${reqId}/remplir`, { data }),
+  downloadSuiviFichePdf: (token: string, ficheId: string) =>
+    api.get(`/dossier-guest-upload/suivi/${token}/fiches/${ficheId}/pdf`, { responseType: 'blob' }),
+
   // Récupérer un dossier par ID
   getDossierById: (id: string | any) => {
     // Protection : s'assurer que l'ID est une string

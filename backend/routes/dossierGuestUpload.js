@@ -343,6 +343,11 @@ router.get('/suivi/:token', async (req, res) => {
       .select('nom originalName createdAt taille typeMime validationStatus validationMotif').sort({ createdAt: -1 }).lean();
     const demandes = await DocumentRequest.find({ dossier: dossier._id, status: { $in: ['pending', 'sent'] } })
       .select('documentType documentTypeLabel description message isUrgent status createdAt').sort({ createdAt: 1 }).lean();
+    // Fiches de constitution : demandes (à remplir) + fiches déjà remplies.
+    const FicheRequest = require('../models/FicheRequest');
+    const FicheConstitution = require('../models/FicheConstitution');
+    const ficheRequests = await FicheRequest.find({ dossier: dossier._id }).sort({ createdAt: 1 }).lean();
+    const fichesRemplies = await FicheConstitution.find({ dossier: dossier._id }).select('typeFiche titre createdAt').sort({ createdAt: -1 }).lean();
 
     // Le demandeur a-t-il déjà un compte ? (dossier rattaché, ou compte avec le même e-mail)
     const clientEmail = (dossier.clientEmail || '').trim();
@@ -405,6 +410,15 @@ router.get('/suivi/:token', async (req, res) => {
         isUrgent: r.isUrgent === true,
         status: r.status,
       })),
+      ficheRequests: ficheRequests.map((r) => ({
+        id: String(r._id),
+        typeFiche: r.typeFiche,
+        titre: r.titre || '',
+        message: r.message || '',
+        statut: r.statut,
+        ficheId: r.fiche ? String(r.fiche) : null,
+      })),
+      fiches: fichesRemplies.map((f) => ({ id: String(f._id), typeFiche: f.typeFiche, titre: f.titre || '', createdAt: f.createdAt })),
     });
   } catch (err) {
     console.error('[suivi] GET:', err?.message || err);
@@ -691,6 +705,84 @@ router.post('/suivi/:token/recommandations/:recId/decision', async (req, res) =>
   } catch (err) {
     console.error('[suivi] POST décision recommandation:', err?.message || err);
     return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route   POST /api/dossier-guest-upload/suivi/:token/fiche-requests/:reqId/remplir
+// @desc    Le porteur du lien remplit une fiche demandée (sans compte)
+router.post('/suivi/:token/fiche-requests/:reqId/remplir', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) {
+      return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif : votre dossier a été clôturé.' });
+    }
+    const FicheRequest = require('../models/FicheRequest');
+    const FicheConstitution = require('../models/FicheConstitution');
+    const fr = await FicheRequest.findOne({ _id: req.params.reqId, dossier: dossier._id });
+    if (!fr) return res.status(404).json({ success: false, message: 'Demande de fiche introuvable.' });
+    const { getSchema } = require('../fiches/registry');
+    const schema = getSchema(fr.typeFiche);
+    const fiche = await FicheConstitution.create({
+      dossier: dossier._id, typeFiche: fr.typeFiche, titre: (schema && schema.titre) || fr.titre,
+      data: (req.body && req.body.data) || {}, viaGuestLink: true,
+    });
+    fr.statut = 'remplie'; fr.fiche = fiche._id; fr.remplieAt = new Date();
+    await fr.save();
+
+    // Notifier l'équipe (in-app + e-mail).
+    const titre = dossier.titre || dossier.numero || 'un dossier';
+    const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+    const dossierUrl = `${frontUrl}/admin/dossiers?dossierId=${String(dossier._id)}`;
+    try {
+      const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id');
+      for (const adm of admins) {
+        await Notification.create({
+          user: adm._id, type: 'document_received', titre: 'Fiche remplie',
+          message: `Le demandeur a rempli « ${fiche.titre} » sur le dossier « ${titre} ».`,
+          lien: '/admin/dossiers', metadata: { dossierId: String(dossier._id), ficheId: String(fiche._id) },
+        });
+      }
+    } catch (e) { console.error('[suivi] notif fiche remplie:', e.message || e); }
+    for (const adminEmail of parseAdminEmails()) {
+      try {
+        await sendTemplatedTransactionalEmail({
+          templateCode: 'dossier_fiche_remplie', eventKey: 'dossier_fiche_remplie', to: adminEmail, toName: 'Équipe Ada Papers',
+          variables: { titre, fiche: fiche.titre, dossierUrl },
+          fallback: {
+            subject: `Fiche remplie — ${titre}`,
+            htmlContent: `<p>Le demandeur a rempli la fiche <strong>${escapeHtml(fiche.titre)}</strong> sur le dossier « ${escapeHtml(titre)} » via son lien de suivi.</p><p>Ouvrir le dossier : <a href="${escapeHtml(dossierUrl)}">${escapeHtml(dossierUrl)}</a></p>`,
+            textContent: `Le demandeur a rempli la fiche « ${fiche.titre} » sur le dossier « ${titre} ».\nDossier : ${dossierUrl}`,
+          },
+        });
+      } catch (e) { console.error('[suivi] email fiche remplie:', e.message || e); }
+    }
+
+    return res.status(201).json({ success: true, message: 'Fiche enregistrée. Merci.', fiche: { id: String(fiche._id), typeFiche: fiche.typeFiche, titre: fiche.titre } });
+  } catch (err) {
+    console.error('[suivi] POST remplir fiche:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route   GET /api/dossier-guest-upload/suivi/:token/fiches/:ficheId/pdf
+// @desc    Télécharger le PDF d'une fiche remplie (via le lien de suivi)
+router.get('/suivi/:token/fiches/:ficheId/pdf', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    const FicheConstitution = require('../models/FicheConstitution');
+    const fiche = await FicheConstitution.findOne({ _id: req.params.ficheId, dossier: dossier._id }).lean();
+    if (!fiche) return res.status(404).json({ success: false, message: 'Fiche introuvable.' });
+    const { generateFichePdf } = require('../fiches/generate');
+    const buf = await generateFichePdf(fiche, { reference: dossier.numero || '' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="fiche-${fiche.typeFiche}-${String(dossier.numero || dossier._id)}.pdf"`);
+    return res.send(buf);
+  } catch (err) {
+    console.error('[suivi] GET PDF fiche:', err?.message || err);
+    if (!res.headersSent) return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+    return undefined;
   }
 });
 

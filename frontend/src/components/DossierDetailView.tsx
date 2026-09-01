@@ -8,6 +8,7 @@ import { ValiderDemandeButton } from '@/components/demande/ValiderDemandeButton'
 import { TelechargerDossierPdfButton } from '@/components/demande/TelechargerDossierPdfButton';
 import { LienSuivi } from '@/components/demande/LienSuivi';
 import { RecommandationsPanel } from '@/components/demande/RecommandationsPanel';
+import { FichesPanel } from '@/components/fiches/FichesPanel';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -186,6 +187,15 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
           categorie={dossier.categorie}
           variant={variant}
           recommandations={dossier.recommandations}
+        />
+      )}
+
+      {/* Fiches de constitution (création d'entreprise) — demande admin, remplissage client */}
+      {(variant === 'admin' || variant === 'client') && dossier.categorie === 'constitution_societe' && (
+        <FichesPanel
+          dossierId={String(dossier._id || dossier.id || '')}
+          categorie={dossier.categorie}
+          variant={variant}
         />
       )}
 

@@ -1129,6 +1129,150 @@ router.patch('/:id/recommandations/:recId/decision', async (req, res) => {
   }
 });
 
+// ===================== FICHES DE CONSTITUTION (création d'entreprise) =====================
+
+// @route   POST /api/user/dossiers/:id/fiche-requests
+// @desc    (Équipe) Demander au demandeur de remplir une fiche (ex. SARL)
+router.post('/:id/fiche-requests', authorize('admin', 'superadmin', 'assistant', 'secretaire', 'juriste'), async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    const { getSchema } = require('../fiches/registry');
+    const typeFiche = String((req.body && req.body.typeFiche) || '').toLowerCase().trim();
+    const schema = getSchema(typeFiche);
+    if (!schema) return res.status(400).json({ success: false, message: 'Type de fiche inconnu.' });
+
+    const FicheRequest = require('../models/FicheRequest');
+    const fr = await FicheRequest.create({
+      dossier: dossier._id, typeFiche, titre: schema.titre,
+      message: String((req.body && req.body.message) || '').trim(), requestedBy: req.user.id,
+    });
+
+    // Notifier le demandeur : in-app (compte) + e-mail (compte ou clientEmail).
+    const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+    const titreDossier = dossier.titre || 'votre dossier';
+    let email = (dossier.clientEmail || '').trim();
+    let prenom = dossier.clientPrenom || '';
+    if (dossier.user) {
+      try {
+        const holder = await User.findById(dossier.user).select('email firstName').lean();
+        if (holder?.email && !email) email = holder.email;
+        if (holder?.firstName && !prenom) prenom = holder.firstName;
+      } catch (e) { /* ignore */ }
+      await createNotification(dossier.user, 'document_request', 'Fiche à remplir',
+        `Notre équipe vous demande de remplir « ${schema.titre} » pour votre dossier « ${titreDossier} ».`,
+        '/client/dossiers', { dossierId: dossier._id.toString(), ficheRequestId: fr._id.toString() });
+    }
+    if (email) {
+      const suiviUrl = dossier.suiviToken ? `${frontUrl}/suivi/${dossier.suiviToken}` : '';
+      const espaceUrl = `${frontUrl}/client/dossiers`;
+      try {
+        await sendTemplatedTransactionalEmail({
+          templateCode: 'dossier_fiche_request', eventKey: 'dossier_fiche_request', to: email,
+          toName: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim() || email,
+          variables: { prenom, titre: titreDossier, fiche: schema.titre, suiviUrl, espaceUrl },
+          fallback: {
+            subject: `Une fiche à remplir pour votre dossier — ${titreDossier}`,
+            htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Pour avancer sur votre dossier « ${escapeHtml(titreDossier)} », merci de remplir en ligne la fiche : <strong>${escapeHtml(schema.titre)}</strong>.</p><p>${suiviUrl ? `via votre <a href="${escapeHtml(suiviUrl)}">lien de suivi</a>` : ''}${suiviUrl ? ' ou ' : ''}depuis votre <a href="${escapeHtml(espaceUrl)}">espace personnel</a> si vous avez un compte.</p>`,
+            textContent: `Bonjour ${prenom || ''},\n\nMerci de remplir en ligne la fiche « ${schema.titre} » pour votre dossier « ${titreDossier} ».\n${suiviUrl ? `Lien de suivi : ${suiviUrl}\n` : ''}Espace personnel : ${espaceUrl}`,
+          },
+        });
+      } catch (e) { console.error('⚠️ Email demande de fiche:', e.message || e); }
+    }
+    return res.status(201).json({ success: true, message: 'Fiche demandée au demandeur.', ficheRequest: fr });
+  } catch (error) {
+    console.error('Erreur demande de fiche:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// Contrôle d'accès simple : admin/staff, propriétaire ou assigné.
+function canAccessDossierFiche(dossier, user) {
+  const isStaff = ['admin', 'superadmin', 'assistant', 'secretaire', 'juriste'].includes(user.role);
+  const ownerId = dossier.user ? (dossier.user._id || dossier.user).toString() : null;
+  const isOwner = ownerId && ownerId === user.id.toString();
+  const assignedId = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
+  const isAssigned = assignedId && assignedId === user.id.toString();
+  return isStaff || isOwner || isAssigned;
+}
+
+// @route   GET /api/user/dossiers/:id/fiches
+// @desc    Demandes de fiches + fiches remplies d'un dossier
+router.get('/:id/fiches', async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    const FicheRequest = require('../models/FicheRequest');
+    const FicheConstitution = require('../models/FicheConstitution');
+    const requests = await FicheRequest.find({ dossier: dossier._id }).sort({ createdAt: -1 }).lean();
+    const fiches = await FicheConstitution.find({ dossier: dossier._id }).select('typeFiche titre createdAt viaGuestLink').sort({ createdAt: -1 }).lean();
+    return res.json({ success: true, requests, fiches });
+  } catch (error) {
+    console.error('Erreur liste fiches:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   POST /api/user/dossiers/:id/fiche-requests/:reqId/remplir
+// @desc    (Propriétaire) Remplir une fiche demandée → enregistre les données + PDF
+router.post('/:id/fiche-requests/:reqId/remplir', async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    const FicheRequest = require('../models/FicheRequest');
+    const FicheConstitution = require('../models/FicheConstitution');
+    const fr = await FicheRequest.findOne({ _id: req.params.reqId, dossier: dossier._id });
+    if (!fr) return res.status(404).json({ success: false, message: 'Demande de fiche introuvable' });
+    const { getSchema } = require('../fiches/registry');
+    const schema = getSchema(fr.typeFiche);
+    const fiche = await FicheConstitution.create({
+      dossier: dossier._id, typeFiche: fr.typeFiche, titre: (schema && schema.titre) || fr.titre,
+      data: (req.body && req.body.data) || {}, filledBy: req.user.id,
+    });
+    fr.statut = 'remplie'; fr.fiche = fiche._id; fr.remplieAt = new Date();
+    await fr.save();
+
+    // Notifier l'équipe.
+    try {
+      const admins = await User.find({ role: { $in: ADMIN_NOTIFY_ROLES }, isActive: true }).select('_id');
+      for (const adm of admins) {
+        await createNotification(adm._id, 'document_received', 'Fiche remplie',
+          `Le demandeur a rempli « ${fiche.titre} » sur le dossier « ${dossier.titre || ''} ».`,
+          '/admin/dossiers', { dossierId: dossier._id.toString(), ficheId: fiche._id.toString() });
+      }
+    } catch (e) { console.error('⚠️ Notif fiche remplie:', e.message || e); }
+
+    return res.status(201).json({ success: true, message: 'Fiche enregistrée.', fiche: { id: fiche._id, typeFiche: fiche.typeFiche, titre: fiche.titre } });
+  } catch (error) {
+    console.error('Erreur remplissage fiche:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// @route   GET /api/user/dossiers/:id/fiches/:ficheId/pdf
+// @desc    Télécharger le PDF d'une fiche remplie
+router.get('/:id/fiches/:ficheId/pdf', async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo numero');
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    const FicheConstitution = require('../models/FicheConstitution');
+    const fiche = await FicheConstitution.findOne({ _id: req.params.ficheId, dossier: dossier._id }).lean();
+    if (!fiche) return res.status(404).json({ success: false, message: 'Fiche introuvable' });
+    const { generateFichePdf } = require('../fiches/generate');
+    const buf = await generateFichePdf(fiche, { reference: dossier.numero || '' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="fiche-${fiche.typeFiche}-${String(dossier.numero || dossier._id)}.pdf"`);
+    return res.send(buf);
+  } catch (error) {
+    console.error('Erreur PDF fiche:', error);
+    if (!res.headersSent) return res.status(500).json({ success: false, message: 'Erreur serveur' });
+    return undefined;
+  }
+});
+
 // @route   GET /api/user/dossiers
 // @desc    Récupérer tous les dossiers de l'utilisateur connecté (tous les rôles)
 // @access  Private (tous les rôles authentifiés)

@@ -56,6 +56,7 @@ function devApiRewriteRules(backendOrigin) {
     'dossiers',
     'drafts',
     'recours',
+    'fiches',
   ];
 
   const rules = [];
