@@ -1306,15 +1306,26 @@ router.post('/:id/piece-requests', async (req, res) => {
     const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
-    const libelle = String((req.body && req.body.libelle) || '').trim();
-    if (!libelle) return res.status(400).json({ success: false, message: 'Libellé requis.' });
     const PieceRequest = require('../models/PieceRequest');
     const natures = ['identite', 'casier', 'statuts', 'procuration', 'autre'];
-    const nature = natures.includes(req.body && req.body.nature) ? req.body.nature : 'autre';
-    const piece = await PieceRequest.create({
-      dossier: dossier._id, libelle, nature, pourPersonne: String((req.body && req.body.pourPersonne) || '').trim(), createdBy: req.user.id,
-    });
-    return res.status(201).json({ success: true, piece });
+    // Accepte une pièce unique (libelle/nature/pourPersonne) ou plusieurs (pieces[]).
+    const raw = Array.isArray(req.body && req.body.pieces) && req.body.pieces.length
+      ? req.body.pieces
+      : [{ libelle: (req.body && req.body.libelle) || '', nature: (req.body && req.body.nature) || '', pourPersonne: (req.body && req.body.pourPersonne) || '' }];
+    const items = raw
+      .map((p) => ({
+        libelle: String((p && p.libelle) || '').trim(),
+        nature: natures.includes(p && p.nature) ? p.nature : 'autre',
+        pourPersonne: String((p && p.pourPersonne) || '').trim(),
+      }))
+      .filter((p) => p.libelle);
+    if (items.length === 0) return res.status(400).json({ success: false, message: 'Aucune pièce valide.' });
+    const created = [];
+    for (const it of items) {
+      const piece = await PieceRequest.create({ dossier: dossier._id, ...it, createdBy: req.user.id });
+      created.push(piece);
+    }
+    return res.status(201).json({ success: true, pieces: created });
   } catch (error) {
     console.error('Erreur ajout pièce:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });

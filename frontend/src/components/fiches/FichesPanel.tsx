@@ -14,6 +14,15 @@ interface FRequest { _id: string; typeFiche: string; titre: string; statut: stri
 interface Fiche { _id: string; typeFiche: string; titre: string; createdAt: string }
 interface Piece { _id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string; validationStatus?: string; validationMotif?: string }
 
+// Catalogue standard des pièces à fournir (documents à téléverser).
+const PIECES_CATALOG: Array<{ libelle: string; nature: string }> = [
+  { libelle: "Pièce d'identité de chaque associé (personne physique)", nature: 'identite' },
+  { libelle: 'Associé personne morale : statuts + registre de commerce + PV autorisant la prise de participation', nature: 'statuts' },
+  { libelle: "Pièce d'identité du gérant / des cogérants", nature: 'identite' },
+  { libelle: "Casier judiciaire du gérant / des cogérants (ou déclaration sur l'honneur)", nature: 'casier' },
+  { libelle: "Procuration de l'associé absent le jour de la signature", nature: 'procuration' },
+];
+
 const valBadge = (s?: string) =>
   s === 'valide' ? { label: '✓ Validé', cls: 'bg-emerald-100 text-emerald-800' }
     : s === 'refuse' ? { label: '✕ Refusé', cls: 'bg-red-100 text-red-700' }
@@ -31,6 +40,9 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   const [fiches, setFiches] = useState<Fiche[]>([]);
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [uploadingPiece, setUploadingPiece] = useState<string | null>(null);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [selPieces, setSelPieces] = useState<number[]>([]);
+  const [otherPiece, setOtherPiece] = useState('');
   const pieceInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const [types, setTypes] = useState<Array<{ type: string; titre: string }>>([]);
   const [selTypes, setSelTypes] = useState<string[]>([]);
@@ -149,13 +161,19 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     } finally { setUploadingPiece(null); if (pieceInputs.current[pieceId]) pieceInputs.current[pieceId]!.value = ''; }
   };
 
-  const addPieceManual = async () => {
-    const libelle = window.prompt('Intitulé de la pièce à fournir (ex. Statuts + RC + PV de l’associé personne morale ; Procuration de l’associé absent) :', '');
-    if (libelle === null || !libelle.trim()) return;
+  const toggleCatalog = (i: number) =>
+    setSelPieces((arr) => (arr.includes(i) ? arr.filter((x) => x !== i) : [...arr, i]));
+
+  const addSelectedPieces = async () => {
+    const toAdd = selPieces.map((i) => ({ libelle: PIECES_CATALOG[i].libelle, nature: PIECES_CATALOG[i].nature }));
+    if (otherPiece.trim()) toAdd.push({ libelle: otherPiece.trim(), nature: 'autre' });
+    if (toAdd.length === 0) return;
     setBusy(true); setMsg(null);
     try {
-      await dossiersAPI.addPiece(dossierId, libelle.trim());
-      setMsg('Pièce ajoutée.'); await load();
+      await dossiersAPI.addPieces(dossierId, toAdd);
+      setMsg(toAdd.length > 1 ? 'Pièces ajoutées.' : 'Pièce ajoutée.');
+      setSelPieces([]); setOtherPiece(''); setShowCatalog(false);
+      await load();
     } catch (e: any) {
       setMsg(e?.response?.data?.message || "L'ajout a échoué.");
     } finally { setBusy(false); }
@@ -330,9 +348,32 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
             ))}
           </ul>
         )}
-        <button type="button" onClick={addPieceManual} disabled={busy} className="mt-2 text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
-          + Ajouter une pièce (associé personne morale, procuration…)
+        <button type="button" onClick={() => setShowCatalog((v) => !v)} className="mt-2 text-xs font-medium text-teal-700 hover:underline">
+          + Ajouter des pièces à fournir
         </button>
+        {showCatalog && (
+          <div className="mt-2 rounded-lg border border-teal-200 bg-white p-3">
+            <p className="mb-2 text-xs font-semibold text-teal-900">Cochez les pièces à demander :</p>
+            <div className="space-y-1">
+              {PIECES_CATALOG.map((p, i) => (
+                <label key={i} className="flex items-start gap-2 rounded px-1 py-0.5 text-sm hover:bg-teal-50 cursor-pointer">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4" checked={selPieces.includes(i)} onChange={() => toggleCatalog(i)} />
+                  <span>{p.libelle}</span>
+                </label>
+              ))}
+            </div>
+            <input type="text" value={otherPiece} onChange={(e) => setOtherPiece(e.target.value)}
+              placeholder="Autre pièce (facultatif)…"
+              className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+            <div className="mt-2 flex items-center gap-3">
+              <button type="button" onClick={addSelectedPieces} disabled={busy || (selPieces.length === 0 && !otherPiece.trim())}
+                className="inline-flex h-9 items-center rounded-md bg-teal-600 px-4 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60">
+                {busy ? '…' : 'Ajouter'}
+              </button>
+              <button type="button" onClick={() => { setShowCatalog(false); setSelPieces([]); setOtherPiece(''); }} className="text-xs text-muted-foreground hover:underline">Annuler</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Fiches remplies (téléchargement direct) */}

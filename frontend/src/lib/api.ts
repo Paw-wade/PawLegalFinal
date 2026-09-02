@@ -1153,6 +1153,8 @@ export const dossiersAPI = {
   // Pièces à fournir (checklist)
   addPiece: (dossierId: string, libelle: string, nature?: string, pourPersonne?: string) =>
     api.post(`/user/dossiers/${dossierId}/piece-requests`, { libelle, nature, pourPersonne }),
+  addPieces: (dossierId: string, pieces: Array<{ libelle: string; nature?: string; pourPersonne?: string }>) =>
+    api.post(`/user/dossiers/${dossierId}/piece-requests`, { pieces }),
   fournirPiece: (dossierId: string, pieceId: string, formData: FormData) =>
     api.post(`/user/dossiers/${dossierId}/piece-requests/${pieceId}/fournir`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   addSuiviPiece: (token: string, libelle: string, nature?: string, pourPersonne?: string) =>
