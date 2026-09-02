@@ -9,6 +9,7 @@ import { TelechargerDossierPdfButton } from '@/components/demande/TelechargerDos
 import { LienSuivi } from '@/components/demande/LienSuivi';
 import { RecommandationsPanel } from '@/components/demande/RecommandationsPanel';
 import { FichesPanel } from '@/components/fiches/FichesPanel';
+import { buildConstitutionFields } from '@/lib/constitutionFormFields';
 
 // Mapping des catégories pour l'affichage
 const categories = {
@@ -104,6 +105,13 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
     ? dossier.champsFormulaire.map((c: any) => ({ label: c.libelle || c.nom || '', value: c.valeur || '' }))
     : parsedDescription.specificFields;
 
+  // Création d'entreprise : afficher la fiche de demande COMPLÈTE (toutes les rubriques
+  // du formulaire initial, y compris celles laissées vides → « — non renseigné »).
+  const isConstitution = dossier.categorie === 'constitution_societe';
+  const displayFields: Array<{ label: string; value: string; empty?: boolean }> = isConstitution
+    ? buildConstitutionFields(dossier.type, dossier.champsFormulaire)
+    : specificFields;
+
   return (
     <div className="min-w-0 space-y-6">
       {/* Icône PDF avec actions — responsive: stack sur mobile */}
@@ -153,7 +161,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
       </div>
 
       {/* Informations de la demande (visible) : description + rubriques du formulaire */}
-      {(mainDescription || specificFields.length > 0) && (
+      {(mainDescription || displayFields.length > 0) && (
         <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm">
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
             Informations de la demande
@@ -164,14 +172,16 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
               <p className="whitespace-pre-wrap break-words text-sm text-foreground">{mainDescription}</p>
             </div>
           )}
-          {specificFields.length > 0 && (
+          {displayFields.length > 0 && (
             <div>
-              <p className="mb-2 text-xs text-gray-500">Informations du formulaire</p>
+              <p className="mb-2 text-xs text-gray-500">
+                {isConstitution ? 'Fiche de demande (formulaire complet)' : 'Informations du formulaire'}
+              </p>
               <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-                {specificFields.map((f, i) => (
+                {displayFields.map((f, i) => (
                   <div key={i} className="min-w-0">
                     <dt className="text-xs text-gray-500">{f.label}</dt>
-                    <dd className="whitespace-pre-wrap break-words text-sm font-medium text-foreground">{f.value}</dd>
+                    <dd className={`whitespace-pre-wrap break-words text-sm ${f.empty ? 'italic text-gray-400' : 'font-medium text-foreground'}`}>{f.value}</dd>
                   </div>
                 ))}
               </dl>
