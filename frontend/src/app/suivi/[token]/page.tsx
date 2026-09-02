@@ -393,6 +393,12 @@ export default function SuiviDossierPage() {
       : s === 'annulee' ? { label: 'Annulée', cls: 'bg-gray-100 text-gray-600' }
       : { label: 'À remplir', cls: 'bg-amber-100 text-amber-800' };
 
+  // Statut combiné (à faire → en vérif. → validé/refusé) pour le récap par personne.
+  const ficheStatusBadge = (r: { statut?: string; validationStatus?: string }) =>
+    r.statut !== 'remplie' ? ficheBadge(r.statut) : valBadgeSuivi(r.validationStatus);
+  const pieceStatusBadge = (p: { statut?: string; validationStatus?: string }) =>
+    p.statut !== 'fourni' ? { label: 'À fournir', cls: 'bg-amber-100 text-amber-800' } : valBadgeSuivi(p.validationStatus);
+
   const recBadge = (s?: string) => {
     if (s === 'acceptee') return { label: '✓ Acceptée', cls: 'bg-green-100 text-green-800' };
     if (s === 'refusee') return { label: '✕ Refusée', cls: 'bg-red-100 text-red-700' };
@@ -417,6 +423,52 @@ export default function SuiviDossierPage() {
     if (statut === 'valide') return { label: '✓ Validé par notre équipe', cls: 'bg-green-100 text-green-800' };
     if (statut === 'refuse') return { label: '✕ Refusé', cls: 'bg-red-100 text-red-700' };
     return { label: 'En cours de vérification', cls: 'bg-amber-100 text-amber-800' };
+  };
+
+  // Récapitulatif des documents demandés, groupés par personne (demandeur + associés).
+  // Rendu à la fois dans la barre latérale fixe (grand écran) et en ligne (petit écran).
+  const renderRecapInner = () => {
+    if (!data) return null;
+    const keyOf = (n?: string) => (n && n.trim() ? n.trim() : '__societe__');
+    const groups = new Map<string, { fiches: NonNullable<SuiviData['ficheRequests']>; pieces: NonNullable<SuiviData['pieceRequests']> }>();
+    const ensure = (k: string) => { if (!groups.has(k)) groups.set(k, { fiches: [], pieces: [] }); return groups.get(k)!; };
+    (data.ficheRequests || []).forEach((r) => { if (r.statut !== 'annulee') ensure(keyOf(r.pourPersonne)).fiches.push(r); });
+    (data.pieceRequests || []).forEach((p) => ensure(keyOf(p.pourPersonne)).pieces.push(p));
+    const entries = Array.from(groups.entries());
+    if (entries.length === 0) return null;
+    // Le groupe société/demandeur d'abord, puis les personnes par ordre alphabétique.
+    entries.sort(([a], [b]) => (a === '__societe__' ? -1 : b === '__societe__' ? 1 : a.localeCompare(b)));
+    return (
+      <div className="space-y-3">
+        {entries.map(([key, g]) => (
+          <div key={key} className="rounded-md bg-teal-50/60 p-2.5">
+            <p className="mb-1.5 text-xs font-bold text-teal-900">
+              {key === '__societe__' ? 'Société / demandeur (vous)' : `👤 ${key}`}
+            </p>
+            <ul className="space-y-1">
+              {g.fiches.map((r) => {
+                const b = ficheStatusBadge(r);
+                return (
+                  <li key={`f_${r.id}`} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="min-w-0 text-xs text-foreground">📝 {r.titre}</span>
+                    <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
+                  </li>
+                );
+              })}
+              {g.pieces.map((p) => {
+                const b = pieceStatusBadge(p);
+                return (
+                  <li key={`p_${p.id}`} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="min-w-0 text-xs text-foreground">📎 {p.libelle}</span>
+                    <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -571,6 +623,16 @@ export default function SuiviDossierPage() {
                 <p className="mb-3 text-xs text-teal-900/70">
                   Remplissez la fiche demandée par notre équipe ; le document est généré automatiquement et rattaché à votre dossier.
                 </p>
+
+                {/* Récap des documents demandés — bloc unique : dans la carte en écran étroit,
+                    barre latérale fixe à gauche en grand écran (xl+). */}
+                {renderRecapInner() && (
+                  <div className="mb-4 rounded-lg border border-teal-200 bg-white p-3 shadow-sm xl:fixed xl:left-3 xl:top-28 xl:z-20 xl:mb-0 xl:max-h-[calc(100vh-8rem)] xl:w-60 xl:overflow-y-auto xl:rounded-xl">
+                    <p className="mb-2 text-xs font-semibold text-teal-900 xl:font-bold xl:uppercase xl:tracking-wide">Documents demandés</p>
+                    {renderRecapInner()}
+                  </div>
+                )}
+
                 <ul className="space-y-2">
                   {(data.ficheRequests || []).map((r) => {
                     const b = ficheBadge(r.statut);
@@ -580,6 +642,7 @@ export default function SuiviDossierPage() {
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="min-w-0">
                             <span className="text-sm font-medium text-foreground">{r.titre}</span>
+                            {r.pourPersonne && <span className="ml-1.5 rounded bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium text-teal-800">👤 {r.pourPersonne}</span>}
                             <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
                             {r.message && <p className="mt-0.5 text-xs text-muted-foreground">{r.message}</p>}
                           </div>
@@ -658,6 +721,7 @@ export default function SuiviDossierPage() {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="min-w-0">
                               <span className="text-sm text-foreground">{p.libelle}</span>
+                              {p.pourPersonne && <span className="ml-1.5 rounded bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium text-teal-800">👤 {p.pourPersonne}</span>}
                               <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.statut === 'fourni' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
                                 {p.statut === 'fourni' ? '✓ Fourni' : 'À fournir'}
                               </span>
