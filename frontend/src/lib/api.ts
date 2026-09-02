@@ -1143,6 +1143,8 @@ export const dossiersAPI = {
   // Liens d'invitation ciblés (déléguer le remplissage d'une fiche à une personne)
   createFicheInvite: (dossierId: string, ficheRequestIds: string[], personne?: string, allowUpload = true) =>
     api.post(`/user/dossiers/${dossierId}/fiche-invites`, { ficheRequestIds, personne, allowUpload }),
+  resendFicheInvite: (dossierId: string, inviteId: string) =>
+    api.post(`/user/dossiers/${dossierId}/fiche-invites/${inviteId}/resend`, { origin: typeof window !== 'undefined' ? window.location.origin : undefined }),
   createSuiviFicheInvite: (token: string, ficheRequestIds: string[], personne?: string, allowUpload = true) =>
     api.post(`/dossier-guest-upload/suivi/${token}/fiche-invites`, { ficheRequestIds, personne, allowUpload }),
   // (Admin) validation des fiches remplies et des pièces

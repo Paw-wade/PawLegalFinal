@@ -96,4 +96,23 @@ async function sendAssocieInvitations(dossierId, schema, data, { origin, request
   return { sent };
 }
 
-module.exports = { sendAssocieInvitations };
+/**
+ * Renvoie l'e-mail d'invitation d'une invitation existante (bouton « Renvoyer » côté admin).
+ * @returns {Promise<{ ok: boolean, sentAt?: Date, email?: string, error?: string }>}
+ */
+async function resendAssocieInvitation(dossierId, inviteId, { origin, cabinetNom } = {}) {
+  const FicheInvite = require('../models/FicheInvite');
+  const invite = await FicheInvite.findOne({ _id: inviteId, dossier: dossierId });
+  if (!invite) return { ok: false, error: 'not_found' };
+  const email = String(invite.personneEmail || '').trim();
+  if (!EMAIL_RE.test(email)) return { ok: false, error: 'no_email' };
+  const url = `${resolveEmailBaseUrl(origin)}/invitation/${invite.token}`;
+  const { subject, htmlContent, textContent } = buildEmail({ nom: invite.personne || '', cabinetNom, url });
+  const ok = await sendTransactionalEmail({ to: email, toName: invite.personne || '', subject, htmlContent, textContent });
+  if (!ok) return { ok: false, error: 'send_failed' };
+  invite.invitationEmailSentAt = new Date();
+  await invite.save();
+  return { ok: true, sentAt: invite.invitationEmailSentAt, email };
+}
+
+module.exports = { sendAssocieInvitations, resendAssocieInvitation };

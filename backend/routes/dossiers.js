@@ -1217,12 +1217,36 @@ router.get('/:id/fiches', async (req, res) => {
     const FicheRequest = require('../models/FicheRequest');
     const FicheConstitution = require('../models/FicheConstitution');
     const PieceRequest = require('../models/PieceRequest');
+    const FicheInvite = require('../models/FicheInvite');
     const requests = await FicheRequest.find({ dossier: dossier._id }).sort({ createdAt: -1 }).lean();
     const fiches = await FicheConstitution.find({ dossier: dossier._id }).select('typeFiche titre createdAt viaGuestLink').sort({ createdAt: -1 }).lean();
     const pieces = await PieceRequest.find({ dossier: dossier._id, statut: { $ne: 'annulee' } }).sort({ createdAt: 1 }).lean();
-    return res.json({ success: true, requests, fiches, pieces });
+    const invites = await FicheInvite.find({ dossier: dossier._id, revokedAt: null }).select('personne personneEmail invitationEmailSentAt token').sort({ createdAt: 1 }).lean();
+    return res.json({ success: true, requests, fiches, pieces, invites });
   } catch (error) {
     console.error('Erreur liste fiches:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   POST /api/user/dossiers/:id/fiche-invites/:inviteId/resend
+// @desc    Renvoyer l'e-mail d'invitation d'un associé (bouton « Renvoyer »)
+router.post('/:id/fiche-invites/:inviteId/resend', async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    const { resendAssocieInvitation } = require('../fiches/associeInvitations');
+    const r = await resendAssocieInvitation(dossier._id, req.params.inviteId, { origin: req.body && req.body.origin });
+    if (!r.ok) {
+      const message = r.error === 'no_email' ? 'Aucune adresse e-mail pour cette invitation.'
+        : r.error === 'not_found' ? 'Invitation introuvable.'
+        : "L'envoi de l'e-mail a échoué.";
+      return res.status(r.error === 'not_found' ? 404 : 400).json({ success: false, message });
+    }
+    return res.json({ success: true, sentAt: r.sentAt });
+  } catch (error) {
+    console.error('Erreur renvoi invitation:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
@@ -1261,11 +1285,13 @@ router.post('/:id/fiche-requests/:reqId/remplir', async (req, res) => {
     } catch (e) { console.error('⚠️ Génération checklist constitution:', e.message || e); }
 
     // Inviter par e-mail chaque associé dont l'adresse est renseignée (best-effort).
+    let invitationsSent = 0;
     try {
       const { sendAssocieInvitations } = require('../fiches/associeInvitations');
-      await sendAssocieInvitations(dossier._id, schema, fiche.data, {
+      const inv = await sendAssocieInvitations(dossier._id, schema, fiche.data, {
         origin: req.body && req.body.origin, requestedBy: req.user.id,
       });
+      invitationsSent = (inv && inv.sent) || 0;
     } catch (e) { console.error('⚠️ Invitations associés:', e.message || e); }
 
     // Notifier l'équipe.
@@ -1278,7 +1304,7 @@ router.post('/:id/fiche-requests/:reqId/remplir', async (req, res) => {
       }
     } catch (e) { console.error('⚠️ Notif fiche remplie:', e.message || e); }
 
-    return res.status(201).json({ success: true, message: 'Fiche enregistrée.', fiche: { id: fiche._id, typeFiche: fiche.typeFiche, titre: fiche.titre } });
+    return res.status(201).json({ success: true, message: 'Fiche enregistrée.', invitationsSent, fiche: { id: fiche._id, typeFiche: fiche.typeFiche, titre: fiche.titre } });
   } catch (error) {
     console.error('Erreur remplissage fiche:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });

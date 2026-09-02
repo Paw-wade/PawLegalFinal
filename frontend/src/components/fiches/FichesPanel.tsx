@@ -53,6 +53,8 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [inviteUrls, setInviteUrls] = useState<Record<string, string>>({});
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [invites, setInvites] = useState<Array<{ _id: string; personne?: string; personneEmail?: string; invitationEmailSentAt?: string; token?: string }>>([]);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const isAdmin = variant === 'admin';
 
@@ -63,6 +65,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
         setRequests(res.data.requests || []);
         setFiches(res.data.fiches || []);
         setPieces(res.data.pieces || []);
+        setInvites(res.data.invites || []);
       }
     } catch (e) { /* silencieux */ }
   }, [dossierId]);
@@ -183,8 +186,9 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     if (!fillingReqId) return;
     setSubmitting(true); setMsg(null);
     try {
-      await dossiersAPI.remplirFiche(dossierId, fillingReqId, data);
-      setMsg('Fiche enregistrée. Le document a été généré.');
+      const res = await dossiersAPI.remplirFiche(dossierId, fillingReqId, data);
+      const n = res.data?.invitationsSent || 0;
+      setMsg('Fiche enregistrée. Le document a été généré.' + (n > 0 ? ` ${n} invitation${n > 1 ? 's' : ''} envoyée${n > 1 ? 's' : ''} par e-mail aux associés.` : ''));
       setFillingReqId(null); setFillingType('');
       await load();
     } catch (e: any) {
@@ -192,8 +196,19 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     } finally { setSubmitting(false); }
   };
 
+  const renvoyerInvite = async (inviteId: string) => {
+    setResendingId(inviteId); setMsg(null);
+    try {
+      await dossiersAPI.resendFicheInvite(dossierId, inviteId);
+      setMsg('Invitation renvoyée par e-mail.');
+      await load();
+    } catch (e: any) { setMsg(e?.response?.data?.message || 'Le renvoi a échoué.'); }
+    finally { setResendingId(null); }
+  };
+
   // Regroupe demandes de fiches (hors annulées) + pièces par personne : société/demandeur d'abord.
   const personLabel = (key: string) => (key === '__societe__' ? 'Société / demandeur' : `👤 ${key}`);
+  const inviteForPerson = (key: string) => invites.find((i) => (i.personne || '').trim() === key);
   const groupByPerson = (): Array<[string, { reqs: FRequest[]; pcs: Piece[] }]> => {
     const keyOf = (n?: string) => (n && n.trim() ? n.trim() : '__societe__');
     const map = new Map<string, { reqs: FRequest[]; pcs: Piece[] }>();
@@ -348,7 +363,24 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
           <div className="space-y-3">
             {entries.map(([key, g]) => (
               <div key={key} className="rounded-lg border border-teal-100 bg-white/50 p-3">
-                <p className="mb-2 text-sm font-bold text-teal-900">{personLabel(key)}</p>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-teal-900">{personLabel(key)}</p>
+                  {isAdmin && key !== '__societe__' && (() => {
+                    const inv = inviteForPerson(key);
+                    if (!inv || !inv.personneEmail) return null;
+                    return (
+                      <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        {inv.invitationEmailSentAt
+                          ? `✉️ Invité le ${new Date(inv.invitationEmailSentAt).toLocaleDateString('fr-FR')} (${inv.personneEmail})`
+                          : `E-mail : ${inv.personneEmail} (non encore invité)`}
+                        <button type="button" disabled={resendingId === inv._id} onClick={() => renvoyerInvite(inv._id)}
+                          className="rounded border border-teal-300 bg-teal-50 px-2 py-0.5 font-medium text-teal-800 hover:bg-teal-100 disabled:opacity-60">
+                          {resendingId === inv._id ? '…' : 'Renvoyer'}
+                        </button>
+                      </span>
+                    );
+                  })()}
+                </div>
                 <ul className="space-y-2">
                   {g.reqs.map((r) => renderRequestItem(r))}
                   {g.pcs.map((p) => renderPieceItem(p))}

@@ -38,7 +38,7 @@ module.exports = {
     },
     {
       id: 'repartition', titre: 'Actionnaires et répartition du capital',
-      note: 'Ajoutez une ligne par actionnaire : chacun recevra sa fiche d’identité à remplir et devra fournir sa pièce d’identité.',
+      note: 'Ajoutez une ligne par actionnaire : chacun recevra sa fiche d’identité à remplir et devra fournir sa pièce d’identité. Renseignez son e-mail : à la validation, un lien personnel lui sera envoyé automatiquement pour compléter ses documents.',
       repeatable: { itemLabel: 'Actionnaire', fields: [{ name: 'nom', label: 'Nom de l’actionnaire', type: 'text', required: true }, { name: 'pourcentage', label: 'Part (%)', type: 'percent', required: true }, { name: 'email', label: 'E-mail (pour l’inviter)', type: 'text', required: false, placeholder: 'email@exemple.com' }] },
     },
     {

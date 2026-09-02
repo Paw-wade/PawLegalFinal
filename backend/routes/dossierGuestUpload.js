@@ -752,12 +752,14 @@ router.post('/suivi/:token/fiche-requests/:reqId/remplir', async (req, res) => {
     } catch (e) { console.error('[suivi] génération checklist:', e.message || e); }
 
     // Inviter par e-mail chaque associé dont l'adresse est renseignée (best-effort).
+    let invitationsSent = 0;
     try {
       const { sendAssocieInvitations } = require('../fiches/associeInvitations');
       const cab = getCabinetContact();
-      await sendAssocieInvitations(dossier._id, schema, fiche.data, {
+      const inv = await sendAssocieInvitations(dossier._id, schema, fiche.data, {
         origin: req.body && req.body.origin, createdViaGuest: true, cabinetNom: cab && cab.nom,
       });
+      invitationsSent = (inv && inv.sent) || 0;
     } catch (e) { console.error('[suivi] invitations associés:', e.message || e); }
 
     // Notifier l'équipe (in-app + e-mail).
@@ -788,7 +790,7 @@ router.post('/suivi/:token/fiche-requests/:reqId/remplir', async (req, res) => {
       } catch (e) { console.error('[suivi] email fiche remplie:', e.message || e); }
     }
 
-    return res.status(201).json({ success: true, message: 'Fiche enregistrée. Merci.', fiche: { id: String(fiche._id), typeFiche: fiche.typeFiche, titre: fiche.titre } });
+    return res.status(201).json({ success: true, message: 'Fiche enregistrée. Merci.', invitationsSent, fiche: { id: String(fiche._id), typeFiche: fiche.typeFiche, titre: fiche.titre } });
   } catch (err) {
     console.error('[suivi] POST remplir fiche:', err?.message || err);
     return res.status(500).json({ success: false, message: 'Erreur serveur.' });

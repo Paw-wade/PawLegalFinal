@@ -304,7 +304,8 @@ export default function SuiviDossierPage() {
     try {
       const res = await dossiersAPI.remplirSuiviFiche(token, fillingFicheReqId, data);
       if (res.data?.success) {
-        flash('Fiche enregistrée. Le document a été généré.');
+        const n = res.data?.invitationsSent || 0;
+        flash('Fiche enregistrée. Le document a été généré.' + (n > 0 ? ` ${n} invitation${n > 1 ? 's' : ''} envoyée${n > 1 ? 's' : ''} par e-mail aux associés.` : ''));
         setFillingFicheReqId(null);
         setFillingFicheType('');
         await load();
