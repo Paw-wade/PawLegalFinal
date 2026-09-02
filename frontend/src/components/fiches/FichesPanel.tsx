@@ -192,6 +192,119 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     } finally { setSubmitting(false); }
   };
 
+  // Regroupe demandes de fiches (hors annulées) + pièces par personne : société/demandeur d'abord.
+  const personLabel = (key: string) => (key === '__societe__' ? 'Société / demandeur' : `👤 ${key}`);
+  const groupByPerson = (): Array<[string, { reqs: FRequest[]; pcs: Piece[] }]> => {
+    const keyOf = (n?: string) => (n && n.trim() ? n.trim() : '__societe__');
+    const map = new Map<string, { reqs: FRequest[]; pcs: Piece[] }>();
+    const ensure = (k: string) => { if (!map.has(k)) map.set(k, { reqs: [], pcs: [] }); return map.get(k)!; };
+    requests.forEach((r) => { if (r.statut !== 'annulee') ensure(keyOf(r.pourPersonne)).reqs.push(r); });
+    pieces.forEach((p) => ensure(keyOf(p.pourPersonne)).pcs.push(p));
+    const entries = Array.from(map.entries());
+    entries.sort(([a], [b]) => (a === '__societe__' ? -1 : b === '__societe__' ? 1 : a.localeCompare(b)));
+    return entries;
+  };
+
+  // Une demande de fiche (Remplir côté demandeur, Valider/Refuser + PDF côté admin, invitation).
+  const renderRequestItem = (r: FRequest) => {
+    const b = statutBadge(r.statut);
+    const canFill = !isAdmin && r.statut === 'a_remplir';
+    return (
+      <li key={`r_${r._id}`} className="rounded-lg border border-teal-100 bg-white p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <span className="text-sm font-medium text-foreground">📝 {r.titre}</span>
+            <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
+            {r.message && <p className="mt-0.5 text-xs text-muted-foreground">{r.message}</p>}
+          </div>
+          <div className="flex flex-none gap-2">
+            {canFill && (
+              <button type="button" onClick={() => { setFillingReqId(r._id); setFillingType(r.typeFiche); setMsg(null); }}
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90">Remplir</button>
+            )}
+            {r.statut === 'remplie' && r.fiche && (
+              <button type="button" onClick={() => downloadPdf(String(r.fiche), r.typeFiche)}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">PDF</button>
+            )}
+          </div>
+        </div>
+
+        {/* Validation (fiche remplie) */}
+        {r.statut === 'remplie' && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadge(r.validationStatus).cls}`}>{valBadge(r.validationStatus).label}</span>
+            {r.validationStatus === 'refuse' && r.validationMotif && <span className="text-[11px] text-red-700">Motif : {r.validationMotif}</span>}
+            {isAdmin && r.validationStatus !== 'valide' && (
+              <button type="button" onClick={() => validerFiche(r._id, 'valide')} className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100">✓ Valider</button>
+            )}
+            {isAdmin && r.validationStatus !== 'refuse' && (
+              <button type="button" onClick={() => validerFiche(r._id, 'refuse')} className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100">✕ Refuser</button>
+            )}
+          </div>
+        )}
+
+        {/* Inviter une autre personne à remplir cette fiche (état civil) — côté demandeur */}
+        {!isAdmin && r.typeFiche === 'etat_civil' && r.statut !== 'remplie' && (
+          <div className="mt-2">
+            {inviteUrls[r._id] ? (
+              <div className="rounded-md border border-teal-200 bg-teal-50 p-2">
+                <p className="mb-1 text-[11px] text-teal-900">Lien à envoyer à cette personne (accès à cette fiche uniquement) :</p>
+                <div className="flex items-center gap-2">
+                  <input readOnly value={inviteUrls[r._id]} className="w-full rounded border border-teal-200 bg-white px-2 py-1 text-[11px]" onFocus={(e) => e.currentTarget.select()} />
+                  <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrls[r._id])} className="rounded bg-teal-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-700">Copier</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" onClick={() => inviter(r._id, r.pourPersonne || r.titre)} disabled={invitingId === r._id}
+                className="text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
+                {invitingId === r._id ? '…' : '🔗 Inviter cette personne à remplir'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Formulaire de remplissage inline (client) */}
+        {canFill && fillingReqId === r._id && (
+          <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
+            <FicheForm type={fillingType} submitting={submitting} onSubmit={submitFill} onCancel={() => setFillingReqId(null)} />
+          </div>
+        )}
+      </li>
+    );
+  };
+
+  // Une pièce à fournir (dépôt côté demandeur, Valider/Refuser côté admin).
+  const renderPieceItem = (p: Piece) => (
+    <li key={`p_${p._id}`} className="rounded-lg border border-teal-100 bg-white p-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <span className="text-sm text-foreground">📎 {p.libelle}</span>
+          <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.statut === 'fourni' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+            {p.statut === 'fourni' ? '✓ Fourni' : 'À fournir'}
+          </span>
+          {p.note && <p className="text-[11px] text-muted-foreground">{p.note}</p>}
+        </div>
+        {!isAdmin && p.statut !== 'fourni' && (
+          <input ref={(el) => { pieceInputs.current[p._id] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
+            disabled={uploadingPiece === p._id} onChange={(e) => uploadPiece(p._id, e.target.files?.[0])}
+            className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
+        )}
+      </div>
+      {p.statut === 'fourni' && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadge(p.validationStatus).cls}`}>{valBadge(p.validationStatus).label}</span>
+          {p.validationStatus === 'refuse' && p.validationMotif && <span className="text-[11px] text-red-700">Motif : {p.validationMotif}</span>}
+          {isAdmin && p.validationStatus !== 'valide' && (
+            <button type="button" onClick={() => validerPieceAdmin(p._id, 'valide')} className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100">✓ Valider</button>
+          )}
+          {isAdmin && p.validationStatus !== 'refuse' && (
+            <button type="button" onClick={() => validerPieceAdmin(p._id, 'refuse')} className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100">✕ Refuser</button>
+          )}
+        </div>
+      )}
+    </li>
+  );
+
   return (
     <div className="min-w-0 rounded-xl border border-teal-200 bg-teal-50/40 p-4 sm:p-5 shadow-sm">
       <h3 className="mb-1 text-sm font-bold uppercase tracking-wide text-teal-900">Fiches de constitution</h3>
@@ -227,128 +340,36 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
         </div>
       )}
 
-      {/* Liste des demandes */}
-      {requests.length > 0 ? (
-        <ul className="space-y-2">
-          {requests.map((r) => {
-            const b = statutBadge(r.statut);
-            const canFill = !isAdmin && r.statut === 'a_remplir';
-            return (
-              <li key={r._id} className="rounded-lg border border-teal-100 bg-white p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <span className="text-sm font-medium text-foreground">{r.titre}</span>
-                    <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
-                    {r.message && <p className="mt-0.5 text-xs text-muted-foreground">{r.message}</p>}
-                  </div>
-                  <div className="flex flex-none gap-2">
-                    {canFill && (
-                      <button type="button" onClick={() => { setFillingReqId(r._id); setFillingType(r.typeFiche); setMsg(null); }}
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90">Remplir</button>
-                    )}
-                    {r.statut === 'remplie' && r.fiche && (
-                      <button type="button" onClick={() => downloadPdf(String(r.fiche), r.typeFiche)}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">PDF</button>
-                    )}
-                  </div>
-                </div>
+      {/* Fiches à remplir + pièces à joindre, regroupées par personne */}
+      {(() => {
+        const entries = groupByPerson();
+        if (entries.length === 0) return <p className="text-xs text-muted-foreground">Aucune fiche ni pièce demandée pour l’instant.</p>;
+        return (
+          <div className="space-y-3">
+            {entries.map(([key, g]) => (
+              <div key={key} className="rounded-lg border border-teal-100 bg-white/50 p-3">
+                <p className="mb-2 text-sm font-bold text-teal-900">{personLabel(key)}</p>
+                <ul className="space-y-2">
+                  {g.reqs.map((r) => renderRequestItem(r))}
+                  {g.pcs.map((p) => renderPieceItem(p))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
-                {/* Validation (fiche remplie) */}
-                {r.statut === 'remplie' && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadge(r.validationStatus).cls}`}>{valBadge(r.validationStatus).label}</span>
-                    {r.validationStatus === 'refuse' && r.validationMotif && <span className="text-[11px] text-red-700">Motif : {r.validationMotif}</span>}
-                    {isAdmin && r.validationStatus !== 'valide' && (
-                      <button type="button" onClick={() => validerFiche(r._id, 'valide')} className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100">✓ Valider</button>
-                    )}
-                    {isAdmin && r.validationStatus !== 'refuse' && (
-                      <button type="button" onClick={() => validerFiche(r._id, 'refuse')} className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100">✕ Refuser</button>
-                    )}
-                  </div>
-                )}
-
-                {/* Inviter une autre personne à remplir cette fiche (état civil) */}
-                {!isAdmin && r.typeFiche === 'etat_civil' && r.statut !== 'remplie' && (
-                  <div className="mt-2">
-                    {inviteUrls[r._id] ? (
-                      <div className="rounded-md border border-teal-200 bg-teal-50 p-2">
-                        <p className="mb-1 text-[11px] text-teal-900">Lien à envoyer à cette personne (accès à cette fiche uniquement) :</p>
-                        <div className="flex items-center gap-2">
-                          <input readOnly value={inviteUrls[r._id]} className="w-full rounded border border-teal-200 bg-white px-2 py-1 text-[11px]" onFocus={(e) => e.currentTarget.select()} />
-                          <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrls[r._id])} className="rounded bg-teal-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-700">Copier</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button type="button" onClick={() => inviter(r._id, r.pourPersonne || r.titre)} disabled={invitingId === r._id}
-                        className="text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
-                        {invitingId === r._id ? '…' : '🔗 Inviter cette personne à remplir'}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Formulaire de remplissage inline (client) */}
-                {canFill && fillingReqId === r._id && (
-                  <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
-                    <FicheForm type={fillingType} submitting={submitting} onSubmit={submitFill} onCancel={() => setFillingReqId(null)} />
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="text-xs text-muted-foreground">Aucune fiche demandée pour l’instant.</p>
-      )}
-
-      {/* Ajouter une personne (état civil) — côté demandeur */}
+      {/* Ajouter une fiche d’identification (état civil) — côté demandeur */}
       {!isAdmin && requests.length > 0 && (
         <button type="button" onClick={addPerson} disabled={busy}
-          className="mt-2 text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
+          className="mt-3 block text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
           + Ajouter une fiche d’identification (autre associé / gérant)
         </button>
       )}
 
-      {/* Documents à fournir */}
+      {/* Ajouter des pièces à fournir */}
       <div className="mt-4 border-t border-teal-100 pt-3">
-        <p className="mb-2 text-xs font-semibold text-teal-900">Documents à fournir</p>
-        {pieces.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Aucun document requis pour l’instant.</p>
-        ) : (
-          <ul className="space-y-2">
-            {pieces.map((p) => (
-              <li key={p._id} className="rounded-lg border border-teal-100 bg-white p-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <span className="text-sm text-foreground">{p.libelle}</span>
-                    <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.statut === 'fourni' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
-                      {p.statut === 'fourni' ? '✓ Fourni' : 'À fournir'}
-                    </span>
-                    {p.note && <p className="text-[11px] text-muted-foreground">{p.note}</p>}
-                  </div>
-                  {p.statut !== 'fourni' && (
-                    <input ref={(el) => { pieceInputs.current[p._id] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
-                      disabled={uploadingPiece === p._id} onChange={(e) => uploadPiece(p._id, e.target.files?.[0])}
-                      className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
-                  )}
-                </div>
-                {p.statut === 'fourni' && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadge(p.validationStatus).cls}`}>{valBadge(p.validationStatus).label}</span>
-                    {p.validationStatus === 'refuse' && p.validationMotif && <span className="text-[11px] text-red-700">Motif : {p.validationMotif}</span>}
-                    {isAdmin && p.validationStatus !== 'valide' && (
-                      <button type="button" onClick={() => validerPieceAdmin(p._id, 'valide')} className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100">✓ Valider</button>
-                    )}
-                    {isAdmin && p.validationStatus !== 'refuse' && (
-                      <button type="button" onClick={() => validerPieceAdmin(p._id, 'refuse')} className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100">✕ Refuser</button>
-                    )}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        <button type="button" onClick={() => setShowCatalog((v) => !v)} className="mt-2 text-xs font-medium text-teal-700 hover:underline">
+        <button type="button" onClick={() => setShowCatalog((v) => !v)} className="text-xs font-medium text-teal-700 hover:underline">
           + Ajouter des pièces à fournir
         </button>
         {showCatalog && (

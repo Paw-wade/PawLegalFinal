@@ -6,6 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
+import { FichesPanel } from '@/components/fiches/FichesPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, userAPI } from '@/lib/api';
 import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
@@ -1667,6 +1668,11 @@ export default function AdminDossierDetailPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Fiches & pièces de constitution — regroupées par associé (demandé / fourni / validé) */}
+        <div className="mb-6">
+          <FichesPanel dossierId={dossier._id || (dossier as any).id} categorie={dossier.categorie} variant="admin" />
         </div>
 
         {/* Documents en préparation (brouillons collaboratifs internes) */}

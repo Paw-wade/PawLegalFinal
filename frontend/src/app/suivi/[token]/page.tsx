@@ -425,19 +425,26 @@ export default function SuiviDossierPage() {
     return { label: 'En cours de vérification', cls: 'bg-amber-100 text-amber-800' };
   };
 
-  // Récapitulatif des documents demandés, groupés par personne (demandeur + associés).
-  // Rendu à la fois dans la barre latérale fixe (grand écran) et en ligne (petit écran).
-  const renderRecapInner = () => {
-    if (!data) return null;
+  // Regroupe fiches (hors annulées) + pièces par personne : société/demandeur d'abord,
+  // puis les personnes par ordre alphabétique. Partagé par le récap et les listes actionnables.
+  const groupRequestsByPerson = (): Array<[string, { fiches: NonNullable<SuiviData['ficheRequests']>; pieces: NonNullable<SuiviData['pieceRequests']> }]> => {
+    if (!data) return [];
     const keyOf = (n?: string) => (n && n.trim() ? n.trim() : '__societe__');
     const groups = new Map<string, { fiches: NonNullable<SuiviData['ficheRequests']>; pieces: NonNullable<SuiviData['pieceRequests']> }>();
     const ensure = (k: string) => { if (!groups.has(k)) groups.set(k, { fiches: [], pieces: [] }); return groups.get(k)!; };
     (data.ficheRequests || []).forEach((r) => { if (r.statut !== 'annulee') ensure(keyOf(r.pourPersonne)).fiches.push(r); });
     (data.pieceRequests || []).forEach((p) => ensure(keyOf(p.pourPersonne)).pieces.push(p));
     const entries = Array.from(groups.entries());
-    if (entries.length === 0) return null;
-    // Le groupe société/demandeur d'abord, puis les personnes par ordre alphabétique.
     entries.sort(([a], [b]) => (a === '__societe__' ? -1 : b === '__societe__' ? 1 : a.localeCompare(b)));
+    return entries;
+  };
+  const personLabel = (key: string) => (key === '__societe__' ? 'Société / demandeur (vous)' : `👤 ${key}`);
+
+  // Récapitulatif (lecture seule) des documents demandés, groupés par personne.
+  // Rendu à la fois dans la barre latérale fixe (grand écran) et en ligne (petit écran).
+  const renderRecapInner = () => {
+    const entries = groupRequestsByPerson();
+    if (entries.length === 0) return null;
     return (
       <div className="space-y-3">
         {entries.map(([key, g]) => (
@@ -470,6 +477,88 @@ export default function SuiviDossierPage() {
       </div>
     );
   };
+
+  // Une fiche à remplir (bouton Remplir / PDF / validation / invitation). Le nom est porté par le groupe.
+  const renderFicheItem = (r: NonNullable<SuiviData['ficheRequests']>[number]) => {
+    const b = ficheBadge(r.statut);
+    const canFill = r.statut === 'a_remplir';
+    return (
+      <li key={`f_${r.id}`} className="rounded-lg border border-teal-100 bg-white p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <span className="text-sm font-medium text-foreground">📝 {r.titre}</span>
+            <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
+            {r.message && <p className="mt-0.5 text-xs text-muted-foreground">{r.message}</p>}
+          </div>
+          <div className="flex flex-none gap-2">
+            {canFill && (
+              <button type="button" onClick={() => { setFillingFicheReqId(r.id); setFillingFicheType(r.typeFiche); flash(null, null); }}
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90">Remplir</button>
+            )}
+            {r.statut === 'remplie' && r.ficheId && (
+              <button type="button" onClick={() => handleDownloadFiche(r.ficheId as string, r.typeFiche)}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">PDF</button>
+            )}
+          </div>
+        </div>
+        {r.statut === 'remplie' && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadgeSuivi(r.validationStatus).cls}`}>{valBadgeSuivi(r.validationStatus).label}</span>
+            {r.validationStatus === 'refuse' && r.validationMotif && <span className="text-[11px] text-red-700">Motif : {r.validationMotif}. Merci de refaire la fiche.</span>}
+          </div>
+        )}
+        {canFill && fillingFicheReqId === r.id && (
+          <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
+            <FicheForm type={fillingFicheType} submitting={submittingFiche} onSubmit={handleFillFiche} onCancel={() => setFillingFicheReqId(null)} />
+          </div>
+        )}
+        {r.typeFiche === 'etat_civil' && r.statut !== 'remplie' && (
+          <div className="mt-2">
+            {inviteUrls[r.id] ? (
+              <div className="rounded-md border border-teal-200 bg-teal-50 p-2">
+                <p className="mb-1 text-[11px] text-teal-900">Lien à envoyer à cette personne (accès à cette fiche uniquement) :</p>
+                <div className="flex items-center gap-2">
+                  <input readOnly value={inviteUrls[r.id]} onFocus={(e) => e.currentTarget.select()} className="w-full rounded border border-teal-200 bg-white px-2 py-1 text-[11px]" />
+                  <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrls[r.id])} className="rounded bg-teal-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-700">Copier</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" onClick={() => inviterSuivi(r.id, r.pourPersonne || r.titre)} disabled={invitingId === r.id}
+                className="text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
+                {invitingId === r.id ? '…' : '🔗 Inviter cette personne à remplir'}
+              </button>
+            )}
+          </div>
+        )}
+      </li>
+    );
+  };
+
+  // Une pièce à fournir (dépôt de fichier / validation). Le nom est porté par le groupe.
+  const renderPieceItem = (p: NonNullable<SuiviData['pieceRequests']>[number]) => (
+    <li key={`p_${p.id}`} className="rounded-lg border border-teal-100 bg-white p-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <span className="text-sm text-foreground">📎 {p.libelle}</span>
+          <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.statut === 'fourni' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+            {p.statut === 'fourni' ? '✓ Fourni' : 'À fournir'}
+          </span>
+          {p.note && <p className="text-[11px] text-muted-foreground">{p.note}</p>}
+        </div>
+        {p.statut !== 'fourni' && (
+          <input ref={(el) => { fileInputs.current[`piece_${p.id}`] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
+            disabled={uploadingPieceId === p.id} onChange={(e) => handleUploadPiece(p.id, e.target.files?.[0])}
+            className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
+        )}
+      </div>
+      {p.statut === 'fourni' && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadgeSuivi(p.validationStatus).cls}`}>{valBadgeSuivi(p.validationStatus).label}</span>
+          {p.validationStatus === 'refuse' && p.validationMotif && <span className="text-[11px] text-red-700">Motif : {p.validationMotif}. Merci de redéposer.</span>}
+        </div>
+      )}
+    </li>
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-secondary/10">
@@ -633,120 +722,49 @@ export default function SuiviDossierPage() {
                   </div>
                 )}
 
-                <ul className="space-y-2">
-                  {(data.ficheRequests || []).map((r) => {
-                    const b = ficheBadge(r.statut);
-                    const canFill = r.statut === 'a_remplir';
-                    return (
-                      <li key={r.id} className="rounded-lg border border-teal-100 bg-white p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <span className="text-sm font-medium text-foreground">{r.titre}</span>
-                            {r.pourPersonne && <span className="ml-1.5 rounded bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium text-teal-800">👤 {r.pourPersonne}</span>}
-                            <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
-                            {r.message && <p className="mt-0.5 text-xs text-muted-foreground">{r.message}</p>}
-                          </div>
-                          <div className="flex flex-none gap-2">
-                            {canFill && (
-                              <button type="button" onClick={() => { setFillingFicheReqId(r.id); setFillingFicheType(r.typeFiche); flash(null, null); }}
-                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90">Remplir</button>
-                            )}
-                            {r.statut === 'remplie' && r.ficheId && (
-                              <button type="button" onClick={() => handleDownloadFiche(r.ficheId as string, r.typeFiche)}
-                                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">PDF</button>
-                            )}
-                          </div>
+                {/* Fiches à remplir + pièces à joindre, regroupées par personne */}
+                {(() => {
+                  const entries = groupRequestsByPerson();
+                  if (entries.length === 0) return <p className="text-xs text-muted-foreground">Aucune fiche ni pièce demandée pour l’instant.</p>;
+                  return (
+                    <div className="space-y-3">
+                      {entries.map(([key, g]) => (
+                        <div key={key} className="rounded-lg border border-teal-100 bg-white/50 p-3">
+                          <p className="mb-2 text-sm font-bold text-teal-900">{personLabel(key)}</p>
+                          <ul className="space-y-2">
+                            {g.fiches.map((r) => renderFicheItem(r))}
+                            {g.pieces.map((p) => renderPieceItem(p))}
+                          </ul>
                         </div>
-                        {r.statut === 'remplie' && (
-                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadgeSuivi(r.validationStatus).cls}`}>{valBadgeSuivi(r.validationStatus).label}</span>
-                            {r.validationStatus === 'refuse' && r.validationMotif && <span className="text-[11px] text-red-700">Motif : {r.validationMotif}. Merci de refaire la fiche.</span>}
-                          </div>
-                        )}
-                        {canFill && fillingFicheReqId === r.id && (
-                          <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
-                            <FicheForm type={fillingFicheType} submitting={submittingFiche} onSubmit={handleFillFiche} onCancel={() => setFillingFicheReqId(null)} />
-                          </div>
-                        )}
-                        {r.typeFiche === 'etat_civil' && r.statut !== 'remplie' && (
-                          <div className="mt-2">
-                            {inviteUrls[r.id] ? (
-                              <div className="rounded-md border border-teal-200 bg-teal-50 p-2">
-                                <p className="mb-1 text-[11px] text-teal-900">Lien à envoyer à cette personne (accès à cette fiche uniquement) :</p>
-                                <div className="flex items-center gap-2">
-                                  <input readOnly value={inviteUrls[r.id]} onFocus={(e) => e.currentTarget.select()} className="w-full rounded border border-teal-200 bg-white px-2 py-1 text-[11px]" />
-                                  <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrls[r.id])} className="rounded bg-teal-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-700">Copier</button>
-                                </div>
-                              </div>
-                            ) : (
-                              <button type="button" onClick={() => inviterSuivi(r.id, r.pourPersonne || r.titre)} disabled={invitingId === r.id}
-                                className="text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
-                                {invitingId === r.id ? '…' : '🔗 Inviter cette personne à remplir'}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-                {(data.ficheRequests && data.ficheRequests.length > 0) && (
-                  addingPerson ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <input type="text" autoFocus value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddPersonFiche(); }}
-                        placeholder="Nom de l’associé / gérant"
-                        className="h-9 min-w-[200px] flex-1 rounded-md border border-gray-300 px-3 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500" />
-                      <button type="button" onClick={handleAddPersonFiche} disabled={addBusy || !newPersonName.trim()}
-                        className="inline-flex h-9 items-center rounded-md bg-teal-600 px-3 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-60">
-                        {addBusy ? '…' : 'Ajouter'}
-                      </button>
-                      <button type="button" onClick={() => { setAddingPerson(false); setNewPersonName(''); }} className="text-xs text-muted-foreground hover:underline">Annuler</button>
-                    </div>
-                  ) : (
-                    <button type="button" onClick={() => setAddingPerson(true)}
-                      className="mt-2 text-xs font-medium text-teal-700 hover:underline">
-                      + Ajouter une fiche d’identification (autre associé / gérant)
-                    </button>
-                  )
-                )}
-
-                {/* Documents à fournir */}
-                <div className="mt-4 border-t border-teal-100 pt-3">
-                  <p className="mb-2 text-xs font-semibold text-teal-900">Documents à fournir</p>
-                  {(data.pieceRequests && data.pieceRequests.length > 0) ? (
-                    <ul className="space-y-2">
-                      {data.pieceRequests.map((p) => (
-                        <li key={p.id} className="rounded-lg border border-teal-100 bg-white p-2.5">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <span className="text-sm text-foreground">{p.libelle}</span>
-                              {p.pourPersonne && <span className="ml-1.5 rounded bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium text-teal-800">👤 {p.pourPersonne}</span>}
-                              <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.statut === 'fourni' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
-                                {p.statut === 'fourni' ? '✓ Fourni' : 'À fournir'}
-                              </span>
-                              {p.note && <p className="text-[11px] text-muted-foreground">{p.note}</p>}
-                            </div>
-                            {p.statut !== 'fourni' && (
-                              <input ref={(el) => { fileInputs.current[`piece_${p.id}`] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
-                                disabled={uploadingPieceId === p.id} onChange={(e) => handleUploadPiece(p.id, e.target.files?.[0])}
-                                className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
-                            )}
-                          </div>
-                          {p.statut === 'fourni' && (
-                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadgeSuivi(p.validationStatus).cls}`}>{valBadgeSuivi(p.validationStatus).label}</span>
-                              {p.validationStatus === 'refuse' && p.validationMotif && <span className="text-[11px] text-red-700">Motif : {p.validationMotif}. Merci de redéposer.</span>}
-                            </div>
-                          )}
-                        </li>
                       ))}
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Aucun document requis pour l’instant.</p>
+                    </div>
+                  );
+                })()}
+
+                {/* Ajouts : nouvelle fiche d'identification / nouvelle pièce */}
+                <div className="mt-3 space-y-2">
+                  {(data.ficheRequests && data.ficheRequests.length > 0) && (
+                    addingPerson ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input type="text" autoFocus value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleAddPersonFiche(); }}
+                          placeholder="Nom de l’associé / gérant"
+                          className="h-9 min-w-[200px] flex-1 rounded-md border border-gray-300 px-3 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                        <button type="button" onClick={handleAddPersonFiche} disabled={addBusy || !newPersonName.trim()}
+                          className="inline-flex h-9 items-center rounded-md bg-teal-600 px-3 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-60">
+                          {addBusy ? '…' : 'Ajouter'}
+                        </button>
+                        <button type="button" onClick={() => { setAddingPerson(false); setNewPersonName(''); }} className="text-xs text-muted-foreground hover:underline">Annuler</button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => setAddingPerson(true)}
+                        className="block text-xs font-medium text-teal-700 hover:underline">
+                        + Ajouter une fiche d’identification (autre associé / gérant)
+                      </button>
+                    )
                   )}
                   {addingPiece ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input type="text" autoFocus value={newPieceLibelle} onChange={(e) => setNewPieceLibelle(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleAddPieceSuivi(); }}
                         placeholder="Intitulé de la pièce (ex. Statuts + RC + PV…)"
@@ -758,7 +776,7 @@ export default function SuiviDossierPage() {
                       <button type="button" onClick={() => { setAddingPiece(false); setNewPieceLibelle(''); }} className="text-xs text-muted-foreground hover:underline">Annuler</button>
                     </div>
                   ) : (
-                    <button type="button" onClick={() => setAddingPiece(true)} className="mt-2 text-xs font-medium text-teal-700 hover:underline">
+                    <button type="button" onClick={() => setAddingPiece(true)} className="block text-xs font-medium text-teal-700 hover:underline">
                       + Ajouter une pièce (associé personne morale, procuration…)
                     </button>
                   )}
