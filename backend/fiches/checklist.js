@@ -41,7 +41,8 @@ async function ensureFicheRequest(dossierId, typeFiche, pourPersonne, requestedB
  * Génère la checklist de constitution après remplissage d'une fiche de société :
  *  - une fiche d'état civil par associé ;
  *  - une pièce d'identité par associé et par gérant ;
- *  - un casier judiciaire par gérant + une déclaration sur l'honneur par gérant (l'un suffit).
+ *  - un casier judiciaire par gérant + une déclaration sur l'honneur par gérant (l'un suffit) ;
+ *  - une procuration par associé (à remplir s'il ne peut pas être présent à la signature).
  */
 async function ensureConstitutionChecklist(dossierId, schema, data, requestedBy) {
   if (!schema) return;
@@ -67,16 +68,18 @@ async function ensureConstitutionChecklist(dossierId, schema, data, requestedBy)
     await ensureFicheRequest(dossierId, 'declaration_honneur', nom, requestedBy);
   }
 
-  // Procuration : pour tout associé qui ne serait pas présent le jour de la signature.
+  // Procuration : une par associé (à remplir s'il ne peut pas être présent le jour de la signature).
   const proc = getSchema('procuration');
   if (proc) {
-    const existsProc = await FicheRequest.findOne({ dossier: dossierId, typeFiche: 'procuration', statut: { $ne: 'annulee' } }).lean();
-    if (!existsProc) {
-      await FicheRequest.create({
-        dossier: dossierId, typeFiche: 'procuration', titre: proc.titre,
-        message: 'À remplir uniquement si un associé ne peut pas être présent le jour de la signature (procuration donnée à un mandataire). Ajoutez-en une par associé absent.',
-        requestedBy: requestedBy || null,
-      });
+    for (const nom of associes) {
+      const existsProc = await FicheRequest.findOne({ dossier: dossierId, typeFiche: 'procuration', pourPersonne: nom, statut: { $ne: 'annulee' } }).lean();
+      if (!existsProc) {
+        await FicheRequest.create({
+          dossier: dossierId, typeFiche: 'procuration', pourPersonne: nom, titre: `${proc.titre} — ${nom}`,
+          message: 'À remplir uniquement si cet associé ne peut pas être présent le jour de la signature (procuration donnée à un mandataire).',
+          requestedBy: requestedBy || null,
+        });
+      }
     }
   }
 }
