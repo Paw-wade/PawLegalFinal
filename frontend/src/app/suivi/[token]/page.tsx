@@ -116,6 +116,11 @@ export default function SuiviDossierPage() {
   const [inviteUrls, setInviteUrls] = useState<Record<string, string>>({});
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [uploadingPieceId, setUploadingPieceId] = useState<string | null>(null);
+  const [addingPerson, setAddingPerson] = useState(false);
+  const [newPersonName, setNewPersonName] = useState('');
+  const [addingPiece, setAddingPiece] = useState(false);
+  const [newPieceLibelle, setNewPieceLibelle] = useState('');
+  const [addBusy, setAddBusy] = useState(false);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const load = useCallback(async () => {
@@ -328,14 +333,15 @@ export default function SuiviDossierPage() {
   };
 
   const handleAddPieceSuivi = async () => {
-    const libelle = window.prompt('Intitulé de la pièce à fournir (ex. Statuts + RC + PV de l’associé personne morale ; Procuration de l’associé absent) :', '');
-    if (libelle === null || !libelle.trim()) return;
-    flash(null, null);
+    const libelle = newPieceLibelle.trim();
+    if (!libelle) return;
+    setAddBusy(true); flash(null, null);
     try {
-      const res = await dossiersAPI.addSuiviPiece(token, libelle.trim());
-      if (res.data?.success) { flash('Pièce ajoutée.'); await load(); }
+      const res = await dossiersAPI.addSuiviPiece(token, libelle);
+      if (res.data?.success) { flash('Pièce ajoutée.'); setNewPieceLibelle(''); setAddingPiece(false); await load(); }
       else flash(null, "L'ajout a échoué.");
     } catch (e: any) { flash(null, e?.response?.data?.message || "L'ajout a échoué."); }
+    finally { setAddBusy(false); }
   };
 
   const inviterSuivi = async (reqId: string, personne?: string) => {
@@ -353,16 +359,16 @@ export default function SuiviDossierPage() {
   };
 
   const handleAddPersonFiche = async () => {
-    const nom = window.prompt('Nom de la personne (associé / gérant) dont il faut la fiche d’identification :', '');
-    if (nom === null) return;
-    flash(null, null);
+    const nom = newPersonName.trim();
+    if (!nom) return;
+    setAddBusy(true); flash(null, null);
     try {
-      const res = await dossiersAPI.addSuiviEtatCivilRequest(token, nom.trim());
-      if (res.data?.success) { flash('Fiche d’identification ajoutée.'); await load(); }
+      const res = await dossiersAPI.addSuiviEtatCivilRequest(token, nom);
+      if (res.data?.success) { flash('Fiche d’identification ajoutée.'); setNewPersonName(''); setAddingPerson(false); await load(); }
       else flash(null, "L'ajout a échoué.");
     } catch (e: any) {
       flash(null, e?.response?.data?.message || "L'ajout a échoué.");
-    }
+    } finally { setAddBusy(false); }
   };
 
   const handleDownloadFiche = async (ficheId: string, typeFiche: string) => {
@@ -622,10 +628,24 @@ export default function SuiviDossierPage() {
                   })}
                 </ul>
                 {(data.ficheRequests && data.ficheRequests.length > 0) && (
-                  <button type="button" onClick={handleAddPersonFiche}
-                    className="mt-2 text-xs font-medium text-teal-700 hover:underline">
-                    + Ajouter une fiche d’identification (autre associé / gérant)
-                  </button>
+                  addingPerson ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <input type="text" autoFocus value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddPersonFiche(); }}
+                        placeholder="Nom de l’associé / gérant"
+                        className="h-9 min-w-[200px] flex-1 rounded-md border border-gray-300 px-3 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                      <button type="button" onClick={handleAddPersonFiche} disabled={addBusy || !newPersonName.trim()}
+                        className="inline-flex h-9 items-center rounded-md bg-teal-600 px-3 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-60">
+                        {addBusy ? '…' : 'Ajouter'}
+                      </button>
+                      <button type="button" onClick={() => { setAddingPerson(false); setNewPersonName(''); }} className="text-xs text-muted-foreground hover:underline">Annuler</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setAddingPerson(true)}
+                      className="mt-2 text-xs font-medium text-teal-700 hover:underline">
+                      + Ajouter une fiche d’identification (autre associé / gérant)
+                    </button>
+                  )
                 )}
 
                 {/* Documents à fournir */}
@@ -661,9 +681,23 @@ export default function SuiviDossierPage() {
                   ) : (
                     <p className="text-xs text-muted-foreground">Aucun document requis pour l’instant.</p>
                   )}
-                  <button type="button" onClick={handleAddPieceSuivi} className="mt-2 text-xs font-medium text-teal-700 hover:underline">
-                    + Ajouter une pièce (associé personne morale, procuration…)
-                  </button>
+                  {addingPiece ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <input type="text" autoFocus value={newPieceLibelle} onChange={(e) => setNewPieceLibelle(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddPieceSuivi(); }}
+                        placeholder="Intitulé de la pièce (ex. Statuts + RC + PV…)"
+                        className="h-9 min-w-[220px] flex-1 rounded-md border border-gray-300 px-3 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                      <button type="button" onClick={handleAddPieceSuivi} disabled={addBusy || !newPieceLibelle.trim()}
+                        className="inline-flex h-9 items-center rounded-md bg-teal-600 px-3 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-60">
+                        {addBusy ? '…' : 'Ajouter'}
+                      </button>
+                      <button type="button" onClick={() => { setAddingPiece(false); setNewPieceLibelle(''); }} className="text-xs text-muted-foreground hover:underline">Annuler</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setAddingPiece(true)} className="mt-2 text-xs font-medium text-teal-700 hover:underline">
+                      + Ajouter une pièce (associé personne morale, procuration…)
+                    </button>
+                  )}
                 </div>
                 {data.fiches && data.fiches.length > 0 && (
                   <div className="mt-3 border-t border-teal-100 pt-3">
