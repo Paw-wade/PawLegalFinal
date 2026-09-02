@@ -29,7 +29,8 @@ module.exports = {
       ],
     },
     {
-      id: 'souscription', titre: 'Souscription du capital',
+      id: 'souscription', titre: 'Souscription du capital (actionnaires)',
+      note: 'Ajoutez une ligne par actionnaire : chacun recevra sa fiche d’identité à remplir et devra fournir sa pièce d’identité.',
       repeatable: { itemLabel: 'Actionnaire', fields: [{ name: 'nom', label: 'Nom de l’actionnaire', type: 'text', required: true }, { name: 'montant', label: 'Montant souscrit', type: 'montant', required: true }] },
     },
     {

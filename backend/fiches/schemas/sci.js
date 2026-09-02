@@ -31,7 +31,8 @@ module.exports = {
       ],
     },
     {
-      id: 'repartition', titre: 'Répartition du capital',
+      id: 'repartition', titre: 'Associés et répartition du capital',
+      note: 'Ajoutez une ligne par associé : chaque associé listé recevra sa fiche d’identité à remplir et devra fournir sa pièce d’identité.',
       repeatable: { itemLabel: 'Associé', fields: [{ name: 'nom', label: 'Nom de l’associé', type: 'text', required: true }, { name: 'pourcentage', label: 'Part (%)', type: 'percent', required: true }] },
     },
     staticSection('responsabilite', 'Responsabilité des associés', RESP),

@@ -55,7 +55,8 @@ module.exports = {
     },
     {
       id: 'repartition',
-      titre: 'Répartition du capital',
+      titre: 'Associés et répartition du capital',
+      note: 'Ajoutez une ligne par associé : chaque associé listé recevra sa fiche d’identité à remplir et devra fournir sa pièce d’identité.',
       repeatable: {
         itemLabel: 'Associé',
         fields: [
