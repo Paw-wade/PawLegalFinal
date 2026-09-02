@@ -33,7 +33,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   const [uploadingPiece, setUploadingPiece] = useState<string | null>(null);
   const pieceInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const [types, setTypes] = useState<Array<{ type: string; titre: string }>>([]);
-  const [selType, setSelType] = useState('');
+  const [selTypes, setSelTypes] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [fillingReqId, setFillingReqId] = useState<string | null>(null);
@@ -62,19 +62,23 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   useEffect(() => {
     if (isAdmin && categorie === 'constitution_societe') {
       dossiersAPI.getFicheTypes().then((r) => {
-        if (r.data?.success) { setTypes(r.data.types || []); setSelType(r.data.types?.[0]?.type || ''); }
+        if (r.data?.success) { setTypes(r.data.types || []); }
       }).catch(() => {});
     }
   }, [isAdmin, categorie]);
 
   if (categorie !== 'constitution_societe') return null;
 
+  const toggleType = (t: string) =>
+    setSelTypes((arr) => (arr.includes(t) ? arr.filter((x) => x !== t) : [...arr, t]));
+
   const requestFiche = async () => {
-    if (!selType) return;
+    if (selTypes.length === 0) return;
     setBusy(true); setMsg(null);
     try {
-      await dossiersAPI.requestFiche(dossierId, selType);
-      setMsg('Fiche demandée au demandeur.');
+      await dossiersAPI.requestFiches(dossierId, selTypes);
+      setMsg(selTypes.length > 1 ? 'Fiches demandées au demandeur.' : 'Fiche demandée au demandeur.');
+      setSelTypes([]);
       await load();
     } catch (e: any) {
       setMsg(e?.response?.data?.message || 'La demande a échoué.');
@@ -181,16 +185,27 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
 
       {msg && <div className="mb-3 rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs text-teal-800">{msg}</div>}
 
-      {/* Demande (admin) */}
+      {/* Demande (admin) — sélection multiple, une seule demande */}
       {isAdmin && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-teal-200 bg-white p-3">
-          <select value={selType} onChange={(e) => setSelType(e.target.value)} className="h-9 rounded-md border border-gray-300 px-3 text-sm">
-            {types.map((t) => <option key={t.type} value={t.type}>{t.titre}</option>)}
-          </select>
-          <button type="button" onClick={requestFiche} disabled={busy || !selType}
-            className="inline-flex h-9 items-center rounded-md bg-teal-600 px-4 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60">
-            {busy ? '…' : 'Demander cette fiche'}
-          </button>
+        <div className="mb-4 rounded-lg border border-teal-200 bg-white p-3">
+          <p className="mb-2 text-xs font-semibold text-teal-900">Sélectionnez la ou les fiches à demander :</p>
+          <div className="mb-3 grid max-h-48 grid-cols-1 gap-1 overflow-auto sm:grid-cols-2">
+            {types.map((t) => (
+              <label key={t.type} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-teal-50 cursor-pointer">
+                <input type="checkbox" checked={selTypes.includes(t.type)} onChange={() => toggleType(t.type)} className="h-4 w-4" />
+                <span>{t.titre}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={requestFiche} disabled={busy || selTypes.length === 0}
+              className="inline-flex h-9 items-center rounded-md bg-teal-600 px-4 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60">
+              {busy ? '…' : `Demander ${selTypes.length > 1 ? `les ${selTypes.length} fiches` : 'la fiche'}`}
+            </button>
+            {selTypes.length > 0 && (
+              <button type="button" onClick={() => setSelTypes([])} className="text-xs text-muted-foreground hover:underline">Tout décocher</button>
+            )}
+          </div>
         </div>
       )}
 

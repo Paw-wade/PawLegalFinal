@@ -1139,17 +1139,26 @@ router.post('/:id/fiche-requests', authorize('admin', 'superadmin', 'assistant',
     const dossier = await Dossier.findById(req.params.id);
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     const { getSchema } = require('../fiches/registry');
-    const typeFiche = String((req.body && req.body.typeFiche) || '').toLowerCase().trim();
-    const schema = getSchema(typeFiche);
-    if (!schema) return res.status(400).json({ success: false, message: 'Type de fiche inconnu.' });
+    // Accepte un type unique (typeFiche) ou plusieurs (typeFiches[]) — dédupliqués.
+    const rawTypes = Array.isArray(req.body && req.body.typeFiches) && req.body.typeFiches.length
+      ? req.body.typeFiches
+      : [(req.body && req.body.typeFiche) || ''];
+    const types = [...new Set(rawTypes.map((t) => String(t || '').toLowerCase().trim()).filter(Boolean))];
+    const valides = types.map((t) => ({ t, schema: getSchema(t) })).filter((x) => x.schema);
+    if (valides.length === 0) return res.status(400).json({ success: false, message: 'Type de fiche inconnu.' });
 
     const FicheRequest = require('../models/FicheRequest');
-    const fr = await FicheRequest.create({
-      dossier: dossier._id, typeFiche, titre: schema.titre,
-      message: String((req.body && req.body.message) || '').trim(), requestedBy: req.user.id,
-    });
+    const message = String((req.body && req.body.message) || '').trim();
+    const created = [];
+    for (const { t, schema } of valides) {
+      const fr = await FicheRequest.create({ dossier: dossier._id, typeFiche: t, titre: schema.titre, message, requestedBy: req.user.id });
+      created.push(fr);
+    }
+    const titres = valides.map((x) => x.schema.titre);
+    const titresTexte = titres.join(', ');
+    const libelleNotif = titres.length > 1 ? `${titres.length} fiches` : `« ${titres[0]} »`;
 
-    // Notifier le demandeur : in-app (compte) + e-mail (compte ou clientEmail).
+    // Notifier le demandeur : une seule notif in-app + un seul e-mail listant toutes les fiches.
     const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
     const titreDossier = dossier.titre || 'votre dossier';
     let email = (dossier.clientEmail || '').trim();
@@ -1160,27 +1169,28 @@ router.post('/:id/fiche-requests', authorize('admin', 'superadmin', 'assistant',
         if (holder?.email && !email) email = holder.email;
         if (holder?.firstName && !prenom) prenom = holder.firstName;
       } catch (e) { /* ignore */ }
-      await createNotification(dossier.user, 'document_request', 'Fiche à remplir',
-        `Notre équipe vous demande de remplir « ${schema.titre} » pour votre dossier « ${titreDossier} ».`,
-        '/client/dossiers', { dossierId: dossier._id.toString(), ficheRequestId: fr._id.toString() });
+      await createNotification(dossier.user, 'document_request', 'Fiches à remplir',
+        `Notre équipe vous demande de remplir ${libelleNotif} pour votre dossier « ${titreDossier} ».`,
+        '/client/dossiers', { dossierId: dossier._id.toString() });
     }
     if (email) {
       const suiviUrl = dossier.suiviToken ? `${frontUrl}/suivi/${dossier.suiviToken}` : '';
       const espaceUrl = `${frontUrl}/client/dossiers/${dossier._id}`;
+      const listeHtml = `<ul>${titres.map((t) => `<li>${escapeHtml(t)}</li>`).join('')}</ul>`;
       try {
         await sendTemplatedTransactionalEmail({
           templateCode: 'dossier_fiche_request', eventKey: 'dossier_fiche_request', to: email,
           toName: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim() || email,
-          variables: { prenom, titre: titreDossier, fiche: schema.titre, suiviUrl, espaceUrl },
+          variables: { prenom, titre: titreDossier, fiche: titresTexte, suiviUrl, espaceUrl },
           fallback: {
-            subject: `Une fiche à remplir pour votre dossier — ${titreDossier}`,
-            htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Pour avancer sur votre dossier « ${escapeHtml(titreDossier)} », merci de remplir en ligne la fiche : <strong>${escapeHtml(schema.titre)}</strong>.</p><p>${suiviUrl ? `via votre <a href="${escapeHtml(suiviUrl)}">lien de suivi</a>` : ''}${suiviUrl ? ' ou ' : ''}depuis votre <a href="${escapeHtml(espaceUrl)}">espace personnel</a> si vous avez un compte.</p>`,
-            textContent: `Bonjour ${prenom || ''},\n\nMerci de remplir en ligne la fiche « ${schema.titre} » pour votre dossier « ${titreDossier} ».\n${suiviUrl ? `Lien de suivi : ${suiviUrl}\n` : ''}Espace personnel : ${espaceUrl}`,
+            subject: `${titres.length > 1 ? 'Des fiches' : 'Une fiche'} à remplir pour votre dossier — ${titreDossier}`,
+            htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Pour avancer sur votre dossier « ${escapeHtml(titreDossier)} », merci de remplir en ligne ${titres.length > 1 ? 'les fiches suivantes' : 'la fiche suivante'} :</p>${listeHtml}<p>${suiviUrl ? `via votre <a href="${escapeHtml(suiviUrl)}">lien de suivi</a>` : ''}${suiviUrl ? ' ou ' : ''}depuis votre <a href="${escapeHtml(espaceUrl)}">espace personnel</a> si vous avez un compte.</p>`,
+            textContent: `Bonjour ${prenom || ''},\n\nMerci de remplir en ligne ${titres.length > 1 ? 'les fiches suivantes' : 'la fiche suivante'} pour votre dossier « ${titreDossier} » :\n- ${titres.join('\n- ')}\n${suiviUrl ? `Lien de suivi : ${suiviUrl}\n` : ''}Espace personnel : ${espaceUrl}`,
           },
         });
       } catch (e) { console.error('⚠️ Email demande de fiche:', e.message || e); }
     }
-    return res.status(201).json({ success: true, message: 'Fiche demandée au demandeur.', ficheRequest: fr });
+    return res.status(201).json({ success: true, message: 'Fiches demandées au demandeur.', ficheRequests: created });
   } catch (error) {
     console.error('Erreur demande de fiche:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });

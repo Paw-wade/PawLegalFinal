@@ -1125,6 +1125,8 @@ export const dossiersAPI = {
   getFicheTypes: () => api.get('/fiches/types'),
   requestFiche: (dossierId: string, typeFiche: string, message?: string) =>
     api.post(`/user/dossiers/${dossierId}/fiche-requests`, { typeFiche, message }),
+  requestFiches: (dossierId: string, typeFiches: string[], message?: string) =>
+    api.post(`/user/dossiers/${dossierId}/fiche-requests`, { typeFiches, message }),
   getDossierFiches: (dossierId: string) => api.get(`/user/dossiers/${dossierId}/fiches`),
   remplirFiche: (dossierId: string, reqId: string, data: any) =>
     api.post(`/user/dossiers/${dossierId}/fiche-requests/${reqId}/remplir`, { data }),
