@@ -44,4 +44,20 @@ async function ensureEtatCivilRequestsPerAssocie(dossierId, schema, data, reques
   return created;
 }
 
-module.exports = { ensureEtatCivilRequestsPerAssocie, extractAssocies };
+/**
+ * Extrait les associés avec leur e-mail (si le schéma a une source à section).
+ * Retourne [{ nom, email }] (email éventuellement vide).
+ */
+function extractAssociesWithEmail(schema, data) {
+  const src = schema && schema.associesSource;
+  if (!src || !src.section || !data) return [];
+  const rows = Array.isArray(data[src.section]) ? data[src.section] : [];
+  return rows
+    .map((r) => ({
+      nom: String((r && r[src.field]) || '').trim(),
+      email: String((r && r.email) || '').trim(),
+    }))
+    .filter((a) => a.nom);
+}
+
+module.exports = { ensureEtatCivilRequestsPerAssocie, extractAssocies, extractAssociesWithEmail };

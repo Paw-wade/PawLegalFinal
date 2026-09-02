@@ -1260,6 +1260,14 @@ router.post('/:id/fiche-requests/:reqId/remplir', async (req, res) => {
       await ensureConstitutionChecklist(dossier._id, schema, fiche.data, req.user.id);
     } catch (e) { console.error('⚠️ Génération checklist constitution:', e.message || e); }
 
+    // Inviter par e-mail chaque associé dont l'adresse est renseignée (best-effort).
+    try {
+      const { sendAssocieInvitations } = require('../fiches/associeInvitations');
+      await sendAssocieInvitations(dossier._id, schema, fiche.data, {
+        origin: req.body && req.body.origin, requestedBy: req.user.id,
+      });
+    } catch (e) { console.error('⚠️ Invitations associés:', e.message || e); }
+
     // Notifier l'équipe.
     try {
       const admins = await User.find({ role: { $in: ADMIN_NOTIFY_ROLES }, isActive: true }).select('_id');

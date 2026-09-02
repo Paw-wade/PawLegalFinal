@@ -9,6 +9,8 @@ const ficheInviteSchema = new mongoose.Schema({
   token: { type: String, required: true, unique: true, index: true },
   dossier: { type: mongoose.Schema.Types.ObjectId, ref: 'Dossier', required: true, index: true },
   personne: { type: String, trim: true, default: '' },
+  personneEmail: { type: String, trim: true, default: '' }, // e-mail de l'associé invité (envoi du lien)
+  invitationEmailSentAt: { type: Date, default: null },     // horodatage du dernier envoi d'invitation par e-mail
   ficheRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'FicheRequest' }],
   pieceRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PieceRequest' }],
   allowUpload: { type: Boolean, default: true },

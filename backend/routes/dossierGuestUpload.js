@@ -751,6 +751,15 @@ router.post('/suivi/:token/fiche-requests/:reqId/remplir', async (req, res) => {
       await ensureConstitutionChecklist(dossier._id, schema, fiche.data, null);
     } catch (e) { console.error('[suivi] génération checklist:', e.message || e); }
 
+    // Inviter par e-mail chaque associé dont l'adresse est renseignée (best-effort).
+    try {
+      const { sendAssocieInvitations } = require('../fiches/associeInvitations');
+      const cab = getCabinetContact();
+      await sendAssocieInvitations(dossier._id, schema, fiche.data, {
+        origin: req.body && req.body.origin, createdViaGuest: true, cabinetNom: cab && cab.nom,
+      });
+    } catch (e) { console.error('[suivi] invitations associés:', e.message || e); }
+
     // Notifier l'équipe (in-app + e-mail).
     const titre = dossier.titre || dossier.numero || 'un dossier';
     const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');

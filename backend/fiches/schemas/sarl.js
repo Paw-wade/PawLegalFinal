@@ -66,6 +66,7 @@ module.exports = {
         fields: [
           { name: 'nom', label: 'Nom de l’associé', type: 'text', required: true },
           { name: 'pourcentage', label: 'Part (%)', type: 'percent', required: true },
+          { name: 'email', label: 'E-mail (pour l’inviter)', type: 'text', required: false, placeholder: 'email@exemple.com' },
         ],
       },
     },
