@@ -66,6 +66,19 @@ async function ensureConstitutionChecklist(dossierId, schema, data, requestedBy)
     await ensurePiece(dossierId, { libelle: `Casier judiciaire — ${nom}`, nature: 'casier', pourPersonne: nom, note: 'À défaut, remplir la déclaration sur l\'honneur.', requestedBy });
     await ensureFicheRequest(dossierId, 'declaration_honneur', nom, requestedBy);
   }
+
+  // Procuration : pour tout associé qui ne serait pas présent le jour de la signature.
+  const proc = getSchema('procuration');
+  if (proc) {
+    const existsProc = await FicheRequest.findOne({ dossier: dossierId, typeFiche: 'procuration', statut: { $ne: 'annulee' } }).lean();
+    if (!existsProc) {
+      await FicheRequest.create({
+        dossier: dossierId, typeFiche: 'procuration', titre: proc.titre,
+        message: 'À remplir uniquement si un associé ne peut pas être présent le jour de la signature (procuration donnée à un mandataire). Ajoutez-en une par associé absent.',
+        requestedBy: requestedBy || null,
+      });
+    }
+  }
 }
 
 module.exports = { ensureConstitutionChecklist, extractGerants };

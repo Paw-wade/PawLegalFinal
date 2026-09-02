@@ -54,6 +54,10 @@ module.exports = {
       ],
     },
     {
+      id: 'nb_associes', titre: '',
+      fields: [{ name: 'nombre_associes', label: 'Nombre d’associés', type: 'number', sizesSection: 'repartition' }],
+    },
+    {
       id: 'repartition',
       titre: 'Associés et répartition du capital',
       note: 'Ajoutez une ligne par associé : chaque associé listé recevra sa fiche d’identité à remplir et devra fournir sa pièce d’identité.',

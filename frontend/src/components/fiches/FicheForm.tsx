@@ -14,6 +14,7 @@ interface FieldDef {
   suffix?: string;
   default?: string;
   fullWidth?: boolean;
+  sizesSection?: string; // un champ nombre qui pré-crée N lignes dans une section répétable
 }
 interface SectionDef {
   id: string;
@@ -83,6 +84,17 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
   }, [type]);
 
   const setField = (name: string, value: any) => setData((d: any) => ({ ...d, [name]: value }));
+  // Redimensionne une section répétable à N lignes (préserve les lignes déjà saisies).
+  const resizeSection = (sectionId: string, countStr: any) => {
+    const n = Math.max(0, Math.min(50, parseInt(String(countStr).replace(/[^\d]/g, ''), 10) || 0));
+    if (n === 0) return;
+    setData((d: any) => {
+      const cur = Array.isArray(d[sectionId]) ? d[sectionId] : [];
+      const rows = cur.slice(0, n);
+      while (rows.length < n) rows.push({});
+      return { ...d, [sectionId]: rows };
+    });
+  };
   const setRepeat = (secId: string, idx: number, name: string, value: any) =>
     setData((d: any) => {
       const rows = Array.isArray(d[secId]) ? [...d[secId]] : [];
@@ -221,7 +233,8 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
                       </>
                     ) : (
                       <FloatingField label={f.label} required={f.required} type={f.type} options={f.options}
-                        suffix={f.suffix} rows={3} placeholder={f.placeholder} value={data[f.name]} onChange={(v) => setField(f.name, v)} />
+                        suffix={f.suffix} rows={3} placeholder={f.placeholder} value={data[f.name]}
+                        onChange={(v) => { setField(f.name, v); if (f.sizesSection) resizeSection(f.sizesSection, v); }} />
                     )}
                   </div>
                 );
