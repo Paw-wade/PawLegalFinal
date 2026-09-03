@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { dossiersAPI } from '@/lib/api';
+import { dossiersAPI, documentsAPI } from '@/lib/api';
 import { FicheForm } from '@/components/fiches/FicheForm';
 
 interface Props {
@@ -35,6 +35,44 @@ const statutBadge = (s: string) =>
     ? { label: 'Annulée', cls: 'bg-gray-100 text-gray-600' }
     : { label: 'À remplir', cls: 'bg-amber-100 text-amber-800' };
 
+function PiecesCatalog({ show, selPieces, otherPiece, busy, onToggle, onChange, onAdd, onClose, onOpen }: {
+  show: boolean; selPieces: number[]; otherPiece: string; busy: boolean;
+  onToggle: (i: number) => void; onChange: (v: string) => void;
+  onAdd: () => void; onClose: () => void; onOpen: () => void;
+}) {
+  const canAdd = selPieces.length > 0 || otherPiece.trim().length > 0;
+  if (!show) {
+    return (
+      <button type="button" onClick={onOpen} className="text-xs font-medium text-teal-700 hover:underline">
+        + Ajouter des pièces à fournir
+      </button>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-teal-100 bg-teal-50/60 p-3">
+      <p className="mb-2 text-xs font-semibold text-teal-900">Cochez les pièces à demander :</p>
+      <div className="space-y-1">
+        {PIECES_CATALOG.map((item, i) => (
+          <label key={i} className="flex items-start gap-2 rounded px-1 py-0.5 text-sm hover:bg-white cursor-pointer">
+            <input type="checkbox" className="mt-0.5 h-4 w-4" checked={selPieces.includes(i)} onChange={() => onToggle(i)} />
+            <span>{item.libelle}</span>
+          </label>
+        ))}
+      </div>
+      <input type="text" value={otherPiece} onChange={(e) => onChange(e.target.value)}
+        placeholder="Autre pièce (facultatif)"
+        className="mt-2 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+      <div className="mt-2 flex items-center gap-3">
+        <button type="button" onClick={onAdd} disabled={busy || !canAdd}
+          className="inline-flex h-8 items-center rounded-md bg-teal-600 px-3 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60">
+          {busy ? 'Ajout en cours' : 'Ajouter'}
+        </button>
+        <button type="button" onClick={onClose} className="text-xs text-muted-foreground hover:underline">Annuler</button>
+      </div>
+    </div>
+  );
+}
+
 export function FichesPanel({ dossierId, categorie, variant }: Props) {
   const [requests, setRequests] = useState<FRequest[]>([]);
   const [fiches, setFiches] = useState<Fiche[]>([]);
@@ -55,6 +93,9 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [invites, setInvites] = useState<Array<{ _id: string; personne?: string; personneEmail?: string; invitationEmailSentAt?: string; token?: string }>>([]);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [adminTab, setAdminTab] = useState<'fiches' | 'pieces'>('fiches');
+  const [openPersons, setOpenPersons] = useState<Set<string>>(new Set());
+  const initializedPersons = useRef(false);
 
   const isAdmin = variant === 'admin';
 
@@ -73,6 +114,24 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   useEffect(() => {
     if (categorie === 'constitution_societe') load();
   }, [categorie, load]);
+
+  // Ouvre automatiquement les personnes ayant des items en attente (une seule fois au chargement initial).
+  useEffect(() => {
+    if (initializedPersons.current || (requests.length === 0 && pieces.length === 0)) return;
+    initializedPersons.current = true;
+    const keyOf = (n?: string) => (n && n.trim() ? n.trim() : '__societe__');
+    const toOpen = new Set<string>(['__societe__']);
+    requests.forEach((r) => { if (r.statut !== 'annulee') toOpen.add(keyOf(r.pourPersonne)); });
+    pieces.forEach((p) => toOpen.add(keyOf(p.pourPersonne)));
+    setOpenPersons(toOpen);
+  }, [requests, pieces]);
+
+  const togglePerson = (key: string) =>
+    setOpenPersons((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
 
   useEffect(() => {
     if (isAdmin && categorie === 'constitution_societe') {
@@ -112,7 +171,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   const openPiece = async (documentId: string) => {
     const win = window.open('', '_blank');
     try {
-      const res = await dossiersAPI.downloadDocument(documentId);
+      const res = await documentsAPI.downloadDocument(documentId);
       const mime = (res.headers as any)['content-type'] || 'application/octet-stream';
       const url = URL.createObjectURL(new Blob([res.data], { type: mime }));
       if (win) { win.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
@@ -120,12 +179,12 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   };
 
   const addPerson = async () => {
-    const nom = window.prompt('Nom de la personne (associé / gérant) dont il faut la fiche d’identification :', '');
+    const nom = window.prompt("Nom complet de la personne (fiche d'identification) :", '');
     if (nom === null) return;
     setBusy(true); setMsg(null);
     try {
       await dossiersAPI.addEtatCivilRequest(dossierId, nom.trim());
-      setMsg('Fiche d’identification ajoutée.');
+      setMsg("Fiche d'identification ajoutée.");
       await load();
     } catch (e: any) {
       setMsg(e?.response?.data?.message || "L'ajout a échoué.");
@@ -300,7 +359,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
             ) : (
               <button type="button" onClick={() => inviter(r._id, r.pourPersonne || r.titre)} disabled={invitingId === r._id}
                 className="text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
-                {invitingId === r._id ? '…' : '🔗 Inviter cette personne à remplir'}
+                {invitingId === r._id ? '...' : '🔗 Inviter cette personne à remplir'}
               </button>
             )}
           </div>
@@ -317,7 +376,8 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   };
 
   // Une pièce à fournir (dépôt côté demandeur, Valider/Refuser côté admin).
-  const renderPieceItem = (p: Piece) => (
+  const renderPieceItem = (p: Piece) => {
+    return (
     <li key={`p_${p._id}`} className="rounded-lg border border-teal-100 bg-white p-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
@@ -356,130 +416,170 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
         </div>
       )}
     </li>
-  );
+    );
+  };
+
+  const closeCatalog = () => { setShowCatalog(false); setSelPieces([]); setOtherPiece(''); };
+
+  const entries = groupByPerson();
 
   return (
-    <div className="min-w-0 rounded-xl border border-teal-200 bg-teal-50/40 p-4 sm:p-5 shadow-sm">
-      <h3 className="mb-1 text-sm font-bold uppercase tracking-wide text-teal-900">Fiches de constitution</h3>
-      <p className="mb-3 text-xs text-teal-900/70">
-        {isAdmin
-          ? 'Demandez au demandeur de remplir la fiche correspondant à la forme juridique.'
-          : 'Remplissez les fiches demandées par notre équipe ; le document est généré automatiquement.'}
-      </p>
+    <div className="min-w-0 overflow-hidden rounded-xl border border-teal-200 bg-teal-50/40 shadow-sm">
 
-      {msg && <div className="mb-3 rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs text-teal-800">{msg}</div>}
+      {/* En-tête du panneau */}
+      <div className="border-b border-teal-200 bg-teal-50 px-4 py-3 sm:px-5">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-teal-900">Fiches de constitution</h3>
+        <p className="mt-0.5 text-xs text-teal-900/70">
+          {isAdmin
+            ? 'Gérez les fiches et pièces requises pour ce dossier.'
+            : 'Remplissez les fiches demandées par notre équipe ; le document est généré automatiquement.'}
+        </p>
+      </div>
 
-      {/* Demande (admin) — sélection multiple, une seule demande */}
+      {/* Feedback */}
+      {msg && (
+        <div className="mx-4 mt-3 rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs text-teal-800 sm:mx-5">{msg}</div>
+      )}
+
+      {/* Bloc de contrôles admin — deux onglets */}
       {isAdmin && (
-        <div className="mb-4 rounded-lg border border-teal-200 bg-white p-3">
-          <p className="mb-2 text-xs font-semibold text-teal-900">Sélectionnez la ou les fiches à demander :</p>
-          <div className="mb-3 grid max-h-48 grid-cols-1 gap-1 overflow-auto sm:grid-cols-2">
-            {types.map((t) => (
-              <label key={t.type} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-teal-50 cursor-pointer">
-                <input type="checkbox" checked={selTypes.includes(t.type)} onChange={() => toggleType(t.type)} className="h-4 w-4" />
-                <span>{t.titre}</span>
-              </label>
+        <div className="border-b border-teal-200 px-4 sm:px-5">
+          {/* Onglets */}
+          <div className="flex gap-0 pt-3">
+            {(['fiches', 'pieces'] as const).map((tab) => (
+              <button key={tab} type="button" onClick={() => setAdminTab(tab)}
+                className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${adminTab === tab ? 'border-teal-600 text-teal-900' : 'border-transparent text-muted-foreground hover:text-teal-800'}`}>
+                {tab === 'fiches' ? 'Demander des fiches' : 'Ajouter des pièces'}
+              </button>
             ))}
           </div>
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={requestFiche} disabled={busy || selTypes.length === 0}
-              className="inline-flex h-9 items-center rounded-md bg-teal-600 px-4 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60">
-              {busy ? '…' : `Demander ${selTypes.length > 1 ? `les ${selTypes.length} fiches` : 'la fiche'}`}
-            </button>
-            {selTypes.length > 0 && (
-              <button type="button" onClick={() => setSelTypes([])} className="text-xs text-muted-foreground hover:underline">Tout décocher</button>
-            )}
-          </div>
+
+          {/* Contenu onglet Fiches */}
+          {adminTab === 'fiches' && (
+            <div className="py-3">
+              <div className="mb-3 grid max-h-48 grid-cols-1 gap-0.5 overflow-auto sm:grid-cols-2">
+                {types.map((t) => (
+                  <label key={t.type} className="flex items-center gap-2 rounded px-1.5 py-1.5 text-sm hover:bg-teal-50 cursor-pointer">
+                    <input type="checkbox" checked={selTypes.includes(t.type)} onChange={() => toggleType(t.type)} className="h-4 w-4 shrink-0" />
+                    <span>{t.titre}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={requestFiche} disabled={busy || selTypes.length === 0}
+                  className="inline-flex h-8 items-center rounded-md bg-teal-600 px-3 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60">
+                  {busy ? '...' : `Demander ${selTypes.length > 1 ? `les ${selTypes.length} fiches` : selTypes.length === 1 ? 'la fiche' : 'la fiche'}`}
+                </button>
+                {selTypes.length > 0 && (
+                  <button type="button" onClick={() => setSelTypes([])} className="text-xs text-muted-foreground hover:underline">Tout décocher</button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Contenu onglet Pièces */}
+          {adminTab === 'pieces' && (
+            <div className="py-3"><PiecesCatalog show={showCatalog} selPieces={selPieces} otherPiece={otherPiece} busy={busy}
+                onToggle={toggleCatalog} onChange={setOtherPiece} onAdd={addSelectedPieces}
+                onClose={closeCatalog} onOpen={() => setShowCatalog(true)} /></div>
+          )}
         </div>
       )}
 
-      {/* Fiches à remplir + pièces à joindre, regroupées par personne */}
-      {(() => {
-        const entries = groupByPerson();
-        if (entries.length === 0) return <p className="text-xs text-muted-foreground">Aucune fiche ni pièce demandée pour l’instant.</p>;
-        return (
-          <div className="space-y-3">
-            {entries.map(([key, g]) => (
-              <div key={key} className="rounded-lg border border-teal-100 bg-white/50 p-3">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-bold text-teal-900">{personLabel(key)}</p>
-                  {isAdmin && key !== '__societe__' && (() => {
-                    const inv = inviteForPerson(key);
-                    if (!inv || !inv.personneEmail) return null;
-                    return (
-                      <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                        {inv.invitationEmailSentAt
-                          ? `✉️ Invité le ${new Date(inv.invitationEmailSentAt).toLocaleDateString('fr-FR')} (${inv.personneEmail})`
-                          : `E-mail : ${inv.personneEmail} (non encore invité)`}
-                        <button type="button" disabled={resendingId === inv._id} onClick={() => renvoyerInvite(inv._id)}
-                          className="rounded border border-teal-300 bg-teal-50 px-2 py-0.5 font-medium text-teal-800 hover:bg-teal-100 disabled:opacity-60">
-                          {resendingId === inv._id ? '…' : 'Renvoyer'}
-                        </button>
-                      </span>
-                    );
-                  })()}
+      {/* Groupes par personne */}
+      <div className="px-4 py-3 sm:px-5">
+        {entries.length === 0 ? (
+          <p className="py-2 text-xs text-muted-foreground">Aucune fiche ni pièce demandée pour l'instant.</p>
+        ) : (
+          <div className="divide-y divide-teal-100">
+            {entries.map(([key, g]) => {
+              const pendingReqs = g.reqs.filter((r) => r.statut === 'a_remplir').length;
+              const pendingPcs = g.pcs.filter((p) => p.statut !== 'fourni').length;
+              const pending = pendingReqs + pendingPcs;
+              const isOpen = openPersons.has(key);
+              const inv = key !== '__societe__' ? inviteForPerson(key) : undefined;
+
+              return (
+                <div key={key} className="py-3 first:pt-1 last:pb-1">
+                  {/* Accordéon — header */}
+                  <button type="button" onClick={() => togglePerson(key)}
+                    className="flex w-full items-center justify-between gap-3 text-left">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-teal-900">{personLabel(key)}</span>
+                      {g.reqs.length > 0 && (
+                        <span className="text-[11px] text-muted-foreground">{g.reqs.length} fiche{g.reqs.length > 1 ? 's' : ''}</span>
+                      )}
+                      {g.pcs.length > 0 && (
+                        <span className="text-[11px] text-muted-foreground">{g.pcs.length} pièce{g.pcs.length > 1 ? 's' : ''}</span>
+                      )}
+                      {pending > 0 && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                          {pending} en attente
+                        </span>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">{isOpen ? '▲' : '▼'}</span>
+                  </button>
+
+                  {/* Info invitation (admin, personne nommée) */}
+                  {isAdmin && inv?.personneEmail && (
+                    <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      {inv.invitationEmailSentAt
+                        ? `✉️ Invité le ${new Date(inv.invitationEmailSentAt).toLocaleDateString('fr-FR')} (${inv.personneEmail})`
+                        : `E-mail : ${inv.personneEmail} (non encore invité)`}
+                      <button type="button" disabled={resendingId === inv._id} onClick={() => renvoyerInvite(inv._id)}
+                        className="rounded border border-teal-300 bg-teal-50 px-2 py-0.5 font-medium text-teal-800 hover:bg-teal-100 disabled:opacity-60">
+                        {resendingId === inv._id ? '...' : 'Renvoyer'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Accordéon — contenu */}
+                  {isOpen && (
+                    <div className="mt-3 space-y-4 pl-1">
+                      {/* Sous-section Fiches */}
+                      {g.reqs.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-teal-600">
+                            Fiches à remplir
+                          </p>
+                          <ul className="space-y-2">
+                            {g.reqs.map((r) => renderRequestItem(r))}
+                          </ul>
+                        </div>
+                      )}
+                      {/* Sous-section Pièces */}
+                      {g.pcs.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-teal-600">
+                            Pièces à joindre
+                          </p>
+                          <ul className="space-y-1.5">
+                            {g.pcs.map((p) => renderPieceItem(p))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <ul className="space-y-2">
-                  {g.reqs.map((r) => renderRequestItem(r))}
-                  {g.pcs.map((p) => renderPieceItem(p))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
-
-      {/* Ajouter une fiche d’identification (état civil) — côté demandeur */}
-      {!isAdmin && requests.length > 0 && (
-        <button type="button" onClick={addPerson} disabled={busy}
-          className="mt-3 block text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
-          + Ajouter une fiche d’identification (autre associé / gérant)
-        </button>
-      )}
-
-      {/* Ajouter des pièces à fournir */}
-      <div className="mt-4 border-t border-teal-100 pt-3">
-        <button type="button" onClick={() => setShowCatalog((v) => !v)} className="text-xs font-medium text-teal-700 hover:underline">
-          + Ajouter des pièces à fournir
-        </button>
-        {showCatalog && (
-          <div className="mt-2 rounded-lg border border-teal-200 bg-white p-3">
-            <p className="mb-2 text-xs font-semibold text-teal-900">Cochez les pièces à demander :</p>
-            <div className="space-y-1">
-              {PIECES_CATALOG.map((p, i) => (
-                <label key={i} className="flex items-start gap-2 rounded px-1 py-0.5 text-sm hover:bg-teal-50 cursor-pointer">
-                  <input type="checkbox" className="mt-0.5 h-4 w-4" checked={selPieces.includes(i)} onChange={() => toggleCatalog(i)} />
-                  <span>{p.libelle}</span>
-                </label>
-              ))}
-            </div>
-            <input type="text" value={otherPiece} onChange={(e) => setOtherPiece(e.target.value)}
-              placeholder="Autre pièce (facultatif)…"
-              className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500" />
-            <div className="mt-2 flex items-center gap-3">
-              <button type="button" onClick={addSelectedPieces} disabled={busy || (selPieces.length === 0 && !otherPiece.trim())}
-                className="inline-flex h-9 items-center rounded-md bg-teal-600 px-4 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60">
-                {busy ? '…' : 'Ajouter'}
-              </button>
-              <button type="button" onClick={() => { setShowCatalog(false); setSelPieces([]); setOtherPiece(''); }} className="text-xs text-muted-foreground hover:underline">Annuler</button>
-            </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Fiches remplies (téléchargement direct) */}
-      {fiches.length > 0 && (
-        <div className="mt-4 border-t border-teal-100 pt-3">
-          <p className="mb-2 text-xs font-semibold text-teal-900">Fiches remplies</p>
-          <ul className="space-y-1">
-            {fiches.map((f) => (
-              <li key={f._id} className="flex items-center justify-between gap-3 text-sm">
-                <span className="min-w-0 truncate text-foreground">📄 {f.titre}</span>
-                <button type="button" onClick={() => openPdf(f._id)}
-                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Voir PDF</button>
-              </li>
-            ))}
-          </ul>
+      {/* Actions côté demandeur (non-admin) */}
+      {!isAdmin && (
+        <div className="space-y-3 border-t border-teal-100 px-4 py-3 sm:px-5">
+          {requests.length > 0 && (
+            <button type="button" onClick={addPerson} disabled={busy}
+              className="block text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
+              + Ajouter une fiche d'identification (autre associé / gérant)
+            </button>
+          )}
+          <PiecesCatalog show={showCatalog} selPieces={selPieces} otherPiece={otherPiece} busy={busy}
+                onToggle={toggleCatalog} onChange={setOtherPiece} onAdd={addSelectedPieces}
+                onClose={closeCatalog} onOpen={() => setShowCatalog(true)} />
         </div>
       )}
     </div>

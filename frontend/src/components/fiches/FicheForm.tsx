@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { dossiersAPI } from '@/lib/api';
 import { FloatingField } from '@/components/ui/FloatingField';
 
@@ -30,6 +30,7 @@ interface Schema {
   titre: string;
   sousTitre?: string;
   sections: SectionDef[];
+  signature?: boolean;
 }
 
 interface Props {
@@ -48,6 +49,8 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<any>(initialData || {});
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isDrawing = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -123,6 +126,40 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
       if (i >= 0) arr.splice(i, 1); else arr.push(value);
       return { ...d, [name]: arr };
     });
+
+  // Signature canvas helpers
+  const getCanvasPos = (e: React.MouseEvent<HTMLCanvasElement> | React.Touch, canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+  const sigStart = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    isDrawing.current = true;
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext('2d')!;
+    const { x, y } = getCanvasPos(e, canvas);
+    ctx.beginPath(); ctx.moveTo(x, y);
+  };
+  const sigMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing.current || !canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d')!;
+    const { x, y } = getCanvasPos(e, canvasRef.current);
+    ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#111111';
+    ctx.lineTo(x, y); ctx.stroke();
+  };
+  const sigEnd = () => { isDrawing.current = false; };
+  const sigClear = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height);
+  };
+  const handleSubmit = () => {
+    const canvas = canvasRef.current;
+    let payload = data;
+    if (canvas && schema?.signature) {
+      payload = { ...data, __signature: canvas.toDataURL('image/png') };
+    }
+    onSubmit(payload);
+  };
 
   const renderInput = (f: FieldDef, value: any, onChange: (v: any) => void) => {
     if (f.type === 'textarea') {
@@ -253,6 +290,25 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
         );
       })}
 
+      {schema.signature && (
+        <div>
+          <p className="mb-1 text-sm font-medium text-foreground">Signature <span className="text-muted-foreground text-xs">(dessinez dans le cadre)</span></p>
+          <div className="relative inline-block">
+            <canvas
+              ref={canvasRef}
+              width={340}
+              height={80}
+              className="rounded border border-dashed border-gray-400 bg-white cursor-crosshair touch-none"
+              onMouseDown={sigStart}
+              onMouseMove={sigMove}
+              onMouseUp={sigEnd}
+              onMouseLeave={sigEnd}
+            />
+          </div>
+          <button type="button" onClick={sigClear} className="ml-3 text-xs text-muted-foreground hover:underline">Effacer</button>
+        </div>
+      )}
+
       {missingRequired.length > 0 && (
         <p className="text-xs text-amber-700">Champs obligatoires manquants : {missingRequired.join(', ')}.</p>
       )}
@@ -260,7 +316,7 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
       <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-4">
         <button
           type="button"
-          onClick={() => onSubmit(data)}
+          onClick={handleSubmit}
           disabled={submitting || missingRequired.length > 0}
           className="inline-flex items-center justify-center rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
         >

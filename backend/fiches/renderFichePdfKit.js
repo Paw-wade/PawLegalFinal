@@ -120,9 +120,17 @@ function renderFichePdfKit(schema, data, opts = {}) {
         doc.moveDown(1.2);
         doc.font('Helvetica').fontSize(10).fillColor(INK).text('Fait à ……………………, le ……… / ……… / …………');
         doc.moveDown(0.4).text('Signature :');
-        const y = doc.y + 4;
-        doc.rect(doc.x, y, 220, 56).dash(2, { space: 2 }).strokeColor('#bbbbbb').stroke().undash();
-        doc.y = y + 62;
+        const sigX = doc.x;
+        const sigY = doc.y + 4;
+        doc.rect(sigX, sigY, 220, 56).dash(2, { space: 2 }).strokeColor('#bbbbbb').stroke().undash();
+        const sig = data.__signature;
+        if (sig && typeof sig === 'string' && sig.startsWith('data:image/png;base64,')) {
+          try {
+            const imgBuf = Buffer.from(sig.split(',')[1], 'base64');
+            doc.image(imgBuf, sigX + 2, sigY + 2, { width: 216, height: 52 });
+          } catch { /* image invalide, on laisse la case vide */ }
+        }
+        doc.y = sigY + 62;
       }
 
       // Pied de page
