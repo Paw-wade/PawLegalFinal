@@ -26,13 +26,21 @@ function getLogoDataUri() {
   return _logoCache;
 }
 
-/** Génère le PDF d'une fiche remplie (document Mongoose ou objet {typeFiche, data}). */
+/** Génère le PDF d'une fiche remplie (document Mongoose ou objet {typeFiche, data}).
+ * Chemin préféré : HTML + Chromium (rendu fidèle). Repli : pdfkit pur Node
+ * (aucun navigateur requis) si Chromium est absent ou échoue — évite les 500 en prod. */
 async function generateFichePdf(fiche, opts = {}) {
   const schema = getSchema(fiche.typeFiche);
   if (!schema) throw new Error('Type de fiche inconnu : ' + fiche.typeFiche);
   const logoDataUri = opts.logoDataUri || getLogoDataUri() || undefined;
   const html = renderFicheHtml(schema, fiche.data || {}, { ...opts, logoDataUri });
-  return htmlToPdf(html);
+  try {
+    return await htmlToPdf(html);
+  } catch (e) {
+    console.warn('[fiches] htmlToPdf indisponible, repli pdfkit:', e?.message || e);
+    const { renderFichePdfKit } = require('./renderFichePdfKit');
+    return await renderFichePdfKit(schema, fiche.data || {}, opts);
+  }
 }
 
 module.exports = { generateFichePdf };
