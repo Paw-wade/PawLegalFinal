@@ -12,7 +12,7 @@ interface Props {
 
 interface FRequest { _id: string; typeFiche: string; titre: string; statut: string; fiche?: string | null; message?: string; pourPersonne?: string; validationStatus?: string; validationMotif?: string }
 interface Fiche { _id: string; typeFiche: string; titre: string; createdAt: string }
-interface Piece { _id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string; validationStatus?: string; validationMotif?: string }
+interface Piece { _id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string; validationStatus?: string; validationMotif?: string; document?: string }
 
 // Catalogue standard des pièces à fournir (documents à téléverser).
 const PIECES_CATALOG: Array<{ libelle: string; nature: string }> = [
@@ -100,13 +100,23 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     } finally { setBusy(false); }
   };
 
-  const downloadPdf = async (ficheId: string, typeFiche: string) => {
+  const openPdf = async (ficheId: string) => {
+    const win = window.open('', '_blank');
     try {
       const res = await dossiersAPI.downloadFichePdf(dossierId, ficheId);
       const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-      const a = document.createElement('a'); a.href = url; a.download = `fiche-${typeFiche}.pdf`;
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    } catch (e) { setMsg('Le téléchargement a échoué.'); }
+      if (win) { win.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
+    } catch (e) { if (win) win.close(); setMsg('La visualisation a échoué.'); }
+  };
+
+  const openPiece = async (documentId: string) => {
+    const win = window.open('', '_blank');
+    try {
+      const res = await dossiersAPI.downloadDocument(documentId);
+      const mime = (res.headers as any)['content-type'] || 'application/octet-stream';
+      const url = URL.createObjectURL(new Blob([res.data], { type: mime }));
+      if (win) { win.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
+    } catch (e) { if (win) win.close(); setMsg('La visualisation a échoué.'); }
   };
 
   const addPerson = async () => {
@@ -134,6 +144,20 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
     } catch (e: any) {
       setMsg(e?.response?.data?.message || "La génération du lien a échoué.");
     } finally { setInvitingId(null); }
+  };
+
+  const cancelFicheRequest = async (reqId: string) => {
+    if (!window.confirm('Annuler cette demande de fiche ?')) return;
+    setMsg(null);
+    try { await dossiersAPI.cancelFicheRequest(dossierId, reqId); setMsg('Demande de fiche annulée.'); await load(); }
+    catch (e: any) { setMsg(e?.response?.data?.message || "L'annulation a échoué."); }
+  };
+
+  const cancelPieceRequest = async (pieceId: string) => {
+    if (!window.confirm('Annuler cette demande de pièce ?')) return;
+    setMsg(null);
+    try { await dossiersAPI.cancelPieceRequest(dossierId, pieceId); setMsg('Demande de pièce annulée.'); await load(); }
+    catch (e: any) { setMsg(e?.response?.data?.message || "L'annulation a échoué."); }
   };
 
   const validerFiche = async (reqId: string, statut: 'valide' | 'refuse') => {
@@ -238,8 +262,12 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
                 className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90">Remplir</button>
             )}
             {r.statut === 'remplie' && r.fiche && (
-              <button type="button" onClick={() => downloadPdf(String(r.fiche), r.typeFiche)}
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">PDF</button>
+              <button type="button" onClick={() => openPdf(String(r.fiche))}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Voir PDF</button>
+            )}
+            {isAdmin && (
+              <button type="button" onClick={() => cancelFicheRequest(r._id)} title="Annuler cette demande"
+                className="rounded-md border border-red-200 bg-white px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">✕</button>
             )}
           </div>
         </div>
@@ -299,11 +327,21 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
           </span>
           {p.note && <p className="text-[11px] text-muted-foreground">{p.note}</p>}
         </div>
-        {!isAdmin && p.statut !== 'fourni' && (
-          <input ref={(el) => { pieceInputs.current[p._id] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
-            disabled={uploadingPiece === p._id} onChange={(e) => uploadPiece(p._id, e.target.files?.[0])}
-            className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
-        )}
+        <div className="flex items-center gap-2">
+          {p.document && (
+            <button type="button" onClick={() => openPiece(p.document!)}
+              className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Voir</button>
+          )}
+          {!isAdmin && p.statut !== 'fourni' && (
+            <input ref={(el) => { pieceInputs.current[p._id] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
+              disabled={uploadingPiece === p._id} onChange={(e) => uploadPiece(p._id, e.target.files?.[0])}
+              className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
+          )}
+          {isAdmin && (
+            <button type="button" onClick={() => cancelPieceRequest(p._id)} title="Annuler cette demande"
+              className="rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">✕</button>
+          )}
+        </div>
       </div>
       {p.statut === 'fourni' && (
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -437,8 +475,8 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
             {fiches.map((f) => (
               <li key={f._id} className="flex items-center justify-between gap-3 text-sm">
                 <span className="min-w-0 truncate text-foreground">📄 {f.titre}</span>
-                <button type="button" onClick={() => downloadPdf(f._id, f.typeFiche)}
-                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Télécharger</button>
+                <button type="button" onClick={() => openPdf(f._id)}
+                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Voir PDF</button>
               </li>
             ))}
           </ul>

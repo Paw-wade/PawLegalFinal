@@ -64,7 +64,7 @@ interface SuiviData {
     ficheId: string | null;
   }>;
   fiches?: Array<{ id: string; typeFiche: string; titre: string; createdAt: string }>;
-  pieceRequests?: Array<{ id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string; validationStatus?: string; validationMotif?: string }>;
+  pieceRequests?: Array<{ id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string; validationStatus?: string; validationMotif?: string; documentId?: string | null }>;
 }
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo (aligné sur le back)
@@ -372,15 +372,28 @@ export default function SuiviDossierPage() {
     } finally { setAddBusy(false); }
   };
 
-  const handleDownloadFiche = async (ficheId: string, typeFiche: string) => {
+  const handleViewPiece = async (pieceId: string) => {
+    const win = window.open('', '_blank');
+    try {
+      const res = await dossiersAPI.viewSuiviPiece(token, pieceId);
+      const mime = (res.headers as any)['content-type'] || 'application/octet-stream';
+      const url = URL.createObjectURL(new Blob([res.data], { type: mime }));
+      if (win) { win.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
+    } catch {
+      if (win) win.close();
+      flash(null, 'La visualisation a échoué.');
+    }
+  };
+
+  const handleDownloadFiche = async (ficheId: string, _typeFiche: string) => {
+    const win = window.open('', '_blank');
     try {
       const res = await dossiersAPI.downloadSuiviFichePdf(token, ficheId);
       const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-      const a = document.createElement('a');
-      a.href = url; a.download = `fiche-${typeFiche}.pdf`;
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      if (win) { win.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
     } catch {
-      flash(null, 'Le téléchargement a échoué.');
+      if (win) win.close();
+      flash(null, 'La visualisation a échoué.');
     }
   };
 
@@ -546,11 +559,17 @@ export default function SuiviDossierPage() {
           </span>
           {p.note && <p className="text-[11px] text-muted-foreground">{p.note}</p>}
         </div>
-        {p.statut !== 'fourni' && (
-          <input ref={(el) => { fileInputs.current[`piece_${p.id}`] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
-            disabled={uploadingPieceId === p.id} onChange={(e) => handleUploadPiece(p.id, e.target.files?.[0])}
-            className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
-        )}
+        <div className="flex items-center gap-2">
+          {p.documentId && (
+            <button type="button" onClick={() => handleViewPiece(p.id)}
+              className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Voir</button>
+          )}
+          {p.statut !== 'fourni' && (
+            <input ref={(el) => { fileInputs.current[`piece_${p.id}`] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
+              disabled={uploadingPieceId === p.id} onChange={(e) => handleUploadPiece(p.id, e.target.files?.[0])}
+              className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
+          )}
+        </div>
       </div>
       {p.statut === 'fourni' && (
         <div className="mt-1.5 flex flex-wrap items-center gap-2">

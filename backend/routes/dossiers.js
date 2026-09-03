@@ -1438,6 +1438,44 @@ router.patch('/:id/fiche-requests/:reqId/validation', authorize('admin', 'supera
   }
 });
 
+// @route   DELETE /api/user/dossiers/:id/fiche-requests/:reqId
+// @desc    (Équipe) Annuler une demande de fiche
+router.delete('/:id/fiche-requests/:reqId', authorize('admin', 'superadmin', 'assistant', 'secretaire', 'juriste'), async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    const FicheRequest = require('../models/FicheRequest');
+    const req2 = await FicheRequest.findOne({ _id: req.params.reqId, dossier: dossier._id });
+    if (!req2) return res.status(404).json({ success: false, message: 'Demande introuvable.' });
+    req2.statut = 'annulee';
+    await req2.save();
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Erreur annulation fiche request:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   DELETE /api/user/dossiers/:id/piece-requests/:pieceId
+// @desc    (Équipe) Annuler une demande de pièce
+router.delete('/:id/piece-requests/:pieceId', authorize('admin', 'superadmin', 'assistant', 'secretaire', 'juriste'), async (req, res) => {
+  try {
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+    if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    const PieceRequest = require('../models/PieceRequest');
+    const piece = await PieceRequest.findOne({ _id: req.params.pieceId, dossier: dossier._id });
+    if (!piece) return res.status(404).json({ success: false, message: 'Pièce introuvable.' });
+    piece.statut = 'annulee';
+    await piece.save();
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Erreur annulation pièce request:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // @route   POST /api/user/dossiers/:id/fiche-invites
 // @desc    Générer un lien d'invitation ciblé (une personne → fiches/document précis)
 router.post('/:id/fiche-invites', async (req, res) => {

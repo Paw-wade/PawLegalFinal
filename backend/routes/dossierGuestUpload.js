@@ -424,7 +424,7 @@ router.get('/suivi/:token', async (req, res) => {
         ficheId: r.fiche ? String(r.fiche) : null,
       })),
       fiches: fichesRemplies.map((f) => ({ id: String(f._id), typeFiche: f.typeFiche, titre: f.titre || '', createdAt: f.createdAt })),
-      pieceRequests: pieceRequestsList.map((p) => ({ id: String(p._id), libelle: p.libelle, nature: p.nature, pourPersonne: p.pourPersonne || '', note: p.note || '', statut: p.statut, validationStatus: p.validationStatus || 'en_attente', validationMotif: p.validationMotif || '' })),
+      pieceRequests: pieceRequestsList.map((p) => ({ id: String(p._id), libelle: p.libelle, nature: p.nature, pourPersonne: p.pourPersonne || '', note: p.note || '', statut: p.statut, validationStatus: p.validationStatus || 'en_attente', validationMotif: p.validationMotif || '', documentId: p.document ? String(p.document) : null })),
     });
   } catch (err) {
     console.error('[suivi] GET:', err?.message || err);
@@ -879,6 +879,25 @@ router.post('/suivi/:token/piece-requests/:pieceId/fournir', (req, res, next) =>
   } catch (err) {
     console.error('[suivi] POST piece fournir:', err?.message || err);
     return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route   GET /api/dossier-guest-upload/suivi/:token/piece-requests/:pieceId/view
+// @desc    Visualiser le fichier d'une pièce fournie (token de suivi)
+router.get('/suivi/:token/piece-requests/:pieceId/view', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    const PieceRequest = require('../models/PieceRequest');
+    const piece = await PieceRequest.findOne({ _id: req.params.pieceId, dossier: dossier._id });
+    if (!piece || !piece.document) return res.status(404).json({ success: false, message: 'Document introuvable.' });
+    const doc = await Document.findById(piece.document);
+    if (!doc) return res.status(404).json({ success: false, message: 'Document introuvable.' });
+    const { deliverDocumentFileResponse } = require('./documents');
+    return deliverDocumentFileResponse(doc, res);
+  } catch (err) {
+    console.error('[suivi] GET piece view:', err?.message || err);
+    if (!res.headersSent) return res.status(500).json({ success: false, message: 'Erreur serveur.' });
   }
 });
 

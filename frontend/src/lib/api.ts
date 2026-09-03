@@ -1152,6 +1152,10 @@ export const dossiersAPI = {
     api.patch(`/user/dossiers/${dossierId}/fiche-requests/${reqId}/validation`, { statut, motif }),
   validerPiece: (dossierId: string, pieceId: string, statut: 'en_attente' | 'valide' | 'refuse', motif?: string) =>
     api.patch(`/user/dossiers/${dossierId}/piece-requests/${pieceId}/validation`, { statut, motif }),
+  cancelFicheRequest: (dossierId: string, reqId: string) =>
+    api.delete(`/user/dossiers/${dossierId}/fiche-requests/${reqId}`),
+  cancelPieceRequest: (dossierId: string, pieceId: string) =>
+    api.delete(`/user/dossiers/${dossierId}/piece-requests/${pieceId}`),
   // Pièces à fournir (checklist)
   addPiece: (dossierId: string, libelle: string, nature?: string, pourPersonne?: string) =>
     api.post(`/user/dossiers/${dossierId}/piece-requests`, { libelle, nature, pourPersonne }),
@@ -1172,6 +1176,8 @@ export const dossiersAPI = {
     api.post(`/fiche-invitations/${token}/documents`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   downloadSuiviFichePdf: (token: string, ficheId: string) =>
     api.get(`/dossier-guest-upload/suivi/${token}/fiches/${ficheId}/pdf`, { responseType: 'blob' }),
+  viewSuiviPiece: (token: string, pieceId: string) =>
+    api.get(`/dossier-guest-upload/suivi/${token}/piece-requests/${pieceId}/view`, { responseType: 'blob' }),
 
   // Récupérer un dossier par ID
   getDossierById: (id: string | any) => {

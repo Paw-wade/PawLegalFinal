@@ -11,7 +11,7 @@ module.exports = {
         { name: 'nom_prenom', label: 'Prénom et nom', type: 'text', required: true },
         { name: 'adresse', label: 'Adresse (domicile)', type: 'text', required: true, fullWidth: true },
         { name: 'telephone', label: 'Téléphone', type: 'text' },
-        { name: 'date', label: 'Fait à Dakar, le', type: 'text', placeholder: 'Ex. 1er septembre 2026' },
+        { name: 'date', label: 'Fait à Dakar, le', type: 'text', placeholder: 'Ex. 1er septembre 2026', autoToday: true },
       ],
     },
   ],

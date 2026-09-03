@@ -66,7 +66,7 @@ module.exports = {
         { name: 'mode_paiement', label: 'Mode de paiement', type: 'radio', options: [
           { value: 'especes', label: 'Espèces' }, { value: 'cheque', label: 'Chèque' }, { value: 'virement', label: 'Virement' },
         ] },
-        { name: 'date_paiement', label: 'Date de paiement', type: 'text' },
+        { name: 'date_paiement', label: 'Date de paiement', type: 'text', autoToday: true },
         { name: 'origine_fonds', label: 'Origine des fonds', type: 'textarea', fullWidth: true },
       ],
     },

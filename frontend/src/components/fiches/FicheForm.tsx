@@ -14,6 +14,7 @@ interface FieldDef {
   suffix?: string;
   default?: string;
   fullWidth?: boolean;
+  autoToday?: boolean;
   sizesSection?: string; // un champ nombre qui pré-crée N lignes dans une section répétable
 }
 interface SectionDef {
@@ -58,6 +59,10 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
           const sc: Schema = res.data.schema;
           setSchema(sc);
           // Initialiser valeurs par défaut + une ligne par section répétable.
+          const todayFr = (() => {
+            const d = new Date();
+            return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+          })();
           setData((prev: any) => {
             const next = { ...prev };
             sc.sections.forEach((s) => {
@@ -65,7 +70,10 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
                 if (!Array.isArray(next[s.id]) || next[s.id].length === 0) next[s.id] = [{}];
               } else if (s.fields) {
                 s.fields.forEach((f) => {
-                  if (next[f.name] === undefined) next[f.name] = f.default ?? (f.type === 'checkboxes' ? [] : '');
+                  if (next[f.name] === undefined) {
+                    if (f.autoToday) next[f.name] = todayFr;
+                    else next[f.name] = f.default ?? (f.type === 'checkboxes' ? [] : '');
+                  }
                 });
               }
             });
