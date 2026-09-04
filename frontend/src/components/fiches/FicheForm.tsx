@@ -101,7 +101,7 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
       canvas.removeEventListener('touchmove', onTouchMove);
       canvas.removeEventListener('touchend', onTouchEnd);
     };
-  }, []);
+  }, [schema]);
 
   useEffect(() => {
     let alive = true;
