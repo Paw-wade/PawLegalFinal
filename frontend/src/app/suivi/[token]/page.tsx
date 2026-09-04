@@ -7,6 +7,7 @@ import { Footer } from '@/components/layout/Footer';
 import { dossiersAPI } from '@/lib/api';
 import { getStatutColor, getStatutLabelWithEtapes } from '@/lib/dossierUtils';
 import { FicheForm } from '@/components/fiches/FicheForm';
+import { Download, Eye, X, Trash2 } from 'lucide-react';
 
 interface SuiviData {
   dossier: {
@@ -62,6 +63,8 @@ interface SuiviData {
     validationStatus?: string;
     validationMotif?: string;
     ficheId: string | null;
+    draftData?: any;
+    draftStep?: number;
   }>;
   fiches?: Array<{ id: string; typeFiche: string; titre: string; createdAt: string }>;
   pieceRequests?: Array<{ id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string; validationStatus?: string; validationMotif?: string; documentId?: string | null }>;
@@ -129,6 +132,7 @@ export default function SuiviDossierPage() {
   const [uploadingPieceId, setUploadingPieceId] = useState<string | null>(null);
   const [addingPerson, setAddingPerson] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
+  const [viewingPdf, setViewingPdf] = useState<{ url: string; titre: string } | null>(null);
   const [addingPiece, setAddingPiece] = useState(false);
   const [newPieceLibelle, setNewPieceLibelle] = useState('');
   const [addBusy, setAddBusy] = useState(false);
@@ -409,35 +413,40 @@ export default function SuiviDossierPage() {
     }
   };
 
-  const handleDownloadFiche = async (ficheId: string, titre: string) => {
+  const handleViewFiche = async (ficheId: string, titre: string) => {
     flash(null, null);
-    const win = window.open('', '_blank');
     try {
       const res = await dossiersAPI.downloadSuiviFichePdf(token, ficheId);
       const blob = new Blob([res.data], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
-      if (win && !win.closed) {
-        win.location.href = url;
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-      } else {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = titre ? `${titre}.pdf` : 'fiche.pdf';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-      }
+      setViewingPdf({ url, titre });
     } catch {
-      if (win && !win.closed) win.close();
+      flash(null, 'La visualisation a echoue. Veuillez reessayer.');
+    }
+  };
+
+  const handleDownloadFiche = async (ficheId: string, titre: string) => {
+    flash(null, null);
+    try {
+      const res = await dossiersAPI.downloadSuiviFichePdf(token, ficheId);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = titre ? `${titre}.pdf` : 'fiche.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch {
       flash(null, 'Le téléchargement du PDF a échoué.');
     }
   };
 
   const valBadgeSuivi = (s?: string) =>
-    s === 'valide' ? { label: '✓ Validé par notre équipe', cls: 'bg-emerald-100 text-emerald-800' }
+    s === 'valide' ? { label: '✓ Validé', cls: 'bg-emerald-100 text-emerald-800' }
       : s === 'refuse' ? { label: '✕ Refusé', cls: 'bg-red-100 text-red-700' }
-      : { label: 'En cours de vérification', cls: 'bg-slate-100 text-slate-700' };
+      : { label: 'En vérif.', cls: 'bg-slate-100 text-slate-700' };
 
   const ficheBadge = (s?: string) =>
     s === 'remplie' ? { label: '✓ Remplie', cls: 'bg-green-100 text-green-800' }
@@ -507,8 +516,8 @@ export default function SuiviDossierPage() {
               {g.fiches.map((r) => {
                 const b = ficheStatusBadge(r);
                 return (
-                  <li key={`f_${r.id}`} className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="min-w-0 text-xs text-foreground">📝 {r.titre}</span>
+                  <li key={`f_${r.id}`} className="flex items-start justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs text-foreground">📝 {r.titre}</span>
                     <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
                   </li>
                 );
@@ -516,8 +525,8 @@ export default function SuiviDossierPage() {
               {g.pieces.map((p) => {
                 const b = pieceStatusBadge(p);
                 return (
-                  <li key={`p_${p.id}`} className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="min-w-0 text-xs text-foreground">📎 {p.libelle}</span>
+                  <li key={`p_${p.id}`} className="flex items-start justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs text-foreground">📎 {p.libelle}</span>
                     <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
                   </li>
                 );
@@ -529,93 +538,108 @@ export default function SuiviDossierPage() {
     );
   };
 
-  // Une fiche à remplir (bouton Remplir / PDF / validation / invitation). Le nom est porté par le groupe.
+  // Une fiche a remplir : nom sur sa propre ligne, badges+actions sur la ligne dessous.
   const renderFicheItem = (r: NonNullable<SuiviData['ficheRequests']>[number]) => {
     const b = ficheBadge(r.statut);
     const canFill = r.statut === 'a_remplir';
+    const val = valBadgeSuivi(r.validationStatus);
     return (
-      <li key={`f_${r.id}`} className="rounded-lg border border-teal-100 bg-white p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0">
-            <span className="text-sm font-medium text-foreground">📝 {r.titre}</span>
-            <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
-            {r.message && <p className="mt-0.5 text-xs text-muted-foreground">{r.message}</p>}
-          </div>
-          <div className="flex flex-none gap-2">
-            {canFill && (
-              <button type="button" onClick={() => { setFillingFicheReqId(r.id); setFillingFicheType(r.typeFiche); flash(null, null); }}
-                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90">Remplir</button>
-            )}
-            {r.statut === 'remplie' && r.ficheId && (
-              <button type="button" onClick={() => handleDownloadFiche(r.ficheId as string, r.titre)}
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">PDF</button>
-            )}
-          </div>
+      <li key={`f_${r.id}`} className="py-2.5 border-b border-teal-100/60 last:border-0">
+        <p className="text-sm font-medium leading-snug text-foreground">📝 {r.titre}</p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
+          {r.statut === 'remplie' && (
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${val.cls}`}>{val.label}</span>
+          )}
+          <div className="flex-1" />
+          {r.statut === 'remplie' && r.ficheId && (
+            <button type="button" title="Visualiser le PDF" onClick={() => handleViewFiche(r.ficheId as string, r.titre)}
+              className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 hover:bg-gray-50">
+              <Eye size={14} />
+            </button>
+          )}
+          {canFill && (
+            <button type="button" onClick={() => { setFillingFicheReqId(fillingFicheReqId === r.id ? null : r.id); setFillingFicheType(r.typeFiche); flash(null, null); }}
+              className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90">
+              {fillingFicheReqId === r.id ? 'Replier' : 'Remplir'}
+            </button>
+          )}
+          {r.typeFiche === 'etat_civil' && canFill && !inviteUrls[r.id] && (
+            <button type="button" onClick={() => inviterSuivi(r.id, r.pourPersonne || r.titre)} disabled={invitingId === r.id}
+              className="rounded-md border border-teal-300 bg-teal-50 px-2 py-1 text-[11px] font-medium text-teal-700 hover:bg-teal-100 disabled:opacity-60">
+              {invitingId === r.id ? '...' : '🔗 Inviter'}
+            </button>
+          )}
         </div>
-        {r.statut === 'remplie' && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadgeSuivi(r.validationStatus).cls}`}>{valBadgeSuivi(r.validationStatus).label}</span>
-            {r.validationStatus === 'refuse' && r.validationMotif && <span className="text-[11px] text-red-700">Motif : {r.validationMotif}. Merci de refaire la fiche.</span>}
+        {r.validationStatus === 'refuse' && r.validationMotif && (
+          <p className="mt-0.5 text-[11px] text-red-600">Motif : {r.validationMotif}. Merci de refaire la fiche.</p>
+        )}
+        {r.message && <p className="mt-0.5 text-[11px] text-muted-foreground">{r.message}</p>}
+        {inviteUrls[r.id] && (
+          <div className="mt-1.5 flex items-center gap-2 rounded-md border border-teal-200 bg-teal-50 p-2">
+            <input readOnly value={inviteUrls[r.id]} onFocus={(e) => e.currentTarget.select()} className="min-w-0 flex-1 rounded border border-teal-200 bg-white px-2 py-1 text-[11px]" />
+            <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrls[r.id])} className="flex-none rounded bg-teal-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-700">Copier</button>
           </div>
         )}
         {canFill && fillingFicheReqId === r.id && (
           <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3">
-            <FicheForm type={fillingFicheType} submitting={submittingFiche} onSubmit={handleFillFiche} onCancel={() => setFillingFicheReqId(null)} />
-          </div>
-        )}
-        {r.typeFiche === 'etat_civil' && r.statut !== 'remplie' && (
-          <div className="mt-2">
-            {inviteUrls[r.id] ? (
-              <div className="rounded-md border border-teal-200 bg-teal-50 p-2">
-                <p className="mb-1 text-[11px] text-teal-900">Lien à envoyer à cette personne (accès à cette fiche uniquement) :</p>
-                <div className="flex items-center gap-2">
-                  <input readOnly value={inviteUrls[r.id]} onFocus={(e) => e.currentTarget.select()} className="w-full rounded border border-teal-200 bg-white px-2 py-1 text-[11px]" />
-                  <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrls[r.id])} className="rounded bg-teal-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-700">Copier</button>
-                </div>
-              </div>
-            ) : (
-              <button type="button" onClick={() => inviterSuivi(r.id, r.pourPersonne || r.titre)} disabled={invitingId === r.id}
-                className="text-xs font-medium text-teal-700 hover:underline disabled:opacity-60">
-                {invitingId === r.id ? '…' : '🔗 Inviter cette personne à remplir'}
-              </button>
-            )}
+            <FicheForm
+              type={fillingFicheType}
+              submitting={submittingFiche}
+              onSubmit={handleFillFiche}
+              onCancel={() => setFillingFicheReqId(null)}
+              ficheRequestId={r.id}
+              token={token}
+              draftData={r.draftData}
+              draftStep={r.draftStep}
+            />
           </div>
         )}
       </li>
     );
   };
 
-  // Une pièce à fournir (dépôt de fichier / validation). Le nom est porté par le groupe.
-  const renderPieceItem = (p: NonNullable<SuiviData['pieceRequests']>[number]) => (
-    <li key={`p_${p.id}`} className="rounded-lg border border-teal-100 bg-white p-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <span className="text-sm text-foreground">📎 {p.libelle}</span>
-          <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.statut === 'fourni' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
-            {p.statut === 'fourni' ? '✓ Fourni' : 'À fournir'}
+  // Une piece a fournir : nom sur sa propre ligne, badges+actions sur la ligne dessous.
+  const renderPieceItem = (p: NonNullable<SuiviData['pieceRequests']>[number]) => {
+    const val = valBadgeSuivi(p.validationStatus);
+    return (
+      <li key={`p_${p.id}`} className="py-2.5 border-b border-teal-100/60 last:border-0">
+        <p className="text-sm font-medium leading-snug text-foreground">📎 {p.libelle}</p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.statut === 'fourni' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+            {p.statut === 'fourni' ? '✓ Fourni' : 'A fournir'}
           </span>
-          {p.note && <p className="text-[11px] text-muted-foreground">{p.note}</p>}
-        </div>
-        <div className="flex items-center gap-2">
+          {p.statut === 'fourni' && (
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${val.cls}`}>{val.label}</span>
+          )}
+          <div className="flex-1" />
           {p.documentId && (
-            <button type="button" onClick={() => handleViewPiece(p.id)}
-              className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Voir</button>
+            <button type="button" title="Visualiser" onClick={() => handleViewPiece(p.id)}
+              className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 hover:bg-gray-50">
+              <Eye size={14} />
+            </button>
           )}
           {p.statut !== 'fourni' && (
-            <input ref={(el) => { fileInputs.current[`piece_${p.id}`] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
-              disabled={uploadingPieceId === p.id} onChange={(e) => handleUploadPiece(p.id, e.target.files?.[0])}
-              className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
+            <label className={`inline-flex cursor-pointer items-center rounded-md bg-teal-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-teal-700 ${uploadingPieceId === p.id ? 'pointer-events-none opacity-60' : ''}`}>
+              <input
+                ref={(el) => { fileInputs.current[`piece_${p.id}`] = el; }}
+                type="file"
+                className="sr-only"
+                accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
+                disabled={uploadingPieceId === p.id}
+                onChange={(e) => handleUploadPiece(p.id, e.target.files?.[0])}
+              />
+              {uploadingPieceId === p.id ? '...' : '+ Joindre'}
+            </label>
           )}
         </div>
-      </div>
-      {p.statut === 'fourni' && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-2">
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${valBadgeSuivi(p.validationStatus).cls}`}>{valBadgeSuivi(p.validationStatus).label}</span>
-          {p.validationStatus === 'refuse' && p.validationMotif && <span className="text-[11px] text-red-700">Motif : {p.validationMotif}. Merci de redéposer.</span>}
-        </div>
-      )}
-    </li>
-  );
+        {p.note && <p className="mt-0.5 text-[11px] text-muted-foreground">{p.note}</p>}
+        {p.validationStatus === 'refuse' && p.validationMotif && (
+          <p className="mt-0.5 text-[11px] text-red-600">Motif : {p.validationMotif}. Merci de redeposer.</p>
+        )}
+      </li>
+    );
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-br from-background via-background to-secondary/10">
@@ -885,11 +909,11 @@ export default function SuiviDossierPage() {
                   const entries = groupRequestsByPerson();
                   if (entries.length === 0) return <p className="text-xs text-muted-foreground">Aucune fiche ni pièce demandée pour l’instant.</p>;
                   return (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {entries.map(([key, g]) => (
-                        <div key={key} className="rounded-lg border border-teal-100 bg-white/50 p-3">
-                          <p className="mb-2 text-sm font-bold text-teal-900">{personLabel(key)}</p>
-                          <ul className="space-y-2">
+                        <div key={key} className="rounded-lg border border-teal-100 bg-white p-3 shadow-sm">
+                          <p className="mb-1 text-sm font-bold text-teal-900">{personLabel(key)}</p>
+                          <ul>
                             {g.fiches.map((r) => renderFicheItem(r))}
                             {g.pieces.map((p) => renderPieceItem(p))}
                           </ul>
@@ -946,8 +970,16 @@ export default function SuiviDossierPage() {
                       {data.fiches.map((f) => (
                         <li key={f.id} className="flex items-center justify-between gap-3 text-sm">
                           <span className="min-w-0 truncate text-foreground">📄 {f.titre}</span>
-                          <button type="button" onClick={() => handleDownloadFiche(f.id, f.titre)}
-                            className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Télécharger</button>
+                          <div className="flex flex-none items-center gap-1">
+                            <button type="button" title="Visualiser" onClick={() => handleViewFiche(f.id, f.titre)}
+                              className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 hover:bg-gray-50">
+                              <Eye size={14} />
+                            </button>
+                            <button type="button" title="Telecharger" onClick={() => handleDownloadFiche(f.id, f.titre)}
+                              className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 hover:bg-gray-50">
+                              <Download size={14} />
+                            </button>
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -1058,19 +1090,21 @@ export default function SuiviDossierPage() {
                           <div className="flex flex-none items-center gap-2">
                             <button
                               type="button"
+                              title="Telecharger"
                               onClick={() => handleDownload(d.id, d.nom)}
-                              className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                              className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 hover:bg-gray-50"
                             >
-                              Télécharger
+                              <Download size={14} />
                             </button>
                             {d.validationStatus !== 'valide' && (
                               <button
                                 type="button"
+                                title="Retirer"
                                 onClick={() => handleDelete(d.id)}
                                 disabled={deletingId === d.id}
-                                className="rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                                className="rounded-md border border-red-200 bg-white p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-60"
                               >
-                                {deletingId === d.id ? '…' : 'Retirer'}
+                                {deletingId === d.id ? <span className="text-xs">...</span> : <Trash2 size={14} />}
                               </button>
                             )}
                           </div>
@@ -1103,10 +1137,11 @@ export default function SuiviDossierPage() {
                         <span className="text-xs text-muted-foreground">{formatDate(d.createdAt)}</span>
                         <button
                           type="button"
+                          title="Telecharger"
                           onClick={() => handleDownload(d.id, d.nom)}
-                          className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                          className="rounded-md border border-gray-300 bg-white p-1.5 text-gray-600 hover:bg-gray-50"
                         >
-                          Télécharger
+                          <Download size={14} />
                         </button>
                       </div>
                     </li>
@@ -1207,6 +1242,37 @@ export default function SuiviDossierPage() {
       </main>
 
       <Footer />
+
+      {viewingPdf && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/80">
+          <div className="flex flex-none items-center justify-between gap-3 bg-white px-4 py-2 shadow">
+            <span className="min-w-0 truncate text-sm font-medium text-foreground">{viewingPdf.titre}</span>
+            <div className="flex flex-none items-center gap-2">
+              <a
+                href={viewingPdf.url}
+                download={`${viewingPdf.titre}.pdf`}
+                title="Telecharger"
+                className="rounded p-1.5 text-gray-600 hover:bg-gray-100"
+              >
+                <Download size={16} />
+              </a>
+              <button
+                type="button"
+                title="Fermer"
+                onClick={() => { URL.revokeObjectURL(viewingPdf.url); setViewingPdf(null); }}
+                className="rounded p-1.5 text-gray-600 hover:bg-gray-100"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+          <iframe
+            src={viewingPdf.url}
+            className="flex-1 w-full border-0"
+            title={viewingPdf.titre}
+          />
+        </div>
+      )}
     </div>
   );
 }

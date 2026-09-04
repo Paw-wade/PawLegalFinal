@@ -1205,14 +1205,20 @@ function canAccessDossierFiche(dossier, user) {
   const isOwner = ownerId && ownerId === user.id.toString();
   const assignedId = dossier.assignedTo ? (dossier.assignedTo._id || dossier.assignedTo).toString() : null;
   const isAssigned = assignedId && assignedId === user.id.toString();
-  return isStaff || isOwner || isAssigned;
+  const isTransmittedPartenaire = user.role === 'partenaire' &&
+    Array.isArray(dossier.transmittedTo) &&
+    dossier.transmittedTo.some((t) => {
+      const pid = t.partenaire ? (t.partenaire._id || t.partenaire).toString() : null;
+      return pid === user.id.toString();
+    });
+  return isStaff || isOwner || isAssigned || isTransmittedPartenaire;
 }
 
 // @route   GET /api/user/dossiers/:id/fiches
 // @desc    Demandes de fiches + fiches remplies d'un dossier
 router.get('/:id/fiches', async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo transmittedTo');
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     const FicheRequest = require('../models/FicheRequest');
@@ -1234,7 +1240,7 @@ router.get('/:id/fiches', async (req, res) => {
 // @desc    Renvoyer l'e-mail d'invitation d'un associé (bouton « Renvoyer »)
 router.post('/:id/fiche-invites/:inviteId/resend', async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo transmittedTo');
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     const { resendAssocieInvitation } = require('../fiches/associeInvitations');
@@ -1316,7 +1322,7 @@ router.post('/:id/fiche-requests/:reqId/remplir', async (req, res) => {
 // @desc    Ajouter une fiche d'état civil pour une personne supplémentaire
 router.post('/:id/etat-civil-request', async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo transmittedTo');
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     const FicheRequest = require('../models/FicheRequest');
@@ -1338,7 +1344,7 @@ router.post('/:id/etat-civil-request', async (req, res) => {
 // @desc    Ajouter une pièce à fournir (document à téléverser)
 router.post('/:id/piece-requests', async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo transmittedTo');
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     const PieceRequest = require('../models/PieceRequest');
@@ -1376,7 +1382,7 @@ router.post('/:id/piece-requests/:pieceId/fournir', (req, res, next) => {
   });
 }, async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo transmittedTo');
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     if (!req.file) return res.status(400).json({ success: false, message: 'Aucun fichier.' });
@@ -1443,7 +1449,7 @@ router.patch('/:id/fiche-requests/:reqId/validation', authorize('admin', 'supera
 // @desc    (Équipe) Annuler une demande de fiche
 router.delete('/:id/fiche-requests/:reqId', authorize('admin', 'superadmin', 'assistant', 'secretaire', 'juriste'), async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo transmittedTo');
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     const FicheRequest = require('../models/FicheRequest');
@@ -1462,7 +1468,7 @@ router.delete('/:id/fiche-requests/:reqId', authorize('admin', 'superadmin', 'as
 // @desc    (Équipe) Annuler une demande de pièce
 router.delete('/:id/piece-requests/:pieceId', authorize('admin', 'superadmin', 'assistant', 'secretaire', 'juriste'), async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo transmittedTo');
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     const PieceRequest = require('../models/PieceRequest');
@@ -1481,7 +1487,7 @@ router.delete('/:id/piece-requests/:pieceId', authorize('admin', 'superadmin', '
 // @desc    Générer un lien d'invitation ciblé (une personne → fiches/document précis)
 router.post('/:id/fiche-invites', async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id).select('user assignedTo');
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo transmittedTo');
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     const FicheInvite = require('../models/FicheInvite');

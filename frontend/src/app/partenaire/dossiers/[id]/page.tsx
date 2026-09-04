@@ -1,10 +1,12 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
+import { FichesPanel } from '@/components/fiches/FichesPanel';
+import { ConstitutionFluxGuide } from '@/components/fiches/ConstitutionFluxGuide';
 import { PartenaireDossierDetailSections } from '@/components/partenaire/PartenaireDossierDetailSections';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, tasksAPI } from '@/lib/api';
 import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
@@ -619,7 +621,7 @@ export default function PartenaireDossierDetailPage() {
                   </div>
                   <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tâches</p>
-                    <p className="text-sm font-semibold text-foreground">{activeTasksCount > 0 ? activeTasksCount : '—'}</p>
+                    <p className="text-sm font-semibold text-foreground">{activeTasksCount > 0 ? activeTasksCount : '-'}</p>
                   </div>
                 </div>
               </div>
@@ -721,7 +723,17 @@ export default function PartenaireDossierDetailPage() {
           getHistoryTypeLabel={getHistoryTypeLabel}
         />
 
-        {/* Documents en préparation (brouillons collaboratifs internes) — même affichage que l'admin */}
+        {/* Fiches & pieces de constitution - meme vue que l'admin */}
+        {dossier.categorie === 'constitution_societe' && <ConstitutionFluxGuide />}
+        <div className="mb-6">
+          <FichesPanel
+            dossierId={dossier._id || (dossier as any).id}
+            categorie={dossier.categorie}
+            variant="partenaire"
+          />
+        </div>
+
+        {/* Documents en préparation (brouillons collaboratifs internes) */}
         <DossierDraftsPanel
           dossierId={dossier._id || (dossier as any).id}
           linkToDedicatedPageHref={`/partenaire/dossiers/${dossierId}/documents-en-preparation`}

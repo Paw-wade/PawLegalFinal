@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { dossiersAPI, documentsAPI } from '@/lib/api';
@@ -98,6 +98,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   const initializedPersons = useRef(false);
 
   const isAdmin = variant === 'admin';
+  const isPartenaire = variant === 'partenaire';
 
   const load = useCallback(async () => {
     try {
@@ -306,7 +307,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
   // Une demande de fiche (Remplir côté demandeur, Valider/Refuser + PDF côté admin, invitation).
   const renderRequestItem = (r: FRequest) => {
     const b = statutBadge(r.statut);
-    const canFill = !isAdmin && r.statut === 'a_remplir';
+    const canFill = !isAdmin && !isPartenaire && r.statut === 'a_remplir';
     return (
       <li key={`r_${r._id}`} className="rounded-lg border border-teal-100 bg-white p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -345,8 +346,8 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
           </div>
         )}
 
-        {/* Inviter une autre personne à remplir cette fiche (état civil) — côté demandeur */}
-        {!isAdmin && r.typeFiche === 'etat_civil' && r.statut !== 'remplie' && (
+        {/* Inviter une autre personne à remplir cette fiche (état civil) - côté demandeur */}
+        {!isAdmin && !isPartenaire && r.typeFiche === 'etat_civil' && r.statut !== 'remplie' && (
           <div className="mt-2">
             {inviteUrls[r._id] ? (
               <div className="rounded-md border border-teal-200 bg-teal-50 p-2">
@@ -392,7 +393,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
             <button type="button" onClick={() => openPiece(p.document!)}
               className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Voir</button>
           )}
-          {!isAdmin && p.statut !== 'fourni' && (
+          {!isAdmin && !isPartenaire && p.statut !== 'fourni' && (
             <input ref={(el) => { pieceInputs.current[p._id] = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
               disabled={uploadingPiece === p._id} onChange={(e) => uploadPiece(p._id, e.target.files?.[0])}
               className="text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-teal-600 file:px-2 file:py-1 file:text-xs file:text-white hover:file:bg-teal-700" />
@@ -432,6 +433,8 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
         <p className="mt-0.5 text-xs text-teal-900/70">
           {isAdmin
             ? 'Gérez les fiches et pièces requises pour ce dossier.'
+            : isPartenaire
+            ? 'Fiches et pièces demandées dans le cadre de la constitution.'
             : 'Remplissez les fiches demandées par notre équipe ; le document est généré automatiquement.'}
         </p>
       </div>
@@ -441,7 +444,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
         <div className="mx-4 mt-3 rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs text-teal-800 sm:mx-5">{msg}</div>
       )}
 
-      {/* Bloc de contrôles admin — deux onglets */}
+      {/* Bloc de contrôles admin - deux onglets */}
       {isAdmin && (
         <div className="border-b border-teal-200 px-4 sm:px-5">
           {/* Onglets */}
@@ -501,7 +504,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
 
               return (
                 <div key={key} className="py-3 first:pt-1 last:pb-1">
-                  {/* Accordéon — header */}
+                  {/* Accordéon - header */}
                   <button type="button" onClick={() => togglePerson(key)}
                     className="flex w-full items-center justify-between gap-3 text-left">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -534,7 +537,7 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
                     </div>
                   )}
 
-                  {/* Accordéon — contenu */}
+                  {/* Accordéon - contenu */}
                   {isOpen && (
                     <div className="mt-3 space-y-4 pl-1">
                       {/* Sous-section Fiches */}
@@ -568,8 +571,8 @@ export function FichesPanel({ dossierId, categorie, variant }: Props) {
         )}
       </div>
 
-      {/* Actions côté demandeur (non-admin) */}
-      {!isAdmin && (
+      {/* Actions côté demandeur (non-admin, non-partenaire) */}
+      {!isAdmin && !isPartenaire && (
         <div className="space-y-3 border-t border-teal-100 px-4 py-3 sm:px-5">
           {requests.length > 0 && (
             <button type="button" onClick={addPerson} disabled={busy}
