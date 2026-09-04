@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { documentsAPI } from '@/lib/api';
 
 interface Compartiment {
@@ -51,8 +51,14 @@ export function DocumentsWithCompartiments({
   const [editingName, setEditingName] = useState('');
   const [savingRename, setSavingRename] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingConfirmId, setDeletingConfirmId] = useState<string | null>(null);
   const [movingDocId, setMovingDocId] = useState<string | null>(null);
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
   const [isExportingZip, setIsExportingZip] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ compId: string | null; done: number; total: number } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadTargetRef = useRef<string | null>(null);
 
   const loadCompartiments = async () => {
     setLoadingCompartiments(true);
@@ -88,7 +94,7 @@ export function DocumentsWithCompartiments({
       await loadCompartiments();
     } catch (e) {
       console.error('Erreur creation compartiment:', e);
-      alert('Impossible de créer le compartiment');
+      alert('Impossible de creer le compartiment');
     } finally {
       setCreating(false);
     }
@@ -111,11 +117,11 @@ export function DocumentsWithCompartiments({
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Supprimer ce compartiment ? Les documents seront déplacés dans "Non classés".')) return;
+  const handleDeleteCompartiment = async (id: string, withDocuments: boolean) => {
     setDeletingId(id);
+    setDeletingConfirmId(null);
     try {
-      await documentsAPI.deleteCompartiment(id);
+      await documentsAPI.deleteCompartiment(id, withDocuments);
       await loadCompartiments();
       onDocumentsChanged?.();
     } catch (e) {
@@ -136,15 +142,58 @@ export function DocumentsWithCompartiments({
       onDocumentsChanged?.();
     } catch (e) {
       console.error('Erreur deplacement:', e);
-      alert('Impossible de déplacer le document');
+      alert('Impossible de deplacer le document');
     } finally {
       setMovingDocId(null);
     }
   };
 
+  const handleDeleteDoc = async (docId: string) => {
+    if (!window.confirm('Supprimer definitivement ce document ?')) return;
+    setDeletingDocId(docId);
+    try {
+      await documentsAPI.deleteDocument(docId);
+      onDocumentsChanged?.();
+    } catch (e) {
+      console.error('Erreur suppression document:', e);
+      alert('Impossible de supprimer le document');
+    } finally {
+      setDeletingDocId(null);
+    }
+  };
+
+  const triggerUpload = (compId: string | null) => {
+    uploadTargetRef.current = compId;
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    const targetComp = uploadTargetRef.current;
+    setUploadProgress({ compId: targetComp, done: 0, total: files.length });
+    for (let i = 0; i < files.length; i++) {
+      const fd = new FormData();
+      fd.append('document', files[i] as File);
+      fd.append('dossierId', dossierId);
+      if (targetComp && targetComp !== '__none__') {
+        fd.append('compartiment', targetComp);
+      }
+      try {
+        await documentsAPI.uploadDocument(fd);
+      } catch (err) {
+        console.error('Erreur upload:', err);
+      }
+      setUploadProgress({ compId: targetComp, done: i + 1, total: files.length });
+    }
+    setUploadProgress(null);
+    onDocumentsChanged?.();
+  };
+
   const handleExportZip = async () => {
     if (!documents || documents.length === 0) {
-      alert('Aucun document à exporter.');
+      alert('Aucun document a exporter.');
       return;
     }
     setIsExportingZip(true);
@@ -161,7 +210,7 @@ export function DocumentsWithCompartiments({
           const fileName = resolveFileNameFromDownloadResponse(response, doc.nom || doc.originalName || 'document');
           zip.file(fileName, blob);
         } catch (err) {
-          console.warn('Document ignoré dans le ZIP:', docId, err);
+          console.warn('Document ignore dans le ZIP:', docId, err);
         }
       }
       const blob = await zip.generateAsync({ type: 'blob' });
@@ -173,13 +222,12 @@ export function DocumentsWithCompartiments({
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error('Erreur ZIP:', e);
-      alert('Erreur lors de la génération du ZIP');
+      alert('Erreur lors de la generation du ZIP');
     } finally {
       setIsExportingZip(false);
     }
   };
 
-  // Regrouper les documents par compartiment
   const grouped = (() => {
     const map = new Map<string, any[]>();
     map.set('__none__', []);
@@ -197,56 +245,63 @@ export function DocumentsWithCompartiments({
     const currentCId = (doc.compartiment?._id || doc.compartiment || '__none__') as string;
     const isHighlighted = targetDocId && String(docId) === String(targetDocId);
     const isMoving = movingDocId === docId;
+    const isDelDoc = deletingDocId === docId;
 
     return (
       <div
         key={docId}
         id={`doc-${docId}`}
-        className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg border min-w-0 transition-colors ${
-          isHighlighted
-            ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300'
-            : 'bg-gray-50 border-gray-200'
+        className={`flex items-center gap-2 py-1.5 min-w-0 border-b border-gray-100 last:border-0 transition-colors ${
+          isHighlighted ? 'bg-amber-50 -mx-1 px-1 rounded' : ''
         }`}
       >
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="text-base flex-shrink-0">📄</span>
-          <p className="font-medium text-sm break-words">{doc.nom}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+        <p
+          className="text-sm flex-1 min-w-0 truncate text-gray-800 cursor-default"
+          title={doc.nom}
+        >
+          {doc.nom}
+        </p>
+        <div className="flex items-center gap-1 shrink-0">
           {isAdmin && (
             <select
-              className="h-7 text-xs border border-gray-200 rounded px-1 bg-white max-w-[140px]"
+              className="h-6 text-xs border border-gray-200 rounded px-1 bg-white w-[90px]"
               value={currentCId}
               disabled={isMoving}
               onChange={(e) => handleMove(docId, e.target.value)}
-              title="Déplacer vers..."
+              title="Deplacer vers..."
             >
-              <option value="__none__">Non classés</option>
+              <option value="__none__">Non classes</option>
               {compartiments.map((c) => (
                 <option key={c._id} value={c._id}>{c.nom}</option>
               ))}
             </select>
           )}
-          <Btn
-            variant="outline"
-            className="text-xs h-7 px-2"
+          <button
+            className="text-xs h-6 px-1.5 rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 shrink-0"
             onClick={() => onPreviewDocument(doc)}
           >
-            👁️ Voir
-          </Btn>
-          <Btn
-            variant="outline"
-            className="text-xs h-7 px-2"
+            Voir
+          </button>
+          <button
+            className="text-xs h-6 px-1.5 text-gray-500 hover:text-gray-700 shrink-0"
             onClick={async () => {
-              try {
-                await documentsAPI.downloadAndSave(docId, doc.nom);
-              } catch {
-                alert('Erreur lors du téléchargement du document');
-              }
+              try { await documentsAPI.downloadAndSave(docId, doc.nom); }
+              catch { alert('Erreur telechargement'); }
             }}
+            title="Telecharger"
           >
             ⬇️
-          </Btn>
+          </button>
+          {isAdmin && (
+            <button
+              className="text-xs h-6 px-1 text-red-400 hover:text-red-600 disabled:opacity-40 shrink-0"
+              disabled={isDelDoc}
+              onClick={() => handleDeleteDoc(docId)}
+              title="Supprimer"
+            >
+              {isDelDoc ? '...' : '🗑️'}
+            </button>
+          )}
         </div>
       </div>
     );
@@ -256,6 +311,8 @@ export function DocumentsWithCompartiments({
     const isNone = id === '__none__';
     const isEditing = editingId === id;
     const isDeleting = deletingId === id;
+    const isConfirming = deletingConfirmId === id;
+    const isUploading = uploadProgress !== null && uploadProgress.compId === id;
 
     return (
       <div key={id} className="mb-5">
@@ -280,6 +337,30 @@ export function DocumentsWithCompartiments({
                 Annuler
               </Btn>
             </>
+          ) : isConfirming ? (
+            <>
+              <span className="text-xs text-gray-600 font-medium">Supprimer "{nom}" :</span>
+              <button
+                className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-300 disabled:opacity-40"
+                disabled={isDeleting}
+                onClick={() => handleDeleteCompartiment(id, false)}
+              >
+                Deplacer vers Non classes
+              </button>
+              <button
+                className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 border border-red-300 disabled:opacity-40"
+                disabled={isDeleting}
+                onClick={() => handleDeleteCompartiment(id, true)}
+              >
+                Supprimer les documents
+              </button>
+              <button
+                className="text-xs px-2 py-1 rounded text-gray-500 hover:text-gray-700"
+                onClick={() => setDeletingConfirmId(null)}
+              >
+                Annuler
+              </button>
+            </>
           ) : (
             <>
               <span className="font-semibold text-sm text-gray-800">
@@ -297,7 +378,7 @@ export function DocumentsWithCompartiments({
                   <button
                     className="text-xs text-red-500 hover:underline"
                     disabled={isDeleting}
-                    onClick={() => handleDelete(id)}
+                    onClick={() => setDeletingConfirmId(id)}
                   >
                     {isDeleting ? '...' : '🗑️'}
                   </button>
@@ -306,13 +387,29 @@ export function DocumentsWithCompartiments({
             </>
           )}
         </div>
-        <div className="space-y-1.5 pl-4">
+        <div className="pl-2">
           {docs.length === 0 ? (
-            <p className="text-xs text-gray-400 italic">Aucun document</p>
+            <p className="text-xs text-gray-400 italic py-1">Aucun document</p>
           ) : (
             docs.map(renderDoc)
           )}
         </div>
+        {isAdmin && (
+          <div className="pl-2 mt-1.5">
+            {isUploading ? (
+              <p className="text-xs text-orange-600">
+                Envoi {uploadProgress!.done}/{uploadProgress!.total}...
+              </p>
+            ) : (
+              <button
+                className="text-xs text-orange-600 hover:text-orange-800 border border-dashed border-orange-300 rounded px-2 py-1 hover:bg-orange-50"
+                onClick={() => triggerUpload(id)}
+              >
+                + Ajouter des fichiers
+              </button>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -322,6 +419,13 @@ export function DocumentsWithCompartiments({
 
   return (
     <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 min-w-0">
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileChange}
+      />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h2 className="text-xl font-bold break-words">📁 Documents du dossier</h2>
         {isAdmin && (
@@ -331,7 +435,7 @@ export function DocumentsWithCompartiments({
             onClick={handleExportZip}
             disabled={isLoading || isExportingZip || !hasContent}
           >
-            {isExportingZip ? 'Préparation ZIP...' : '🗜️ Télécharger tout (ZIP)'}
+            {isExportingZip ? 'Preparation ZIP...' : '🗜️ Telecharger tout (ZIP)'}
           </Btn>
         )}
       </div>
@@ -339,11 +443,21 @@ export function DocumentsWithCompartiments({
       {isLoading || loadingCompartiments ? (
         <p className="text-sm text-muted-foreground">Chargement...</p>
       ) : !hasContent ? (
-        <p className="text-sm text-muted-foreground">Aucun document</p>
+        <div>
+          <p className="text-sm text-muted-foreground mb-2">Aucun document</p>
+          {isAdmin && (
+            <button
+              className="text-xs text-orange-600 hover:text-orange-800 border border-dashed border-orange-300 rounded px-2 py-1 hover:bg-orange-50"
+              onClick={() => triggerUpload(null)}
+            >
+              + Ajouter des fichiers
+            </button>
+          )}
+        </div>
       ) : (
         <>
           {compartiments.map((c) => renderGroup(c._id, c.nom, grouped.get(c._id) || []))}
-          {(showNone || compartiments.length === 0) && renderGroup('__none__', 'Non classés', grouped.get('__none__') || [])}
+          {(showNone || compartiments.length === 0) && renderGroup('__none__', 'Non classes', grouped.get('__none__') || [])}
         </>
       )}
 
@@ -363,7 +477,7 @@ export function DocumentsWithCompartiments({
               onClick={handleCreate}
               disabled={creating || !newName.trim()}
             >
-              {creating ? '...' : '+ Créer'}
+              {creating ? '...' : '+ Creer'}
             </Btn>
           </div>
         </div>

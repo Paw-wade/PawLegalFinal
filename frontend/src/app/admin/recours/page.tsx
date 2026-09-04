@@ -546,89 +546,80 @@ export default function RecoursDirectoryPage() {
   const renderTemplateCard = (tpl: RecoursTemplate, showThemeChip = false) => (
     <div
       key={tpl._id}
-      className="border rounded-lg p-3 sm:p-4 bg-white hover:shadow-md transition-shadow flex flex-col sm:flex-row sm:items-center gap-3"
+      className="px-3 py-2 min-w-0 border-b border-gray-100 last:border-0"
     >
-      <div className="flex-1 min-w-0">
-        <div className="flex flex-wrap items-center gap-2 mb-0.5">
-          <InlineDocumentRename
-            value={tpl.title || tpl.fileName || 'Sans titre'}
-            className="text-sm font-semibold text-foreground"
-            onSave={(nextName) => handleRenameTemplate(tpl._id, nextName)}
-          />
+      <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-2">
+        {/* Nom + chip : pleine largeur sur mobile, flex-1 sur desktop */}
+        <div className="flex items-start gap-1.5 flex-1 min-w-0">
+          <div className="flex-1 min-w-0">
+            <InlineDocumentRename
+              value={tpl.title || tpl.fileName || 'Sans titre'}
+              className="text-sm text-gray-800 whitespace-normal md:truncate"
+              onSave={(nextName) => handleRenameTemplate(tpl._id, nextName)}
+            />
+          </div>
           {showThemeChip && tpl.type?.label ? (
-            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 border border-slate-200">
+            <span className="mt-0.5 inline-flex shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 border border-slate-200">
               {tpl.type.label}
             </span>
           ) : null}
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5 break-words">
-          {tpl.description || tpl.fileName}
-        </p>
-        <p className="text-[11px] text-gray-500 mt-0.5">
-          {tpl.mimeType.includes('pdf') ? 'PDF' : 'Document'}
-          {tpl.createdAt
-            ? ` · ${new Date(tpl.createdAt).toLocaleDateString('fr-FR', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              })}`
-            : ''}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5 flex-shrink-0">
-        <button
-          type="button"
-          onClick={() => {
-            setPreviewTemplate(tpl);
-            setPreviewTargetTypeId(tpl.type?._id || selectedTypeId || '');
-          }}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
-          title="Ouvrir"
-          aria-label="Ouvrir"
-        >
-          👁️
-        </button>
-        <button
-          type="button"
-          onClick={() => void openSendToDossierModal(tpl)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-blue-300 text-sm text-blue-700 hover:bg-blue-50"
-          title="Envoyer vers un dossier"
-          aria-label="Envoyer vers un dossier"
-        >
-          📁
-        </button>
-        <button
-          type="button"
-          onClick={() => openShareModal(tpl)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
-          title="Lien public"
-          aria-label="Lien public"
-        >
-          🔗
-        </button>
-        <a
-          href={buildSecureFileUrl(tpl.fileUrl)}
-          download
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
-          title="Télécharger"
-          aria-label="Télécharger"
-        >
-          ⬇️
-        </a>
-        <button
-          type="button"
-          onClick={() => handleDeleteTemplate(tpl._id, tpl.title)}
-          disabled={deletingTemplateId === tpl._id || movingTemplateId === tpl._id}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-red-600 text-sm text-white hover:bg-red-700 disabled:opacity-60"
-          title={deletingTemplateId === tpl._id ? 'Suppression…' : 'Supprimer'}
-          aria-label={deletingTemplateId === tpl._id ? 'Suppression en cours' : 'Supprimer'}
-        >
-          {deletingTemplateId === tpl._id ? (
-            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-          ) : (
-            '🗑️'
-          )}
-        </button>
+        {/* Boutons : taille tactile sur mobile, compacts sur desktop */}
+        <div className="flex items-center gap-2 md:gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setPreviewTemplate(tpl);
+              setPreviewTargetTypeId(tpl.type?._id || selectedTypeId || '');
+            }}
+            className="inline-flex h-9 w-9 md:h-7 md:w-7 items-center justify-center rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
+            title="Ouvrir"
+            aria-label="Ouvrir"
+          >
+            👁️
+          </button>
+          <button
+            type="button"
+            onClick={() => void openSendToDossierModal(tpl)}
+            className="inline-flex h-9 w-9 md:h-7 md:w-7 items-center justify-center rounded-md border border-blue-300 text-sm text-blue-700 hover:bg-blue-50"
+            title="Envoyer vers un dossier"
+            aria-label="Envoyer vers un dossier"
+          >
+            📁
+          </button>
+          <button
+            type="button"
+            onClick={() => openShareModal(tpl)}
+            className="inline-flex h-9 w-9 md:h-7 md:w-7 items-center justify-center rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
+            title="Lien public"
+            aria-label="Lien public"
+          >
+            🔗
+          </button>
+          <a
+            href={buildSecureFileUrl(tpl.fileUrl)}
+            download
+            className="inline-flex h-9 w-9 md:h-7 md:w-7 items-center justify-center rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
+            title="Telecharger"
+            aria-label="Telecharger"
+          >
+            ⬇️
+          </a>
+          <button
+            type="button"
+            onClick={() => handleDeleteTemplate(tpl._id, tpl.title)}
+            disabled={deletingTemplateId === tpl._id || movingTemplateId === tpl._id}
+            className="inline-flex h-9 w-9 md:h-7 md:w-7 items-center justify-center rounded-md bg-red-600 text-sm text-white hover:bg-red-700 disabled:opacity-60"
+            title={deletingTemplateId === tpl._id ? 'Suppression...' : 'Supprimer'}
+            aria-label={deletingTemplateId === tpl._id ? 'Suppression en cours' : 'Supprimer'}
+          >
+            {deletingTemplateId === tpl._id ? (
+              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+              '🗑️'
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -674,7 +665,7 @@ export default function RecoursDirectoryPage() {
                   <span className="text-sm font-semibold text-foreground">{type.label}</span>
                   <DocCountBadge count={sectionTemplates.length} />
                 </button>
-                <div className="space-y-3 pl-0 sm:pl-2">
+                <div className="pl-0 sm:pl-2 border border-gray-100 rounded-lg overflow-hidden bg-white">
                   {sectionTemplates.map((tpl) => renderTemplateCard(tpl))}
                 </div>
               </section>
@@ -686,7 +677,7 @@ export default function RecoursDirectoryPage() {
 
     const showThemeChip = selectedTypeId === ALL_TYPES_ID || Boolean(searchQuery.trim());
     return (
-      <div className="space-y-3">
+      <div className="border border-gray-100 rounded-lg overflow-hidden bg-white">
         {filteredTemplates.map((tpl) => renderTemplateCard(tpl, showThemeChip))}
       </div>
     );
@@ -706,10 +697,10 @@ export default function RecoursDirectoryPage() {
   return (
     <div className="min-h-screen bg-background">
       <main className="w-full px-4 py-8">
-        <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+        <div className="bg-white rounded-xl shadow-md border border-gray-200 p-4 sm:p-6">
+          <div className="flex items-start justify-between gap-3 mb-4 sm:mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Répertoire des documents importants</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground">Répertoire des documents importants</h1>
               {!isLoading && (
                 <p className="mt-1 text-sm text-muted-foreground">
                   {totalDocumentCount} document{totalDocumentCount !== 1 ? 's' : ''} · {types.length} thème
@@ -720,6 +711,13 @@ export default function RecoursDirectoryPage() {
                 </p>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowUploadForm((v) => !v)}
+              className="md:hidden shrink-0 px-3 py-2 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90"
+            >
+              + Ajouter
+            </button>
           </div>
 
           {error && (
@@ -728,9 +726,9 @@ export default function RecoursDirectoryPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Colonne gauche : types */}
-            <div className="md:col-span-1">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-4">
+            {/* Colonne gauche : types (desktop seulement) */}
+            <div className="hidden md:block md:col-span-1">
               <div className="border rounded-lg p-3 bg-gray-50">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                   Thèmes
@@ -868,6 +866,35 @@ export default function RecoursDirectoryPage() {
 
             {/* Colonne droite : modèles */}
             <div className="md:col-span-3">
+              {/* Mobile : themes en chips horizontaux */}
+              <div className="md:hidden mb-3 flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                <button
+                  type="button"
+                  onClick={() => handleSelectType(ALL_TYPES_ID)}
+                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                    selectedTypeId === ALL_TYPES_ID
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Tous ({totalDocumentCount})
+                </button>
+                {types.map((type) => (
+                  <button
+                    key={type._id}
+                    type="button"
+                    onClick={() => handleSelectType(type._id)}
+                    className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      selectedTypeId === type._id
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {type.label}{(typeCounts[type._id] || 0) > 0 ? ` (${typeCounts[type._id]})` : ''}
+                  </button>
+                ))}
+              </div>
+
               <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
                 <input
                   type="search"

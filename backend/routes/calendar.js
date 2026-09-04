@@ -6,11 +6,15 @@ const RendezVous = require('../models/RendezVous');
 const Dossier = require('../models/Dossier');
 const Task = require('../models/Task');
 const User = require('../models/User');
+const CalendarEvent = require('../models/CalendarEvent');
 
 const router = express.Router();
 router.use(protect);
 
-// Couleur selon nombre de jours restants
+const STAFF_ROLES = ['admin', 'superadmin', 'assistant', 'secretaire', 'juriste', 'comptable'];
+const VALID_COULEURS = ['blue', 'green', 'purple', 'orange', 'red', 'amber', 'indigo', 'pink'];
+const VALID_VISIBILITES = ['prive', 'equipe', 'tous'];
+
 function urgencyColor(daysLeft) {
   if (daysLeft <= 3) return 'red';
   if (daysLeft <= 7) return 'orange';
@@ -22,8 +26,24 @@ function daysUntil(date) {
   return Math.ceil((new Date(date) - new Date()) / (1000 * 60 * 60 * 24));
 }
 
+// @route   GET /api/calendar/members
+// @desc    Liste du personnel pour la selection de participants
+// @access  Private staff
+router.get('/members', async (req, res) => {
+  try {
+    const members = await User.find({
+      role: { $in: STAFF_ROLES },
+      isActive: { $ne: false },
+    }).select('firstName lastName email role').lean();
+    return res.json({ success: true, members });
+  } catch (error) {
+    console.error('Erreur GET /calendar/members:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // @route   GET /api/calendar/events?start=&end=
-// @desc    Agrege RDV + echeances dossiers + expirations titres + taches
+// @desc    Agrege RDV + echeances dossiers + expirations titres + taches + evenements personnalises
 // @access  Private (staff + partenaire)
 router.get('/events', async (req, res) => {
   try {
@@ -42,13 +62,12 @@ router.get('/events', async (req, res) => {
     const role = req.user.role;
     const isPartenaire = role === 'partenaire';
     const isSuperAdmin = role === 'superadmin';
+    const uid = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null;
 
-    // Filtre dossier selon le role
     let dossierFilter = {};
     let allowedDossierIds = null;
 
     if (isPartenaire) {
-      const uid = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
       const transmitted = await Dossier.find({ 'transmittedTo.partenaire': uid }).select('_id').lean();
       allowedDossierIds = transmitted.map((d) => d._id);
       if (allowedDossierIds.length === 0) {
@@ -68,8 +87,7 @@ router.get('/events', async (req, res) => {
 
     // ── 1. Rendez-vous ────────────────────────────────────────────────────────
     if (!isPartenaire) {
-      const rdvQuery = { date: { $gte: startDate, $lte: endDate } };
-      const rdvs = await RendezVous.find(rdvQuery)
+      const rdvs = await RendezVous.find({ date: { $gte: startDate, $lte: endDate } })
         .populate('user', 'firstName lastName')
         .lean();
 
@@ -82,7 +100,7 @@ router.get('/events', async (req, res) => {
           titre: `RDV - ${rdv.prenom || ''} ${rdv.nom || ''}`.trim(),
           details: String(rdv.motif || '').slice(0, 80),
           couleur: 'blue',
-          lien: `/admin/appointments`,
+          lien: '/admin/appointments',
           statut: rdv.statut,
           urgence: false,
         });
@@ -90,13 +108,10 @@ router.get('/events', async (req, res) => {
     }
 
     // ── 2. Echeances dossiers ─────────────────────────────────────────────────
-    const dossierEcheanceFilter = {
+    const dossiersEch = await Dossier.find({
       ...dossierFilter,
       dateEcheance: { $gte: startDate, $lte: endDate },
-    };
-    const dossiersEch = await Dossier.find(dossierEcheanceFilter)
-      .select('titre numero dateEcheance statut priorite')
-      .lean();
+    }).select('titre numero dateEcheance statut priorite').lean();
 
     for (const d of dossiersEch) {
       const dl = daysUntil(d.dateEcheance);
@@ -114,12 +129,12 @@ router.get('/events', async (req, res) => {
       });
     }
 
-    // ── 3. Expirations titres de sejour (clients des dossiers) ────────────────
+    // ── 3. Expirations titres de sejour ───────────────────────────────────────
     if (!isPartenaire) {
-      const titreFilter = { dateExpiration: { $gte: startDate, $lte: endDate }, role: 'client' };
-      const clients = await User.find(titreFilter)
-        .select('firstName lastName dateExpiration typeTitre _id')
-        .lean();
+      const clients = await User.find({
+        dateExpiration: { $gte: startDate, $lte: endDate },
+        role: 'client',
+      }).select('firstName lastName dateExpiration typeTitre _id').lean();
 
       for (const u of clients) {
         const dl = daysUntil(u.dateExpiration);
@@ -137,7 +152,6 @@ router.get('/events', async (req, res) => {
         });
       }
     } else {
-      // Partenaire : expirations des clients des dossiers transmis
       const dossiersWithUser = await Dossier.find(dossierFilter).select('user').lean();
       const clientIds = dossiersWithUser.map((d) => d.user).filter(Boolean);
       if (clientIds.length > 0) {
@@ -196,15 +210,11 @@ router.get('/events', async (req, res) => {
       });
     }
 
-    // Dossiers crees dans la periode (optionnel - informationnel)
-    const dossiersCreesFilter = {
+    // ── 5. Dossiers crees ─────────────────────────────────────────────────────
+    const dossiersNouveaux = await Dossier.find({
       ...dossierFilter,
       createdAt: { $gte: startDate, $lte: endDate },
-    };
-    const dossiersNouveaux = await Dossier.find(dossiersCreesFilter)
-      .select('titre numero createdAt categorie')
-      .limit(50)
-      .lean();
+    }).select('titre numero createdAt categorie').limit(50).lean();
 
     for (const d of dossiersNouveaux) {
       events.push({
@@ -221,9 +231,144 @@ router.get('/events', async (req, res) => {
       });
     }
 
+    // ── 6. Evenements personnalises ───────────────────────────────────────────
+    if (!isPartenaire && uid) {
+      const customFilter = {
+        date: { $gte: startDate, $lte: endDate },
+        $or: [
+          { visibilite: { $in: ['equipe', 'tous'] } },
+          { createdBy: uid },
+          { participants: uid },
+        ],
+      };
+
+      const customEvents = await CalendarEvent.find(customFilter)
+        .populate('createdBy', 'firstName lastName')
+        .populate('participants', 'firstName lastName')
+        .lean();
+
+      for (const ev of customEvents) {
+        const creatorName = ev.createdBy
+          ? `${ev.createdBy.firstName || ''} ${ev.createdBy.lastName || ''}`.trim()
+          : '';
+        const participantNames = (ev.participants || []).map((p) =>
+          `${p.firstName || ''} ${p.lastName || ''}`.trim()
+        );
+        const isCreator = ev.createdBy && ev.createdBy._id.toString() === userId;
+        const isAdmin = ['admin', 'superadmin'].includes(role);
+
+        events.push({
+          id: `custom_${ev._id}`,
+          type: ev.type,
+          date: ev.date,
+          heure: ev.heureDebut || null,
+          heureFin: ev.heureFin || null,
+          titre: ev.titre,
+          details: ev.type === 'email_programme'
+            ? `A: ${ev.emailTo}${ev.emailEnvoye ? ' (envoye)' : ''}`
+            : ev.description || '',
+          couleur: ev.couleur,
+          lien: ev.dossierId ? `/admin/dossiers/${ev.dossierId}` : null,
+          statut: ev.type === 'email_programme' ? (ev.emailEnvoye ? 'Envoye' : 'En attente') : null,
+          urgence: false,
+          customId: ev._id.toString(),
+          deletable: isCreator || isAdmin,
+          visibilite: ev.visibilite,
+          participants: participantNames,
+          createdByName: creatorName,
+          emailTo: ev.type === 'email_programme' ? ev.emailTo : undefined,
+          emailEnvoye: ev.type === 'email_programme' ? ev.emailEnvoye : undefined,
+        });
+      }
+    }
+
     return res.json({ success: true, events });
   } catch (error) {
     console.error('Erreur GET /calendar/events:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   POST /api/calendar/custom-events
+// @desc    Creer un evenement ou email programme
+// @access  Private staff
+router.post('/custom-events', async (req, res) => {
+  try {
+    const {
+      type, titre, description, date, heureDebut, heureFin,
+      couleur, visibilite, participants, rappelVeille, dossierId,
+      emailTo, emailSujet, emailCorps,
+    } = req.body;
+
+    if (!type || !['evenement', 'email_programme'].includes(type)) {
+      return res.status(400).json({ success: false, message: 'Type invalide' });
+    }
+    if (!titre || !String(titre).trim()) {
+      return res.status(400).json({ success: false, message: 'Le titre est requis' });
+    }
+    if (!date) {
+      return res.status(400).json({ success: false, message: 'La date est requise' });
+    }
+    if (type === 'email_programme') {
+      if (!emailTo || !String(emailTo).trim()) {
+        return res.status(400).json({ success: false, message: 'Le destinataire est requis' });
+      }
+      if (!emailSujet || !String(emailSujet).trim()) {
+        return res.status(400).json({ success: false, message: "L'objet est requis" });
+      }
+      if (!emailCorps || !String(emailCorps).trim()) {
+        return res.status(400).json({ success: false, message: 'Le corps du message est requis' });
+      }
+    }
+
+    const ev = await CalendarEvent.create({
+      type,
+      titre: String(titre).trim(),
+      description: String(description || '').trim(),
+      date: new Date(date),
+      heureDebut: String(heureDebut || '').trim(),
+      heureFin: String(heureFin || '').trim(),
+      couleur: VALID_COULEURS.includes(couleur) ? couleur : 'blue',
+      visibilite: VALID_VISIBILITES.includes(visibilite) ? visibilite : 'equipe',
+      createdBy: req.user.id,
+      participants: Array.isArray(participants)
+        ? participants.filter((id) => mongoose.Types.ObjectId.isValid(id))
+        : [],
+      rappelVeille: rappelVeille !== false,
+      dossierId: dossierId && mongoose.Types.ObjectId.isValid(dossierId) ? dossierId : null,
+      emailTo: type === 'email_programme' ? String(emailTo || '').trim() : '',
+      emailSujet: type === 'email_programme' ? String(emailSujet || '').trim() : '',
+      emailCorps: type === 'email_programme' ? String(emailCorps || '').trim() : '',
+    });
+
+    return res.status(201).json({
+      success: true,
+      event: { id: ev._id, titre: ev.titre, type: ev.type },
+    });
+  } catch (error) {
+    console.error('Erreur POST /calendar/custom-events:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   DELETE /api/calendar/custom-events/:id
+// @desc    Supprimer un evenement personnalise (createur ou admin)
+// @access  Private staff
+router.delete('/custom-events/:id', async (req, res) => {
+  try {
+    const ev = await CalendarEvent.findById(req.params.id);
+    if (!ev) return res.status(404).json({ success: false, message: 'Evenement introuvable' });
+
+    const isCreator = ev.createdBy.toString() === req.user.id;
+    const isAdmin = ['admin', 'superadmin'].includes(req.user.role);
+    if (!isCreator && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Vous ne pouvez pas supprimer cet evenement' });
+    }
+
+    await CalendarEvent.deleteOne({ _id: ev._id });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Erreur DELETE /calendar/custom-events/:id:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

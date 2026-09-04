@@ -1486,8 +1486,8 @@ export const documentsAPI = {
     api.post('/user/documents/compartiments', data),
   renameCompartiment: (id: string, nom: string) =>
     api.patch(`/user/documents/compartiments/${id}`, { nom }),
-  deleteCompartiment: (id: string) =>
-    api.delete(`/user/documents/compartiments/${id}`),
+  deleteCompartiment: (id: string, withDocuments = false) =>
+    api.delete(`/user/documents/compartiments/${id}`, { params: withDocuments ? { withDocuments: 'true' } : {} }),
   moveDocumentToCompartiment: (docId: string, compartimentId: string | null) =>
     api.patch(`/user/documents/${docId}`, { compartiment: compartimentId }),
 };

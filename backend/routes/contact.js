@@ -7,6 +7,7 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
+const { getDefaultEtapes } = require('../utils/defaultEtapes');
 
 const router = express.Router();
 
@@ -562,10 +563,11 @@ router.post(
       const clientNom = nameParts.slice(1).join(' ') || '';
 
       // Créer le dossier avec les données du message
+      const categorieContact = req.body.categorie || 'autre';
       const dossierData = {
         titre: req.body.titre,
         description: req.body.description || `Dossier créé depuis le message de contact: "${message.subject}"\n\n${message.message}`,
-        categorie: req.body.categorie,
+        categorie: categorieContact,
         type: req.body.type,
         statut: req.body.statut || 'recu',
         priorite: req.body.priorite || 'normale',
@@ -574,7 +576,8 @@ router.post(
         clientEmail: req.body.clientEmail || message.email,
         clientTelephone: req.body.clientTelephone || message.phone || '',
         notes: `Dossier créé depuis le message de contact ID: ${message._id}\nSujet: ${message.subject}\nDate du message: ${message.createdAt}`,
-        createdFromContactMessage: message._id, // Lier le dossier au message
+        createdFromContactMessage: message._id,
+        etapesSupplementaires: getDefaultEtapes(categorieContact, req.user ? req.user.id : null),
       };
 
       const newDossier = await Dossier.create(dossierData);

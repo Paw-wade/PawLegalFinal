@@ -740,6 +740,11 @@ router.post('/', (req, res, next) => {
       }
     }
 
+    // Associer au compartiment si fourni et valide
+    if (req.body.compartiment && mongoose.Types.ObjectId.isValid(req.body.compartiment)) {
+      documentData.compartiment = req.body.compartiment;
+    }
+
     console.log('📤 Création du document...');
     const document = await Document.create(documentData);
     console.log('✅ Document créé avec succès:', document._id);
@@ -1467,10 +1472,25 @@ router.delete('/compartiments/:id', authorize('admin', 'superadmin', 'partenaire
     if (!compartiment) {
       return res.status(404).json({ success: false, message: 'Compartiment non trouve' });
     }
-    // Dé-classer les documents qui étaient dans ce compartiment
-    await Document.updateMany({ compartiment: compartiment._id }, { $set: { compartiment: null } });
+    const withDocuments = req.query.withDocuments === 'true';
+    if (withDocuments) {
+      const docs = await Document.find({ compartiment: compartiment._id }).lean();
+      for (const doc of docs) {
+        if (doc.cheminFichier && isS3StoragePath(doc.cheminFichier)) {
+          try { await archiveS3Object(doc.cheminFichier); } catch (e) { console.warn('Archive S3 echec:', e.message); }
+        }
+        await Document.deleteOne({ _id: doc._id });
+      }
+    } else {
+      await Document.updateMany({ compartiment: compartiment._id }, { $set: { compartiment: null } });
+    }
     await compartiment.deleteOne();
-    return res.json({ success: true, message: 'Compartiment supprime, documents deplaces vers Non classes' });
+    return res.json({
+      success: true,
+      message: withDocuments
+        ? 'Compartiment et documents supprimes'
+        : 'Compartiment supprime, documents deplaces vers Non classes',
+    });
   } catch (error) {
     console.error('Erreur DELETE compartiment:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });

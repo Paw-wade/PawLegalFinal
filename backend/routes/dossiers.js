@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const Dossier = require('../models/Dossier');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const { getDefaultEtapes } = require('../utils/defaultEtapes');
 const StandaloneTarificationRequest = require('../models/StandaloneTarificationRequest');
 const { protect, authorize } = require('../middleware/auth');
 const pieceUpload = require('../utils/pieceUpload');
@@ -635,6 +636,8 @@ router.post(
         }
       }
 
+      const categorieFinale = categorie || 'autre';
+      const creatorId = req.user ? req.user.id : null;
       const dossier = await Dossier.create({
         user: finalUserId || null,
         clientNom: finalUserId ? null : clientNom,
@@ -643,7 +646,7 @@ router.post(
         clientTelephone: finalUserId ? user.phone : clientTelephone,
         titre: normalizedTitre,
         description: description || '',
-        categorie: categorie || 'autre',
+        categorie: categorieFinale,
         type: type || '',
         statut: isPublicDemande ? 'en_attente_validation' : (statut || 'recu'),
         priorite: priorite || 'normale',
@@ -652,9 +655,10 @@ router.post(
         champsFormulaire: champsFormulaireClean,
         suiviToken: require('crypto').randomBytes(24).toString('hex'),
         estDemandePublique: isPublicDemande,
-        createdBy: req.user ? req.user.id : null, // null si créé par un visiteur
+        createdBy: creatorId,
         assignedTo: assignedTo || null,
-        rendezVous: rendezVousId ? [rendezVousId] : []
+        rendezVous: rendezVousId ? [rendezVousId] : [],
+        etapesSupplementaires: getDefaultEtapes(categorieFinale, creatorId),
       });
 
       if (assignedTo) {
@@ -1515,7 +1519,7 @@ router.post('/:id/fiche-invites', async (req, res) => {
 // @desc    Télécharger le PDF d'une fiche remplie
 router.get('/:id/fiches/:ficheId/pdf', async (req, res) => {
   try {
-    const dossier = await Dossier.findById(req.params.id).select('user assignedTo numero');
+    const dossier = await Dossier.findById(req.params.id).select('user assignedTo numero transmittedTo');
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     if (!canAccessDossierFiche(dossier, req.user)) return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     const FicheConstitution = require('../models/FicheConstitution');
@@ -1894,6 +1898,7 @@ router.post(
         }
       }
 
+      const categorieFinale2 = categorie || 'autre';
       const dossier = await Dossier.create({
         user: finalUserId || null,
         clientNom: finalUserId ? null : clientNom,
@@ -1902,7 +1907,7 @@ router.post(
         clientTelephone: finalUserId ? user.phone : clientTelephone,
         titre: normalizedTitre,
         description: description || '',
-        categorie: categorie || 'autre',
+        categorie: categorieFinale2,
         type: type || '',
         statut: statut || 'recu',
         priorite: priorite || 'normale',
@@ -1911,7 +1916,8 @@ router.post(
         suiviToken: require('crypto').randomBytes(24).toString('hex'),
         createdBy: req.user.id,
         assignedTo: assignedTo || null,
-        rendezVous: rendezVousId ? [rendezVousId] : []
+        rendezVous: rendezVousId ? [rendezVousId] : [],
+        etapesSupplementaires: getDefaultEtapes(categorieFinale2, req.user.id),
       });
 
       if (assignedTo) {
