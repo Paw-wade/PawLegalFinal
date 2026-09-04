@@ -82,7 +82,7 @@ async function checkTarificationInstallmentReminders() {
         });
         const label = String(echeance.label || 'Échéance').trim() || 'Échéance';
         const titre = 'Échéance de tarification dans 3 jours';
-        const message = `Pour le dossier « ${dossierTitle} » (${dossierRef}), l’échéance « ${label} » de ${amountText} ${dossier.tarificationDevise || ‘EUR’} arrive le ${dueLabel}.`;
+        const message = `Pour le dossier « ${dossierTitle} » (${dossierRef}), l’échéance « ${label} » de ${amountText} ${dossier.tarificationDevise || "EUR"} arrive le ${dueLabel}.`;
 
         await Notification.create({
           user: clientUserId,
