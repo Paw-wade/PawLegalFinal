@@ -36,6 +36,7 @@ function devApiRewriteRules(backendOrigin) {
     'content',
     'media',
     'appointments',
+    'calendar',
     'forum',
     'logs',
     'notifications',

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -79,7 +79,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
           </>
         )}
 
-        {/* Contenu — padding mobile et pas de débordement */}
+        {/* Contenu - padding mobile et pas de débordement */}
         <main
           className={`flex flex-1 flex-col min-h-0 overflow-x-hidden w-full max-w-[100vw] px-3 sm:px-4 lg:px-6 safe-bottom ${
             lexiaFullscreen ? 'overflow-y-hidden pb-0 pt-0' : 'overflow-y-auto pb-6'

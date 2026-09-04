@@ -1,11 +1,11 @@
-/** Schéma fiche SAS (Société par Actions Simplifiée) — Sénégal. */
+﻿/** Schéma fiche SAS (Société par Actions Simplifiée) - Sénégal. */
 const { TXT, VAL_NOMINALE, LIBRE_CONDITIONS, sectionObjet, sectionIdentite, sectionPublication, staticSection } = require('../common');
 
 const VAL_NOMINALE_SAS = [...VAL_NOMINALE, { value: 'autre', label: 'Autre (à préciser)' }];
 
 module.exports = {
   type: 'sas',
-  titre: 'Fiche de renseignements — SAS',
+  titre: 'Fiche de renseignements - SAS',
   sousTitre: 'Société par Actions Simplifiée',
   associesSource: { section: 'repartition', field: 'nom' },
   gerantsSource: { fields: ['president_nom', 'dg_nom'] },
@@ -51,8 +51,8 @@ module.exports = {
       id: 'direction', titre: 'Direction de la société',
       fields: [
         { name: 'direction_structure', label: 'Structure de direction', type: 'radio', options: [{ value: 'president', label: 'SAS avec Président de société' }, { value: 'president_dg', label: 'SAS avec Président et Directeur Général' }] },
-        { name: 'president_nom', label: 'Président — identité', type: 'text' },
-        { name: 'dg_nom', label: 'Directeur Général — identité (le cas échéant)', type: 'text' },
+        { name: 'president_nom', label: 'Président - identité', type: 'text' },
+        { name: 'dg_nom', label: 'Directeur Général - identité (le cas échéant)', type: 'text' },
         { name: 'pouvoirs', label: 'Pouvoirs à l’égard des tiers', type: 'radio', options: [{ value: 'plenitude', label: 'Plénitude de pouvoirs' }, { value: 'limitation', label: 'Limitation de pouvoirs' }] },
         { name: 'pouvoirs_limitation', label: 'Préciser en cas de limitation de pouvoirs', type: 'textarea', fullWidth: true },
       ],

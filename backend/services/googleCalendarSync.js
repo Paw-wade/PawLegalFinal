@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Synchronise les RDV vers Google Calendar (API Calendar v3) : création dès la demande
  * (en attente), mise à jour à la confirmation / replanification / fin, suppression si annulé.
  *
@@ -229,7 +229,7 @@ async function verifyGoogleCalendarTargetReady() {
   if (items.length) {
     lines.push('Calendriers visibles pour ce compte :');
     for (const c of items) {
-      lines.push(`  • ${c.id} — ${c.summary || '(sans titre)'} (${c.accessRole || '?'})`);
+      lines.push(`  • ${c.id} - ${c.summary || '(sans titre)'} (${c.accessRole || '?'})`);
     }
   } else {
     lines.push('Aucun calendrier visible : le partage avec le compte de service n’est pas encore effectif.');
@@ -298,15 +298,15 @@ function statutLabel(statut) {
   if (s === 'en_attente') return 'En attente de confirmation';
   if (s === 'termine') return 'Terminé';
   if (s === 'annule') return 'Annulé';
-  return s || '—';
+  return s || '-';
 }
 
 function summaryForStatut(statut, name) {
   const s = String(statut || '').trim();
-  if (s === 'confirme') return `RDV confirmé — ${name}`;
-  if (s === 'en_attente') return `RDV (demande) — ${name}`;
-  if (s === 'termine') return `RDV (terminé) — ${name}`;
-  return `RDV — ${name}`;
+  if (s === 'confirme') return `RDV confirmé - ${name}`;
+  if (s === 'en_attente') return `RDV (demande) - ${name}`;
+  if (s === 'termine') return `RDV (terminé) - ${name}`;
+  return `RDV - ${name}`;
 }
 
 function buildEventBody(rendezVous, motifLabel) {

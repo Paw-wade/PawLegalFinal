@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
@@ -163,8 +163,8 @@ const categories = {
   constitution_societe: {
     label: 'Constitution de société',
     types: [
-      { value: 'constitution_societe_senegal', label: 'Constitution — entreprise / société au Sénégal' },
-      { value: 'constitution_societe_france', label: 'Constitution — entreprise / société en France' },
+      { value: 'constitution_societe_senegal', label: 'Constitution - entreprise / société au Sénégal' },
+      { value: 'constitution_societe_france', label: 'Constitution - entreprise / société en France' },
     ]
   },
   autre: {
@@ -1928,7 +1928,7 @@ export default function PartenaireDossiersPage() {
                                 </div>
                                 <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tâches</p>
-                                  <p className="text-sm font-semibold text-foreground">{tasksCount > 0 ? tasksCount : '—'}</p>
+                                  <p className="text-sm font-semibold text-foreground">{tasksCount > 0 ? tasksCount : '-'}</p>
                                 </div>
                                 <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Transmission</p>
@@ -2036,9 +2036,9 @@ export default function PartenaireDossiersPage() {
                             {(dossierDrafts[dossier._id || dossier.id] || []).map((d: any) => (
                               <div key={d._id} className="rounded border border-gray-100 bg-white px-3 py-2">
                                 <p className="font-medium text-sm text-foreground">{d.title || 'Sans titre'}</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">Créé par : {d.createdBy ? `${d.createdBy.firstName || ''} ${d.createdBy.lastName || ''}`.trim() || d.createdBy.role : '—'}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Créé par : {d.createdBy ? `${d.createdBy.firstName || ''} ${d.createdBy.lastName || ''}`.trim() || d.createdBy.role : '-'}</p>
                                 {(d.partnerAccess?.length > 0) && (
-                                  <p className="text-xs text-gray-500 mt-0.5">Accès : {(d.partnerAccess.map((pa: any) => (pa.partner && typeof pa.partner === 'object' && (pa.partner.firstName || pa.partner.lastName)) ? `${(pa.partner.firstName || '').trim()} ${(pa.partner.lastName || '').trim()}`.trim() : null).filter(Boolean).join(', ')) || '—'}</p>
+                                  <p className="text-xs text-gray-500 mt-0.5">Accès : {(d.partnerAccess.map((pa: any) => (pa.partner && typeof pa.partner === 'object' && (pa.partner.firstName || pa.partner.lastName)) ? `${(pa.partner.firstName || '').trim()} ${(pa.partner.lastName || '').trim()}`.trim() : null).filter(Boolean).join(', ')) || '-'}</p>
                                 )}
                               </div>
                             ))}
@@ -2071,7 +2071,7 @@ export default function PartenaireDossiersPage() {
                       return null;
                     })()}
 
-                    {/* Informations du dossier — version compacte, identique à l'admin */}
+                    {/* Informations du dossier - version compacte, identique à l'admin */}
                     <div className="mb-3 pb-3 border-b border-gray-200">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         {(dossier.numero || dossier.numeroDossier) && (
@@ -2101,7 +2101,7 @@ export default function PartenaireDossiersPage() {
                           <span className="text-foreground">
                             {dossier.assignedTo
                               ? `${dossier.assignedTo.firstName || ""} ${dossier.assignedTo.lastName || ""}`.trim() ||
-                                (dossier.assignedTo.email ?? "—")
+                                (dossier.assignedTo.email ?? "-")
                               : "Non assigné"}
                           </span>
                         </span>

@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+﻿const crypto = require('crypto');
 const { extractAssociesWithEmail } = require('./etatCivilRequests');
 const { getFrontendOriginsList, getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
@@ -40,7 +40,7 @@ function buildEmail({ nom, cabinetNom, url }) {
 /**
  * Après remplissage de la fiche société : pour chaque associé dont l'e-mail est renseigné,
  * crée/retrouve une invitation ciblée (ses fiches + pièces) et lui envoie le lien par e-mail
- * (une seule fois — dédoublonné par `invitationEmailSentAt`).
+ * (une seule fois - dédoublonné par `invitationEmailSentAt`).
  * Best-effort : les échecs d'envoi n'interrompent pas la soumission.
  * @returns {Promise<{ sent: number }>}
  */

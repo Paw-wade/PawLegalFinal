@@ -1,10 +1,10 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const os = require('os');
 const { getInternalModeLegalFooter } = require('./lexiaLegalCharter');
 
-/** VPS Linux — sans résolution win32 pour éviter `/root/…` → `C:\\root\\…`. */
+/** VPS Linux - sans résolution win32 pour éviter `/root/…` → `C:\\root\\…`. */
 const DEFAULT_DIR_POSIX = '/root/adapapers/backend/lexia/CAA';
 
 /** Windows : corpus local du dépôt (pas le chemin du serveur). */
@@ -672,7 +672,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
         `## Index Lexia trop lourd pour cette requête\n\n` +
         `**${indexedPaths.length}** fichiers sont pris en compte (plafond d’index : **${capLabel}**), ` +
         `ce qui dépasse la limite de sécurité **LEXIA_ENFORCE_SOFT_CAP=${softCap}**.\n\n` +
-        `Sans cette limite, le premier chargement peut faire **planter le process Node** (mémoire) ou couper la connexion — ` +
+        `Sans cette limite, le premier chargement peut faire **planter le process Node** (mémoire) ou couper la connexion - ` +
         `d’où une ligne de log du type \`POST /api/lexia - - ms - -\`.\n\n` +
         `**Actions possibles :**\n` +
         `- Baisser **LEXIA_INDEX_MAX_FILES** (ex. 8000–15000 en dev).\n` +
@@ -683,7 +683,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
   }
   if (indexedPaths.length > 12_000) {
     console.warn(
-      `[lexia] ${indexedPaths.length} fichiers listés pour l’index — charge RAM/CPU très élevée au premier POST. ` +
+      `[lexia] ${indexedPaths.length} fichiers listés pour l’index - charge RAM/CPU très élevée au premier POST. ` +
         `En cas de crash ou de requête interrompue, baissez LEXIA_INDEX_MAX_FILES ou définissez LEXIA_ENFORCE_SOFT_CAP=12000.`
     );
   }
@@ -732,7 +732,7 @@ async function searchAndCompose(trimmedMessages, knowledgeDir) {
   }
 
   const lines = [];
-  lines.push('## Recherche — base documentaire interne');
+  lines.push('## Recherche - base documentaire interne');
   lines.push('');
   lines.push(
     '_Réponse **Paw AI** issue uniquement de la base documentaire indexée : extraits classés par pertinence à partir de vos fichiers `.md` / `.txt` / `.xml` / `.pdf` / `.doc` / `.docx`._'
@@ -866,7 +866,7 @@ function getKnowledgeDir() {
   const raw = (process.env.LEXIA_KNOWLEDGE_DIR || '').trim();
   if (!raw) return defaultKnowledgeDirForPlatform();
 
-  /* Sous Windows, LEXIA=/root/… (copié du VPS) deviendrait C:\\root\\… via path.resolve — on l’évite. */
+  /* Sous Windows, LEXIA=/root/… (copié du VPS) deviendrait C:\\root\\… via path.resolve - on l’évite. */
   if (process.platform === 'win32' && isPosixStyleAbsolute(raw)) {
     if (!posixOnWindowsWarned) {
       posixOnWindowsWarned = true;

@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 
 const CollaborativeDraft = require('../models/CollaborativeDraft');
@@ -55,7 +55,7 @@ function clientDisplayName(dossier) {
     return [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
   }
   const n = [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ').trim();
-  return n || dossier.clientEmail || '—';
+  return n || dossier.clientEmail || '-';
 }
 
 function parseDueDateField(value) {
@@ -117,7 +117,7 @@ function computeDraftContentCanEdit(draft, user, dossier) {
   return false;
 }
 
-// GET /collaborative-drafts/count — tous les brouillons visibles (liste globale)
+// GET /collaborative-drafts/count - tous les brouillons visibles (liste globale)
 router.get('/collaborative-drafts/count', async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -136,7 +136,7 @@ router.get('/collaborative-drafts/count', async (req, res) => {
   }
 });
 
-// GET /collaborative-drafts — liste globale (mêmes règles de visibilité que par dossier)
+// GET /collaborative-drafts - liste globale (mêmes règles de visibilité que par dossier)
 router.get('/collaborative-drafts', async (req, res) => {
   try {
     const user = await User.findById(req.user.id);

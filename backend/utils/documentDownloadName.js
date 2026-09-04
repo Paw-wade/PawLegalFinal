@@ -1,4 +1,4 @@
-const path = require('path');
+﻿const path = require('path');
 
 const isHttpLikeStoragePath = (value) => /^https?:\/\//i.test(String(value || '').trim());
 
@@ -59,7 +59,7 @@ function pickFileExtension(...names) {
   return '';
 }
 
-/** Extension de secours uniquement si le fichier n'en a aucune — ne remplace jamais une extension existante. */
+/** Extension de secours uniquement si le fichier n'en a aucune - ne remplace jamais une extension existante. */
 function pickMimeExtension(mimeType) {
   const map = {
     'application/pdf': '.pdf',
@@ -155,7 +155,7 @@ function resolveDocumentDisplayTitle(document, localPath) {
 }
 
 /**
- * Content-Disposition RFC 5987 — filename ASCII + filename* UTF-8.
+ * Content-Disposition RFC 5987 - filename ASCII + filename* UTF-8.
  * Ne pas mettre encodeURIComponent dans filename="..." (sinon %20 littéral).
  */
 function buildContentDisposition(fileName, { inline = false } = {}) {

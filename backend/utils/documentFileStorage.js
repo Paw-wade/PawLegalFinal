@@ -1,4 +1,4 @@
-const path = require('path');
+﻿const path = require('path');
 const http = require('http');
 const https = require('https');
 
@@ -420,7 +420,7 @@ function pipeRemoteDocumentUrl(remoteUrl, res, document, { inline = false } = {}
 async function tryServeDocumentFromCloudinary(document, res, { inline = false } = {}) {
   const cloudUrl = await findCloudinaryDocumentUrl(document);
   if (!cloudUrl) return false;
-  console.log('✅ Document — Cloudinary:', cloudUrl);
+  console.log('✅ Document - Cloudinary:', cloudUrl);
   return pipeHttpDocumentUrl(cloudUrl, res, document, { inline });
 }
 
@@ -434,7 +434,7 @@ async function tryServeDocumentFromRemoteOrigin(document, res, { inline = false 
     console.log('🔍 Tentative fichier distant:', remoteUrl);
     const ok = await pipeRemoteDocumentUrl(remoteUrl, res, document, { inline });
     if (ok) {
-      console.log('✅ Document — distant:', remoteUrl);
+      console.log('✅ Document - distant:', remoteUrl);
       return true;
     }
   }
@@ -571,7 +571,7 @@ async function tryServeDocumentFromProductionApi(document, res, { inline = false
   res.setHeader('Content-Type', contentType);
   res.setHeader('Content-Disposition', buildContentDisposition(fileName, { inline }));
   res.send(hit.buffer);
-  console.log('✅ Document — API production:', hit.url);
+  console.log('✅ Document - API production:', hit.url);
   return true;
 }
 

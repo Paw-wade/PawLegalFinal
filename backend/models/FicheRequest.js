@@ -14,6 +14,9 @@ const ficheRequestSchema = new mongoose.Schema({
   fiche: { type: mongoose.Schema.Types.ObjectId, ref: 'FicheConstitution', default: null }, // fiche remplie liée
   createdAt: { type: Date, default: Date.now },
   remplieAt: { type: Date, default: null },
+  draftData: { type: mongoose.Schema.Types.Mixed, default: null },
+  draftStep: { type: Number, default: 0 },
+  draftSavedAt: { type: Date, default: null },
 });
 
 module.exports = mongoose.model('FicheRequest', ficheRequestSchema);

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Récupération des fichiers documents orphelins (métadonnée en base, binaire absent).
  *
  * Usage:
@@ -243,7 +243,7 @@ async function main() {
   }
 
   console.log('🔗 Mongo:', uri.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'));
-  console.log(DRY_RUN ? '🔍 Mode dry-run (ajoutez --apply pour écrire)' : '✅ Mode APPLY — écriture disque + base');
+  console.log(DRY_RUN ? '🔍 Mode dry-run (ajoutez --apply pour écrire)' : '✅ Mode APPLY - écriture disque + base');
 
   await mongoose.connect(uri);
   const Document = require('../models/Document');
@@ -267,7 +267,7 @@ async function main() {
       console.log(`☁️ ${cloudIndex.size} clés Cloudinary indexées`);
     } catch (e) {
       const msg = e?.error?.message || e?.message || String(e);
-      console.warn(`⚠️ Index Cloudinary ignoré (${msg}) — poursuite sans index.`);
+      console.warn(`⚠️ Index Cloudinary ignoré (${msg}) - poursuite sans index.`);
       cloudIndex = new Map();
     }
   }
@@ -377,7 +377,7 @@ async function main() {
       try {
         cheminToStore = await uploadToCloudinary(cloudinary, dest, doc);
       } catch (e) {
-        console.warn('⚠️ Cloudinary upload', doc._id, e.message, '— garde local');
+        console.warn('⚠️ Cloudinary upload', doc._id, e.message, '- garde local');
       }
     }
 

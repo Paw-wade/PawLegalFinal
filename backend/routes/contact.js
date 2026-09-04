@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -119,7 +119,7 @@ router.post(
           await sendTransactionalEmail({
             to: email,
             toName: name || '',
-            subject: 'Confirmation de réception de votre demande — Ada Papers',
+            subject: 'Confirmation de réception de votre demande - Ada Papers',
             htmlContent: `
               <p>Nous vous remercions pour votre message.</p>
               <p>Votre demande a bien été enregistrée sous la référence <strong>${escapeHtml(newMessage._id.toString())}</strong>.</p>
@@ -162,7 +162,7 @@ Pour faciliter le suivi de votre dossier, nous vous invitons à conserver cet e-
             await sendTransactionalEmail({
               to: admin.email,
               toName: `${admin.firstName || ''} ${admin.lastName || ''}`.trim(),
-              subject: `Nouveau message de contact — ${subject}`,
+              subject: `Nouveau message de contact - ${subject}`,
               htmlContent: `
                 <p>Un nouveau message de contact a été reçu sur la plateforme.</p>
                 <p><strong>Expéditeur :</strong> ${escapeHtml(name)} (${escapeHtml(email)})</p>
@@ -589,7 +589,7 @@ router.post(
           await sendTransactionalEmail({
             to: message.email,
             toName: message.name || '',
-            subject: `Votre dossier a été créé — Référence ${newDossier.numero || newDossier._id}`,
+            subject: `Votre dossier a été créé - Référence ${newDossier.numero || newDossier._id}`,
             htmlContent: `
               <p>Nous vous confirmons la création de votre dossier suite à votre message de contact.</p>
               <p><strong>Référence du dossier :</strong> ${escapeHtml(newDossier.numero || newDossier._id.toString())}</p>

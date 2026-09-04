@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
@@ -493,7 +493,7 @@ export default function DocumentsPage() {
                   key={group.dossierId}
                   className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden"
                 >
-                  {/* En-tête du groupe (Dossier) — aligné admin */}
+                  {/* En-tête du groupe (Dossier) - aligné admin */}
                   <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-3 sm:px-5 py-3 sm:py-4 border-b border-gray-200">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:justify-between sm:gap-3">
                       <button

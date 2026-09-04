@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
@@ -56,9 +56,9 @@ const DEFAULT_WELCOME_TEMPLATE = {
   description: 'Envoyé après validation du compte (lien d’activation / OTP).',
   subject: 'Bienvenue sur Ada Papers, {{firstName}} !',
   htmlContent:
-    '<p>Bienvenue sur Ada Papers, {{firstName}} !</p><p>Nous sommes ravis de vous accueillir. Votre espace personnel est maintenant actif.</p><p><strong>CE QUE VOUS POUVEZ FAIRE DÈS MAINTENANT</strong></p><p>📁 <strong>Création et suivi de dossier</strong><br/>Créez un dossier d’accompagnement et suivez l’avancement de votre dossier en temps réel, de la création jusqu’à la finalisation.</p><p>⏱️ <strong>Calculateur de délais</strong><br/>Anticipez vos échéances et planifiez vos démarches sereinement.</p><p>🤖 <strong>Paw AI</strong><br/>Obtenez des réponses claires et vérifiées, corroborées par des décisions de justice et adaptées à votre situation. Recevez également des recommandations sur les démarches à suivre.</p><p>💬 <strong>Accompagnement humain</strong><br/>Notre équipe reste disponible à chaque étape depuis votre espace.</p><p><strong>Accédez à votre espace :</strong> https://adapapers.fr</p><p>Cordialement,<br/>L’équipe Ada Papers</p><p style="font-size:12px;color:#666;">© 2025 Ada Papers — adapapers.fr<br/>Si vous n’êtes pas à l’origine de cette inscription, ignorez ce message.</p>',
+    '<p>Bienvenue sur Ada Papers, {{firstName}} !</p><p>Nous sommes ravis de vous accueillir. Votre espace personnel est maintenant actif.</p><p><strong>CE QUE VOUS POUVEZ FAIRE DÈS MAINTENANT</strong></p><p>📁 <strong>Création et suivi de dossier</strong><br/>Créez un dossier d’accompagnement et suivez l’avancement de votre dossier en temps réel, de la création jusqu’à la finalisation.</p><p>⏱️ <strong>Calculateur de délais</strong><br/>Anticipez vos échéances et planifiez vos démarches sereinement.</p><p>🤖 <strong>Paw AI</strong><br/>Obtenez des réponses claires et vérifiées, corroborées par des décisions de justice et adaptées à votre situation. Recevez également des recommandations sur les démarches à suivre.</p><p>💬 <strong>Accompagnement humain</strong><br/>Notre équipe reste disponible à chaque étape depuis votre espace.</p><p><strong>Accédez à votre espace :</strong> https://adapapers.fr</p><p>Cordialement,<br/>L’équipe Ada Papers</p><p style="font-size:12px;color:#666;">© 2025 Ada Papers - adapapers.fr<br/>Si vous n’êtes pas à l’origine de cette inscription, ignorez ce message.</p>',
   textContent:
-    'Bienvenue sur Ada Papers, {{firstName}} !\n\nNous sommes ravis de vous accueillir. Votre espace personnel est maintenant actif.\n\nCE QUE VOUS POUVEZ FAIRE DÈS MAINTENANT\n\n📁 Création et suivi de dossier\nCréez un dossier d’accompagnement et suivez l’avancement de votre dossier en temps réel, de la création jusqu’à la finalisation.\n\n⏱️ Calculateur de délais\nAnticipez vos échéances et planifiez vos démarches sereinement.\n\n🤖 Paw AI\nObtenez des réponses claires et vérifiées, corroborées par des décisions de justice et adaptées à votre situation. Recevez également des recommandations sur les démarches à suivre.\n\n💬 Accompagnement humain\nNotre équipe reste disponible à chaque étape depuis votre espace.\n\nAccédez à votre espace : https://adapapers.fr\n\nCordialement,\nL’équipe Ada Papers\n\n© 2025 Ada Papers — adapapers.fr\nSi vous n’êtes pas à l’origine de cette inscription, ignorez ce message.',
+    'Bienvenue sur Ada Papers, {{firstName}} !\n\nNous sommes ravis de vous accueillir. Votre espace personnel est maintenant actif.\n\nCE QUE VOUS POUVEZ FAIRE DÈS MAINTENANT\n\n📁 Création et suivi de dossier\nCréez un dossier d’accompagnement et suivez l’avancement de votre dossier en temps réel, de la création jusqu’à la finalisation.\n\n⏱️ Calculateur de délais\nAnticipez vos échéances et planifiez vos démarches sereinement.\n\n🤖 Paw AI\nObtenez des réponses claires et vérifiées, corroborées par des décisions de justice et adaptées à votre situation. Recevez également des recommandations sur les démarches à suivre.\n\n💬 Accompagnement humain\nNotre équipe reste disponible à chaque étape depuis votre espace.\n\nAccédez à votre espace : https://adapapers.fr\n\nCordialement,\nL’équipe Ada Papers\n\n© 2025 Ada Papers - adapapers.fr\nSi vous n’êtes pas à l’origine de cette inscription, ignorez ce message.',
   category: 'account',
   isSystem: true,
   isActive: true,
@@ -144,7 +144,7 @@ const getGoogleClient = () => {
   return new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 };
 
-/** Lien de réinitialisation (email uniquement — pas de code SMS en doublon si l’utilisateur a un email). */
+/** Lien de réinitialisation (email uniquement - pas de code SMS en doublon si l’utilisateur a un email). */
 async function deliverPasswordResetLinkEmail(user) {
   if (!user?.email || !String(user.email).trim()) return false;
   const resetToken = crypto.randomBytes(32).toString('hex');
@@ -829,10 +829,10 @@ router.post(
       if (devSimulateSms) {
         await persistResetCode();
         console.log(
-          `⚠️ [dev] SMS réinitialisation mdp simulé pour ${formattedPhone} — code : ${verificationCode} (10 min)`
+          `⚠️ [dev] SMS réinitialisation mdp simulé pour ${formattedPhone} - code : ${verificationCode} (10 min)`
         );
         return successPayload(
-          'Si ce numéro est associé à un compte, un code de vérification a été généré (mode développement — SMS simulé).',
+          'Si ce numéro est associé à un compte, un code de vérification a été généré (mode développement - SMS simulé).',
           { devResetCode: verificationCode }
         );
       }
@@ -871,10 +871,10 @@ router.post(
         if (isDev) {
           await persistResetCode();
           console.log(
-            `⚠️ [dev] Envoi SMS échoué — code réinitialisation conservé pour ${formattedPhone} : ${verificationCode} (10 min)`
+            `⚠️ [dev] Envoi SMS échoué - code réinitialisation conservé pour ${formattedPhone} : ${verificationCode} (10 min)`
           );
           return successPayload(
-            'Si ce numéro est associé à un compte, un code a été généré (développement — échec envoi SMS).',
+            'Si ce numéro est associé à un compte, un code a été généré (développement - échec envoi SMS).',
             { devResetCode: verificationCode }
           );
         }

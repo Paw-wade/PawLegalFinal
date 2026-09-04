@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
@@ -619,7 +619,7 @@ router.put(
 //          Les cartes « Vue d'ensemble » doivent toujours afficher les mêmes
 //          chiffres qu'un superadmin ; le filtrage par affectation ne s'applique
 //          qu'à l'intérieur de chaque rubrique.
-// @access  Private — rôles staff
+// @access  Private - rôles staff
 router.get(
   '/dashboard/stats/global',
   authorize('admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire', 'visiteur'),

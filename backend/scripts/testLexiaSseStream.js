@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Tests parseur SSE Lexia (aligné sur frontend) + test live POST /api/lexia?stream
  * Usage: node scripts/testLexiaSseStream.js [--no-live]
  */
@@ -209,7 +209,7 @@ async function main() {
     await runLiveTest(port);
   } catch (e) {
     if (e.code === 'ECONNREFUSED') {
-      console.error('❌ Serveur injoignable sur le port', port, '— démarrez le backend puis relancez ce script.');
+      console.error('❌ Serveur injoignable sur le port', port, '- démarrez le backend puis relancez ce script.');
       process.exitCode = 2;
       return;
     }

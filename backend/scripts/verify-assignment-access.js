@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Vérifie le scénario : super-admin retire les permissions dossiers/tâches/documents
  * mais assigne un dossier → l'admin doit voir uniquement ce dossier et pouvoir le modifier (mode restreint).
  *
@@ -38,7 +38,7 @@ async function runStep(label, fn) {
     const status = err.response?.status;
     const msg = err.response?.data?.message || err.message;
     console.log(`❌ ${label}`);
-    console.log(`    ${status ? `HTTP ${status} — ` : ''}${msg}`);
+    console.log(`    ${status ? `HTTP ${status} - ` : ''}${msg}`);
     return { ok: false, status, msg };
   }
 }
@@ -105,15 +105,15 @@ async function main() {
   const headers = authHeaders(admin._id);
 
   // 2. GET /permissions/me
-  await runStep('GET /permissions/me — assignedDossierCount > 0', async () => {
+  await runStep('GET /permissions/me - assignedDossierCount > 0', async () => {
     const res = await axios.get(`${API}/permissions/me`, { headers });
     const count = res.data.assignedDossierCount;
     if (!count || count < 1) throw new Error(`assignedDossierCount=${count}`);
     return `assignedDossierCount=${count}`;
   });
 
-  // 3. Liste dossiers (client endpoint) — uniquement assignés
-  await runStep('GET /user/dossiers — liste filtrée aux dossiers assignés', async () => {
+  // 3. Liste dossiers (client endpoint) - uniquement assignés
+  await runStep('GET /user/dossiers - liste filtrée aux dossiers assignés', async () => {
     const res = await axios.get(`${API}/user/dossiers`, { headers });
     const ids = (res.data.dossiers || []).map((d) => d._id);
     if (!ids.includes(assignedDossier._id.toString())) {
@@ -125,8 +125,8 @@ async function main() {
     return `${ids.length} dossier(s) visible(s)`;
   });
 
-  // 3b. Liste dossiers ADMIN (endpoint utilisé par la page /admin/dossiers) — uniquement assignés
-  await runStep('GET /user/dossiers/admin — liste filtrée aux dossiers assignés', async () => {
+  // 3b. Liste dossiers ADMIN (endpoint utilisé par la page /admin/dossiers) - uniquement assignés
+  await runStep('GET /user/dossiers/admin - liste filtrée aux dossiers assignés', async () => {
     const res = await axios.get(`${API}/user/dossiers/admin`, { headers });
     const ids = (res.data.dossiers || []).map((d) => d._id);
     if (!ids.includes(assignedDossier._id.toString())) {
@@ -139,15 +139,15 @@ async function main() {
   });
 
   // 4. Détail dossier assigné
-  await runStep('GET /user/dossiers/:id — accès au dossier assigné', async () => {
+  await runStep('GET /user/dossiers/:id - accès au dossier assigné', async () => {
     const res = await axios.get(`${API}/user/dossiers/${assignedDossier._id}`, { headers });
     if (!res.data.dossier) throw new Error('Pas de dossier dans la réponse');
     return res.data.dossier.titre || res.data.dossier.numero;
   });
 
-  // 5. Détail dossier non assigné — doit échouer
+  // 5. Détail dossier non assigné - doit échouer
   if (otherDossier) {
-    const r = await runStep('GET /user/dossiers/:id — refus sur dossier non assigné', async () => {
+    const r = await runStep('GET /user/dossiers/:id - refus sur dossier non assigné', async () => {
       await axios.get(`${API}/user/dossiers/${otherDossier._id}`, { headers });
       throw new Error('Accès inattendu à un dossier non assigné');
     });
@@ -156,13 +156,13 @@ async function main() {
     } else if (r.status !== 403) {
       console.log('    ⚠️  Attendu HTTP 403');
     } else {
-      console.log('✅ GET /user/dossiers/:id — refus sur dossier non assigné (403 attendu)');
+      console.log('✅ GET /user/dossiers/:id - refus sur dossier non assigné (403 attendu)');
     }
   }
 
-  // 6. Modification restreinte — notes
+  // 6. Modification restreinte - notes
   const testNote = `[test-permissions] ${new Date().toISOString()}`;
-  await runStep('PUT /user/dossiers/:id — modification notes (mode restreint)', async () => {
+  await runStep('PUT /user/dossiers/:id - modification notes (mode restreint)', async () => {
     const res = await axios.put(
       `${API}/user/dossiers/${assignedDossier._id}`,
       { notes: testNote },
@@ -172,9 +172,9 @@ async function main() {
     return 'notes mises à jour';
   });
 
-  // 7. Modification interdite — titre (hors périmètre restreint)
+  // 7. Modification interdite - titre (hors périmètre restreint)
   {
-    const r = await runStep('PUT /user/dossiers/:id — refus modification titre (hors périmètre)', async () => {
+    const r = await runStep('PUT /user/dossiers/:id - refus modification titre (hors périmètre)', async () => {
       await axios.put(
         `${API}/user/dossiers/${assignedDossier._id}`,
         { titre: 'Titre modifié sans permission' },
@@ -183,18 +183,18 @@ async function main() {
       throw new Error('Modification titre autorisée à tort');
     });
     if (!r.ok && r.status === 403) {
-      console.log('✅ PUT /user/dossiers/:id — refus modification titre (403 attendu)');
+      console.log('✅ PUT /user/dossiers/:id - refus modification titre (403 attendu)');
     }
   }
 
-  // 8. Tâches — liste scoped
-  await runStep('GET /tasks — liste des tâches assignées / dossier assigné', async () => {
+  // 8. Tâches - liste scoped
+  await runStep('GET /tasks - liste des tâches assignées / dossier assigné', async () => {
     const res = await axios.get(`${API}/tasks`, { headers });
     return `${res.data.count ?? res.data.tasks?.length ?? 0} tâche(s)`;
   });
 
-  // 9. Documents admin — liste scoped
-  await runStep('GET /user/documents/admin — documents du dossier assigné uniquement', async () => {
+  // 9. Documents admin - liste scoped
+  await runStep('GET /user/documents/admin - documents du dossier assigné uniquement', async () => {
     const res = await axios.get(`${API}/user/documents/admin`, { headers });
     const docs = res.data.documents || [];
     const bad = docs.filter(
@@ -204,13 +204,13 @@ async function main() {
     return `${docs.length} document(s)`;
   });
 
-  // 10. Tâche assignée — mise à jour statut si une tâche existe
+  // 10. Tâche assignée - mise à jour statut si une tâche existe
   const task = await Task.findOne({
     $or: [{ assignedTo: admin._id }, { dossier: assignedDossier._id }],
   }).sort({ updatedAt: -1 });
 
   if (task) {
-    await runStep(`PUT /tasks/:id — mise à jour statut tâche (${task._id})`, async () => {
+    await runStep(`PUT /tasks/:id - mise à jour statut tâche (${task._id})`, async () => {
       const res = await axios.put(
         `${API}/tasks/${task._id}`,
         { statut: task.statut === 'en_cours' ? 'a_faire' : 'en_cours' },
@@ -220,7 +220,7 @@ async function main() {
       return `statut → ${res.data.task?.statut}`;
     });
   } else {
-    console.log('ℹ️  Aucune tâche liée — étape tâche ignorée');
+    console.log('ℹ️  Aucune tâche liée - étape tâche ignorée');
   }
 
   console.log('\n🏁 Vérification terminée.');

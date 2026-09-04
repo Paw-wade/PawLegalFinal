@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
@@ -487,7 +487,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
           )}
 
 
-          {/* Informations utilisateur et actions — cibles tactiles sur mobile */}
+          {/* Informations utilisateur et actions - cibles tactiles sur mobile */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {isAuthenticated ? (
                 <>
@@ -525,7 +525,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
         </div>
       </div>
 
-      {/* Menu de navigation mobile (page d'accueil, calculateur, etc.) — plein écran lisible */}
+      {/* Menu de navigation mobile (page d'accueil, calculateur, etc.) - plein écran lisible */}
       {variant === 'home' && mobileNavOpen && (
         <>
           {/* Overlay mobile : commence sous le header pour laisser le header cliquable */}

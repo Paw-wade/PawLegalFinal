@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const Cabinet = require('../models/Cabinet');
 const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
@@ -39,7 +39,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/cabinets — crée le cabinet + préfixe S3 Cabinet-{slug}/
+// POST /api/cabinets - crée le cabinet + préfixe S3 Cabinet-{slug}/
 router.post('/', async (req, res) => {
   try {
     const name = String(req.body?.name || '').trim();
@@ -109,7 +109,7 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// POST /api/cabinets/:id/users/:userId — rattacher un utilisateur au cabinet
+// POST /api/cabinets/:id/users/:userId - rattacher un utilisateur au cabinet
 router.post('/:id/users/:userId', async (req, res) => {
   try {
     const cabinet = await Cabinet.findById(req.params.id).lean();

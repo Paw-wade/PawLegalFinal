@@ -1,15 +1,15 @@
-/** Procuration spéciale pour constituer une société (document en prose — mode « document »). */
+﻿/** Procuration spéciale pour constituer une société (document en prose - mode « document »). */
 const personFields = (prefix, roleLabel) => [
-  { name: `${prefix}_nom`, label: `${roleLabel} — Nom et prénom`, type: 'text', required: true },
-  { name: `${prefix}_profession`, label: `${roleLabel} — Profession`, type: 'text' },
-  { name: `${prefix}_domicile`, label: `${roleLabel} — Demeurant et domicilié(e) à (ville, pays, adresse)`, type: 'text', fullWidth: true },
-  { name: `${prefix}_lieu_naissance`, label: `${roleLabel} — Lieu de naissance (ville, pays)`, type: 'text' },
-  { name: `${prefix}_date_naissance`, label: `${roleLabel} — Date de naissance (en lettres)`, type: 'text' },
-  { name: `${prefix}_nationalite`, label: `${roleLabel} — Nationalité`, type: 'text' },
-  { name: `${prefix}_piece_type`, label: `${roleLabel} — Type de pièce`, type: 'radio', options: [{ value: 'passeport', label: 'Passeport' }, { value: 'cni', label: "Carte nationale d'identité" }] },
-  { name: `${prefix}_piece_num`, label: `${roleLabel} — Numéro de la pièce`, type: 'text' },
-  { name: `${prefix}_piece_delivrance`, label: `${roleLabel} — Délivré(e) le (en lettres)`, type: 'text' },
-  { name: `${prefix}_matrimonial`, label: `${roleLabel} — Statut et régime matrimonial`, type: 'text', fullWidth: true },
+  { name: `${prefix}_nom`, label: `${roleLabel} - Nom et prénom`, type: 'text', required: true },
+  { name: `${prefix}_profession`, label: `${roleLabel} - Profession`, type: 'text' },
+  { name: `${prefix}_domicile`, label: `${roleLabel} - Demeurant et domicilié(e) à (ville, pays, adresse)`, type: 'text', fullWidth: true },
+  { name: `${prefix}_lieu_naissance`, label: `${roleLabel} - Lieu de naissance (ville, pays)`, type: 'text' },
+  { name: `${prefix}_date_naissance`, label: `${roleLabel} - Date de naissance (en lettres)`, type: 'text' },
+  { name: `${prefix}_nationalite`, label: `${roleLabel} - Nationalité`, type: 'text' },
+  { name: `${prefix}_piece_type`, label: `${roleLabel} - Type de pièce`, type: 'radio', options: [{ value: 'passeport', label: 'Passeport' }, { value: 'cni', label: "Carte nationale d'identité" }] },
+  { name: `${prefix}_piece_num`, label: `${roleLabel} - Numéro de la pièce`, type: 'text' },
+  { name: `${prefix}_piece_delivrance`, label: `${roleLabel} - Délivré(e) le (en lettres)`, type: 'text' },
+  { name: `${prefix}_matrimonial`, label: `${roleLabel} - Statut et régime matrimonial`, type: 'text', fullWidth: true },
 ];
 
 const personParagraph = (data, prefix, h) => {

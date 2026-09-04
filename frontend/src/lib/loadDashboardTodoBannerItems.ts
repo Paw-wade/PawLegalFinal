@@ -1,4 +1,4 @@
-import { appointmentsAPI, dossiersAPI, notificationsAPI, tasksAPI } from '@/lib/api';
+﻿import { appointmentsAPI, dossiersAPI, notificationsAPI, tasksAPI } from '@/lib/api';
 
 export type DashboardTodoUserRole = 'admin' | 'client' | 'partenaire';
 
@@ -111,7 +111,7 @@ async function loadAppointmentGroups(userRole: DashboardTodoUserRole): Promise<D
       const aptDate = safeString(apt.date);
       return {
         id: aptId || `apt-${Math.random()}`,
-        time: heure || '—',
+        time: heure || '-',
         name: clientName,
         link: agendaLink(userRole, aptDate, aptId || undefined),
       };

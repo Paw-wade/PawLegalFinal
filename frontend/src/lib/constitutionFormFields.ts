@@ -1,8 +1,8 @@
-/**
+﻿/**
  * Rubriques du formulaire initial de demande de création d'entreprise
  * (miroir de DemandeWizard.getSpecificFields pour constitution_societe_*).
  * Sert à afficher la fiche de demande COMPLÈTE côté admin, y compris les
- * champs laissés vides (« — non renseigné »).
+ * champs laissés vides (« - non renseigné »).
  */
 export interface ConstitutionField { name: string; label: string }
 
@@ -69,7 +69,7 @@ export function buildConstitutionFields(
     usedNoms.add(f.name);
     usedLabels.add(f.label.trim());
     const filled = v !== undefined && String(v).trim() !== '';
-    out.push({ label: f.label, value: filled ? String(v) : '— non renseigné', empty: !filled });
+    out.push({ label: f.label, value: filled ? String(v) : '- non renseigné', empty: !filled });
   }
   // Rubriques stockées hors formulaire (ex. recommandation validée) : on les ajoute à la fin.
   list.forEach((c) => {

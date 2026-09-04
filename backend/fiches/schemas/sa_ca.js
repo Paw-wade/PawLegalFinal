@@ -1,4 +1,4 @@
-/** Schéma fiche SA avec Conseil d'Administration (PCA + DG) — Sénégal. */
+﻿/** Schéma fiche SA avec Conseil d'Administration (PCA + DG) - Sénégal. */
 const { TXT, sectionObjet, sectionIdentite, sectionPublication, staticSection } = require('../common');
 
 const VAL_NOMINALE_SA = [
@@ -9,7 +9,7 @@ const VAL_NOMINALE_SA = [
 
 module.exports = {
   type: 'sa_ca',
-  titre: "Fiche de renseignements — SA (Conseil d'Administration)",
+  titre: "Fiche de renseignements - SA (Conseil d'Administration)",
   sousTitre: "Société Anonyme avec Conseil d'Administration (PCA et Directeur Général)",
   associesSource: { section: 'repartition', field: 'nom' },
   gerantsSource: { section: 'administrateurs', field: 'nom', fields: ['pca', 'dg'] },
@@ -57,8 +57,8 @@ module.exports = {
     {
       id: 'administration', titre: 'Mode d’administration',
       fields: [
-        { name: 'pca', label: 'Président du Conseil d’Administration — identité', type: 'text' },
-        { name: 'dg', label: 'Directeur Général — identité', type: 'text' },
+        { name: 'pca', label: 'Président du Conseil d’Administration - identité', type: 'text' },
+        { name: 'dg', label: 'Directeur Général - identité', type: 'text' },
       ],
     },
     {

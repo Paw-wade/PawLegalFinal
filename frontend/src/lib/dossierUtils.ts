@@ -1,4 +1,4 @@
-// Utilitaires pour les statuts de dossiers
+﻿// Utilitaires pour les statuts de dossiers
 
 export const getStatutColor = (statut: string): string => {
   const colors: { [key: string]: string } = {
@@ -69,7 +69,7 @@ export const getStatutLabel = (statut: string): string => {
   return statut;
 };
 
-/** Id technique d'étape personnalisée (ex. custom_1784307447137) — ne doit jamais être affiché tel quel. */
+/** Id technique d'étape personnalisée (ex. custom_1784307447137) - ne doit jamais être affiché tel quel. */
 export const isCustomStatutId = (statut: string | null | undefined): boolean =>
   /^custom[_-]\d+$/i.test(String(statut || '').trim());
 
@@ -84,7 +84,7 @@ export const getStatutLabelWithEtapes = (
   etapesSupplementaires?: unknown[] | null
 ): string => {
   const s = String(statut || '').trim();
-  if (!s) return '—';
+  if (!s) return '-';
   const raw = Array.isArray(etapesSupplementaires) ? etapesSupplementaires : [];
   const matched = raw.find(
     (e: any) => e && (String(e.id ?? '') === s || String(e.label ?? '') === s)
@@ -435,7 +435,7 @@ export function getDossierEtapeDatesMs(
 }
 
 /**
- * Date de jalon la plus « proche dans le temps » (min) parmi les étapes datées — retards et échéances proches en tête si tri asc.
+ * Date de jalon la plus « proche dans le temps » (min) parmi les étapes datées - retards et échéances proches en tête si tri asc.
  */
 export function getDossierMinEtapeDateMs(
   dossier: { etapesSupplementaires?: Array<{ date?: string | Date | null }> } | null | undefined

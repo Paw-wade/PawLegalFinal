@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { signOut, useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
@@ -11,6 +11,7 @@ import {
   FolderOpen,
   CheckSquare,
   Calendar,
+  CalendarRange,
   Clock,
   MessageSquare,
   FileText,
@@ -46,6 +47,7 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/dossiers/tarification', label: 'Dossiers tarification', icon: FolderOpen },
   { href: '/admin/taches', label: 'Tâches', icon: CheckSquare },
   { href: '/admin/rendez-vous', label: 'Rendez-vous', icon: Calendar },
+  { href: '/admin/calendrier', label: 'Calendrier equipe', icon: CalendarRange },
   { href: '/admin/creneaux', label: 'Créneaux', icon: Clock },
   { href: '/admin/messages', label: 'Messages', icon: MessageSquare },
   { href: '/admin/documents', label: 'Documents', icon: FileText },
@@ -169,7 +171,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
         />
       )}
 
-      {/* Sidebar — même design que partenaire */}
+      {/* Sidebar - même design que partenaire */}
       <aside
         className={`
           w-64 bg-white border-r border-gray-200 flex flex-col
@@ -203,7 +205,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
           )}
         </div>
 
-        {/* Navigation — scroll ; déconnexion fixée en bas sur mobile */}
+        {/* Navigation - scroll ; déconnexion fixée en bas sur mobile */}
         <nav className="p-4 space-y-2 flex-1 min-h-0 overflow-y-auto">
           {filteredMenuItems.map((item) => {
             const Icon = item.icon;
@@ -242,7 +244,7 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
             );
           })}
         </nav>
-        {/* Bouton de déconnexion — bandeau bas du tiroir mobile */}
+        {/* Bouton de déconnexion - bandeau bas du tiroir mobile */}
         <div className="shrink-0 border-t border-gray-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_12px_rgba(0,0,0,0.06)] lg:shadow-none">
           <button
             type="button"

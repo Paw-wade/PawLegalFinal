@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Récupération documentaire pour Paw AI : index Lexia, Judilibre (PISTE), Légifrance (PISTE),
  * et pages HTTPS sur hôtes juridiques officiels (liste blanche).
  * Pas d’accès HTTP arbitraire (SSRF) : domaines autorisés uniquement.
@@ -197,7 +197,7 @@ async function tryJudilibre(queryText) {
       return { md: '_Aucun résultat Judilibre pour cette recherche._', sources };
     }
 
-    const lines = ['### Judilibre (Cour de cassation — API officielle)', ''];
+    const lines = ['### Judilibre (Cour de cassation - API officielle)', ''];
     for (let i = 0; i < Math.min(list.length, 6); i++) {
       const item = list[i] || {};
       const id = item.id || item.decisionId || item._id || item.decision_id;
@@ -214,7 +214,7 @@ async function tryJudilibre(queryText) {
       const head = [item.numero || item.number, item.date || item.decisionDate, item.formation || item.chamber]
         .filter(Boolean)
         .join(' · ');
-      lines.push(`**Décision ${i + 1}**${head ? ` — ${head}` : ''}${id ? ` — id: \`${id}\`` : ''}`);
+      lines.push(`**Décision ${i + 1}**${head ? ` - ${head}` : ''}${id ? ` - id: \`${id}\`` : ''}`);
       lines.push('');
       lines.push(truncate(String(blob || JSON.stringify(item)).replace(/\s+/g, ' '), 3500));
       lines.push('');
@@ -282,7 +282,7 @@ async function tryLegifrance(queryText) {
       }
       if (parts.length) {
         articleMd =
-          `### Légifrance — texte d’articles (consult/getArticle)\n\n` + parts.join('\n\n---\n\n') + '\n\n';
+          `### Légifrance - texte d’articles (consult/getArticle)\n\n` + parts.join('\n\n---\n\n') + '\n\n';
       }
     }
 
@@ -294,7 +294,7 @@ async function tryLegifrance(queryText) {
     });
     return {
       md:
-        `### Légifrance (recherche API — fond \`${fond}\`)\n\n` +
+        `### Légifrance (recherche API - fond \`${fond}\`)\n\n` +
         articleMd +
         `_Réponse recherche (JSON tronqué). À recouper sur legifrance.gouv.fr._\n\n\`\`\`\n${json}\n\`\`\`\n`,
       sources,
@@ -315,7 +315,7 @@ async function tryOfficialUrls(messages) {
   for (const u of urls) {
     const r = await fetchOfficialPageText(u);
     if (r.error) {
-      parts.push(`**${u}** — _${r.error}_\n`);
+      parts.push(`**${u}** - _${r.error}_\n`);
     } else {
       parts.push(`**${r.url}**\n\n${r.text || '_(vide)_'}\n`);
       sources.push({
@@ -417,7 +417,7 @@ async function gatherExternalOnlyForInternal(messages) {
 
   const sources = [...jud.sources, ...leg.sources, ...web.sources];
   const md = [
-    '## Récupération automatique — bases externes',
+    '## Récupération automatique - bases externes',
     '_Judilibre / Légifrance (si configurés) et pages officielles en liste blanche. À recouper sur les sites officiels._',
     '',
     jud.md,

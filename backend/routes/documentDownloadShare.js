@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
@@ -210,7 +210,7 @@ router.post(
           to: share.recipientEmail,
           variables: emailVariables,
           fallback: {
-            subject: 'Téléchargement de document — Ada Papers',
+            subject: 'Téléchargement de document - Ada Papers',
             htmlContent:
               '<p>Bonjour,</p><p>Ada Papers vous transmet un lien pour télécharger le document <strong>{{title}}</strong>.</p>{{cabinetMessageBlock}}<p>Le lien est valable 7 jours et permet plusieurs téléchargements.</p>{{downloadButtonBlock}}<p>Ce lien expire le {{expiryLabel}}.</p>',
             textContent:

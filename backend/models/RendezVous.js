@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 
 const rendezVousSchema = new mongoose.Schema({
   user: {
@@ -77,7 +77,7 @@ const rendezVousSchema = new mongoose.Schema({
     ref: 'Dossier',
     required: false
   },
-  /** RDV créé par un admin pour un client connecté — le client doit accepter ou refuser. */
+  /** RDV créé par un admin pour un client connecté - le client doit accepter ou refuser. */
   proposeParAdmin: {
     type: Boolean,
     default: false
@@ -100,7 +100,7 @@ const rendezVousSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  /** ID événement Google Calendar (sync cabinet) — renseigné après création côté Google. */
+  /** ID événement Google Calendar (sync cabinet) - renseigné après création côté Google. */
   googleCalendarEventId: {
     type: String,
     trim: true,

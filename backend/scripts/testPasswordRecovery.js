@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Test end-to-end password recovery (email link flow).
  * Does not leave the account broken: restores Pawlegal25 at the end for wadepaw.
  *
@@ -160,7 +160,7 @@ async function setPassword(userId, plain) {
     process.exit(1);
   }
   if (!summary.emailSent) {
-    console.error('\n⚠️ Reset API works, but email delivery FAILED — users will not receive the link.');
+    console.error('\n⚠️ Reset API works, but email delivery FAILED - users will not receive the link.');
     process.exit(2);
   }
   process.exit(0);

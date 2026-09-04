@@ -1,4 +1,4 @@
-const Task = require('../models/Task');
+﻿const Task = require('../models/Task');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { sendTransactionalEmail, escapeHtml } = require('./emailNotifications');
@@ -130,7 +130,7 @@ async function checkTaskDeadlines() {
               await sendTransactionalEmail({
                 to: ru.email,
                 toName: ru.firstName || '',
-                subject: `${titre} — Ada Papers`,
+                subject: `${titre} - Ada Papers`,
                 htmlContent: `<p>Bonjour,</p><p>${escapeHtml(message)}</p><p><a href="${appUrl}/admin/taches">Voir les tâches</a></p>`,
                 textContent: `${message}\n\n${appUrl}/admin/taches`,
               });
@@ -262,7 +262,7 @@ async function checkOverdueTasks() {
               await sendTransactionalEmail({
                 to: admin.email,
                 toName: admin.firstName || '',
-                subject: `Tâche en retard — Ada Papers`,
+                subject: `Tâche en retard - Ada Papers`,
                 htmlContent: `<p>${escapeHtml(notifMsg)}</p><p><a href="${appUrl}/admin/taches">Voir les tâches</a></p>`,
                 textContent: `${notifMsg}\n${appUrl}/admin/taches`,
               });

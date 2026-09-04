@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -261,7 +261,7 @@ export default function ContactPage() {
         </div>
       </section>
 
-      {/* Démarrer une demande — accessible sans compte */}
+      {/* Démarrer une demande - accessible sans compte */}
       <section id="demande" className="container mx-auto px-4 pt-12 scroll-mt-24">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-6">

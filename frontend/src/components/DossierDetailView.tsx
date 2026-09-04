@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useRef, useEffect } from 'react';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
@@ -46,7 +46,7 @@ const getCategorieLabel = (categorie: string) => {
 interface DossierDetailViewProps {
   dossier: any;
   variant?: 'client' | 'admin' | 'partenaire';
-  /** Pièces du dossier (toutes origines) — prioritaire sur dossier.documents si fourni */
+  /** Pièces du dossier (toutes origines) - prioritaire sur dossier.documents si fourni */
   dossierFiles?: any[];
 }
 
@@ -106,7 +106,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
     : parsedDescription.specificFields;
 
   // Création d'entreprise : afficher la fiche de demande COMPLÈTE (toutes les rubriques
-  // du formulaire initial, y compris celles laissées vides → « — non renseigné »).
+  // du formulaire initial, y compris celles laissées vides → « - non renseigné »).
   const isConstitution = dossier.categorie === 'constitution_societe';
   const displayFields: Array<{ label: string; value: string; empty?: boolean }> = isConstitution
     ? buildConstitutionFields(dossier.type, dossier.champsFormulaire)
@@ -114,7 +114,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
 
   return (
     <div className="min-w-0 space-y-6">
-      {/* Icône PDF avec actions — responsive: stack sur mobile */}
+      {/* Icône PDF avec actions - responsive: stack sur mobile */}
       <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 border-2 border-dashed border-primary/30">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -190,7 +190,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
         </div>
       )}
 
-      {/* Recommandations (création d'entreprise) — création admin, décision client */}
+      {/* Recommandations (création d'entreprise) - création admin, décision client */}
       {(variant === 'admin' || variant === 'client') && dossier.categorie === 'constitution_societe' && (
         <RecommandationsPanel
           dossierId={String(dossier._id || dossier.id || '')}
@@ -200,7 +200,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
         />
       )}
 
-      {/* Fiches de constitution (création d'entreprise) — demande admin, remplissage client */}
+      {/* Fiches de constitution (création d'entreprise) - demande admin, remplissage client */}
       {(variant === 'admin' || variant === 'client') && dossier.categorie === 'constitution_societe' && (
         <FichesPanel
           dossierId={String(dossier._id || dossier.id || '')}
@@ -209,12 +209,12 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
         />
       )}
 
-      {/* Lien de suivi public — visible côté admin et client (à partager / suivi sans connexion) */}
+      {/* Lien de suivi public - visible côté admin et client (à partager / suivi sans connexion) */}
       {(variant === 'admin' || variant === 'client') && dossier.suiviToken && (
         <LienSuivi token={dossier.suiviToken} />
       )}
 
-      {/* Messages du demandeur (envoyés depuis le lien de suivi) — visible côté admin */}
+      {/* Messages du demandeur (envoyés depuis le lien de suivi) - visible côté admin */}
       {variant === 'admin' && Array.isArray(dossier.messages) && (() => {
         const msgs = (dossier.messages as any[])
           .filter((m) => m && typeof m === 'object' && typeof m.message === 'string')
@@ -248,7 +248,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
         );
       })()}
 
-      {/* Formule tarifaire — visible uniquement côté admin (masquée pour client et partenaire) */}
+      {/* Formule tarifaire - visible uniquement côté admin (masquée pour client et partenaire) */}
       {variant === 'admin' && (
         <div className="min-w-0 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50/80 p-4 sm:p-5 shadow-sm">
           <h3 className="text-sm font-bold text-amber-900 uppercase tracking-wide mb-2 break-words">
@@ -422,7 +422,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
           </div>
         </div>
 
-        {/* Informations client complètes — ancre #fiche-client (liste dossiers → fiche contact) */}
+        {/* Informations client complètes - ancre #fiche-client (liste dossiers → fiche contact) */}
         <div id="fiche-client" className="section mb-6 scroll-mt-20">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4 text-foreground border-b pb-4">
             {dossier.user ? (
@@ -636,7 +636,7 @@ export function DossierDetailView({ dossier, variant = 'client', dossierFiles }:
                       {doc.nom || doc.nomFichier || doc.filename || `Document ${index + 1}`}
                       {doc.user && (doc.user.firstName || doc.user.email) && (
                         <span className="text-xs text-muted-foreground ml-2">
-                          — {doc.user.firstName || ''} {doc.user.lastName || ''}{' '}
+                          - {doc.user.firstName || ''} {doc.user.lastName || ''}{' '}
                           {doc.user.email ? `(${doc.user.email})` : ''}
                         </span>
                       )}

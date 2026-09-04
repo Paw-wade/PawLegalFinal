@@ -1,4 +1,4 @@
-import NextAuth, { type Account, type NextAuthOptions } from 'next-auth';
+﻿import NextAuth, { type Account, type NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import { authApiPath } from '@/lib/publicApiUrl';
@@ -24,13 +24,13 @@ import { authApiPath } from '@/lib/publicApiUrl';
     parts[0];
   if (preferred) {
     console.warn(
-      `[NextAuth] NEXTAUTH_URL was a list — using single URL: ${preferred} (fix Coolify env to this value only)`
+      `[NextAuth] NEXTAUTH_URL was a list - using single URL: ${preferred} (fix Coolify env to this value only)`
     );
     process.env.NEXTAUTH_URL = preferred;
   }
 })();
 
-/** Corps pour POST `/api/auth/google-login` — selon la version NextAuth, les clés peuvent varier. */
+/** Corps pour POST `/api/auth/google-login` - selon la version NextAuth, les clés peuvent varier. */
 function bodyForGoogleLogin(account: Account | null) {
   const a = account as Record<string, unknown> | null;
   const idTok =
@@ -208,7 +208,7 @@ const authOptions: NextAuthOptions = {
         }
         const ok = Boolean(data?.success && data?.token && data?.user);
         if (!ok) {
-          return signInErr('Réponse API invalide après Google — vérifiez les logs backend.');
+          return signInErr('Réponse API invalide après Google - vérifiez les logs backend.');
         }
         return true;
       } catch (error) {

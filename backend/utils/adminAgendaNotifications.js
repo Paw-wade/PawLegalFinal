@@ -1,4 +1,4 @@
-const Dossier = require('../models/Dossier');
+﻿const Dossier = require('../models/Dossier');
 const Task = require('../models/Task');
 const DossierDocumentDraft = require('../models/DossierDocumentDraft');
 const User = require('../models/User');
@@ -91,7 +91,7 @@ async function checkAdminAgendaNotifications() {
           lien: link,
           bucket,
           titre: bucket === 'overdue' ? 'Dossier en retard' : 'Dossier à échéance proche',
-          message: `${ref} — ${title} : échéance dossier ${dateFr(dd)}.`,
+          message: `${ref} - ${title} : échéance dossier ${dateFr(dd)}.`,
         });
       }
 
@@ -107,7 +107,7 @@ async function checkAdminAgendaNotifications() {
           lien: link,
           bucket,
           titre: bucket === 'overdue' ? 'Jalon en retard' : 'Jalon à venir',
-          message: `${ref} — ${title} : jalon "${label}" (${dateFr(sd)}).`,
+          message: `${ref} - ${title} : jalon "${label}" (${dateFr(sd)}).`,
         });
       });
     }

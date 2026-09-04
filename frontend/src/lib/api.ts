@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import { getDirectBackendApiBaseUrl, getPublicApiBaseUrl } from './publicApiUrl';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
@@ -1137,6 +1137,8 @@ export const dossiersAPI = {
   // Côté lien de suivi (sans compte)
   remplirSuiviFiche: (token: string, reqId: string, data: any) =>
     api.post(`/dossier-guest-upload/suivi/${token}/fiche-requests/${reqId}/remplir`, { data, origin: typeof window !== 'undefined' ? window.location.origin : undefined }),
+  saveFicheDraft: (token: string, reqId: string, payload: { data: any; step: number }) =>
+    api.patch(`/dossier-guest-upload/suivi/${token}/fiche-requests/${reqId}/draft`, payload),
   addSuiviEtatCivilRequest: (token: string, pourPersonne?: string) =>
     api.post(`/dossier-guest-upload/suivi/${token}/etat-civil-request`, { pourPersonne }),
 
@@ -1224,7 +1226,7 @@ export const dossiersAPI = {
   deleteRecapComplement: (dossierId: string, complementId: string) =>
     api.delete(`/user/dossiers/${dossierId}/recap/complements/${complementId}`),
   
-  // Client — choix de la formule tarifaire (Premium / Standard)
+  // Client - choix de la formule tarifaire (Premium / Standard)
   setDossierFormuleTarifaire: (dossierId: string, formule: 'standard' | 'premium') =>
     api.patch(`/user/dossiers/${dossierId}/formule-tarifaire`, { formule }),
 
@@ -1236,7 +1238,7 @@ export const dossiersAPI = {
   updateDossier: (id: string, data: any) =>
     api.put(`/user/dossiers/${id}`, data),
 
-  // Admin / superadmin — notifier tarification à la demande (PUT dossier)
+  // Admin / superadmin - notifier tarification à la demande (PUT dossier)
   notifyTarification: (id: string) =>
     api.put(`/user/dossiers/${id}`, { notifyTarificationClient: true }),
 
@@ -1401,7 +1403,7 @@ export const documentsAPI = {
     api.get('/user/documents'),
   
   // Admin - Récupérer tous les documents
-  getAllDocuments: (params?: { userId?: string }) => {
+  getAllDocuments: (params?: { userId?: string; dossierId?: string }) => {
     return api.get('/user/documents/admin', { params });
   },
   
@@ -1414,7 +1416,7 @@ export const documentsAPI = {
     });
   },
   
-  // Prévisualiser un document (blob URL — à révoquer avec URL.revokeObjectURL quand terminé)
+  // Prévisualiser un document (blob URL - à révoquer avec URL.revokeObjectURL quand terminé)
   previewDocument: async (id: string): Promise<string> => {
     const token = typeof window !== 'undefined' ? await getAuthToken() : null;
     const url = `${getApiBaseUrl()}/user/documents/${encodeURIComponent(id)}/preview`;
@@ -1444,12 +1446,12 @@ export const documentsAPI = {
     return URL.createObjectURL(blob);
   },
 
-  /** URL d’API preview (sans token) — préférer previewDocument + blob pour l’affichage */
+  /** URL d’API preview (sans token) - préférer previewDocument + blob pour l’affichage */
   getPreviewUrl: (id: string): string => {
     return `${getApiBaseUrl()}/user/documents/${encodeURIComponent(id)}/preview`;
   },
   
-  // Télécharger un document (blob brut — préférer downloadAndSave)
+  // Télécharger un document (blob brut - préférer downloadAndSave)
   downloadDocument: (id: string) =>
     api.get(`/user/documents/${id}/download`, {
       responseType: 'blob',
@@ -1471,11 +1473,23 @@ export const documentsAPI = {
   updateDocument: (id: string, data: { nom?: string; description?: string }) =>
     api.patch(`/user/documents/${id}`, data),
 
-  /** Admin — autoriser ou masquer un document pour le client */
+  /** Admin - autoriser ou masquer un document pour le client */
   updateDocumentVisibility: (
     id: string,
     data: { visibleToClient?: boolean; confidentialReason?: string }
   ) => api.patch(`/user/documents/${id}/visibility`, data),
+
+  // Compartiments
+  getCompartimentsByDossier: (dossierId: string) =>
+    api.get('/user/documents/compartiments', { params: { dossierId } }),
+  createCompartiment: (data: { dossierId: string; nom: string }) =>
+    api.post('/user/documents/compartiments', data),
+  renameCompartiment: (id: string, nom: string) =>
+    api.patch(`/user/documents/compartiments/${id}`, { nom }),
+  deleteCompartiment: (id: string) =>
+    api.delete(`/user/documents/compartiments/${id}`),
+  moveDocumentToCompartiment: (docId: string, compartimentId: string | null) =>
+    api.patch(`/user/documents/${docId}`, { compartiment: compartimentId }),
 };
 
 export const dossierGuestUploadAPI = {
@@ -1831,7 +1845,7 @@ export const documentRequestsAPI = {
     message?: string;
     isUrgent?: boolean;
     skipSms?: boolean;
-    /** Nombre total de demandes créées dans le même envoi (1er appel uniquement) — adapte le SMS client */
+    /** Nombre total de demandes créées dans le même envoi (1er appel uniquement) - adapte le SMS client */
     batchDocumentCount?: number;
   }) => {
     return api.post('/document-requests', data);

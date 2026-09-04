@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const {
   rechercher,
@@ -30,7 +30,7 @@ router.post('/article', async (req, res) => {
   }
 });
 
-/** Prévisualisation texte article (Paw AI) — authentifié pour limiter l’usage des quotas PISTE. */
+/** Prévisualisation texte article (Paw AI) - authentifié pour limiter l’usage des quotas PISTE. */
 router.post('/article-preview', protect, async (req, res) => {
   try {
     if (!process.env.LEGIFRANCE_API_URL) {

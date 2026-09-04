@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
 const {
@@ -109,7 +109,7 @@ function pawAiMongoUserId(req) {
 }
 
 /**
- * Partage public Paw AI — même préfixe que le proxy Next `/api/lexia/*`.
+ * Partage public Paw AI - même préfixe que le proxy Next `/api/lexia/*`.
  * POST /api/lexia/public-share · GET /api/lexia/public-share/:token
  */
 router.use('/public-share', require('./pawAiPublicShare'));
@@ -204,7 +204,7 @@ router.post('/invalidate-cache', (req, res) => {
 
 /**
  * POST /api/lexia/knowledge-file
- * Corps : { file: "chemin/relatif/doc.md" } — texte intégral extrait (sécurisé sous LEXIA_KNOWLEDGE_DIR).
+ * Corps : { file: "chemin/relatif/doc.md" } - texte intégral extrait (sécurisé sous LEXIA_KNOWLEDGE_DIR).
  */
 router.post('/knowledge-file', protect, authorize(...LEXIA_KNOWLEDGE_READ_ROLES), async (req, res) => {
   try {
@@ -298,7 +298,7 @@ router.put('/chat-state', protect, authorize(...LEXIA_KNOWLEDGE_READ_ROLES), asy
 
 /**
  * POST /api/lexia
- * Point d'entrée principal — reçoit les messages et retourne une réponse
+ * Point d'entrée principal - reçoit les messages et retourne une réponse
  */
 router.post('/', async (req, res) => {
   const t0 = Date.now();
@@ -326,7 +326,7 @@ router.post('/', async (req, res) => {
       try {
         threadAttachmentAppendix = await buildThreadAttachmentAppendix(lexiaUserId, safeThreadId);
       } catch (attachErr) {
-        console.warn('[lexia] Pièces jointes du fil — non bloquant:', attachErr?.message || attachErr);
+        console.warn('[lexia] Pièces jointes du fil - non bloquant:', attachErr?.message || attachErr);
       }
     }
     const lexiaOpts = { threadAttachmentAppendix };

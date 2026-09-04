@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
@@ -55,7 +55,7 @@ async function notifyAdmins(dossier, titre, message, metadata) {
   } catch (e) { console.error('[invitation] notif:', e.message || e); }
 }
 
-// @route GET /api/fiche-invitations/:token — vue scopée
+// @route GET /api/fiche-invitations/:token - vue scopée
 router.get('/:token', async (req, res) => {
   try {
     const inv = await findInvite(req.params.token);
@@ -113,7 +113,7 @@ router.post('/:token/fiche-requests/:reqId/remplir', async (req, res) => {
   }
 });
 
-// @route POST /api/fiche-invitations/:token/documents — dépôt ciblé
+// @route POST /api/fiche-invitations/:token/documents - dépôt ciblé
 router.post('/:token/documents', (req, res, next) => {
   upload.single('document')(req, res, (err) => {
     if (err) return res.status(400).json({ success: false, message: err.message || 'Fichier invalide.' });
@@ -142,7 +142,7 @@ router.post('/:token/documents', (req, res, next) => {
       user: ownerUserId, nom: docNom, nomFichier: req.file.filename, originalName: req.file.originalname,
       cheminFichier, typeMime: req.file.mimetype, taille: req.file.size, dossierId: inv.dossier,
       cabinetId: cabinet?._id || null, visibleToClient: false,
-      confidentialReason: 'Document déposé via une invitation ciblée — en attente de validation.',
+      confidentialReason: 'Document déposé via une invitation ciblée - en attente de validation.',
       uploadedViaGuestLink: true, guestContributorName: (inv.personne || '').slice(0, 200),
     });
     await notifyAdmins(dossier, 'Document reçu (invitation)', `${inv.personne || 'Une personne invitée'} a déposé « ${docNom} » (dossier « ${dossier.titre || ''} »).`, { dossierId: String(inv.dossier), documentId: String(document._id) });
@@ -153,7 +153,7 @@ router.post('/:token/documents', (req, res, next) => {
   }
 });
 
-// @route POST /api/fiche-invitations/:token/piece-requests/:pieceId/fournir — dépôt d'une pièce scopée
+// @route POST /api/fiche-invitations/:token/piece-requests/:pieceId/fournir - dépôt d'une pièce scopée
 router.post('/:token/piece-requests/:pieceId/fournir', (req, res, next) => {
   upload.single('document')(req, res, (err) => {
     if (err) return res.status(400).json({ success: false, message: err.message || 'Fichier invalide.' });

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Logique partagée d'application d'une recommandation acceptée sur un dossier
  * (utilisée côté client authentifié et côté lien de suivi public).
  *
@@ -29,7 +29,7 @@ function applyAcceptedRecommendation(dossier, rec) {
     parts.push(`démarche : ${rec.demarcheRecommandee}`);
   }
   if (parts.length > 0) {
-    const bloc = `— Ajustement validé le ${dateLabel} : ${parts.join(' ; ')}.`;
+    const bloc = `- Ajustement validé le ${dateLabel} : ${parts.join(' ; ')}.`;
     const base = (dossier.description || '').trim();
     dossier.description = base ? `${base}\n\n${bloc}` : bloc;
   }

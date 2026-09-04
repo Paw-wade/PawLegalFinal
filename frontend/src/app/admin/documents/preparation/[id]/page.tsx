@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
@@ -99,7 +99,7 @@ export default function AdminDocumentPreparationEditPage() {
       setClientName(d.clientName || '');
       const num = d.dossier?.numero;
       const tit = d.dossier?.titre;
-      setDossierLabel([num, tit].filter(Boolean).join(' — ') || did || '');
+      setDossierLabel([num, tit].filter(Boolean).join(' - ') || did || '');
       setCompletedAt(d.completedAt ? new Date(d.completedAt).toISOString() : null);
     } catch (e: any) {
       setError(e?.response?.data?.message || 'Chargement impossible.');
@@ -236,7 +236,7 @@ export default function AdminDocumentPreparationEditPage() {
       <div className="rounded-xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm space-y-4">
         <div>
           <div className="flex flex-wrap items-center gap-2 gap-y-2">
-            <h1 className="text-xl font-bold text-gray-900">Édition — document en préparation</h1>
+            <h1 className="text-xl font-bold text-gray-900">Édition - document en préparation</h1>
             {isCompleted ? (
               <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-200">
                 Terminé

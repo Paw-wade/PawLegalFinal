@@ -1,9 +1,10 @@
-const express = require('express');
+﻿const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const mongoose = require('mongoose');
 const Document = require('../models/Document');
+const DocumentCompartiment = require('../models/DocumentCompartiment');
 const User = require('../models/User');
 const Log = require('../models/Log');
 const Dossier = require('../models/Dossier');
@@ -490,9 +491,15 @@ router.get('/admin', protect, async (req, res) => {
       }
     }
     
+    // Filtre optionnel par dossier
+    if (req.query.dossierId && mongoose.Types.ObjectId.isValid(req.query.dossierId)) {
+      query.dossierId = req.query.dossierId;
+    }
+
     const documents = await Document.find(query)
       .populate('user', 'firstName lastName email')
       .populate('dossierId', 'titre numero')
+      .populate('compartiment', 'nom ordre')
       .sort({ createdAt: -1 });
 
     console.log('✅ Documents trouvés:', documents.length);
@@ -693,7 +700,7 @@ router.post('/', (req, res, next) => {
       });
     } catch (uploadErr) {
       removeLocalUploadTempFile(req.file);
-      console.error('Échec upload distant — document non créé:', uploadErr.message);
+      console.error('Échec upload distant - document non créé:', uploadErr.message);
       return res.status(503).json({
         success: false,
         message:
@@ -892,7 +899,7 @@ async function canClientAccessDocumentViaOwningDossier(document, user) {
 
 // @route   GET /api/user/documents/:id/preview
 // @desc    Prévisualiser un document (retourne le fichier avec headers pour affichage)
-// @access  Private — auth via middleware protect (Bearer ou ?token=)
+// @access  Private - auth via middleware protect (Bearer ou ?token=)
 router.get('/:id/preview', async (req, res) => {
   try {
     const user = req.user;
@@ -1009,7 +1016,7 @@ router.get('/:id/preview', async (req, res) => {
     return res.status(404).json({
       success: false,
       code: 'FILE_NOT_FOUND',
-      message: 'Fichier non trouvé sur le serveur. Le fichier peut être absent du disque local — récupérez-le depuis le VPS ou re-téléversez le document.',
+      message: 'Fichier non trouvé sur le serveur. Le fichier peut être absent du disque local - récupérez-le depuis le VPS ou re-téléversez le document.',
     });
   } catch (error) {
     console.error('Erreur lors de la prévisualisation du document:', error);
@@ -1109,7 +1116,7 @@ router.get('/:id/download', async (req, res) => {
     return res.status(404).json({
       success: false,
       code: 'FILE_NOT_FOUND',
-      message: 'Fichier non trouvé sur le serveur. Le fichier peut être absent du disque local — récupérez-le depuis le VPS ou re-téléversez le document.',
+      message: 'Fichier non trouvé sur le serveur. Le fichier peut être absent du disque local - récupérez-le depuis le VPS ou re-téléversez le document.',
     });
   } catch (error) {
     console.error('Erreur lors du téléchargement du document:', error);
@@ -1142,11 +1149,21 @@ router.patch('/:id', async (req, res) => {
 
     const ownerId = document.user != null ? String(document.user) : null;
     const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
-    if (ownerId && ownerId !== String(effectiveUserId) && !isAdmin) {
+    const isPartenaire = req.user.role === 'partenaire';
+    if (ownerId && ownerId !== String(effectiveUserId) && !isAdmin && !isPartenaire) {
       return res.status(403).json({ success: false, message: 'Accès non autorisé à ce document' });
     }
 
-    const { nom, description } = req.body || {};
+    const { nom, description, compartiment } = req.body || {};
+
+    if (compartiment !== undefined) {
+      if (compartiment === null || compartiment === '') {
+        document.compartiment = null;
+      } else if (mongoose.Types.ObjectId.isValid(compartiment)) {
+        document.compartiment = compartiment;
+      }
+    }
+
     if (nom !== undefined) {
       const trimmed = String(nom).trim();
       if (!trimmed) {
@@ -1326,7 +1343,7 @@ router.delete('/:id', async (req, res) => {
     // Supprimer le document de la base de données
     await document.deleteOne();
 
-    // Logger l'action (userEmail requis par le schéma — comptes téléphone seulement sans email)
+    // Logger l'action (userEmail requis par le schéma - comptes téléphone seulement sans email)
     try {
       const actorEmail =
         req.user.email || req.user.phone || (req.user.name ? String(req.user.name) : '') || 'inconnu';
@@ -1364,6 +1381,99 @@ router.delete('/:id', async (req, res) => {
       message: 'Erreur serveur',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
+  }
+});
+
+// ─── Compartiments ────────────────────────────────────────────────────────────
+
+// @route   GET /api/user/documents/compartiments?dossierId=xxx
+// @access  Private (staff + partenaire)
+router.get('/compartiments', async (req, res) => {
+  try {
+    const { dossierId } = req.query;
+    if (!dossierId || !mongoose.Types.ObjectId.isValid(dossierId)) {
+      return res.status(400).json({ success: false, message: 'dossierId requis et valide' });
+    }
+    const compartiments = await DocumentCompartiment.find({ dossier: dossierId })
+      .sort({ ordre: 1, createdAt: 1 });
+    return res.json({ success: true, compartiments });
+  } catch (error) {
+    console.error('Erreur GET compartiments:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   POST /api/user/documents/compartiments
+// @access  Private (admin/superadmin)
+router.post('/compartiments', authorize('admin', 'superadmin', 'partenaire'), async (req, res) => {
+  try {
+    const { dossierId, nom } = req.body || {};
+    if (!dossierId || !mongoose.Types.ObjectId.isValid(dossierId)) {
+      return res.status(400).json({ success: false, message: 'dossierId requis et valide' });
+    }
+    const trimmed = String(nom || '').trim();
+    if (!trimmed) {
+      return res.status(400).json({ success: false, message: 'Nom du compartiment requis' });
+    }
+    const maxOrdre = await DocumentCompartiment.findOne({ dossier: dossierId })
+      .sort({ ordre: -1 }).select('ordre').lean();
+    const ordre = maxOrdre ? (maxOrdre.ordre || 0) + 1 : 0;
+    const compartiment = await DocumentCompartiment.create({
+      dossier: dossierId,
+      nom: trimmed,
+      ordre,
+      createdBy: req.user.id,
+    });
+    return res.status(201).json({ success: true, compartiment });
+  } catch (error) {
+    console.error('Erreur POST compartiment:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   PATCH /api/user/documents/compartiments/:id
+// @access  Private (admin/superadmin)
+router.patch('/compartiments/:id', authorize('admin', 'superadmin', 'partenaire'), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Identifiant invalide' });
+    }
+    const compartiment = await DocumentCompartiment.findById(req.params.id);
+    if (!compartiment) {
+      return res.status(404).json({ success: false, message: 'Compartiment non trouve' });
+    }
+    const { nom } = req.body || {};
+    if (nom !== undefined) {
+      const trimmed = String(nom).trim();
+      if (!trimmed) return res.status(400).json({ success: false, message: 'Nom requis' });
+      compartiment.nom = trimmed;
+    }
+    await compartiment.save();
+    return res.json({ success: true, compartiment });
+  } catch (error) {
+    console.error('Erreur PATCH compartiment:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   DELETE /api/user/documents/compartiments/:id
+// @access  Private (admin/superadmin)
+router.delete('/compartiments/:id', authorize('admin', 'superadmin', 'partenaire'), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Identifiant invalide' });
+    }
+    const compartiment = await DocumentCompartiment.findById(req.params.id);
+    if (!compartiment) {
+      return res.status(404).json({ success: false, message: 'Compartiment non trouve' });
+    }
+    // Dé-classer les documents qui étaient dans ce compartiment
+    await Document.updateMany({ compartiment: compartiment._id }, { $set: { compartiment: null } });
+    await compartiment.deleteOne();
+    return res.json({ success: true, message: 'Compartiment supprime, documents deplaces vers Non classes' });
+  } catch (error) {
+    console.error('Erreur DELETE compartiment:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 

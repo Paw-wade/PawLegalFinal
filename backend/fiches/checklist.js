@@ -1,4 +1,4 @@
-const { getSchema } = require('./registry');
+﻿const { getSchema } = require('./registry');
 const { extractAssocies } = require('./etatCivilRequests');
 
 /** Extrait les noms des gérants / dirigeants selon schema.gerantsSource. */
@@ -33,7 +33,7 @@ async function ensureFicheRequest(dossierId, typeFiche, pourPersonne, requestedB
   if (exists) return;
   await FicheRequest.create({
     dossier: dossierId, typeFiche, pourPersonne: pourPersonne || '', requestedBy: requestedBy || null,
-    titre: pourPersonne ? `${schema.titre} — ${pourPersonne}` : schema.titre,
+    titre: pourPersonne ? `${schema.titre} - ${pourPersonne}` : schema.titre,
   });
 }
 
@@ -56,15 +56,15 @@ async function ensureConstitutionChecklist(dossierId, schema, data, requestedBy)
   for (const nom of associes) {
     if (ec) {
       const exists = await FicheRequest.findOne({ dossier: dossierId, typeFiche: 'etat_civil', pourPersonne: nom, statut: { $ne: 'annulee' } }).lean();
-      if (!exists) await FicheRequest.create({ dossier: dossierId, typeFiche: 'etat_civil', titre: `${ec.titre} — ${nom}`, pourPersonne: nom, requestedBy: requestedBy || null });
+      if (!exists) await FicheRequest.create({ dossier: dossierId, typeFiche: 'etat_civil', titre: `${ec.titre} - ${nom}`, pourPersonne: nom, requestedBy: requestedBy || null });
     }
-    await ensurePiece(dossierId, { libelle: `Pièce d'identité — ${nom}`, nature: 'identite', pourPersonne: nom, requestedBy });
+    await ensurePiece(dossierId, { libelle: `Pièce d'identité - ${nom}`, nature: 'identite', pourPersonne: nom, requestedBy });
   }
 
   // Pièce d'identité + casier (ou déclaration) par gérant.
   for (const nom of gerants) {
-    await ensurePiece(dossierId, { libelle: `Pièce d'identité — ${nom}`, nature: 'identite', pourPersonne: nom, requestedBy });
-    await ensurePiece(dossierId, { libelle: `Casier judiciaire — ${nom}`, nature: 'casier', pourPersonne: nom, note: 'À défaut, remplir la déclaration sur l\'honneur.', requestedBy });
+    await ensurePiece(dossierId, { libelle: `Pièce d'identité - ${nom}`, nature: 'identite', pourPersonne: nom, requestedBy });
+    await ensurePiece(dossierId, { libelle: `Casier judiciaire - ${nom}`, nature: 'casier', pourPersonne: nom, note: 'À défaut, remplir la déclaration sur l\'honneur.', requestedBy });
     await ensureFicheRequest(dossierId, 'declaration_honneur', nom, requestedBy);
   }
 
@@ -75,7 +75,7 @@ async function ensureConstitutionChecklist(dossierId, schema, data, requestedBy)
       const existsProc = await FicheRequest.findOne({ dossier: dossierId, typeFiche: 'procuration', pourPersonne: nom, statut: { $ne: 'annulee' } }).lean();
       if (!existsProc) {
         await FicheRequest.create({
-          dossier: dossierId, typeFiche: 'procuration', pourPersonne: nom, titre: `${proc.titre} — ${nom}`,
+          dossier: dossierId, typeFiche: 'procuration', pourPersonne: nom, titre: `${proc.titre} - ${nom}`,
           message: 'À remplir uniquement si cet associé ne peut pas être présent le jour de la signature (procuration donnée à un mandataire).',
           requestedBy: requestedBy || null,
         });

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -274,7 +274,7 @@ export default function ClientDossierRecapPage() {
                     <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
                       <span className="text-sm text-gray-500">
                         {c.authorName}{c.role ? ` • ${c.role}` : ''}{' '}
-                        {c.addedAt && `— ${formatDate(c.addedAt)}`}
+                        {c.addedAt && `- ${formatDate(c.addedAt)}`}
                       </span>
                     </div>
                   </div>
@@ -446,7 +446,7 @@ export default function ClientDossierRecapPage() {
                         <p className="text-gray-800 whitespace-pre-wrap">{c.text}</p>
                         <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
                           <span className="text-sm text-gray-500">
-                            {c.authorName}{c.role ? ` • ${c.role}` : ''} — {formatDate(c.addedAt)}
+                            {c.authorName}{c.role ? ` • ${c.role}` : ''} - {formatDate(c.addedAt)}
                           </span>
                           {canEditComplement(c) && (
                             <div className="flex gap-2">

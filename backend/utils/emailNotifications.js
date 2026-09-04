@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+﻿const nodemailer = require('nodemailer');
 const { sendEmail: sendBrevoEmail } = require('../services/brevoService');
 const EMAIL_PROVIDER_TIMEOUT_MS = Number(process.env.EMAIL_PROVIDER_TIMEOUT_MS || 12000);
 
@@ -131,7 +131,7 @@ async function sendTransactionalEmailDetailed({ to, toName = '', subject, htmlCo
       console.warn('⚠️ Brevo indisponible ou refusé, tentative SMTP:', e.message || e);
     }
   } else {
-    console.warn('⚠️ BREVO_API_KEY absente — envoi via SMTP si configuré.');
+    console.warn('⚠️ BREVO_API_KEY absente - envoi via SMTP si configuré.');
   }
 
   try {

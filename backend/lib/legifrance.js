@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+﻿const fetch = require('node-fetch');
 const { getPisteToken, clearPisteTokenCache } = require('./auth');
 
 const BASE = process.env.LEGIFRANCE_API_URL;
@@ -101,7 +101,7 @@ async function rechercher(query, fond = 'CODE_DATE') {
   if (!res.ok) {
     if (res.status === 401) {
       const err = new Error(
-        `Legifrance /search a échoué (401 Unauthorized) : ${JSON.stringify(data)} — ${legifranceUnauthorizedHint()}`
+        `Legifrance /search a échoué (401 Unauthorized) : ${JSON.stringify(data)} - ${legifranceUnauthorizedHint()}`
       );
       err.code = 'LEGIFRANCE_UNAUTHORIZED';
       err.httpStatus = 401;
@@ -146,7 +146,7 @@ async function getArticle(id) {
   if (!res.ok) {
     if (res.status === 401) {
       const err = new Error(
-        `Legifrance /consult/getArticle a échoué (401 Unauthorized) : ${JSON.stringify(data)} — ${legifranceUnauthorizedHint()}`
+        `Legifrance /consult/getArticle a échoué (401 Unauthorized) : ${JSON.stringify(data)} - ${legifranceUnauthorizedHint()}`
       );
       err.httpStatus = 401;
       err.code = 'LEGIFRANCE_UNAUTHORIZED';
@@ -409,7 +409,7 @@ async function getArticlePreviewEnriched(id, titleFallback = '') {
     referencesSortantes: [...sortantesResolved, ...sortantesRest],
     articlesQuiCitent: [...citantsResolved, ...citantsRest],
     crossRefNote:
-      'Références sortantes : identifiants LEGIARTI présents dans la réponse API. Autres textes repérés : ids extraits des résultats de recherche Légifrance sur cet identifiant (fonds : variable LEGIFRANCE_CITATION_FONDS, défaut CODE_DATE). Liste non exhaustive — contrôler sur Légifrance.',
+      'Références sortantes : identifiants LEGIARTI présents dans la réponse API. Autres textes repérés : ids extraits des résultats de recherche Légifrance sur cet identifiant (fonds : variable LEGIFRANCE_CITATION_FONDS, défaut CODE_DATE). Liste non exhaustive - contrôler sur Légifrance.',
   };
 }
 

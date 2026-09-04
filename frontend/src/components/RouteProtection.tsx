@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useSession } from 'next-auth/react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -58,7 +58,7 @@ export function RouteProtection({ children }: RouteProtectionProps) {
     return (
       <>
         <div className="mx-4 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <span className="font-medium">Accès restreint —</span> vous n&apos;avez pas la permission
+          <span className="font-medium">Accès restreint -</span> vous n&apos;avez pas la permission
           complète pour cette rubrique. Seuls les éléments qui vous sont assignés sont affichés.
         </div>
         {children}

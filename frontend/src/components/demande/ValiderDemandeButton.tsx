@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { dossiersAPI } from '@/lib/api';
@@ -28,7 +28,7 @@ export function ValiderDemandeButton({ dossierId }: { dossierId: string }) {
   };
 
   if (done) {
-    return <span className="text-sm font-medium text-green-700">✓ Demande prise en compte — e-mail envoyé au demandeur</span>;
+    return <span className="text-sm font-medium text-green-700">✓ Demande prise en compte - e-mail envoyé au demandeur</span>;
   }
 
   return (

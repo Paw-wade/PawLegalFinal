@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 
 const RecoursType = require('../models/RecoursType');
@@ -530,11 +530,11 @@ router.post('/recours/templates/:id/send-to-dossier', async (req, res) => {
       cheminFichier,
       typeMime: template.mimeType || sourceDoc?.typeMime || 'application/octet-stream',
       taille: template.size || sourceDoc?.taille || 0,
-      description: descriptionParts.join(' — '),
+      description: descriptionParts.join(' - '),
       categorie: sourceDoc?.categorie || 'autre',
       dossierId,
       visibleToClient: clientVisible,
-      confidentialReason: clientVisible ? '' : 'Document interne — issu de la documentation',
+      confidentialReason: clientVisible ? '' : 'Document interne - issu de la documentation',
     });
 
     try {

@@ -1,4 +1,4 @@
-const { getSchema } = require('./registry');
+﻿const { getSchema } = require('./registry');
 
 /** Extrait les noms des associés d'une fiche de société remplie (selon schema.associesSource). */
 function extractAssocies(schema, data) {
@@ -35,7 +35,7 @@ async function ensureEtatCivilRequestsPerAssocie(dossierId, schema, data, reques
     }).lean();
     if (!exists) {
       await FicheRequest.create({
-        dossier: dossierId, typeFiche: 'etat_civil', titre: `${ec.titre} — ${clean}`,
+        dossier: dossierId, typeFiche: 'etat_civil', titre: `${ec.titre} - ${clean}`,
         pourPersonne: clean, requestedBy: requestedBy || null,
       });
       created += 1;

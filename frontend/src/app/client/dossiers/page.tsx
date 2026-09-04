@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
@@ -82,8 +82,8 @@ const categories = {
   constitution_societe: {
     label: 'Constitution de société',
     types: [
-      { value: 'constitution_societe_senegal', label: 'Constitution — entreprise / société au Sénégal' },
-      { value: 'constitution_societe_france', label: 'Constitution — entreprise / société en France' },
+      { value: 'constitution_societe_senegal', label: 'Constitution - entreprise / société au Sénégal' },
+      { value: 'constitution_societe_france', label: 'Constitution - entreprise / société en France' },
     ]
   },
   autre: {
@@ -745,7 +745,7 @@ function DossiersContent() {
                                 </div>
                                 <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Notifications</p>
-                                  <p className="text-sm font-semibold text-foreground">{unreadNotifications > 0 ? unreadNotifications : '—'}</p>
+                                  <p className="text-sm font-semibold text-foreground">{unreadNotifications > 0 ? unreadNotifications : '-'}</p>
                                 </div>
                                 <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Intervenants</p>
@@ -862,7 +862,7 @@ function DossiersContent() {
                     })()}
                   </div>
 
-                  {/* Dossier transmis — une ligne par transmission */}
+                  {/* Dossier transmis - une ligne par transmission */}
                   {dossier.transmittedTo && dossier.transmittedTo.length > 0 && (
                     <div className="mb-2 pb-2 border-b border-gray-100">
                       <p className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Transmis</p>
@@ -888,7 +888,7 @@ function DossiersContent() {
 
                               return (
                                 <>
-                                  {label}: {fullName || '—'}
+                                  {label}: {fullName || '-'}
                                   {nomOrganisme ? ` (${nomOrganisme})` : null}
                                 </>
                               );
@@ -900,7 +900,7 @@ function DossiersContent() {
                     </div>
                   )}
 
-                  {/* Informations du dossier — grille compacte */}
+                  {/* Informations du dossier - grille compacte */}
                   <div className="mb-2 pb-2 border-b border-gray-100">
                     <p className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Infos</p>
                     <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-0.5 text-[11px] md:text-sm">
@@ -914,7 +914,7 @@ function DossiersContent() {
                       )}
                       <dt className="text-muted-foreground">Créé</dt>
                       <dd className="text-foreground">
-                        {dossier.createdAt ? new Date(dossier.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
+                        {dossier.createdAt ? new Date(dossier.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' }) : '-'}
                       </dd>
                       {dossier.updatedAt && (
                         <>
@@ -937,7 +937,7 @@ function DossiersContent() {
                     </dl>
                   </div>
 
-                  {/* Synthèse — une ligne : Documents · Messages · Demandes */}
+                  {/* Synthèse - une ligne : Documents · Messages · Demandes */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2 pb-2 border-b border-gray-100 text-[11px] md:text-sm text-muted-foreground">
                     <span><span className="font-semibold text-foreground">{dossierDocuments[dossier._id || dossier.id]?.length || dossier.documents?.length || 0}</span> doc.</span>
                     <span><span className="font-semibold text-foreground">{dossier.messages?.length || 0}</span> msg.</span>
@@ -1178,7 +1178,7 @@ function DossiersContent() {
                                   <span className="shrink-0">{isPending ? (isUrgent ? '🔴' : '📄') : '✅'}</span>
                                   <div className="flex-1 min-w-0 truncate font-medium">
                                     {request.documentTypeLabel || request.documentType || 'Document'}
-                                    {request.message && <span className="text-muted-foreground font-normal"> — {request.message}</span>}
+                                    {request.message && <span className="text-muted-foreground font-normal"> - {request.message}</span>}
                                   </div>
                                   <span className="text-[10px] md:text-xs text-muted-foreground shrink-0">
                                     {request.receivedAt

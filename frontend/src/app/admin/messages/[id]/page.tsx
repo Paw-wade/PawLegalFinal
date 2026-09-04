@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
@@ -1035,8 +1035,8 @@ export default function AdminMessageDetailPage() {
                           )}
                           {dossierFormData.categorie === 'constitution_societe' && (
                             <>
-                              <option value="constitution_societe_senegal">Constitution — Sénégal</option>
-                              <option value="constitution_societe_france">Constitution — France</option>
+                              <option value="constitution_societe_senegal">Constitution - Sénégal</option>
+                              <option value="constitution_societe_france">Constitution - France</option>
                             </>
                           )}
                           {dossierFormData.categorie === 'autre' && (

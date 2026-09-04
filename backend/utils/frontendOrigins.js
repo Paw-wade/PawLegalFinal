@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Origines frontend autorisées (CORS).
  * FRONTEND_URL peut être une liste séparée par des virgules, ex. :
  *   https://www.adapapers.fr,https://adapapers.fr,https://adapapers.vercel.app
@@ -57,7 +57,7 @@ function isLocalhostOrigin(urlStr) {
   }
 }
 
-/** Hôte type sous-domaine API (souvent en première position dans FRONTEND_URL) — à ne pas utiliser pour les liens e-mail. */
+/** Hôte type sous-domaine API (souvent en première position dans FRONTEND_URL) - à ne pas utiliser pour les liens e-mail. */
 function isApiSubdomainHostname(hostname) {
   return String(hostname || '')
     .toLowerCase()

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -333,7 +333,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Hero Section — design renforcé, padding mobile */}
+      {/* Hero Section - design renforcé, padding mobile */}
       <section className="relative min-h-[80vh] sm:min-h-[85vh] flex items-center py-12 sm:py-20 lg:py-28 overflow-hidden">
         {/* Fond : dégradé doux + formes organiques */}
         <div className="absolute inset-0 bg-gradient-to-br from-amber-50/90 via-white to-orange-50/60" />

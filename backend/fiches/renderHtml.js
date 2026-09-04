@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Rendu HTML générique d'une fiche à partir de son schéma et des données saisies.
  * Le HTML est ensuite converti en PDF (utils/htmlToPdf) avec l'en-tête / logo AdaPapers.
  * Un même moteur sert toutes les fiches → fidélité rubrique-à-rubrique garantie.
@@ -65,7 +65,7 @@ function renderRepeatable(section, data) {
       if (f.type === 'montant') cell = fmtMontant(cell);
       else if (f.type === 'percent') cell = cell === '' ? '' : `${esc(cell)} %`;
       else cell = esc(cell);
-      return `<td>${cell || '—'}</td>`;
+      return `<td>${cell || '-'}</td>`;
     }).join('');
     return `<tr><td class="idx">${i + 1}</td>${tds}</tr>`;
   }).join('');

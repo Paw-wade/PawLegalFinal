@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require('docx');
@@ -36,7 +36,7 @@ function clientDisplayName(dossier) {
     return [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
   }
   const n = [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ').trim();
-  return n || dossier.clientEmail || '—';
+  return n || dossier.clientEmail || '-';
 }
 
 function decodeBasicEntities(s) {
@@ -133,7 +133,7 @@ router.get('/dossier-document-drafts/:id/docx', staffOnly, async (req, res) => {
     if (draft.dossier?.numero) metaLines.push(`Dossier : ${draft.dossier.numero}`);
     if (draft.dossier?.titre) metaLines.push(`Objet : ${draft.dossier.titre}`);
     const client = clientDisplayName(draft.dossier);
-    if (client && client !== '—') metaLines.push(`Client : ${client}`);
+    if (client && client !== '-') metaLines.push(`Client : ${client}`);
     if (draft.dueDate) {
       metaLines.push(
         `Échéance : ${new Date(draft.dueDate).toLocaleDateString('fr-FR', {

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { History, Clock } from 'lucide-react';
 import { DossierDetailView } from '@/components/DossierDetailView';
-import { documentsAPI } from '@/lib/api';
+import { DocumentsWithCompartiments } from '@/components/DocumentsWithCompartiments';
 import { TaskListItem } from '@/components/tasks/TaskListItem';
 
 type PartenaireDossierDetailSectionsProps = {
@@ -280,51 +280,13 @@ export function PartenaireDossierDetailSections({
             )}
           </div>
 
-          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 min-w-0">
-            <h2 className="text-xl font-bold mb-4 break-words">📁 Documents du dossier</h2>
-            {isLoadingDocuments ? (
-              <p className="text-sm text-muted-foreground">Chargement...</p>
-            ) : documents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucun document</p>
-            ) : (
-              <div className="space-y-2">
-                {documents.map((doc: any) => (
-                  <div
-                    key={doc._id || doc.id}
-                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 min-w-0"
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-lg flex-shrink-0">📄</span>
-                      <p className="font-medium text-sm break-words">{doc.nom}</p>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto shrink-0">
-                      <Button
-                        variant="outline"
-                        className="text-xs h-8 w-full sm:w-auto"
-                        onClick={() => onPreviewDocument(doc)}
-                      >
-                        👁️ Voir
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="text-xs h-8 w-full sm:w-auto"
-                        onClick={async () => {
-                          try {
-                            await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
-                          } catch (error) {
-                            console.error('Erreur lors du téléchargement:', error);
-                            alert('Erreur lors du téléchargement du document');
-                          }
-                        }}
-                      >
-                        ⬇️ Télécharger
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <DocumentsWithCompartiments
+            dossierId={dossierId}
+            variant="partenaire"
+            documents={documents}
+            isLoading={isLoadingDocuments}
+            onPreviewDocument={onPreviewDocument}
+          />
         </div>
       )}
 

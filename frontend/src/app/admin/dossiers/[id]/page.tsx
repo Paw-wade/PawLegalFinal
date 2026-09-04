@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
@@ -8,6 +8,7 @@ import { DossierDetailView } from '@/components/DossierDetailView';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { FichesPanel } from '@/components/fiches/FichesPanel';
 import { ConstitutionFluxGuide } from '@/components/fiches/ConstitutionFluxGuide';
+import { DocumentsWithCompartiments } from '@/components/DocumentsWithCompartiments';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI, userAPI } from '@/lib/api';
 import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
@@ -65,7 +66,6 @@ export default function AdminDossierDetailPage() {
   const [requestActionLoadingId, setRequestActionLoadingId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
-  const [isExportingZip, setIsExportingZip] = useState(false);
   const [selectedDocumentRequestNotification, setSelectedDocumentRequestNotification] = useState<any>(null);
   const [showDocumentRequestModal, setShowDocumentRequestModal] = useState(false);
   const [selectedDocumentForPreview, setSelectedDocumentForPreview] = useState<any>(null);
@@ -118,7 +118,7 @@ export default function AdminDossierDetailPage() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     
-    if (status === 'loading') {
+    if (status === "loading") {
       return;
     }
 
@@ -250,14 +250,10 @@ export default function AdminDossierDetailPage() {
     if (!dossierId) return;
     setIsLoadingDocuments(true);
     try {
-      const response = await documentsAPI.getAllDocuments();
+      const response = await documentsAPI.getAllDocuments({ dossierId });
       if (response.data.success) {
-        const allDocuments = response.data.documents || response.data.data || [];
-        // Filtrer les documents liés à ce dossier
-        const dossierDocuments = allDocuments.filter((doc: any) => 
-          doc.dossierId && (doc.dossierId._id || doc.dossierId).toString() === dossierId.toString()
-        );
-        setDocuments(dossierDocuments);
+        const docs = response.data.documents || response.data.data || [];
+        setDocuments(docs);
       }
     } catch (err: any) {
       console.error('Erreur lors du chargement des documents:', err);
@@ -267,19 +263,19 @@ export default function AdminDossierDetailPage() {
   };
 
   const handleCancelDocumentRequest = async (requestId: string) => {
-    const confirmCancel = window.confirm('Confirmer l’annulation de cette demande de document ?');
+    const confirmCancel = window.confirm("Confirmer l'annulation de cette demande de document ?");
     if (!confirmCancel) return;
 
     try {
       setRequestActionLoadingId(requestId);
       const response = await documentRequestsAPI.cancelRequest(requestId);
       if (!response.data?.success) {
-        throw new Error(response.data?.message || 'Impossible d’annuler la demande');
+        throw new Error(response.data?.message || "Impossible d'annuler la demande");
       }
       await loadDocumentRequests();
     } catch (err: any) {
-      console.error('Erreur lors de l’annulation de la demande:', err);
-      alert(err.response?.data?.message || err.message || 'Erreur lors de l’annulation de la demande');
+      console.error("Erreur lors de l'annulation de la demande:", err);
+      alert(err.response?.data?.message || err.message || "Erreur lors de l'annulation de la demande");
     } finally {
       setRequestActionLoadingId(null);
     }
@@ -308,49 +304,7 @@ export default function AdminDossierDetailPage() {
     }
   };
 
-  const handleExportDocumentsZip = async () => {
-    if (!documents || documents.length === 0) {
-      alert('Aucun document à exporter.');
-      return;
-    }
-
-    setIsExportingZip(true);
-    try {
-      const JSZip = (await import('jszip')).default;
-      const zip = new JSZip();
-
-      for (const doc of documents) {
-        const docId = doc._id || doc.id;
-        if (!docId) continue;
-
-        const response = await documentsAPI.downloadDocument(docId);
-        const { blobFromDownloadResponse, resolveFileNameFromDownloadResponse } = await import('@/lib/downloadFile');
-        const blob = blobFromDownloadResponse(response);
-        const fileName = resolveFileNameFromDownloadResponse(
-          response,
-          doc.originalName || doc.nom || doc.nomFichier || `document-${docId}`
-        );
-        zip.file(fileName, blob);
-      }
-
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const url = window.URL.createObjectURL(zipBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `dossier-${dossier?.numero || dossierId}-documents.zip`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Erreur lors de l’export ZIP des documents:', error);
-      alert('Erreur lors de l’export ZIP. Vérifiez que tous les documents sont accessibles.');
-    } finally {
-      setIsExportingZip(false);
-    }
-  };
-
-  if (status === 'loading') {
+  if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -767,10 +721,10 @@ export default function AdminDossierDetailPage() {
                                 setLocalSteps(res.data.dossier.etapesSupplementaires || []);
                                 setEditingTitre(false);
                               } else {
-                                setTitreEditError(res.data?.message || 'Erreur lors de l’enregistrement');
+                                setTitreEditError(res.data?.message || "Erreur lors de l'enregistrement");
                               }
                             } catch (err: any) {
-                              setTitreEditError(err.response?.data?.message || 'Erreur lors de l’enregistrement');
+                              setTitreEditError(err.response?.data?.message || "Erreur lors de l'enregistrement");
                             } finally {
                               setSavingTitre(false);
                             }
@@ -856,10 +810,10 @@ export default function AdminDossierDetailPage() {
                               setLocalSteps(res.data.dossier.etapesSupplementaires || []);
                               setEditingDescription(false);
                             } else {
-                              setDescriptionEditError(res.data?.message || 'Erreur lors de l’enregistrement');
+                              setDescriptionEditError(res.data?.message || "Erreur lors de l'enregistrement");
                             }
                           } catch (err: any) {
-                            setDescriptionEditError(err.response?.data?.message || 'Erreur lors de l’enregistrement');
+                            setDescriptionEditError(err.response?.data?.message || "Erreur lors de l'enregistrement");
                           } finally {
                             setSavingDescription(false);
                           }
@@ -1603,75 +1557,22 @@ export default function AdminDossierDetailPage() {
             )}
           </div>
 
-          {/* Documents du dossier */}
-          <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 min-w-0">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-              <h2 className="text-xl font-bold break-words">📁 Documents du dossier</h2>
-              <Button
-                variant="outline"
-                className="text-xs h-8 w-full sm:w-auto"
-                onClick={handleExportDocumentsZip}
-                disabled={isLoadingDocuments || isExportingZip || documents.length === 0}
-              >
-                {isExportingZip ? 'Préparation ZIP...' : '🗜️ Télécharger tout (ZIP)'}
-              </Button>
-            </div>
-            {isLoadingDocuments ? (
-              <p className="text-sm text-muted-foreground">Chargement...</p>
-            ) : documents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucun document</p>
-            ) : (
-              <div className="space-y-2">
-                {documents.map((doc: any) => (
-                  <div
-                    key={doc._id || doc.id}
-                    id={`doc-${doc._id || doc.id}`}
-                    className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg border min-w-0 transition-colors ${
-                      targetDocId === String(doc._id || doc.id)
-                        ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-300'
-                        : 'bg-gray-50 border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-lg flex-shrink-0">📄</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm break-words">{doc.nom}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto shrink-0">
-                      <Button
-                        variant="outline"
-                        className="text-xs h-8 w-full sm:w-auto"
-                        onClick={() => {
-                          setSelectedDocumentForPreview(doc);
-                          setShowDocumentPreviewModal(true);
-                        }}
-                      >
-                        👁️ Voir
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="text-xs h-8 w-full sm:w-auto"
-                        onClick={async () => {
-                          try {
-                            await documentsAPI.downloadAndSave(doc._id || doc.id, doc.nom);
-                          } catch (error) {
-                            console.error('Erreur lors du téléchargement:', error);
-                            alert('Erreur lors du téléchargement du document');
-                          }
-                        }}
-                      >
-                        ⬇️ Télécharger
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Documents du dossier avec compartiments */}
+          <DocumentsWithCompartiments
+            dossierId={dossierId}
+            variant="admin"
+            documents={documents}
+            isLoading={isLoadingDocuments}
+            targetDocId={targetDocId}
+            onPreviewDocument={(doc) => {
+              setSelectedDocumentForPreview(doc);
+              setShowDocumentPreviewModal(true);
+            }}
+            onDocumentsChanged={loadDocuments}
+          />
         </div>
 
-        {/* Fiches & pièces de constitution — regroupées par associé (demandé / fourni / validé) */}
+        {/* Fiches & pièces de constitution - regroupées par associé (demandé / fourni / validé) */}
         {dossier.categorie === 'constitution_societe' && <ConstitutionFluxGuide />}
         <div className="mb-6">
           <FichesPanel dossierId={dossier._id || (dossier as any).id} categorie={dossier.categorie} variant="admin" />

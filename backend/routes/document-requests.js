@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const mongoose = require('mongoose');
@@ -304,8 +304,8 @@ router.post(
             to: clientUser.email,
             toName: `${clientUser.firstName || ''} ${clientUser.lastName || ''}`.trim(),
             subject: isUrgent
-              ? `Demande urgente de documents — Dossier ${dossierRef}`
-              : `Demande de documents — Dossier ${dossierRef}`,
+              ? `Demande urgente de documents - Dossier ${dossierRef}`
+              : `Demande de documents - Dossier ${dossierRef}`,
             htmlContent: `
               <p>Nous vous informons qu'une demande de document a été ajoutée à votre dossier <strong>${escapeHtml(dossierRef)}</strong>.</p>
               <p><strong>${escapeHtml(bodyLine)}</strong></p>

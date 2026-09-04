@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Envoie vers Google Calendar tous les RDV non annulés encore absents du calendrier
  * (ou met à jour si googleCalendarEventId est déjà défini).
  *
@@ -40,7 +40,7 @@ async function main() {
     process.exit(1);
   }
   await mongoose.connect(uri);
-  const getMotif = (m) => String(m || '').trim() || '—';
+  const getMotif = (m) => String(m || '').trim() || '-';
 
   const query = { statut: { $ne: 'annule' } };
   const total = await RendezVous.countDocuments(query);

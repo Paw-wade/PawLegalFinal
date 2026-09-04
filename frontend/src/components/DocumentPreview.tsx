@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -112,7 +112,7 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
           }
           if (response.status === 404) {
             let detail =
-              'Document ou fichier introuvable. Si le document est ancien, le fichier peut avoir été perdu sur le serveur — importez-le à nouveau.';
+              'Document ou fichier introuvable. Si le document est ancien, le fichier peut avoir été perdu sur le serveur - importez-le à nouveau.';
             try {
               const ct = response.headers.get('content-type');
               if (ct?.includes('application/json')) {
@@ -224,7 +224,7 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
           </button>
         </div>
 
-        {/* Content — hauteur flexible, évite de dépasser sous la sidebar (z-index au-dessus) */}
+        {/* Content - hauteur flexible, évite de dépasser sous la sidebar (z-index au-dessus) */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-100">
           {isLoading ? (
             <div className="flex min-h-[12rem] flex-1 items-center justify-center px-4 py-8">

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Schéma de la fiche de renseignements SARL (Sénégal), fidèle au document papier.
  * Ce schéma est la source de vérité : il pilote le formulaire en ligne ET le PDF généré.
  *
@@ -13,7 +13,7 @@ const JOURNAUX = [
 
 module.exports = {
   type: 'sarl',
-  titre: 'Fiche de renseignements — SARL',
+  titre: 'Fiche de renseignements - SARL',
   sousTitre: 'Société à Responsabilité Limitée',
   associesSource: { section: 'repartition', field: 'nom' },
   gerantsSource: { section: 'gerance', field: 'nom' },

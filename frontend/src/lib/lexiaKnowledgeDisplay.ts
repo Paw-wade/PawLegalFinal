@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Libellés pour les sources « base interne » Paw AI (fichiers XML du corpus).
  */
 
@@ -80,7 +80,7 @@ function pickDecisionNumberForTitle(file: string, mdN: string, fromFile: ReturnT
 }
 
 /**
- * Titre lisible : juridiction, n° de décision, date — priorité aux métadonnées index, sinon nom de fichier.
+ * Titre lisible : juridiction, n° de décision, date - priorité aux métadonnées index, sinon nom de fichier.
  */
 export function formatKnowledgeSourceTitle(
   file: string,

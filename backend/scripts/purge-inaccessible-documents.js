@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Identifie et supprime les documents dont le fichier est introuvable.
  *
  * Usage:
@@ -80,7 +80,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(DRY_RUN ? '🔍 Mode dry-run' : '🗑️  Mode APPLY — suppression');
+  console.log(DRY_RUN ? '🔍 Mode dry-run' : '🗑️  Mode APPLY - suppression');
   await mongoose.connect(uri);
 
   const Document = require('../models/Document');

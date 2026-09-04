@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -41,7 +41,7 @@ export default function PawAiPublicSharePage() {
         if (!cancelled) {
           setData(json);
           if (json.success && json.title) {
-            document.title = `${json.title} | Paw AI — Ada Papers`;
+            document.title = `${json.title} | Paw AI - Ada Papers`;
           }
         }
       } catch {

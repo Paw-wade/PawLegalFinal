@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
@@ -809,10 +809,10 @@ router.post(
               messageData.dossierId = inheritedDossierId;
               console.log('📎 DossierId hérité du message parent:', inheritedDossierId.toString());
             } else {
-              console.warn('⚠️ Message parent sans dossierId exploitable — réponse sans dossier.');
+              console.warn('⚠️ Message parent sans dossierId exploitable - réponse sans dossier.');
             }
           } else {
-            console.log('📎 Message parent sans dossier — fil de discussion hors dossier.');
+            console.log('📎 Message parent sans dossier - fil de discussion hors dossier.');
           }
           console.log('📎 Message parent trouvé:', messageParent, 'threadId:', threadId, 'dossierId hérité:', messageData.dossierId?.toString());
         } else {
@@ -937,7 +937,7 @@ router.post(
                 await sendTransactionalEmail({
                   to: destinatairePrincipal.email,
                   toName: `${destinatairePrincipal.firstName || ''} ${destinatairePrincipal.lastName || ''}`.trim(),
-                  subject: `Nouveau message : ${sujet || 'Sans objet'} — Ada Papers`,
+                  subject: `Nouveau message : ${sujet || 'Sans objet'} - Ada Papers`,
                   htmlContent: `
                     <p>Vous avez reçu un nouveau message dans votre espace Ada Papers.</p>
                     <p><strong>Expéditeur :</strong> ${escapeHtml(expediteurName)}</p>

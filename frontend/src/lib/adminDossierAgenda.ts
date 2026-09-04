@@ -1,4 +1,4 @@
-/** Agenda admin : échéances dossier, jalons datés, tâches — fenêtre glissante + retards. */
+﻿/** Agenda admin : échéances dossier, jalons datés, tâches - fenêtre glissante + retards. */
 
 export const DEFAULT_AGENDA_HORIZON_DAYS = 15;
 
@@ -202,7 +202,7 @@ export async function downloadAdminDossierAgendaPdf(
 
   doc.setFontSize(15);
   newPageIfNeeded(12);
-  doc.text(stripForPdf('Ada Papers — Agenda dossiers (echeances & jalons)'), margin, y);
+  doc.text(stripForPdf('Ada Papers - Agenda dossiers (echeances & jalons)'), margin, y);
   y += 8;
 
   doc.setFontSize(9);
@@ -210,7 +210,7 @@ export async function downloadAdminDossierAgendaPdf(
   newPageIfNeeded(8);
   doc.text(
     stripForPdf(
-      `Genere le ${gen} — Fenetre : ${horizonDays} jours a partir d'aujourd'hui (inclus) + retards ouverts`
+      `Genere le ${gen} - Fenetre : ${horizonDays} jours a partir d'aujourd'hui (inclus) + retards ouverts`
     ),
     margin,
     y
@@ -231,7 +231,7 @@ export async function downloadAdminDossierAgendaPdf(
     }
     for (const it of rows) {
       const dateStr = new Date(it.eventDayMs).toLocaleDateString('fr-FR');
-      const line = `${dateStr}  [${it.kindLabel}]  ${it.dossierRef} — ${it.dossierTitle} — ${it.actionLabel}`;
+      const line = `${dateStr}  [${it.kindLabel}]  ${it.dossierRef} - ${it.dossierTitle} - ${it.actionLabel}`;
       const wrapped = doc.splitTextToSize(stripForPdf(line), maxW);
       newPageIfNeeded(wrapped.length * lineGap + 2);
       doc.text(wrapped, margin, y);

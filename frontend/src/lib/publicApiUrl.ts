@@ -1,4 +1,4 @@
-const DEFAULT_ORIGIN = 'http://localhost:3005';
+﻿const DEFAULT_ORIGIN = 'http://localhost:3005';
 
 function normalizeApiOrigin(raw: string | undefined): string {
   let base = (raw || DEFAULT_ORIGIN)
@@ -36,7 +36,7 @@ export function authApiPath(relativePath: string): string {
 /**
  * Base `/api` pour axios / fetch.
  * En `next dev`, le navigateur utilise **toujours** `/api` (réécriture vers le backend) même si
- * `NEXT_PUBLIC_API_URL` pointe vers `:3005` — sinon les appels doublent l’origine et on voit souvent
+ * `NEXT_PUBLIC_API_URL` pointe vers `:3005` - sinon les appels doublent l’origine et on voit souvent
  * `ERR_CONNECTION_RESET` sur `/api/lexia`.
  * Côté serveur Next (SSR), on garde une URL absolue (`NEXT_PUBLIC_*` ou localhost:3005).
  */

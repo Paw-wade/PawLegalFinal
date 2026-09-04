@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -641,7 +641,7 @@ export default function ComptePage() {
               {/* Séparateur */}
               <div className="border-t border-border"></div>
 
-              {/* Informations de séjour — obligatoire pour les comptes client uniquement */}
+              {/* Informations de séjour - obligatoire pour les comptes client uniquement */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">

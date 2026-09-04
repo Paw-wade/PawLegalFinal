@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
@@ -2519,7 +2519,7 @@ export default function CalculateurPage() {
                     </div>
                     )}
 
-                    {/* 1. Période d'introduction de la demande (R.431-5 CESEDA) — doc §29-45 */}
+                    {/* 1. Période d'introduction de la demande (R.431-5 CESEDA) - doc §29-45 */}
                     {formData.dateFinValiditeTitreDemande && (() => {
                       const dateFin = new Date(formData.dateFinValiditeTitreDemande);
                       if (isNaN(dateFin.getTime())) return null;
@@ -2682,7 +2682,7 @@ export default function CalculateurPage() {
                           <div ref={timelineAbsenceReponseRef} className="space-y-4 pt-4 border-t" id="timeline-absence-reponse">
                             <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
                               <span className="h-px flex-1 bg-gray-200" />
-                              <span>Timeline — Absence de réponse (art. R.432-1 et R.432-2 CESEDA)</span>
+                              <span>Timeline - Absence de réponse (art. R.432-1 et R.432-2 CESEDA)</span>
                               <span className="h-px flex-1 bg-gray-200" />
                             </div>
 

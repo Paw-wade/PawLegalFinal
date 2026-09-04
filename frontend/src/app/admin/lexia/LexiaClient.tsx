@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -17,7 +17,7 @@ type LexiaProviderMode = 'auto' | 'anthropic' | 'gemini' | 'internal' | 'all';
 type LexiaKnowledgeSourceRow = {
   file: string;
   score?: number;
-  /** Métadonnées index (juridiction, n° décision, date) — optionnel selon l’API. */
+  /** Métadonnées index (juridiction, n° décision, date) - optionnel selon l’API. */
   metadata?: Record<string, unknown>;
 };
 
@@ -61,7 +61,7 @@ type ChatMessage = {
   /** Clés sources déduites des requêtes web_search (mode Anthropic). */
   sourcesFound?: string[];
   totalToolUses?: number;
-  /** Fichiers corpus (base interne) renvoyés par l’API — ouverture lecture intégrale. */
+  /** Fichiers corpus (base interne) renvoyés par l’API - ouverture lecture intégrale. */
   lexiaKnowledgeSources?: LexiaKnowledgeSourceRow[];
   attachmentNames?: string[];
 };
@@ -81,7 +81,7 @@ type PawAiThreadAttachment = {
 type PawAiPublicLinkScope = 'full' | 'since_last_user' | 'this_exchange';
 
 const PAW_AI_THREADS_KEY = 'pawlegal-paw-ai-threads-v1';
-/** Ancienne clé — lecture seule pour migration. */
+/** Ancienne clé - lecture seule pour migration. */
 const LEGACY_ADA_AI_THREADS_KEY = 'pawlegal-ada-ai-threads-v1';
 const LEXIA_SIDEBAR_RAIL_COLLAPSED_KEY = 'pawlegal-lexia-sidebar-rail-collapsed';
 const MAX_STORED_THREADS = 40;
@@ -220,7 +220,7 @@ function clipTitle(s: string, n = 52) {
   return t.length <= n ? t : `${t.slice(0, n)}…`;
 }
 
-/** Threads avec au moins un message — pour ne pas écraser le cloud avec une seule conversation vide locale. */
+/** Threads avec au moins un message - pour ne pas écraser le cloud avec une seule conversation vide locale. */
 function latestMeaningfulThreadTs(threads: ChatThread[]): number {
   let m = 0;
   for (const t of threads) {
@@ -294,7 +294,7 @@ function parseLexiaSseChunks(buffer: string): { events: Record<string, unknown>[
       try {
         events.push(JSON.parse(payload) as Record<string, unknown>);
       } catch {
-        /* ligne SSE invalide ou JSON tronqué — attendu au prochain chunk */
+        /* ligne SSE invalide ou JSON tronqué - attendu au prochain chunk */
       }
     }
   }
@@ -615,7 +615,7 @@ function buildForumThreadOpeningBody(slice: ChatMessage[]): string {
   if (first?.role === 'user') {
     main = stripHtmlToPlainText(first.content);
   } else if (first) {
-    const label = first.role === 'assistant' ? (first.isError ? 'Paw AI — erreur' : 'Paw AI') : 'Message';
+    const label = first.role === 'assistant' ? (first.isError ? 'Paw AI - erreur' : 'Paw AI') : 'Message';
     main = `${label}\n\n${stripHtmlToPlainText(first.content)}`;
   }
   let combined = `${header}${main.trim()}`;
@@ -627,7 +627,7 @@ function buildForumThreadOpeningBody(slice: ChatMessage[]): string {
 
 /** Texte d’une réponse forum (message suivant le premier). */
 function buildForumReplyPostBody(m: ChatMessage): string {
-  const label = m.role === 'user' ? 'Question' : m.isError ? 'Paw AI — erreur' : 'Paw AI';
+  const label = m.role === 'user' ? 'Question' : m.isError ? 'Paw AI - erreur' : 'Paw AI';
   return `${label}\n\n${stripHtmlToPlainText(m.content)}`.trim();
 }
 
@@ -794,7 +794,7 @@ export type LexiaAudience = 'admin' | 'user';
 type LexiaClientProps = {
   /**
    * `admin` : page /admin/lexia (admin / superadmin uniquement).
-   * `user` : page /lexia — tout rôle connecté (client, partenaire, etc.).
+   * `user` : page /lexia - tout rôle connecté (client, partenaire, etc.).
    */
   audience?: LexiaAudience;
 };
@@ -1037,7 +1037,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
     try {
       if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
         await navigator.share({
-          title: 'Ada Papers — Paw AI',
+          title: 'Ada Papers - Paw AI',
           text: 'Consultez cette analyse Paw AI (information générale) sur Ada Papers.',
           url: pawShareCreatedUrl,
         });
@@ -2010,7 +2010,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
       setForumPublishedId(fid);
       if (replyFailures.length > 0) {
         setForumErr(
-          `La discussion est en ligne, mais ${replyFailures.length} message(s) n’ont pas pu être publié(s) en réponse : ${replyFailures.join(' — ')}`
+          `La discussion est en ligne, mais ${replyFailures.length} message(s) n’ont pas pu être publié(s) en réponse : ${replyFailures.join(' - ')}`
         );
       }
       if (typeof window !== 'undefined') {
@@ -2127,7 +2127,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
         .lexia-root *, .lexia-root *::before, .lexia-root *::after { box-sizing: border-box; }
 
         .lexia-root {
-          /* Hauteur exacte du <main> (flex), pas calcul viewport — évite scroll page / jeu de ±px */
+          /* Hauteur exacte du <main> (flex), pas calcul viewport - évite scroll page / jeu de ±px */
           flex: 1 1 0%;
           min-height: 0;
           max-height: none;
@@ -5129,7 +5129,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                     className={`lexia-attach-btn${isRecordingAudio ? ' lexia-attach-btn--recording' : ''}`}
                     title={
                       isRecordingAudio
-                        ? `Enregistrement… ${formatAudioRecordingSeconds(audioRecordingSeconds)} — cliquer pour arrêter`
+                        ? `Enregistrement… ${formatAudioRecordingSeconds(audioRecordingSeconds)} - cliquer pour arrêter`
                         : 'Enregistrer une note vocale'
                     }
                     aria-label={isRecordingAudio ? 'Arrêter l’enregistrement audio' : 'Enregistrer une note vocale'}
@@ -5482,7 +5482,7 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                     ? `${knowledgeReaderSafeMatchIdx + 1} / ${knowledgeReaderMatches.length}`
                     : knowledgeReaderSearch.trim().length > 0 && knowledgeReaderSearch.trim().length < 2
                       ? '…'
-                      : '—'}
+                      : '-'}
                 </span>
                 <button
                   type="button"

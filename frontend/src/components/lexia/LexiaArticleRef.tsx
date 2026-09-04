@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useMemo, type ReactNode, type MouseEvent } from 'react';
 import { ExternalLink } from 'lucide-react';
@@ -33,7 +33,7 @@ type LexiaArticleRefProps = {
 
 /**
  * Référence d’article : mise en évidence du texte + lien externe vers Légifrance
- * (sans aperçu API — recherche publique ou article_lc si LEGIARTI connu).
+ * (sans aperçu API - recherche publique ou article_lc si LEGIARTI connu).
  */
 export function LexiaArticleRef({ children, className, query, legiartiId }: LexiaArticleRefProps) {
   const href = useMemo(() => buildLegifranceUrl(query, legiartiId), [query, legiartiId]);

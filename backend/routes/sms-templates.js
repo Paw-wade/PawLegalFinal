@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const { body, validationResult } = require('express-validator');
 const SmsTemplate = require('../models/SmsTemplate');
 const { protect, authorizePermission } = require('../middleware/auth');
@@ -128,8 +128,8 @@ router.post('/init-defaults', async (req, res) => {
         variables: [
           { name: 'dossierTitle', description: 'Titre du dossier', example: 'Demande de titre de séjour' },
           { name: 'dossierId', description: 'Identifiant du dossier', example: 'DOS-2024-001' },
-          { name: 'appointmentDate', description: 'Optionnel — création depuis un RDV', example: '15 janvier 2024' },
-          { name: 'appointmentTime', description: 'Optionnel — création depuis un RDV', example: '14:30' }
+          { name: 'appointmentDate', description: 'Optionnel - création depuis un RDV', example: '15 janvier 2024' },
+          { name: 'appointmentTime', description: 'Optionnel - création depuis un RDV', example: '14:30' }
         ],
         category: 'dossier',
         isActive: true,
@@ -210,7 +210,7 @@ router.post('/init-defaults', async (req, res) => {
         message: 'Vous avez reçu un nouveau message de {{senderName}}. Connectez-vous pour le consulter. Ada Papers.',
         variables: [
           { name: 'senderName', description: 'Nom de l\'expéditeur', example: 'Ada Papers' },
-          { name: 'subject', description: 'Optionnel — ex. formulaire contact', example: 'Question sur mon dossier' }
+          { name: 'subject', description: 'Optionnel - ex. formulaire contact', example: 'Question sur mon dossier' }
         ],
         category: 'message',
         isActive: true,
@@ -297,7 +297,7 @@ router.post('/init-defaults', async (req, res) => {
       },
       {
         code: 'tarification_choice_reminder',
-        name: 'Tarification — rappel choix / espace client',
+        name: 'Tarification - rappel choix / espace client',
         description: 'SMS client lorsque Ada Papers demande un choix de formule ou une action tarification (si aucun modèle actif en base, le serveur applique un libellé court par défaut)',
         message: 'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.',
         variables: [{ name: 'dossierTitle', description: 'Titre du dossier (contexte)', example: 'Demande de titre de séjour' }],
@@ -307,7 +307,7 @@ router.post('/init-defaults', async (req, res) => {
       },
       {
         code: 'tarification_payment_reminder',
-        name: 'Tarification — relance paiement',
+        name: 'Tarification - relance paiement',
         description: 'SMS court lors d\'une relance paiement tarification (même comportement de repli que tarification_choice_reminder si modèle inactif)',
         message: 'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.',
         variables: [{ name: 'numero', description: 'Référence courte dossier', example: 'DOS-001' }],
@@ -317,7 +317,7 @@ router.post('/init-defaults', async (req, res) => {
       },
       {
         code: 'frais_tarification_exoneres',
-        name: 'Tarification — frais exonérés',
+        name: 'Tarification - frais exonérés',
         description: 'SMS client lorsque les frais de tarification sont exonérés',
         message: 'Bonjour, Une information de tarification est disponible dans votre espace client. Ada Papers.',
         variables: [{ name: 'dossierTitle', description: 'Titre du dossier', example: 'Demande de titre de séjour' }],
@@ -347,7 +347,7 @@ router.post('/init-defaults', async (req, res) => {
       },
       {
         code: 'contact_confirmation',
-        name: 'Accusé de réception — formulaire contact',
+        name: 'Accusé de réception - formulaire contact',
         description: 'SMS envoyé au visiteur après envoi du formulaire de contact (si numéro renseigné)',
         message:
           'Merci de nous avoir contactés. Nous vous invitons à créer un compte sur notre site afin de faciliter le suivi de votre demande. À très bientôt. Ada Papers.',

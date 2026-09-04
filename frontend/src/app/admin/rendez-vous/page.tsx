@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
@@ -106,8 +106,8 @@ const categories = {
   constitution_societe: {
     label: 'Constitution de société',
     types: [
-      { value: 'constitution_societe_senegal', label: 'Constitution — entreprise / société au Sénégal' },
-      { value: 'constitution_societe_france', label: 'Constitution — entreprise / société en France' },
+      { value: 'constitution_societe_senegal', label: 'Constitution - entreprise / société au Sénégal' },
+      { value: 'constitution_societe_france', label: 'Constitution - entreprise / société en France' },
     ]
   },
   autre: {
@@ -140,8 +140,8 @@ const RDV_MOTIFS_OPTIONS = [
   { value: 'pas_reponse_visa', label: 'Je n’ai pas eu de réponse à ma demande de visa' },
   { value: 'conteste_refus_titre', label: 'Je conteste un refus de titre de séjour' },
   { value: 'conteste_oqtf', label: 'J’ai reçu une OQTF (obligation de quitter le territoire)' },
-  { value: 'constitution_societe_senegal', label: 'Constitution de société — Sénégal' },
-  { value: 'constitution_societe_france', label: 'Constitution de société — France' },
+  { value: 'constitution_societe_senegal', label: 'Constitution de société - Sénégal' },
+  { value: 'constitution_societe_france', label: 'Constitution de société - France' },
   { value: 'autre', label: 'Autre' },
 ];
 
@@ -293,7 +293,7 @@ export default function AdminRendezVousPage() {
         const descParts = [ref && `Réf. ${ref}`, titre && `« ${titre} »`].filter(Boolean);
         const description =
           descParts.length > 0
-            ? `RDV concernant le dossier ${descParts.join(' — ')}`
+            ? `RDV concernant le dossier ${descParts.join(' - ')}`
             : `RDV concernant le dossier ${dKey}`;
 
         if (dossier.user && typeof dossier.user === 'object') {
@@ -303,7 +303,7 @@ export default function AdminRendezVousPage() {
             nom: u.lastName || '',
             prenom: u.firstName || '',
             email: u.email || '',
-            telephone: (u.phone || '').trim() || '—',
+            telephone: (u.phone || '').trim() || '-',
             date: getTodayDate(),
             heure: '',
             motif: 'premiere_demande_titre',
@@ -315,7 +315,7 @@ export default function AdminRendezVousPage() {
             nom: dossier.clientNom || '',
             prenom: dossier.clientPrenom || '',
             email: dossier.clientEmail || '',
-            telephone: (dossier.clientTelephone || '').trim() || '—',
+            telephone: (dossier.clientTelephone || '').trim() || '-',
             date: getTodayDate(),
             heure: '',
             motif: 'premiere_demande_titre',
@@ -566,7 +566,7 @@ export default function AdminRendezVousPage() {
         nom: adminBookingForm.nom.trim(),
         prenom: adminBookingForm.prenom.trim(),
         email: adminBookingForm.email.trim(),
-        telephone: (adminBookingForm.telephone || '').trim() || '—',
+        telephone: (adminBookingForm.telephone || '').trim() || '-',
         date: adminBookingForm.date,
         heure: adminBookingForm.heure,
         motif: adminBookingForm.motif,
@@ -1354,16 +1354,16 @@ export default function AdminRendezVousPage() {
                     Client
                   </p>
                   <p className="font-medium text-foreground">
-                    {[adminBookingForm.prenom, adminBookingForm.nom].filter(Boolean).join(' ') || '—'}
+                    {[adminBookingForm.prenom, adminBookingForm.nom].filter(Boolean).join(' ') || '-'}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1 break-all">{adminBookingForm.email || '—'}</p>
-                  {adminBookingForm.telephone && adminBookingForm.telephone !== '—' && (
+                  <p className="text-xs text-muted-foreground mt-1 break-all">{adminBookingForm.email || '-'}</p>
+                  {adminBookingForm.telephone && adminBookingForm.telephone !== '-' && (
                     <p className="text-xs text-muted-foreground mt-0.5">{adminBookingForm.telephone}</p>
                   )}
                   {adminBookingForm.forUserId ? (
                     <p className="text-[11px] text-muted-foreground mt-1.5">Compte client lié (espace connecté).</p>
                   ) : (
-                    <p className="text-[11px] text-muted-foreground mt-1.5">Dossier sans compte — coordonnées issues de la fiche.</p>
+                    <p className="text-[11px] text-muted-foreground mt-1.5">Dossier sans compte - coordonnées issues de la fiche.</p>
                   )}
                 </div>
               ) : (
@@ -1404,7 +1404,7 @@ export default function AdminRendezVousPage() {
                         }));
                       }}
                     >
-                      <option value="">— Saisie manuelle (sans compte) —</option>
+                      <option value="">- Saisie manuelle (sans compte) -</option>
                       {clientUsers.map((u) => (
                         <option key={String(u._id || u.id)} value={String(u._id || u.id)}>
                           {`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email} · {u.email}
@@ -1462,7 +1462,7 @@ export default function AdminRendezVousPage() {
                       onChange={(e) => setAdminBookingForm({ ...adminBookingForm, telephone: e.target.value })}
                       disabled={adminBookingSubmitting}
                       className="mt-1"
-                      placeholder="Facultatif (— si vide)"
+                      placeholder="Facultatif (- si vide)"
                     />
                   </div>
                 </>

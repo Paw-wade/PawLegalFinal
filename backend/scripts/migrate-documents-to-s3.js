@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Migration de tous les documents vers S3.
  *
  * Usage:
@@ -287,7 +287,7 @@ async function main() {
   const s3 = getS3Config();
   console.log('🔗 Mongo:', uri.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'));
   console.log('🪣 S3:', s3.bucket, '| prefix:', s3.prefix, '| region:', s3.region);
-  console.log(DRY_RUN ? '🔍 Mode dry-run (ajoutez --apply pour migrer)' : '✅ Mode APPLY — upload S3 + mise à jour base');
+  console.log(DRY_RUN ? '🔍 Mode dry-run (ajoutez --apply pour migrer)' : '✅ Mode APPLY - upload S3 + mise à jour base');
 
   await mongoose.connect(uri);
   const Document = require('../models/Document');

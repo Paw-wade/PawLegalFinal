@@ -1,4 +1,4 @@
-import { dossierListCardId, normalizeDossierId } from '@/lib/dossierAccess';
+﻿import { dossierListCardId, normalizeDossierId } from '@/lib/dossierAccess';
 
 export type DossierListScope = 'admin' | 'client' | 'partenaire';
 
@@ -108,7 +108,7 @@ export function scrollToDossierListCard(
 
 /**
  * Résout l’id à recentrer : query ?focus= prioritaire, sinon sessionStorage (peek).
- * Ne consomme pas le storage — appeler clearDossierListFocus après un scroll réussi.
+ * Ne consomme pas le storage - appeler clearDossierListFocus après un scroll réussi.
  */
 export function resolveDossierListFocusId(
   scope: DossierListScope,

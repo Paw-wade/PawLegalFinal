@@ -1,9 +1,9 @@
-/** Schéma fiche SUARL (Société Unipersonnelle à Responsabilité Limitée) — Sénégal. */
+﻿/** Schéma fiche SUARL (Société Unipersonnelle à Responsabilité Limitée) - Sénégal. */
 const { TXT, VAL_NOMINALE, LIBRE_CONDITIONS, sectionObjet, sectionIdentite, sectionPublication, staticSection } = require('../common');
 
 module.exports = {
   type: 'suarl',
-  titre: 'Fiche de renseignements — SUARL',
+  titre: 'Fiche de renseignements - SUARL',
   sousTitre: 'Société Unipersonnelle à Responsabilité Limitée',
   associesSource: { field: 'associe_unique' },
   gerantsSource: { section: 'gerance', field: 'nom' },

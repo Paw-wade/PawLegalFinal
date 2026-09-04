@@ -447,6 +447,8 @@ router.get('/suivi/:token', async (req, res) => {
         validationStatus: r.validationStatus || 'en_attente',
         validationMotif: r.validationMotif || '',
         ficheId: r.fiche ? String(r.fiche) : null,
+        draftData: r.draftData || null,
+        draftStep: typeof r.draftStep === 'number' ? r.draftStep : 0,
       })),
       fiches: fichesRemplies.map((f) => ({ id: String(f._id), typeFiche: f.typeFiche, titre: f.titre || '', createdAt: f.createdAt })),
       pieceRequests: pieceRequestsList.map((p) => ({ id: String(p._id), libelle: p.libelle, nature: p.nature, pourPersonne: p.pourPersonne || '', note: p.note || '', statut: p.statut, validationStatus: p.validationStatus || 'en_attente', validationMotif: p.validationMotif || '', documentId: p.document ? String(p.document) : null })),
@@ -736,6 +738,33 @@ router.post('/suivi/:token/recommandations/:recId/decision', async (req, res) =>
     return res.json({ success: true, message: decision === 'acceptee' ? 'Recommandation acceptée.' : 'Recommandation refusée.' });
   } catch (err) {
     console.error('[suivi] POST décision recommandation:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// @route   PATCH /api/dossier-guest-upload/suivi/:token/fiche-requests/:reqId/draft
+// @desc    Sauvegarde un brouillon de fiche en cours de remplissage (cross-device)
+router.patch('/suivi/:token/fiche-requests/:reqId/draft', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) {
+      return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif.' });
+    }
+    const FicheRequest = require('../models/FicheRequest');
+    const ficheReq = await FicheRequest.findOne({ _id: req.params.reqId, dossier: dossier._id });
+    if (!ficheReq) return res.status(404).json({ success: false, message: 'Fiche introuvable.' });
+    if (ficheReq.statut !== 'a_remplir') return res.status(400).json({ success: false, message: 'Fiche deja remplie.' });
+
+    const { data, step } = req.body || {};
+    if (data !== undefined) ficheReq.draftData = data;
+    if (typeof step === 'number') ficheReq.draftStep = step;
+    ficheReq.draftSavedAt = new Date();
+    await ficheReq.save();
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[suivi] PATCH draft fiche:', err?.message || err);
     return res.status(500).json({ success: false, message: 'Erreur serveur.' });
   }
 });

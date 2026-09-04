@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
@@ -807,7 +807,7 @@ export default function AdminDashboardPage() {
                     const timeLabel = meta?.heure ? ` à ${meta.heure}` : '';
                     return (
                       <p key={notif._id || notif.id} className="truncate">
-                        • {clientName}{dateLabel ? ` — ${dateLabel}${timeLabel}` : ''}
+                        • {clientName}{dateLabel ? ` - ${dateLabel}${timeLabel}` : ''}
                       </p>
                     );
                   })}

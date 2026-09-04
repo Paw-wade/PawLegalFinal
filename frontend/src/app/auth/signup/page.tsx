@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -435,7 +435,7 @@ export default function SignupPage() {
                       <p
                         className={`text-sm font-semibold ${activationEmailFailed ? 'text-amber-900' : 'text-emerald-900'}`}
                       >
-                        {activationEmailFailed ? 'Compte créé — email non envoyé' : 'Compte créé avec succès'}
+                        {activationEmailFailed ? 'Compte créé - email non envoyé' : 'Compte créé avec succès'}
                       </p>
                       <p
                         className={`text-sm mt-1 ${activationEmailFailed ? 'text-amber-900' : 'text-emerald-800'}`}

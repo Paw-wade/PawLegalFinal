@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { appointmentsAPI, creneauxAPI, userAPI } from '@/lib/api';
@@ -79,8 +79,8 @@ const RDV_MOTIFS_OPTIONS = [
   { value: 'pas_reponse_visa', label: 'Je n’ai pas eu de réponse à ma demande de visa' },
   { value: 'conteste_refus_titre', label: 'Je conteste un refus de titre de séjour' },
   { value: 'conteste_oqtf', label: 'J’ai reçu une OQTF (obligation de quitter le territoire)' },
-  { value: 'constitution_societe_senegal', label: 'Constitution de société — Sénégal' },
-  { value: 'constitution_societe_france', label: 'Constitution de société — France' },
+  { value: 'constitution_societe_senegal', label: 'Constitution de société - Sénégal' },
+  { value: 'constitution_societe_france', label: 'Constitution de société - France' },
   { value: 'autre', label: 'Autre' },
 ];
 
@@ -107,7 +107,7 @@ export function buildAdminBookingFromDossier(dossier: any): AdminBookingSeed {
   const descParts = [ref && `Réf. ${ref}`, titre && `« ${titre} »`].filter(Boolean);
   const description =
     descParts.length > 0
-      ? `RDV concernant le dossier ${descParts.join(' — ')}`
+      ? `RDV concernant le dossier ${descParts.join(' - ')}`
       : `RDV concernant le dossier ${dossierKey}`;
 
   if (dossier?.user && typeof dossier.user === 'object') {
@@ -117,7 +117,7 @@ export function buildAdminBookingFromDossier(dossier: any): AdminBookingSeed {
       nom: user.lastName || '',
       prenom: user.firstName || '',
       email: user.email || '',
-      telephone: (user.phone || '').trim() || '—',
+      telephone: (user.phone || '').trim() || '-',
       description,
     };
   }
@@ -127,7 +127,7 @@ export function buildAdminBookingFromDossier(dossier: any): AdminBookingSeed {
     nom: dossier?.clientNom || '',
     prenom: dossier?.clientPrenom || '',
     email: dossier?.clientEmail || '',
-    telephone: (dossier?.clientTelephone || '').trim() || '—',
+    telephone: (dossier?.clientTelephone || '').trim() || '-',
     description,
   };
 }
@@ -317,7 +317,7 @@ export function AdminBookingModal({
         nom: adminBookingForm.nom.trim(),
         prenom: adminBookingForm.prenom.trim(),
         email: adminBookingForm.email.trim(),
-        telephone: (adminBookingForm.telephone || '').trim() || '—',
+        telephone: (adminBookingForm.telephone || '').trim() || '-',
         date: adminBookingForm.date,
         heure: adminBookingForm.heure,
         motif: adminBookingForm.motif,
@@ -398,16 +398,16 @@ export function AdminBookingModal({
             <div className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Client</p>
               <p className="font-medium text-foreground">
-                {[adminBookingForm.prenom, adminBookingForm.nom].filter(Boolean).join(' ') || '—'}
+                {[adminBookingForm.prenom, adminBookingForm.nom].filter(Boolean).join(' ') || '-'}
               </p>
-              <p className="text-xs text-muted-foreground mt-1 break-all">{adminBookingForm.email || '—'}</p>
-              {adminBookingForm.telephone && adminBookingForm.telephone !== '—' && (
+              <p className="text-xs text-muted-foreground mt-1 break-all">{adminBookingForm.email || '-'}</p>
+              {adminBookingForm.telephone && adminBookingForm.telephone !== '-' && (
                 <p className="text-xs text-muted-foreground mt-0.5">{adminBookingForm.telephone}</p>
               )}
               {adminBookingForm.forUserId ? (
                 <p className="text-[11px] text-muted-foreground mt-1.5">Compte client lié (espace connecté).</p>
               ) : (
-                <p className="text-[11px] text-muted-foreground mt-1.5">Dossier sans compte — coordonnées issues de la fiche.</p>
+                <p className="text-[11px] text-muted-foreground mt-1.5">Dossier sans compte - coordonnées issues de la fiche.</p>
               )}
             </div>
           ) : (
@@ -444,7 +444,7 @@ export function AdminBookingModal({
                     }));
                   }}
                 >
-                  <option value="">— Saisie manuelle (sans compte) —</option>
+                  <option value="">- Saisie manuelle (sans compte) -</option>
                   {clientUsers.map((user) => (
                     <option key={String(user._id || user.id)} value={String(user._id || user.id)}>
                       {`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email} · {user.email}
@@ -502,7 +502,7 @@ export function AdminBookingModal({
                   onChange={(e) => setAdminBookingForm({ ...adminBookingForm, telephone: e.target.value })}
                   disabled={adminBookingSubmitting}
                   className="mt-1"
-                  placeholder="Facultatif (— si vide)"
+                  placeholder="Facultatif (- si vide)"
                 />
               </div>
             </>

@@ -1,4 +1,4 @@
-const multer = require('multer');
+﻿const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { uploadDocumentToRemoteStorage, removeLocalUploadTempFile } = require('./documentRemoteUpload');
@@ -37,7 +37,7 @@ async function persistDocumentForDossier(file, { dossierId, ownerUserId, contrib
     user: ownerUserId, nom: docNom, nomFichier: file.filename, originalName: file.originalname,
     cheminFichier, typeMime: file.mimetype, taille: file.size, dossierId,
     cabinetId: cabinet?._id || null, visibleToClient: false,
-    confidentialReason: reason || 'Pièce déposée pour la constitution — en attente de validation.',
+    confidentialReason: reason || 'Pièce déposée pour la constitution - en attente de validation.',
     uploadedViaGuestLink: true, guestContributorName: String(contributorName || '').slice(0, 200),
   });
 }

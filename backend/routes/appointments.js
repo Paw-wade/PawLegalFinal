@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const RendezVous = require('../models/RendezVous');
@@ -12,7 +12,7 @@ const {
   removeGoogleCalendarEventIfAny,
 } = require('../services/googleCalendarSync');
 
-/** Libellés des motifs (formulaire public) — pour les notifications admin. */
+/** Libellés des motifs (formulaire public) - pour les notifications admin. */
 const MOTIF_RDV_LABELS = {
   premiere_demande_titre: 'Je fais une première demande de titre de séjour',
   renouvellement_titre: 'Je demande le renouvellement de mon titre de séjour',
@@ -25,8 +25,8 @@ const MOTIF_RDV_LABELS = {
   pas_reponse_visa: 'Je n’ai pas eu de réponse à ma demande de visa',
   conteste_refus_titre: 'Je conteste un refus de titre de séjour',
   conteste_oqtf: 'J’ai reçu une OQTF (obligation de quitter le territoire)',
-  constitution_societe_senegal: 'Constitution de société — Sénégal',
-  constitution_societe_france: 'Constitution de société — France',
+  constitution_societe_senegal: 'Constitution de société - Sénégal',
+  constitution_societe_france: 'Constitution de société - France',
   autre: 'Autre'
 };
 
@@ -350,7 +350,7 @@ router.post(
           await sendTransactionalEmail({
             to: email,
             toName: `${prenom || ''} ${nom}`.trim() || 'Client',
-            subject: 'Demande de rendez-vous bien reçue — Ada Papers',
+            subject: 'Demande de rendez-vous bien reçue - Ada Papers',
             htmlContent: `<p>Bonjour ${escapeHtml(prenom || nom)},</p><p>Nous accusons réception de votre demande de rendez-vous.</p><p><strong>Date souhaitée :</strong> ${escapeHtml(dateLabelReq)} à ${escapeHtml(heure)}.</p><p><strong>Motif déclaré :</strong> ${escapeHtml(motifLabelMail)}.</p><p>Notre équipe va examiner votre demande et vous adressera une confirmation, ou une proposition d’ajustement de créneau, par e-mail dans les meilleurs délais.</p><p style="margin-top:16px;font-size:13px;color:#555;">Accès à votre espace : ${escapeHtml(getPrimaryFrontendUrl())}</p>`,
             textContent: `Bonjour ${prenom || nom || ''},
 
@@ -364,7 +364,7 @@ Notre équipe va examiner votre demande et vous adressera une confirmation, ou u
 Accès à votre espace : ${getPrimaryFrontendUrl()}`,
           });
           // Créneau administrateur pour un contact sans compte : SMS +33 uniquement (pas de push sans userId).
-          if (requestingAdmin && telephone && String(telephone).trim() && String(telephone).trim() !== '—') {
+          if (requestingAdmin && telephone && String(telephone).trim() && String(telephone).trim() !== '-') {
             try {
               const formattedPhone = formatPhoneNumber(telephone);
               if (formattedPhone && formattedPhone.startsWith('+33')) {
@@ -372,7 +372,7 @@ Accès à votre espace : ${getPrimaryFrontendUrl()}`,
                 await sendSMS(formattedPhone, smsBody.slice(0, 480));
               }
             } catch (smsManErr) {
-              console.error('⚠️ SMS RDV création admin (sans compte client) — non bloquant:', smsManErr?.message || smsManErr);
+              console.error('⚠️ SMS RDV création admin (sans compte client) - non bloquant:', smsManErr?.message || smsManErr);
             }
           }
         }
@@ -388,7 +388,7 @@ Accès à votre espace : ${getPrimaryFrontendUrl()}`,
             await sendTransactionalEmail({
               to: adm.email,
               toName: adm.firstName || '',
-              subject: `Nouvelle demande de RDV — ${prenom || ''} ${nom || ''}`.trim(),
+              subject: `Nouvelle demande de RDV - ${prenom || ''} ${nom || ''}`.trim(),
               htmlContent: `<p>Une nouvelle demande de rendez-vous a été soumise.</p><p><strong>Demandeur :</strong> ${escapeHtml(prenom)} ${escapeHtml(nom)}<br/><strong>E-mail :</strong> ${escapeHtml(email)}${telephone ? `<br/><strong>Téléphone :</strong> ${escapeHtml(telephone)}` : ''}</p><p><strong>Date/heure demandées :</strong> ${escapeHtml(dateLabelReq)} à ${escapeHtml(heure)}.</p><p><strong>Motif :</strong> ${escapeHtml(motifLabelMail)}.</p><p>Merci de traiter cette demande depuis l’espace d’administration.</p>`,
               textContent: `Une nouvelle demande de rendez-vous a été soumise.
 
@@ -440,7 +440,7 @@ Merci de traiter cette demande depuis l’espace d’administration.`,
             await sendTransactionalEmail({
               to: clientMail,
               toName: name,
-              subject: 'Proposition de rendez-vous — Ada Papers',
+              subject: 'Proposition de rendez-vous - Ada Papers',
               htmlContent: `<p>Bonjour ${escapeHtml(name)},</p><p>Vous avez reçu une proposition de rendez-vous.</p><p><strong>Date :</strong> ${escapeHtml(dateLabelSms)}<br/><strong>Heure :</strong> ${escapeHtml(rendezVous.heure)}</p><p>Merci de <strong>accepter ou refuser</strong> depuis votre espace <a href="${escapeHtml(`${getPrimaryFrontendUrl()}/client/rendez-vous`)}">Mes rendez-vous</a>. L’équipe Ada Papers sera notifiée de votre choix.</p>`,
               textContent: `Bonjour ${name},
 
@@ -461,10 +461,10 @@ L’équipe Ada Papers sera notifiée de votre choix.`,
               await sendSMS(formattedPhone, smsBody.slice(0, 480));
             }
           } catch (smsErr) {
-            console.error('⚠️ SMS création RDV (admin pour client) — non bloquant:', smsErr?.message || smsErr);
+            console.error('⚠️ SMS création RDV (admin pour client) - non bloquant:', smsErr?.message || smsErr);
           }
         } catch (clientNotifErr) {
-          console.error('⚠️ Notification / e-mail client RDV admin — non bloquant:', clientNotifErr);
+          console.error('⚠️ Notification / e-mail client RDV admin - non bloquant:', clientNotifErr);
         }
       }
 
@@ -915,7 +915,7 @@ router.patch(
               await sendTransactionalEmail({
                 to: clientMail,
                 toName: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim(),
-                subject: 'Rendez-vous annulé — Ada Papers',
+                subject: 'Rendez-vous annulé - Ada Papers',
                 htmlContent: `<p>Bonjour,</p><p>Nous confirmons la prise en compte de votre annulation de rendez-vous.</p><p><strong>Créneau annulé :</strong> ${escapeHtml(dateFormatted)} à ${escapeHtml(rendezVous.heure)}.</p><p>Si vous souhaitez reprendre rendez-vous, vous pouvez soumettre une nouvelle demande depuis votre espace client.</p>`,
                 textContent: `Bonjour,
 
@@ -1118,8 +1118,8 @@ router.patch(
         const adminNotifications = admins.map((admin) => ({
           user: admin._id,
           type: 'appointment_client_accepted',
-          titre: `✅ RDV accepté — ${clientName}`,
-          message: `${clientName} a accepté le rendez-vous du ${dateFormatted} à ${rendezVous.heure || '—'}.`,
+          titre: `✅ RDV accepté - ${clientName}`,
+          message: `${clientName} a accepté le rendez-vous du ${dateFormatted} à ${rendezVous.heure || '-'}.`,
           lien: '/admin/rendez-vous',
           metadata: {
             appointmentId: rendezVous._id.toString(),
@@ -1136,8 +1136,8 @@ router.patch(
         const adminNotifications = admins.map((admin) => ({
           user: admin._id,
           type: 'appointment_client_declined',
-          titre: `❌ RDV refusé — ${clientName}`,
-          message: `${clientName} a refusé le rendez-vous du ${dateFormatted} à ${rendezVous.heure || '—'}.${refus}`,
+          titre: `❌ RDV refusé - ${clientName}`,
+          message: `${clientName} a refusé le rendez-vous du ${dateFormatted} à ${rendezVous.heure || '-'}.${refus}`,
           lien: '/admin/rendez-vous',
           metadata: {
             appointmentId: rendezVous._id.toString(),
@@ -1343,7 +1343,7 @@ router.put(
                 await sendTransactionalEmail({
                   to: clientMail,
                   toName: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim(),
-                  subject: 'Rendez-vous modifié — Ada Papers',
+                  subject: 'Rendez-vous modifié - Ada Papers',
                   htmlContent: `<p>Bonjour,</p><p>Votre rendez-vous a fait l’objet d’une mise à jour.</p><p>${escapeHtml(notificationMessage)}</p><p>Nous vous invitons à vérifier les détails actualisés dans votre espace client.</p>`,
                   textContent: `Bonjour,
 
@@ -1509,7 +1509,7 @@ router.patch(
         }
       }
 
-      // Email de confirmation / annulation (priorité email — pas de SMS en doublon)
+      // Email de confirmation / annulation (priorité email - pas de SMS en doublon)
       if (statut && statut !== oldStatut && (statut === 'confirme' || statut === 'annule')) {
         try {
           const clientMail = await resolveRdvClientEmail(rendezVous);
@@ -1526,7 +1526,7 @@ router.patch(
             await sendTransactionalEmail({
               to: clientMail,
               toName: `${rendezVous.prenom || ''} ${rendezVous.nom || ''}`.trim() || 'Client',
-              subject: isOk ? 'Rendez-vous confirmé — Ada Papers' : 'Rendez-vous annulé — Ada Papers',
+              subject: isOk ? 'Rendez-vous confirmé - Ada Papers' : 'Rendez-vous annulé - Ada Papers',
               htmlContent: isOk
                 ? `<p>Bonjour,</p><p>Nous vous confirmons que votre rendez-vous est désormais validé.</p><p><strong>Date :</strong> ${escapeHtml(dateFormatted)}<br/><strong>Heure :</strong> ${escapeHtml(rendezVous.heure)}</p><p>Merci de vous présenter à l’heure prévue avec vos documents utiles.</p>`
                 : `<p>Bonjour,</p><p>Nous vous informons que votre rendez-vous prévu a été annulé.</p><p><strong>Créneau concerné :</strong> ${escapeHtml(dateFormatted)} à ${escapeHtml(rendezVous.heure)}</p><p>Vous pouvez effectuer une nouvelle demande de rendez-vous à votre convenance.</p>`,

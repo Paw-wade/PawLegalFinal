@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -273,7 +273,7 @@ export default function ForumPage() {
               {debouncedSearch && (
                 <span>
                   Filtre actif sur&nbsp;
-                  <span className="font-semibold">“{debouncedSearch}”</span> — {threads.length} discussion(s) trouvée(s)
+                  <span className="font-semibold">“{debouncedSearch}”</span> - {threads.length} discussion(s) trouvée(s)
                 </span>
               )}
             </div>
@@ -339,7 +339,7 @@ export default function ForumPage() {
         <div className="lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(260px,0.9fr)] lg:gap-6 items-start">
           {/* Colonne principale */}
           <div className="space-y-8">
-            {/* Création d'une nouvelle discussion — compact, champs un par un */}
+            {/* Création d'une nouvelle discussion - compact, champs un par un */}
             <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
               <h2 className="text-base font-semibold mb-3">Créer une nouvelle discussion</h2>
                 <form onSubmit={handleCreateThread} className="space-y-2">

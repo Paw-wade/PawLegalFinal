@@ -1,4 +1,4 @@
-import { getStatutLabelWithEtapes } from '@/lib/dossierUtils';
+﻿import { getStatutLabelWithEtapes } from '@/lib/dossierUtils';
 
 export function getDossierTransmittedPartners(dossier: any) {
   if (!Array.isArray(dossier?.transmittedTo) || dossier.transmittedTo.length === 0) return [];
@@ -14,7 +14,7 @@ export function getDossierTransmittedPartners(dossier: any) {
     const fullName = [partenaire?.firstName, partenaire?.lastName]
       .filter(Boolean)
       .join(' ')
-      .trim() || partenaire?.email || '—';
+      .trim() || partenaire?.email || '-';
     const nomOrganisme = partenaire?.partenaireInfo?.nomOrganisme || partenaire?.organisationName;
     return { typeLabel, fullName, nomOrganisme };
   });
@@ -22,7 +22,7 @@ export function getDossierTransmittedPartners(dossier: any) {
 
 export function getDossierTransmissionSummary(partners: Array<{ fullName: string }>) {
   if (!partners.length) return 'Aucune';
-  const first = partners[0]?.fullName || '—';
+  const first = partners[0]?.fullName || '-';
   return partners.length > 1 ? `${first} +${partners.length - 1}` : first;
 }
 
@@ -34,7 +34,7 @@ export function getDossierDisplayTitle(dossier: any, strictPrivacyMode = false) 
 export function getDossierClientDisplayName(dossier: any, strictPrivacyMode = false) {
   const raw =
     dossier.user && typeof dossier.user === 'object'
-      ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '—'
+      ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '-'
       : [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ') || dossier.clientEmail || 'Non renseigné';
   return strictPrivacyMode ? 'Titulaire masqué' : raw;
 }

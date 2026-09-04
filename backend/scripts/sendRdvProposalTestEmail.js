@@ -1,4 +1,4 @@
-/**
+﻿/**
  * E-mail de test : même contenu que la proposition de RDV (admin → client).
  * Usage : node scripts/sendRdvProposalTestEmail.js [destinataire@example.com]
  */
@@ -20,7 +20,7 @@ async function main() {
   const heure = '14:00';
   const rdvUrl = `${getPrimaryFrontendUrl()}/client/rendez-vous`;
 
-  const subject = '[Ada Papers] Test — proposition de rendez-vous';
+  const subject = '[Ada Papers] Test - proposition de rendez-vous';
   const htmlContent = `<p>Bonjour ${escapeHtml(name)},</p><p>Vous avez reçu une proposition de rendez-vous.</p><p><strong>Date :</strong> ${escapeHtml(dateLabelSms)}<br/><strong>Heure :</strong> ${escapeHtml(heure)}</p><p>Merci de <strong>accepter ou refuser</strong> depuis votre espace <a href="${escapeHtml(rdvUrl)}">Mes rendez-vous</a>. L’équipe Ada Papers sera notifiée de votre choix.</p>`;
   const textContent = `Bonjour ${name},
 

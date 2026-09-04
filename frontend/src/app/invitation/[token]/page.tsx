@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -94,7 +94,7 @@ export default function InvitationPage() {
         ) : data ? (
           <div className="space-y-6">
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Invitation — {data.societe}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Invitation - {data.societe}</p>
               <h1 className="mt-1 text-xl font-bold text-foreground">
                 {data.personne ? `${data.personne}, ` : ''}vous avez été invité(e) à compléter votre fiche d'identification
               </h1>

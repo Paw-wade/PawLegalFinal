@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSession } from 'next-auth/react';
@@ -26,9 +26,9 @@ export type UnifiedPreparationRow = {
 };
 
 function formatEcheance(iso?: string | null) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return '-';
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
@@ -494,10 +494,10 @@ export default function AdminDocumentsPreparationPage() {
                 value={createDossierId}
                 onChange={(e) => setCreateDossierId(e.target.value)}
               >
-                <option value="">— Choisir un dossier —</option>
+                <option value="">- Choisir un dossier -</option>
                 {dossiers.map((d: any) => {
                   const id = (d._id || d.id)?.toString();
-                  const label = [d.numero, d.titre].filter(Boolean).join(' — ') || id;
+                  const label = [d.numero, d.titre].filter(Boolean).join(' - ') || id;
                   return (
                     <option key={id} value={id}>
                       {label}
@@ -578,7 +578,7 @@ export default function AdminDocumentsPreparationPage() {
             <ul className="md:hidden divide-y divide-gray-100" aria-label="Liste des documents">
               {rows.map((row) => {
                 const dossierId = row.dossier?._id?.toString();
-                const updated = row.updatedAt ? new Date(row.updatedAt).toLocaleString('fr-FR') : '—';
+                const updated = row.updatedAt ? new Date(row.updatedAt).toLocaleString('fr-FR') : '-';
                 const completed = Boolean(row.completedAt);
                 const overdue = isEcheanceDepassee(row.dueDate) && !completed;
                 const collabEditHref = dossierId
@@ -638,13 +638,13 @@ export default function AdminDocumentsPreparationPage() {
                               <span>{row.dossier?.numero || dossierId}</span>
                             </Link>
                           ) : (
-                            '—'
+                            '-'
                           )}
                         </dd>
                       </div>
                       <div className="min-w-0">
                         <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Client</dt>
-                        <dd className="mt-0.5 text-gray-800 break-words">{row.clientName || '—'}</dd>
+                        <dd className="mt-0.5 text-gray-800 break-words">{row.clientName || '-'}</dd>
                       </div>
                       <div>
                         <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Échéance</dt>
@@ -654,7 +654,7 @@ export default function AdminDocumentsPreparationPage() {
                               {formatEcheance(row.dueDate)}
                             </span>
                           ) : (
-                            <span className="text-gray-400">—</span>
+                            <span className="text-gray-400">-</span>
                           )}
                         </dd>
                       </div>
@@ -686,7 +686,7 @@ export default function AdminDocumentsPreparationPage() {
                 <tbody>
                   {rows.map((row) => {
                     const dossierId = row.dossier?._id?.toString();
-                    const updated = row.updatedAt ? new Date(row.updatedAt).toLocaleString('fr-FR') : '—';
+                    const updated = row.updatedAt ? new Date(row.updatedAt).toLocaleString('fr-FR') : '-';
                     const completed = Boolean(row.completedAt);
                     const overdue = isEcheanceDepassee(row.dueDate) && !completed;
                     const collabEditHref = dossierId
@@ -722,17 +722,17 @@ export default function AdminDocumentsPreparationPage() {
                               <span className="truncate max-w-[180px]">{row.dossier?.numero || dossierId}</span>
                             </Link>
                           ) : (
-                            '—'
+                            '-'
                           )}
                         </td>
-                        <td className="px-4 py-3 text-gray-700 max-w-[160px] truncate">{row.clientName || '—'}</td>
+                        <td className="px-4 py-3 text-gray-700 max-w-[160px] truncate">{row.clientName || '-'}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           {row.dueDate ? (
                             <span className={overdue ? 'text-red-700 font-medium' : 'text-gray-700'}>
                               {formatEcheance(row.dueDate)}
                             </span>
                           ) : (
-                            <span className="text-gray-400">—</span>
+                            <span className="text-gray-400">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{updated}</td>

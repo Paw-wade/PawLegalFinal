@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
@@ -203,7 +203,7 @@ export default function SignInPage() {
 
   return (
     <div className="min-h-screen min-h-[100dvh] flex bg-gradient-to-br from-primary/5 via-background to-primary/10 relative overflow-x-hidden max-w-[100vw] pt-[env(safe-area-inset-top,0)]">
-      {/* Bouton retour — zone tactile 44px sur mobile */}
+      {/* Bouton retour - zone tactile 44px sur mobile */}
       <Link href="/" className="absolute top-4 left-3 sm:left-4 z-50 min-h-[44px] min-w-[44px] flex items-center">
         <Button variant="ghost" className="text-foreground hover:bg-primary/10 backdrop-blur-sm py-2.5 px-3 text-sm sm:text-base">
           ← Retour

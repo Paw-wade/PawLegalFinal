@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
@@ -320,7 +320,7 @@ export default function ClientTarificationPage() {
                   const id = d._id || d.id;
                   return (
                     <option key={id} value={id}>
-                      {(d.titre || 'Sans titre') + (d.numero ? ` — ${d.numero}` : '')}
+                      {(d.titre || 'Sans titre') + (d.numero ? ` - ${d.numero}` : '')}
                     </option>
                   );
                 })}
@@ -346,7 +346,7 @@ export default function ClientTarificationPage() {
                         const label = String(p?.label || `Prestation ${idx + 1}`).trim();
                         return (
                           <li key={String(p?._id || `${label}-${idx}`)}>
-                            À régler : {label} —{' '}
+                            À régler : {label} -{' '}
                             {Number.isFinite(m)
                               ? m.toLocaleString('fr-FR', {
                                   minimumFractionDigits: 2,
@@ -370,7 +370,7 @@ export default function ClientTarificationPage() {
                         const label = String(p?.label || `Prestation ${idx + 1}`).trim();
                         return (
                           <li key={String(p?._id || `paid-${label}-${idx}`)}>
-                            Réglée : {label} —{' '}
+                            Réglée : {label} -{' '}
                             {Number.isFinite(m)
                               ? m.toLocaleString('fr-FR', {
                                   minimumFractionDigits: 2,
@@ -477,7 +477,7 @@ export default function ClientTarificationPage() {
                     </p>
                   ) : null}
                   <p className="text-xs text-gray-600 mb-3 leading-snug">
-                    Règlement par WERO, PayPal ou virement — indiquez la référence du dossier sur le libellé ou le message.
+                    Règlement par WERO, PayPal ou virement - indiquez la référence du dossier sur le libellé ou le message.
                   </p>
                   {paiementEnPlusieursFoisAutorise ? (
                     <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">

@@ -1,4 +1,4 @@
-/** Déclaration sur l'honneur (document en prose — mode « document »). */
+﻿/** Déclaration sur l'honneur (document en prose - mode « document »). */
 module.exports = {
   type: 'declaration_honneur',
   titre: "Déclaration sur l'honneur",

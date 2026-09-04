@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
@@ -410,7 +410,7 @@ export default function DossierDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/10 max-w-[100vw]">
       <div className="w-full max-w-[100vw] min-w-0 px-3 sm:px-4 py-4 sm:py-8 overflow-x-hidden">
-        {/* En-tête — sur mobile: colonne, boutons en bas */}
+        {/* En-tête - sur mobile: colonne, boutons en bas */}
         <div className="mb-4 sm:mb-6">
           <Link href={dossierListFocusHref('client', dossierId)} className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 mb-3 sm:mb-4 transition-colors min-h-[44px] items-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -584,7 +584,7 @@ export default function DossierDetailPage() {
                   </div>
                   <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Notifications</p>
-                    <p className="text-sm font-semibold text-foreground">{unreadNotificationsCount > 0 ? unreadNotificationsCount : '—'}</p>
+                    <p className="text-sm font-semibold text-foreground">{unreadNotificationsCount > 0 ? unreadNotificationsCount : '-'}</p>
                   </div>
                   <div className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Intervenants</p>
@@ -1091,7 +1091,7 @@ export default function DossierDetailPage() {
             )}
           </div>
 
-          {/* Sidebar — même largeur que le contenu sur mobile */}
+          {/* Sidebar - même largeur que le contenu sur mobile */}
           <div className="space-y-4 sm:space-y-6 min-w-0">
             {/* Actions rapides */}
             <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">

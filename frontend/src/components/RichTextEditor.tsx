@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -51,7 +51,7 @@ function ensureSelectionInsideEditor(el: HTMLDivElement) {
 
 export function RichTextEditor({ value, onChange, placeholder, className = '', readOnly = false }: RichTextEditorProps) {
   const ref = useRef<HTMLDivElement | null>(null);
-  /** HTML dernier émis au parent — évite de réécrire innerHTML à chaque frappe (gel + curseur). */
+  /** HTML dernier émis au parent - évite de réécrire innerHTML à chaque frappe (gel + curseur). */
   const lastEmittedHtml = useRef<string | null>(null);
   const [lineHeight, setLineHeight] = useState<number>(1.65);
   const [textColor, setTextColor] = useState('#111827');

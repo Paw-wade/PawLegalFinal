@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Envoie un e-mail de test avec un lien vers le forum.
  * Usage : node scripts/sendForumTestEmail.js [destinataire@example.com]
  * Variables : BREVO_API_KEY ou SMTP (voir emailNotifications).
@@ -15,7 +15,7 @@ async function main() {
   const base = getPrimaryFrontendUrl();
   const forumUrl = `${base}/forum`;
 
-  const subject = '[Ada Papers] Test — lien vers le forum';
+  const subject = '[Ada Papers] Test - lien vers le forum';
   const htmlContent = `
 <p>Ceci est un <strong>e-mail de test</strong> automatique (script <code>sendForumTestEmail.js</code>).</p>
 <p style="margin:24px 0;">

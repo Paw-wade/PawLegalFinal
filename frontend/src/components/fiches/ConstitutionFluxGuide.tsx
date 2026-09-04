@@ -1,11 +1,11 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 
 /**
  * Guide explicatif (repliable) du flux de constitution de société côté admin :
  * les 3 interfaces (cabinet / demandeur / associés), le parcours, et la
- * circulation des documents. Purement informatif — aucune donnée du dossier.
+ * circulation des documents. Purement informatif - aucune donnée du dossier.
  */
 const LANES = [
   {
@@ -44,7 +44,7 @@ const LANES = [
 
 const STEPS = [
   { n: '01', dot: 'bg-teal-500', title: 'Le cabinet demande la fiche', body: 'L’admin sélectionne la ou les fiches (ex. SARL) → crée des FicheRequest. Le demandeur est notifié (in-app + e-mail).' },
-  { n: '02', dot: 'bg-indigo-500', title: 'Le demandeur remplit la fiche société', body: 'Il renseigne la société et la liste des associés — nom + e-mail pour chacun — puis valide.' },
+  { n: '02', dot: 'bg-indigo-500', title: 'Le demandeur remplit la fiche société', body: 'Il renseigne la société et la liste des associés - nom + e-mail pour chacun - puis valide.' },
   { n: '03', dot: 'bg-violet-500', title: 'Le système génère tout automatiquement', body: 'Le PDF de la fiche est rattaché au dossier (Document). La checklist crée, par associé : fiche d’état civil + pièce d’identité + procuration (et casier/déclaration pour les gérants).' },
   { n: '04', dot: 'bg-violet-500', title: 'Invitations envoyées par e-mail', body: 'Chaque associé dont l’e-mail est renseigné reçoit son lien personnel /invitation/[token] (une seule fois). Un FicheInvite ne donne accès qu’à ses documents.' },
   { n: '05', dot: 'bg-amber-500', title: 'L’associé complète ses documents', body: 'Il remplit sa fiche (→ PDF Document) et dépose sa pièce d’identité (→ Document). Sa fiche passe « remplie », sa pièce « fournie ».' },
@@ -52,10 +52,10 @@ const STEPS = [
 ];
 
 const DOCS = [
-  { doc: 'Fiche société (SARL, SAS…)', by: 'Demandeur — sur le suivi', byCls: 'bg-indigo-50 text-indigo-700', obj: 'FicheConstitution → Document (PDF)', vis: 'Admin : valide · « Documents du dossier »' },
-  { doc: 'Fiche d’état civil (par associé)', by: 'Associé — via son invitation', byCls: 'bg-amber-50 text-amber-700', obj: 'FicheRequest + Document (PDF)', vis: 'Admin : valide · Demandeur : suit le statut' },
-  { doc: 'Procuration (par associé)', by: 'Associé — si absent à la signature', byCls: 'bg-amber-50 text-amber-700', obj: 'FicheRequest + Document', vis: 'Admin : valide · facultative' },
-  { doc: 'Pièce d’identité (par associé)', by: 'Associé — dépôt de fichier', byCls: 'bg-amber-50 text-amber-700', obj: 'PieceRequest → Document', vis: 'Admin : valide · « Documents du dossier »' },
+  { doc: 'Fiche société (SARL, SAS…)', by: 'Demandeur - sur le suivi', byCls: 'bg-indigo-50 text-indigo-700', obj: 'FicheConstitution → Document (PDF)', vis: 'Admin : valide · « Documents du dossier »' },
+  { doc: 'Fiche d’état civil (par associé)', by: 'Associé - via son invitation', byCls: 'bg-amber-50 text-amber-700', obj: 'FicheRequest + Document (PDF)', vis: 'Admin : valide · Demandeur : suit le statut' },
+  { doc: 'Procuration (par associé)', by: 'Associé - si absent à la signature', byCls: 'bg-amber-50 text-amber-700', obj: 'FicheRequest + Document', vis: 'Admin : valide · facultative' },
+  { doc: 'Pièce d’identité (par associé)', by: 'Associé - dépôt de fichier', byCls: 'bg-amber-50 text-amber-700', obj: 'PieceRequest → Document', vis: 'Admin : valide · « Documents du dossier »' },
   { doc: 'Casier / déclaration (par gérant)', by: 'Associé-gérant', byCls: 'bg-amber-50 text-amber-700', obj: 'PieceRequest / FicheRequest', vis: 'Admin : valide' },
   { doc: 'Lien d’invitation', by: 'Système (à la validation) ou manuel', byCls: 'bg-violet-50 text-violet-700', obj: 'FicheInvite (token + e-mail)', vis: 'Admin : « invité le… » + Renvoyer' },
 ];
@@ -68,7 +68,7 @@ export function ConstitutionFluxGuide() {
         className="flex w-full items-center justify-between gap-3 p-4 text-left sm:p-5">
         <span className="flex items-center gap-2">
           <span className="text-lg">🔗</span>
-          <span className="text-base font-bold text-foreground">Comment fonctionne la constitution — 3 interfaces</span>
+          <span className="text-base font-bold text-foreground">Comment fonctionne la constitution - 3 interfaces</span>
         </span>
         <span className="text-sm text-muted-foreground">{open ? '▲ Masquer' : '▼ Afficher'}</span>
       </button>
@@ -100,7 +100,7 @@ export function ConstitutionFluxGuide() {
           </div>
 
           {/* Le parcours */}
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Le parcours — de bout en bout</p>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Le parcours - de bout en bout</p>
           <ol className="mb-6 ml-1 space-y-3 border-l-2 border-gray-200 pl-5">
             {STEPS.map((s) => (
               <li key={s.n} className="relative">

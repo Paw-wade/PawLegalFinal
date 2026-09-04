@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -60,7 +60,7 @@ export default function AdminDossierDocumentsEnPreparationPage() {
         </Link>
         <div className="mb-6 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-gray-800">
           <span className="font-medium">Autre brouillon (même éditeur riche, export .docx)</span>
-          {' — '}
+          {' - '}
           <Link
             href={`/admin/documents/preparation?dossierId=${encodeURIComponent(dossierId)}`}
             className="text-primary font-semibold hover:underline"

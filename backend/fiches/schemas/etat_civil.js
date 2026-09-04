@@ -1,7 +1,7 @@
-/** Fiche d'identification — personne physique (bloc état civil). */
+﻿/** Fiche d'identification - personne physique (bloc état civil). */
 module.exports = {
   type: 'etat_civil',
-  titre: "Fiche d'identification — personne physique",
+  titre: "Fiche d'identification - personne physique",
   sousTitre: '',
   sections: [
     {

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -132,7 +132,7 @@ export function PartenaireSidebar({ isOpen = true, onClose }: PartenaireSidebarP
           );
         })}
         </nav>
-        {/* Bouton de déconnexion — bandeau bas du tiroir mobile */}
+        {/* Bouton de déconnexion - bandeau bas du tiroir mobile */}
         <div className="shrink-0 border-t border-gray-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_12px_rgba(0,0,0,0.06)] lg:shadow-none">
           <button
             type="button"

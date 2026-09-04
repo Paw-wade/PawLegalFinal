@@ -70,7 +70,7 @@
   }
 }
 
-/* nextjs-portal : évite décalage (ex. top: 690px) et impact sur le layout — hors layer pour priorité sur les styles inline */
+/* nextjs-portal : évite décalage (ex. top: 690px) et impact sur le layout - hors layer pour priorité sur les styles inline */
 nextjs-portal,
 nextjs-portal[data-cursor-element-id] {
   position: fixed !important;
@@ -209,7 +209,7 @@ nextjs-portal[data-cursor-element-id] {
   pointer-events: none;
 }
 
-/* Listes dans l’éditeur : le preflight Tailwind enlève puces / numéros — on les restaure ici */
+/* Listes dans l’éditeur : le preflight Tailwind enlève puces / numéros - on les restaure ici */
 .rich-text-editor-page ul {
   list-style-type: disc;
   list-style-position: outside;

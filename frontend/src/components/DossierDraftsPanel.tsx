@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -451,7 +451,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
         </div>
       ) : (
         <div className="w-full space-y-4">
-          {/* Titres des documents — juste au-dessus, en ligne */}
+          {/* Titres des documents - juste au-dessus, en ligne */}
           <div className="flex flex-wrap gap-2">
             {drafts.map((draft) => {
               const authorName = draft.createdBy
@@ -578,13 +578,13 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
                     {selectedDraft.canEdit ? (
                       <>
                         {hasUnsavedChanges ? (
-                          <span className="text-amber-700 font-medium">Modifications non enregistrées — cliquez sur « Enregistrer le document ».</span>
+                          <span className="text-amber-700 font-medium">Modifications non enregistrées - cliquez sur « Enregistrer le document ».</span>
                         ) : (
                           <span>Utilisez le bouton Enregistrer pour sauvegarder vos changements.</span>
                         )}
                       </>
                     ) : (
-                      'Lecture seule — vous ne pouvez pas modifier ce document.'
+                      'Lecture seule - vous ne pouvez pas modifier ce document.'
                     )}
                   </span>
                   <span>
@@ -718,7 +718,7 @@ export function DossierDraftsPanel({ dossierId, linkToDedicatedPageHref, initial
 
               {adminUsersExcludingCreator.length > 0 && (
                 <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3">
-                  <p className="text-sm font-semibold text-gray-800 mb-2">Exclure des accès (admins qui ne pourront pas voir/éditer) — le créateur du document conserve toujours l’accès</p>
+                  <p className="text-sm font-semibold text-gray-800 mb-2">Exclure des accès (admins qui ne pourront pas voir/éditer) - le créateur du document conserve toujours l’accès</p>
                   <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto rounded border border-gray-200 p-2 bg-white">
                     {adminUsersExcludingCreator.map((u) => (
                       <label

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
@@ -83,7 +83,7 @@ function MessagesContent() {
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [selectedDossierId, setSelectedDossierId] = useState<string>('');
   const [composeDossierId, setComposeDossierId] = useState<string>('');
-  /** Admin ciblé pour un nouveau message (optionnel — sinon tous les admins) */
+  /** Admin ciblé pour un nouveau message (optionnel - sinon tous les admins) */
   const [composeDestinataireId, setComposeDestinataireId] = useState<string>('');
   const [users, setUsers] = useState<any[]>([]);
   const [selectedExpediteurId, setSelectedExpediteurId] = useState<string>('');

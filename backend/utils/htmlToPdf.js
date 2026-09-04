@@ -1,11 +1,11 @@
-const { spawn } = require('child_process');
+﻿const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
 /**
  * Génération PDF à partir de HTML/CSS via un navigateur Chromium headless
- * (Chrome/Edge/Chromium) en ligne de commande — sans dépendance npm lourde.
+ * (Chrome/Edge/Chromium) en ligne de commande - sans dépendance npm lourde.
  * En production, définir CHROME_PATH sur le binaire chromium du serveur.
  */
 function findChrome() {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Repli de génération PDF d'une fiche SANS navigateur headless : rendu direct via pdfkit.
  * Utilisé quand htmlToPdf (Chromium) est indisponible ou échoue (ex. serveur sans Chrome).
  * Rendu volontairement sobre mais complet (mêmes rubriques que le schéma).
@@ -97,7 +97,7 @@ function renderFichePdfKit(schema, data, opts = {}) {
               rows.forEach((row, i) => {
                 doc.font('Helvetica-Bold').fontSize(9.5).fillColor(INK).text(`${rep.itemLabel || 'Élément'} ${i + 1}`);
                 rep.fields.forEach((f) => {
-                  const disp = fieldDisplay(f, row || {}) || '—';
+                  const disp = fieldDisplay(f, row || {}) || '-';
                   label(`${f.label} : `);
                   doc.font('Helvetica').fontSize(9).fillColor(INK).text(disp);
                 });
@@ -110,7 +110,7 @@ function renderFichePdfKit(schema, data, opts = {}) {
           (section.fields || []).forEach((f) => {
             const disp = fieldDisplay(f, data);
             label(`${f.label} : `);
-            doc.font('Helvetica').fontSize(9).fillColor(disp ? INK : '#999999').text(disp || '—');
+            doc.font('Helvetica').fontSize(9).fillColor(disp ? INK : '#999999').text(disp || '-');
           });
           if (section.note) doc.moveDown(0.1).font('Helvetica-Oblique').fontSize(8.5).fillColor(MUTED).text(section.note);
         }

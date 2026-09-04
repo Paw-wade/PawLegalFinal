@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const { uploadLocalFileToS3, isS3UploadMode } = require('./s3DocumentStorage');
 const { resolveUploadedFileStoragePath } = require('./documentFileStorage');
 
@@ -26,7 +26,7 @@ async function uploadDocumentToRemoteStorage(file, { backendRoot, s3Prefix = nul
   if (storage === 's3') {
     const uri = await uploadLocalFileToS3(file, { prefix: s3Prefix });
     if (!uri) {
-      throw new Error('Upload S3 refusé — vérifiez la configuration AWS');
+      throw new Error('Upload S3 refusé - vérifiez la configuration AWS');
     }
     removeLocalUploadTempFile(file);
     console.log('Document vérifié et enregistré sur S3:', uri);
@@ -50,7 +50,7 @@ async function uploadDocumentToRemoteStorage(file, { backendRoot, s3Prefix = nul
     throw new Error('Stockage distant requis mais indisponible');
   }
 
-  console.warn('Stockage distant indisponible — conservation locale (mode non-S3)');
+  console.warn('Stockage distant indisponible - conservation locale (mode non-S3)');
   return resolveUploadedFileStoragePath(file, backendRoot);
 }
 

@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -18,7 +18,7 @@ let isDatabaseConnected = false;
 ========================= */
 
 const allowedOrigins = getFrontendOriginsList();
-console.log('✅ CORS — origines autorisées:', allowedOrigins.join(', ') || '(aucune)');
+console.log('✅ CORS - origines autorisées:', allowedOrigins.join(', ') || '(aucune)');
 
 app.use(
   cors({
@@ -63,7 +63,7 @@ const connectDB = async () => {
     const mongoURI = process.env.MONGODB_URI;
 
     if (!mongoURI) {
-      console.warn('⚠️ MONGODB_URI manquant — démarrage en mode dégradé (sans base de données)');
+      console.warn('⚠️ MONGODB_URI manquant - démarrage en mode dégradé (sans base de données)');
       isDatabaseConnected = false;
       return;
     }
@@ -80,7 +80,7 @@ const connectDB = async () => {
       console.warn('⚠️ Cabinet par défaut non initialisé:', cabinetErr.message);
     }
   } catch (error) {
-    console.warn(`⚠️ MongoDB indisponible (${error.message}) — démarrage en mode dégradé`);
+    console.warn(`⚠️ MongoDB indisponible (${error.message}) - démarrage en mode dégradé`);
     isDatabaseConnected = false;
   }
 };
@@ -107,7 +107,7 @@ app.use('/api/auth', (req, res) => {
   });
 });
 
-// ✅ Légifrance — ajoute ces lignes
+// ✅ Légifrance - ajoute ces lignes
 try {
   app.use('/api/legal', require('./routes/legal'));
   console.log('✅ Route /api/legal enregistrée');
@@ -187,6 +187,10 @@ try {
 
 try {
   app.use('/api/appointments', require('./routes/appointments'));
+} catch (e) {}
+
+try {
+  app.use('/api/calendar', require('./routes/calendar'));
 } catch (e) {}
 
 try {
@@ -308,7 +312,7 @@ const startServer = async () => {
       console.log(`🚀 Serveur démarré sur le port ${PORT}`);
       console.log(`📡 API: /api`);
       const lexiaKnowledgeDir = getKnowledgeDir();
-      console.log(`🧠 Paw AI (interne) — dossier indexé: ${lexiaKnowledgeDir}`);
+      console.log(`🧠 Paw AI (interne) - dossier indexé: ${lexiaKnowledgeDir}`);
       getKnowledgeStats()
         .then((s) => {
           const breakdown = Object.entries(s.byExt || {})
@@ -320,11 +324,11 @@ const startServer = async () => {
               ? ` | indexRAM≤${s.indexedFilesCap} fichier(s)${s.indexTruncated ? ' (tronqué)' : ''}`
               : ' | indexRAM: tous les fichiers (LEXIA_INDEX_MAX_FILES sans plafond)';
           console.log(
-            `🧠 Paw AI (interne) — fichiers détectés sur disque: total=${s.total}${breakdown ? ` (${breakdown})` : ''}${capInfo}`
+            `🧠 Paw AI (interne) - fichiers détectés sur disque: total=${s.total}${breakdown ? ` (${breakdown})` : ''}${capInfo}`
           );
         })
         .catch((e) => {
-          console.warn(`⚠️ Paw AI (interne) — impossible de compter les fichiers: ${e.message}`);
+          console.warn(`⚠️ Paw AI (interne) - impossible de compter les fichiers: ${e.message}`);
         });
 
       if (isDatabaseConnected) {

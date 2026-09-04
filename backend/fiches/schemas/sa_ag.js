@@ -1,4 +1,4 @@
-/** Schéma fiche SA avec Administrateur Général — Sénégal. */
+﻿/** Schéma fiche SA avec Administrateur Général - Sénégal. */
 const { TXT, VAL_NOMINALE, sectionObjet, sectionIdentite, sectionPublication, staticSection } = require('../common');
 
 const VAL_NOMINALE_SA = [
@@ -9,7 +9,7 @@ const VAL_NOMINALE_SA = [
 
 module.exports = {
   type: 'sa_ag',
-  titre: 'Fiche de renseignements — SA (Administrateur Général)',
+  titre: 'Fiche de renseignements - SA (Administrateur Général)',
   sousTitre: 'Société Anonyme avec Administrateur Général',
   associesSource: { section: 'souscription', field: 'nom' },
   gerantsSource: { fields: ['administrateur_general', 'administrateur_general_adjoint'] },
@@ -43,7 +43,7 @@ module.exports = {
     },
     {
       id: 'commissaires', titre: 'Commissaires aux comptes',
-      note: 'Obligatoire — choisis parmi les experts-comptables du Sénégal.',
+      note: 'Obligatoire - choisis parmi les experts-comptables du Sénégal.',
       fields: [
         { name: 'commissaire_titulaire', label: 'Titulaire', type: 'text' },
         { name: 'commissaire_suppleant', label: 'Suppléant', type: 'text' },
@@ -54,8 +54,8 @@ module.exports = {
       id: 'administration', titre: 'Mode d’administration',
       fields: [
         { name: 'mode_admin', label: 'Structure', type: 'radio', options: [{ value: 'ag', label: 'SA avec Administrateur Général' }, { value: 'ag_aga', label: 'SA avec Administrateur Général et Administrateur Général Adjoint' }] },
-        { name: 'administrateur_general', label: 'Administrateur Général — identité', type: 'text' },
-        { name: 'administrateur_general_adjoint', label: 'Administrateur Général Adjoint — identité (le cas échéant)', type: 'text' },
+        { name: 'administrateur_general', label: 'Administrateur Général - identité', type: 'text' },
+        { name: 'administrateur_general_adjoint', label: 'Administrateur Général Adjoint - identité (le cas échéant)', type: 'text' },
       ],
     },
     sectionPublication(),

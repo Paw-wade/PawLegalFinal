@@ -1,7 +1,7 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 
 /**
- * Historique Paw AI (Lexia) par compte — synchronisation multi-appareils.
+ * Historique Paw AI (Lexia) par compte - synchronisation multi-appareils.
  * Tableau `threads` validé côté route avant écriture (taille / forme).
  */
 const lexiaPawAiStateSchema = new mongoose.Schema(

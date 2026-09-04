@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
@@ -500,7 +500,7 @@ function AdminTachesPageContent() {
           </div>
         )}
 
-        {/* Formulaire de création/modification — portal au-dessus de la sidebar (z-70) et du header (z-80) */}
+        {/* Formulaire de création/modification - portal au-dessus de la sidebar (z-70) et du header (z-80) */}
         {isMounted &&
           isCreating &&
           createPortal(

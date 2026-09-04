@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -232,7 +232,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
         </div>
 
-        {/* Navigation — scroll seul ; déconnexion reste fixée en bas du tiroir mobile */}
+        {/* Navigation - scroll seul ; déconnexion reste fixée en bas du tiroir mobile */}
         <nav className="p-3 sm:p-4 space-y-1 flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           {clientMenuItems.map((item) => {
             const Icon = item.icon;
@@ -276,7 +276,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             );
           })}
         </nav>
-        {/* Bouton de déconnexion — toujours visible en bas du menu (tiroir mobile = bandeau fixe) */}
+        {/* Bouton de déconnexion - toujours visible en bas du menu (tiroir mobile = bandeau fixe) */}
         <div className="shrink-0 border-t border-gray-200 bg-white p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_12px_rgba(0,0,0,0.06)] lg:shadow-none">
           <button
             type="button"

@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 const {
   S3Client,
@@ -304,7 +304,7 @@ async function tryServeDocumentFromS3(document, res, { inline = false } = {}) {
       resp.Body.on('error', () => resolve(false));
       resp.Body.pipe(res);
       resp.Body.on('end', () => {
-        console.log('✅ Document — S3:', document.cheminFichier);
+        console.log('✅ Document - S3:', document.cheminFichier);
         resolve(true);
       });
     });

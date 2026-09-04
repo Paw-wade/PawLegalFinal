@@ -1,10 +1,10 @@
-/** Schéma fiche SCI (Société Civile Immobilière) — Sénégal (COCC art. 765 à 810). */
+﻿/** Schéma fiche SCI (Société Civile Immobilière) - Sénégal (COCC art. 765 à 810). */
 const { TXT, VAL_NOMINALE, sectionObjet, sectionIdentite, sectionPublication, staticSection } = require('../common');
 
 const RESP =
   "Dans ses rapports avec ses coassociés, chaque associé n’est tenu des dettes sociales que dans la proportion du nombre de parts qu’il possède. Vis-à-vis des créanciers, chaque associé est tenu des dettes et engagements sociaux à parts égales, sans qu’il soit tenu compte de leurs apports ; toutefois les créanciers ne peuvent poursuivre un associé qu’après avoir vainement poursuivi la société.";
 const TRANSM =
-  "Transmission de parts (art. 787 COCC) : toute cession est soumise à une majorité — entre associés, conjoints, ascendants et descendants : majorité absolue ; à des tiers : majorité des trois quarts. La majorité se calcule selon le nombre d’associés (art. 796 COCC).";
+  "Transmission de parts (art. 787 COCC) : toute cession est soumise à une majorité - entre associés, conjoints, ascendants et descendants : majorité absolue ; à des tiers : majorité des trois quarts. La majorité se calcule selon le nombre d’associés (art. 796 COCC).";
 const DECES =
   "En cas de décès d’un associé ou de dissolution de communauté entre époux, la société continue entre les associés survivants et les ayants droit ou héritiers de l’associé décédé, éventuellement le conjoint survivant, avec l’agrément des associés survivants.";
 const PIECES_SCI =
@@ -12,7 +12,7 @@ const PIECES_SCI =
 
 module.exports = {
   type: 'sci',
-  titre: 'Fiche de renseignements — SCI',
+  titre: 'Fiche de renseignements - SCI',
   sousTitre: 'Société Civile Immobilière (COCC, art. 765 à 810)',
   associesSource: { section: 'repartition', field: 'nom' },
   gerantsSource: { section: 'gerance', field: 'nom' },

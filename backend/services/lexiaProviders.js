@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Orchestration Paw AI : Anthropic, Gemini, base interne (Lexia), mode combiné.
  * Les clés API restent côté serveur uniquement.
  */
@@ -195,7 +195,7 @@ async function streamAnthropicLexia(res, req, messages, lexiaOpts = {}) {
       threadAttachmentAppendix: lexiaOpts.threadAttachmentAppendix,
     });
   } catch (prepErr) {
-    console.warn('[lexia] Récupération documentaire (stream) — non bloquant:', prepErr?.message || prepErr);
+    console.warn('[lexia] Récupération documentaire (stream) - non bloquant:', prepErr?.message || prepErr);
     retrievalCtx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
   }
 
@@ -211,7 +211,7 @@ async function streamAnthropicLexia(res, req, messages, lexiaOpts = {}) {
     messages: msgs,
   });
 
-  /** Évite d’appeler `abort()` après une fin normale — `req` « close » peut arriver trop tôt sur certains proxies. */
+  /** Évite d’appeler `abort()` après une fin normale - `req` « close » peut arriver trop tôt sur certains proxies. */
   let upstreamSettled = false;
   const onResClose = () => {
     if (upstreamSettled) return;
@@ -300,7 +300,7 @@ async function callAnthropic(messages, retrievalCtx = null) {
     try {
       ctx = await prepareLlmContext(messages);
     } catch (prepErr) {
-      console.warn('[lexia] Récupération documentaire — non bloquant:', prepErr?.message || prepErr);
+      console.warn('[lexia] Récupération documentaire - non bloquant:', prepErr?.message || prepErr);
       ctx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
     }
   }
@@ -321,7 +321,7 @@ async function callAnthropic(messages, retrievalCtx = null) {
 
     const text = textFromAnthropicContent(data.content);
     if (!text && data.stop_reason === 'max_tokens') {
-      return { text: '_(Réponse tronquée — augmentez ANTHROPIC_MAX_TOKENS si besoin.)_', model, retrievalCtx: ctx };
+      return { text: '_(Réponse tronquée - augmentez ANTHROPIC_MAX_TOKENS si besoin.)_', model, retrievalCtx: ctx };
     }
     return { text: text || '_(Réponse vide du modèle.)_', model, retrievalCtx: ctx };
   } catch (e) {
@@ -356,7 +356,7 @@ async function callGemini(messages, retrievalCtx = null) {
     try {
       ctx = await prepareLlmContext(messages);
     } catch (prepErr) {
-      console.warn('[lexia] Récupération documentaire (Gemini) — non bloquant:', prepErr?.message || prepErr);
+      console.warn('[lexia] Récupération documentaire (Gemini) - non bloquant:', prepErr?.message || prepErr);
       ctx = { systemAppendix: '', sources: [], searched: false, totalToolUses: 0 };
     }
   }
@@ -453,7 +453,7 @@ function toSourcesFound(sources) {
 }
 
 /**
- * Corps JSON pour POST /api/lexia en succès — même objet pour réponse HTTP et événement SSE `complete`
+ * Corps JSON pour POST /api/lexia en succès - même objet pour réponse HTTP et événement SSE `complete`
  * (Anthropic stream), sauf le discriminant `type` sur le flux.
  */
 function buildLexiaChatSuccessPayload(result) {
@@ -491,11 +491,11 @@ async function runAllAndMerge(messages, lexiaOpts = {}) {
   try {
     retrievalCtx = await prepareLlmContext(messages, ctxOptions);
   } catch (prepErr) {
-    console.warn('[lexia] Mode « all » — récupération documentaire non bloquante:', prepErr?.message || prepErr);
+    console.warn('[lexia] Mode « all » - récupération documentaire non bloquante:', prepErr?.message || prepErr);
   }
 
   const internalP = searchAndCompose(internalMessages, dir).catch((e) => ({
-    text: `## Base interne — erreur\n\n${String(e.message || e)}`,
+    text: `## Base interne - erreur\n\n${String(e.message || e)}`,
     sources: [],
   }));
 
@@ -530,15 +530,15 @@ async function runAllAndMerge(messages, lexiaOpts = {}) {
     content:
       `L'utilisateur a posé une question ; la dernière formulation utile est :\n` +
       `"""${lastUserSnippet}"""\n\n` +
-      `Tu reçois trois briques produites en parallèle (ci-dessous sous des intitulés neutres A / B / C — ne **jamais** les répéter tels quels ni révéler à l'utilisateur qu'il s'agit de chaînes ou fournisseurs distincts). ` +
+      `Tu reçois trois briques produites en parallèle (ci-dessous sous des intitulés neutres A / B / C - ne **jamais** les répéter tels quels ni révéler à l'utilisateur qu'il s'agit de chaînes ou fournisseurs distincts). ` +
       `Rédige **une seule** réponse en français, claire et structurée (titres markdown ## / ### si utile), comme si **Paw AI** produisait une analyse unifiée. ` +
       `Respecte la charte Paw AI (sources, syllogisme, section Recommandations). Balises span lexia-* : **très peu**, uniquement pour l’essentiel (voir consigne « parcimonie ») ; le gras markdown suffit le plus souvent. ` +
       `N'utilise **aucune** étiquette du type [Interne], [Anthropic], [Gemini], [Claude], [Google], ni aucun nom de modèle ou d'API. Ne dis pas quelle « brique » a fourni quoi. ` +
       `Si une brique indique une erreur ou une absence de configuration, intègre l'information de façon générique (« une partie de l'analyse n'a pas pu être produite ») sans nommer de fournisseur. ` +
-      `Si tu recommandes un contact humain ou un accompagnement personnalisé sur le dossier, oriente **uniquement** vers **Ada Papers** (plateforme / messagerie Ada Papers) — jamais vers la Cimade, le Gisti, un autre cabinet ou une autre association pour ce suivi.\n\n` +
-      `---\n### Brique A — recherche documentaire indexée\n\n${internalText.slice(0, 16000)}\n\n` +
-      `---\n### Brique B — analyse complémentaire\n\n${antText.slice(0, 16000)}\n\n` +
-      `---\n### Brique C — analyse complémentaire\n\n${gemText.slice(0, 16000)}`,
+      `Si tu recommandes un contact humain ou un accompagnement personnalisé sur le dossier, oriente **uniquement** vers **Ada Papers** (plateforme / messagerie Ada Papers) - jamais vers la Cimade, le Gisti, un autre cabinet ou une autre association pour ce suivi.\n\n` +
+      `---\n### Brique A - recherche documentaire indexée\n\n${internalText.slice(0, 16000)}\n\n` +
+      `---\n### Brique B - analyse complémentaire\n\n${antText.slice(0, 16000)}\n\n` +
+      `---\n### Brique C - analyse complémentaire\n\n${gemText.slice(0, 16000)}`,
   };
 
   const retrievalNonIndex = (retrievalCtx.sources || []).filter((s) => s && s.source !== 'internal_index');
@@ -645,7 +645,7 @@ async function runLexiaWithProvider(messages, providerRequested, lexiaOpts = {})
       try {
         retrievalCtx = await prepareLlmContext(messages, ctxOptions);
       } catch (prepErr) {
-        console.warn('[lexia] Récupération (Anthropic) — non bloquant:', prepErr?.message || prepErr);
+        console.warn('[lexia] Récupération (Anthropic) - non bloquant:', prepErr?.message || prepErr);
       }
       const out = await callAnthropic(internalMessages, retrievalCtx);
       const ctx = out.retrievalCtx || retrievalCtx;
@@ -691,7 +691,7 @@ async function runLexiaWithProvider(messages, providerRequested, lexiaOpts = {})
       try {
         retrievalCtx = await prepareLlmContext(messages, ctxOptions);
       } catch (prepErr) {
-        console.warn('[lexia] Récupération (Gemini) — non bloquant:', prepErr?.message || prepErr);
+        console.warn('[lexia] Récupération (Gemini) - non bloquant:', prepErr?.message || prepErr);
       }
       const out = await callGemini(internalMessages, retrievalCtx);
       const ctx = out.retrievalCtx || retrievalCtx;
@@ -743,7 +743,7 @@ async function runLexiaWithProvider(messages, providerRequested, lexiaOpts = {})
     };
   }
 
-  // auto (ne devrait pas arriver ici — resolveLexiaProvider renvoie déjà un mode concret)
+  // auto (ne devrait pas arriver ici - resolveLexiaProvider renvoie déjà un mode concret)
   const [fallback, ext] = await Promise.all([
     searchAndCompose(internalMessages, dir),
     gatherExternalOnlyForInternal(internalMessages),

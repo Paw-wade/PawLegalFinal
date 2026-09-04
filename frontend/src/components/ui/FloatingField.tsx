@@ -40,18 +40,27 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
   const floated = focused || hasValue || type === 'date';
 
   const controlBase =
-    'peer block w-full rounded-md border bg-white text-sm text-foreground transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 ' +
+    'peer block w-full rounded-md border bg-white text-[16px] md:text-sm text-foreground transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 ' +
     (error ? 'border-red-500 ' : focused ? 'border-primary ring-1 ring-primary ' : 'border-gray-300 ');
 
   const labelBase =
-    'pointer-events-none absolute left-2.5 z-10 bg-white px-1 transition-all duration-150 ';
+    'pointer-events-none absolute left-2.5 z-10 bg-white px-1 transition-all duration-150 ' +
+    'max-w-[calc(100%-1rem)] overflow-hidden text-ellipsis whitespace-nowrap ';
   const labelFloated = `-top-2 text-[11px] ${error ? 'text-red-600' : focused ? 'text-primary' : 'text-gray-600'}`;
   const handleBlur = () => { setFocused(false); if (onBlur) onBlur(value); };
   const labelResting = isTextarea
-    ? 'top-3 text-sm text-gray-400'
-    : 'top-1/2 -translate-y-1/2 text-sm text-gray-400';
+    ? 'top-3 text-[16px] md:text-sm text-gray-400'
+    : 'top-1/2 -translate-y-1/2 text-[16px] md:text-sm text-gray-400';
 
-  const htmlType = isPassword ? (showPwd ? 'text' : 'password') : ['date', 'email', 'tel'].includes(type) ? type : 'text';
+  const isDateMask = type === 'date';
+  const htmlType = isPassword ? (showPwd ? 'text' : 'password') : ['email', 'tel'].includes(type) ? type : 'text';
+  const formatDateMask = (raw: string): string => {
+    const digits = raw.replace(/\D/g, '').slice(0, 8);
+    let result = digits.slice(0, 2);
+    if (digits.length > 2) result += '/' + digits.slice(2, 4);
+    if (digits.length > 4) result += '/' + digits.slice(4, 8);
+    return result;
+  };
 
   return (
     <div className="relative">
@@ -80,13 +89,15 @@ export function FloatingField({ label, value, onChange, type = 'text', options, 
         </select>
       ) : (
         <input
-          id={id} ref={inputRef} name={name} disabled={disabled} autoComplete={autoComplete} inputMode={inputMode}
-          type={htmlType}
+          id={id} ref={inputRef} name={name} disabled={disabled} autoComplete={autoComplete}
+          inputMode={isDateMask ? 'numeric' : inputMode}
+          type={isDateMask ? 'text' : htmlType}
           value={value || ''}
-          placeholder={focused ? placeholder || '' : ''}
+          placeholder={focused ? (isDateMask ? 'JJ/MM/AAAA' : placeholder || '') : ''}
+          maxLength={isDateMask ? 10 : undefined}
           onFocus={() => setFocused(true)}
           onBlur={handleBlur}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(isDateMask ? formatDateMask(e.target.value) : e.target.value)}
           className={`${controlBase} h-11 px-3 ${suffix || isPassword ? 'pr-11' : ''}`}
         />
       )}

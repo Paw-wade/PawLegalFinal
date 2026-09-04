@@ -101,6 +101,11 @@ const documentSchema = new mongoose.Schema({
     maxlength: 200,
     default: '',
   },
+  compartiment: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'DocumentCompartiment',
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now
