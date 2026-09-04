@@ -50,7 +50,58 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<any>(initialData || {});
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const sigWrapperRef = useRef<HTMLDivElement>(null);
   const isDrawing = useRef(false);
+
+  useEffect(() => {
+    const wrapper = sigWrapperRef.current;
+    const canvas = canvasRef.current;
+    if (!wrapper || !canvas) return;
+
+    const syncSize = () => {
+      const w = wrapper.clientWidth;
+      if (!w) return;
+      canvas.width = w;
+      canvas.height = 120;
+    };
+    syncSize();
+    const ro = new ResizeObserver(syncSize);
+    ro.observe(wrapper);
+
+    const pos = (touch: Touch) => {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (touch.clientX - rect.left) * (canvas.width / rect.width),
+        y: (touch.clientY - rect.top) * (canvas.height / rect.height),
+      };
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      isDrawing.current = true;
+      const ctx = canvas.getContext('2d')!;
+      const { x, y } = pos(e.touches[0]);
+      ctx.beginPath(); ctx.moveTo(x, y);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (!isDrawing.current) return;
+      const ctx = canvas.getContext('2d')!;
+      const { x, y } = pos(e.touches[0]);
+      ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#111111';
+      ctx.lineTo(x, y); ctx.stroke();
+    };
+    const onTouchEnd = (e: TouchEvent) => { e.preventDefault(); isDrawing.current = false; };
+
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+    return () => {
+      ro.disconnect();
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', onTouchEnd);
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -127,10 +178,13 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
       return { ...d, [name]: arr };
     });
 
-  // Signature canvas helpers
-  const getCanvasPos = (e: React.MouseEvent<HTMLCanvasElement> | React.Touch, canvas: HTMLCanvasElement) => {
+  // Signature canvas helpers (souris uniquement - touch est géré nativement dans useEffect)
+  const getCanvasPos = (e: React.MouseEvent<HTMLCanvasElement>, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    return {
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (canvas.height / rect.height),
+    };
   };
   const sigStart = (e: React.MouseEvent<HTMLCanvasElement>) => {
     isDrawing.current = true;
@@ -293,19 +347,18 @@ export function FicheForm({ type, initialData, submitting, onSubmit, onCancel }:
       {schema.signature && (
         <div>
           <p className="mb-1 text-sm font-medium text-foreground">Signature <span className="text-muted-foreground text-xs">(dessinez dans le cadre)</span></p>
-          <div className="relative inline-block">
+          <div ref={sigWrapperRef} className="w-full">
             <canvas
               ref={canvasRef}
-              width={340}
-              height={80}
-              className="rounded border border-dashed border-gray-400 bg-white cursor-crosshair touch-none"
+              className="block w-full rounded border border-dashed border-gray-400 bg-white cursor-crosshair touch-none"
+              style={{ height: '120px' }}
               onMouseDown={sigStart}
               onMouseMove={sigMove}
               onMouseUp={sigEnd}
               onMouseLeave={sigEnd}
             />
           </div>
-          <button type="button" onClick={sigClear} className="ml-3 text-xs text-muted-foreground hover:underline">Effacer</button>
+          <button type="button" onClick={sigClear} className="mt-1 text-xs text-muted-foreground hover:underline">Effacer</button>
         </div>
       )}
 
