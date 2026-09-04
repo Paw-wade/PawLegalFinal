@@ -1,4 +1,4 @@
-const RendezVous = require('../models/RendezVous');
+﻿const RendezVous = require('../models/RendezVous');
 const DocumentRequest = require('../models/DocumentRequest');
 const Dossier = require('../models/Dossier');
 const User = require('../models/User');
@@ -94,7 +94,7 @@ async function checkAppointmentTomorrowReminders() {
         await sendTransactionalEmail({
           to: uMail.email,
           toName: uMail.firstName || '',
-          subject: 'Rappel : rendez-vous demain — Ada Papers',
+          subject: 'Rappel : rendez-vous demain - Ada Papers',
           htmlContent: `<p>Bonjour ${escapeHtml(uMail.firstName || '')},</p><p>${escapeHtml(msgBody)}</p><p><a href="${appUrl}/client/rendez-vous">Mes rendez-vous</a></p>`,
           textContent: `${msgBody}\n${appUrl}/client/rendez-vous`,
         });
@@ -178,7 +178,7 @@ async function checkTarificationPaymentDueReminders() {
     paiementTarificationEffectue: { $ne: true },
     montantTarificationFixe: { $gt: 0 },
   })
-    .select('user titre numero montantTarificationFixe')
+    .select('user titre numero montantTarificationFixe tarificationDevise')
     .limit(200)
     .lean();
 
@@ -204,7 +204,7 @@ async function checkTarificationPaymentDueReminders() {
       user: userId,
       type: 'tarification_payment_reminder',
       titre: 'Rappel : tarification en attente',
-      message: `Un paiement de ${montant} € est attendu pour le dossier « ${titre} ». Consultez la page Tarification.`,
+      message: `Un paiement de ${montant} ${d.tarificationDevise || 'EUR'} est attendu pour le dossier « ${titre} ». Consultez la page Tarification.`,
       lien: '/client/tarification',
       metadata: { dossierId: d._id.toString(), autoWeekly: true },
     });

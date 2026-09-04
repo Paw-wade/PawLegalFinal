@@ -103,7 +103,8 @@ function serializeTarificationInstallmentPlan(echeances) {
   );
 }
 
-function buildTarificationInstallmentPlanMessage(dossierTitle, echeances) {
+function buildTarificationInstallmentPlanMessage(dossierTitle, echeances, devise) {
+  const deviseSuffix = devise === 'XOF' ? 'XOF' : 'EUR';
   const rows = Array.isArray(echeances) ? echeances : [];
   const lines = rows.map((row, index) => {
     const label = String(row?.label || `Échéance ${index + 1}`).trim() || `Échéance ${index + 1}`;
@@ -119,7 +120,7 @@ function buildTarificationInstallmentPlanMessage(dossierTitle, echeances) {
       maximumFractionDigits: 2,
     });
     const paid = String(row?.statut || 'a_regler') === 'reglee';
-    return `- ${label} : ${amountText} EUR le ${dueLabel}${paid ? ' (réglée)' : ''}`;
+    return `- ${label} : ${amountText} ${deviseSuffix} le ${dueLabel}${paid ? ' (réglée)' : ''}`;
   });
 
   return `Pour le dossier « ${dossierTitle} », votre règlement en plusieurs fois a été défini dans la rubrique Tarification :\n${lines.join(
@@ -3188,7 +3189,7 @@ router.post(
           ? `Le règlement de la tarification (${montantFixe.toLocaleString('fr-FR', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2
-            })} EUR) pour le dossier « ${dossierTitle} » est en attente. Finalisez depuis la rubrique Tarification.`
+            })} ${dossier.tarificationDevise || 'EUR'}) pour le dossier « ${dossierTitle} » est en attente. Finalisez depuis la rubrique Tarification.`
           : `Le dossier « ${dossierTitle} » : choix de formule et paiement tarifaire sont attendus. Consultez Tarification dans votre espace client.`;
 
       const notif = await createNotification(
@@ -3328,8 +3329,8 @@ router.post(
         const remainingCount = remaining.length;
         const message =
           remainingCount > 0
-            ? `Ada Papers a enregistré le règlement de la prestation « ${label} » (${amountText} EUR) pour le dossier « ${dossierTitle} ». Il reste ${remainingCount} prestation${remainingCount > 1 ? 's' : ''} à régler.`
-            : `Ada Papers a enregistré le règlement de la prestation « ${label} » (${amountText} EUR) pour le dossier « ${dossierTitle} ». Toutes les prestations de tarification sont désormais réglées.`;
+            ? `Ada Papers a enregistré le règlement de la prestation « ${label} » (${amountText} ${dossier.tarificationDevise || 'EUR'}) pour le dossier « ${dossierTitle} ». Il reste ${remainingCount} prestation${remainingCount > 1 ? 's' : ''} à régler.`
+            : `Ada Papers a enregistré le règlement de la prestation « ${label} » (${amountText} ${dossier.tarificationDevise || 'EUR'}) pour le dossier « ${dossierTitle} ». Toutes les prestations de tarification sont désormais réglées.`;
 
         await createNotification(
           clientUserId,
@@ -5227,7 +5228,7 @@ Cette information est également consultable dans votre espace client, rubrique 
                 maximumFractionDigits: 2
               });
               titreTarif = 'Montant du paiement convenu avec Ada Papers.';
-              messageTarif = `Pour le dossier « ${dossierTitle} », le montant à payer a été fixé à ${amountText} EUR.`;
+              messageTarif = `Pour le dossier « ${dossierTitle} », le montant à payer a été fixé à ${amountText} ${dossierForNotification.tarificationDevise || 'EUR'}.`;
             } else if (prestations.length > 0) {
               const lines = prestations
                 .slice(0, 20)
@@ -5237,7 +5238,7 @@ Cette information est également consultable dans votre espace client, rubrique 
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   });
-                  return `- ${String(p?.label || 'Prestation')} : ${amountText} EUR`;
+                  return `- ${String(p?.label || 'Prestation')} : ${amountText} ${dossierForNotification.tarificationDevise || 'EUR'}`;
                 });
               const total = prestations.reduce((acc, p) => acc + Number(p?.montant || 0), 0);
               const totalText = total.toLocaleString('fr-FR', {
@@ -5247,7 +5248,7 @@ Cette information est également consultable dans votre espace client, rubrique 
               titreTarif = 'Tarification par prestations';
               messageTarif = `Pour le dossier « ${dossierTitle} », plusieurs prestations de tarification ont été définies :\n${lines.join(
                 '\n'
-              )}\n\nTotal: ${totalText} EUR.`;
+              )}\n\nTotal: ${totalText} ${dossierForNotification.tarificationDevise || 'EUR'}.`;
             } else if (dossierForNotification.formuleTarifaire) {
               const formuleLabel =
                 dossierForNotification.formuleTarifaire === 'premium'
@@ -5336,7 +5337,8 @@ Nous vous remercions de réaliser les actions demandées depuis votre espace cli
               dossierForNotification.titre || dossierForNotification.numero || 'votre dossier';
             const messageInstallments = buildTarificationInstallmentPlanMessage(
               dossierTitle,
-              dossierForNotification.tarificationEcheances
+              dossierForNotification.tarificationEcheances,
+              dossierForNotification.tarificationDevise
             );
 
             await createNotification(

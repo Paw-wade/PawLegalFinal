@@ -1,4 +1,4 @@
-const Dossier = require('../models/Dossier');
+﻿const Dossier = require('../models/Dossier');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { sendTransactionalEmail, escapeHtml } = require('./emailNotifications');
@@ -44,7 +44,7 @@ async function checkTarificationInstallmentReminders() {
       fraisExoneres: { $ne: true },
       paiementTarificationEffectue: { $ne: true },
       tarificationEcheances: { $exists: true, $ne: [] },
-    }).select('_id titre numero user clientEmail tarificationEcheances');
+    }).select('_id titre numero user clientEmail tarificationEcheances tarificationDevise');
 
     let sent = 0;
 
@@ -82,7 +82,7 @@ async function checkTarificationInstallmentReminders() {
         });
         const label = String(echeance.label || 'Échéance').trim() || 'Échéance';
         const titre = 'Échéance de tarification dans 3 jours';
-        const message = `Pour le dossier « ${dossierTitle} » (${dossierRef}), l’échéance « ${label} » de ${amountText} EUR arrive le ${dueLabel}.`;
+        const message = `Pour le dossier « ${dossierTitle} » (${dossierRef}), l’échéance « ${label} » de ${amountText} ${dossier.tarificationDevise || ‘EUR’} arrive le ${dueLabel}.`;
 
         await Notification.create({
           user: clientUserId,
@@ -103,7 +103,7 @@ async function checkTarificationInstallmentReminders() {
           try {
             await sendTransactionalEmail({
               to: clientUser.email,
-              subject: 'Rappel : échéance de tarification dans 3 jours — Ada Papers',
+              subject: 'Rappel : échéance de tarification dans 3 jours - Ada Papers',
               html: `<p>Bonjour ${escapeHtml(clientUser.firstName || '')},</p><p>${escapeHtml(message)}</p><p><a href="${process.env.FRONTEND_URL || 'https://adapapers.fr'}/client/tarification">Voir la tarification</a></p>`,
             });
           } catch (mailErr) {
