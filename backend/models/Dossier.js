@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 
 const dossierSchema = new mongoose.Schema({
   user: {
@@ -332,6 +332,12 @@ const dossierSchema = new mongoose.Schema({
       createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
     },
   ],
+  // Devise de tarification : EUR (defaut) ou XOF (Franc CFA).
+  tarificationDevise: {
+    type: String,
+    enum: ["EUR", "XOF"],
+    default: "EUR",
+  },
   // Exonération des frais de tarification (décision admin à l’acceptation ou ultérieurement)
   fraisExoneres: {
     type: Boolean,
@@ -352,7 +358,7 @@ const dossierSchema = new mongoose.Schema({
     maxlength: 500,
     required: false
   },
-  // Clôture / archive (filtres CLÔTURÉS / ARCHIVÉS) — synchronisés avec le statut
+  // Clôture / archive (filtres CLÔTURÉS / ARCHIVÉS) - synchronisés avec le statut
   estCloture: {
     type: Boolean,
     default: false

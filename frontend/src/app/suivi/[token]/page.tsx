@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
@@ -65,6 +65,17 @@ interface SuiviData {
   }>;
   fiches?: Array<{ id: string; typeFiche: string; titre: string; createdAt: string }>;
   pieceRequests?: Array<{ id: string; libelle: string; nature: string; pourPersonne?: string; note?: string; statut: string; validationStatus?: string; validationMotif?: string; documentId?: string | null }>;
+  tarification?: {
+    fraisExoneres: boolean;
+    formuleTarifaire?: 'standard' | 'premium' | null;
+    montantTarificationFixe?: number | null;
+    tarificationPrestations?: Array<{ label: string; montant: number; statut: string }>;
+    paiementTarificationEffectue: boolean;
+    tarificationPaiementEnPlusieursFoisAutorise: boolean;
+    tarificationEcheances?: Array<{ id: string; label?: string | null; montant: number; dateEcheance: string; statut: string }>;
+    tarificationLastNotifySummary?: string | null;
+    tarificationDevise?: string;
+  } | null;
 }
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo (aligné sur le back)
@@ -373,27 +384,53 @@ export default function SuiviDossierPage() {
   };
 
   const handleViewPiece = async (pieceId: string) => {
+    flash(null, null);
     const win = window.open('', '_blank');
     try {
       const res = await dossiersAPI.viewSuiviPiece(token, pieceId);
       const mime = (res.headers as any)['content-type'] || 'application/octet-stream';
-      const url = URL.createObjectURL(new Blob([res.data], { type: mime }));
-      if (win) { win.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
+      const blob = new Blob([res.data], { type: mime });
+      const url = URL.createObjectURL(blob);
+      if (win && !win.closed) {
+        win.location.href = url;
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } else {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'document';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      }
     } catch {
-      if (win) win.close();
+      if (win && !win.closed) win.close();
       flash(null, 'La visualisation a échoué.');
     }
   };
 
-  const handleDownloadFiche = async (ficheId: string, _typeFiche: string) => {
+  const handleDownloadFiche = async (ficheId: string, titre: string) => {
+    flash(null, null);
     const win = window.open('', '_blank');
     try {
       const res = await dossiersAPI.downloadSuiviFichePdf(token, ficheId);
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-      if (win) { win.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      if (win && !win.closed) {
+        win.location.href = url;
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } else {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = titre ? `${titre}.pdf` : 'fiche.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      }
     } catch {
-      if (win) win.close();
-      flash(null, 'La visualisation a échoué.');
+      if (win && !win.closed) win.close();
+      flash(null, 'Le téléchargement du PDF a échoué.');
     }
   };
 
@@ -510,7 +547,7 @@ export default function SuiviDossierPage() {
                 className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90">Remplir</button>
             )}
             {r.statut === 'remplie' && r.ficheId && (
-              <button type="button" onClick={() => handleDownloadFiche(r.ficheId as string, r.typeFiche)}
+              <button type="button" onClick={() => handleDownloadFiche(r.ficheId as string, r.titre)}
                 className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">PDF</button>
             )}
           </div>
@@ -725,6 +762,107 @@ export default function SuiviDossierPage() {
               </div>
             )}
 
+            {/* Tarification */}
+            {data.tarification && (
+              <div className={`rounded-xl border p-5 shadow-sm sm:p-6 ${data.tarification.fraisExoneres ? 'border-green-200 bg-green-50/50' : data.tarification.paiementTarificationEffectue ? 'border-green-200 bg-green-50/50' : 'border-amber-200 bg-amber-50/40'}`}>
+                <h2 className={`mb-1 text-sm font-bold uppercase tracking-wide ${data.tarification.fraisExoneres || data.tarification.paiementTarificationEffectue ? 'text-green-900' : 'text-amber-900'}`}>
+                  Tarification
+                </h2>
+
+                {data.tarification.fraisExoneres ? (
+                  <p className="text-sm text-green-800">Vos frais de traitement sont exoneres. Aucun paiement n'est requis.</p>
+                ) : data.tarification.paiementTarificationEffectue ? (
+                  <p className="text-sm text-green-800">Reglement enregistre par notre equipe. Merci.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {data.tarification.tarificationLastNotifySummary && (
+                      <p className="text-sm text-amber-900/80">{data.tarification.tarificationLastNotifySummary}</p>
+                    )}
+
+                    {/* Montant unique fixe */}
+                    {data.tarification.montantTarificationFixe && !data.tarification.tarificationPrestations?.length && !data.tarification.tarificationEcheances?.length && (
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-amber-900/70">Montant a regler :</span>
+                        <span className="text-base font-bold text-amber-900">{data.tarification.montantTarificationFixe.toLocaleString('fr-FR')} {data.tarification.tarificationDevise || 'EUR'}</span>
+                      </div>
+                    )}
+
+                    {/* Formule tarifaire */}
+                    {data.tarification.formuleTarifaire && !data.tarification.montantTarificationFixe && !data.tarification.tarificationPrestations?.length && (
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-amber-900/70">Formule choisie :</span>
+                        <span className="font-semibold text-amber-900">
+                          {data.tarification.formuleTarifaire === 'premium' ? `Formule Tawfekh - 150 ${data.tarification.tarificationDevise || 'EUR'}` : `Formule Standard - 250 ${data.tarification.tarificationDevise || 'EUR'}`}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Prestations multiples */}
+                    {data.tarification.tarificationPrestations && data.tarification.tarificationPrestations.length > 0 && (
+                      <ul className="space-y-1.5">
+                        {data.tarification.tarificationPrestations.map((p, i) => (
+                          <li key={i} className="flex items-center justify-between gap-2 rounded-lg bg-white/60 px-3 py-2 text-sm">
+                            <span className="text-amber-900">{p.label}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-amber-900">{p.montant.toLocaleString('fr-FR')} {data.tarification?.tarificationDevise || 'EUR'}</span>
+                              {p.statut === 'reglee' && <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-800">Reglee</span>}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {/* Echeances */}
+                    {data.tarification.tarificationEcheances && data.tarification.tarificationEcheances.length > 0 && (
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold text-amber-900/70 uppercase tracking-wide">
+                          {data.tarification.tarificationPaiementEnPlusieursFoisAutorise || data.tarification.tarificationEcheances.length > 1 ? 'Echeances' : 'Echeance'}
+                        </p>
+                        <ul className="space-y-1.5">
+                          {data.tarification.tarificationEcheances.map((e) => (
+                            <li key={e.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/60 px-3 py-2 text-sm">
+                              <div className="min-w-0">
+                                {e.label && <span className="block text-xs text-amber-900/70">{e.label}</span>}
+                                <span className="text-amber-900">{new Date(e.dateEcheance).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                              </div>
+                              <div className="flex flex-none items-center gap-2">
+                                <span className="font-semibold text-amber-900">{e.montant.toLocaleString('fr-FR')} {data.tarification?.tarificationDevise || 'EUR'}</span>
+                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${e.statut === 'reglee' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                                  {e.statut === 'reglee' ? 'Reglee' : 'A regler'}
+                                </span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {data.tarification.tarificationDevise === 'XOF' ? (
+                      <div className="rounded-lg border border-amber-300/60 bg-amber-100/60 px-3 py-2.5 text-xs text-amber-900">
+                        <p className="font-semibold mb-1">Paiement par Wave accepte</p>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-bold tracking-wide">+221 78 145 75 44</span>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText('+221781457544').then(() => flash('Numero copie !', null))}
+                            className="rounded border border-amber-400/60 bg-white/70 px-2 py-0.5 text-[11px] font-semibold text-amber-900 hover:bg-white active:scale-95 transition-transform"
+                            title="Copier le numero"
+                          >
+                            Copier
+                          </button>
+                        </div>
+                        <p className="mt-1 text-amber-900/70">Le paiement en especes est egalement possible directement aupres de notre equipe.</p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-900/60">
+                        Le paiement s'effectue par virement ou en especes directement aupres de notre equipe. Contactez-nous pour toute question.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Fiches de constitution à remplir (création d'entreprise) */}
             {((data.ficheRequests && data.ficheRequests.length > 0) || (data.fiches && data.fiches.length > 0) || (data.pieceRequests && data.pieceRequests.length > 0)) && (
               <div className="rounded-xl border border-teal-200 bg-teal-50/40 p-5 shadow-sm sm:p-6">
@@ -733,7 +871,7 @@ export default function SuiviDossierPage() {
                   Remplissez la fiche demandée par notre équipe ; le document est généré automatiquement et rattaché à votre dossier.
                 </p>
 
-                {/* Récap des documents demandés — bloc unique : dans la carte en écran étroit,
+                {/* Récap des documents demandés - bloc unique : dans la carte en écran étroit,
                     barre latérale fixe à gauche en grand écran (xl+). */}
                 {renderRecapInner() && (
                   <div className="mb-4 rounded-lg border border-teal-200 bg-white p-3 shadow-sm xl:fixed xl:left-3 xl:top-28 xl:z-20 xl:mb-0 xl:max-h-[calc(100vh-8rem)] xl:w-60 xl:overflow-y-auto xl:rounded-xl">
@@ -808,7 +946,7 @@ export default function SuiviDossierPage() {
                       {data.fiches.map((f) => (
                         <li key={f.id} className="flex items-center justify-between gap-3 text-sm">
                           <span className="min-w-0 truncate text-foreground">📄 {f.titre}</span>
-                          <button type="button" onClick={() => handleDownloadFiche(f.id, f.typeFiche)}
+                          <button type="button" onClick={() => handleDownloadFiche(f.id, f.titre)}
                             className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Télécharger</button>
                         </li>
                       ))}

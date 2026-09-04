@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
@@ -181,8 +181,8 @@ const categories = {
   constitution_societe: {
     label: 'Constitution de société',
     types: [
-      { value: 'constitution_societe_senegal', label: 'Constitution — entreprise / société au Sénégal' },
-      { value: 'constitution_societe_france', label: 'Constitution — entreprise / société en France' },
+      { value: 'constitution_societe_senegal', label: 'Constitution - entreprise / société au Sénégal' },
+      { value: 'constitution_societe_france', label: 'Constitution - entreprise / société en France' },
     ]
   },
   autre: {
@@ -339,6 +339,7 @@ export default function AdminDossiersPage() {
   const [tarifPrestations, setTarifPrestations] = useState<
     Array<{ label: string; montant: string; statut: 'a_regler' | 'reglee' }>
   >([]);
+  const [tarifDevise, setTarifDevise] = useState<'EUR' | 'XOF'>('EUR');
   const [tarifSavingMontant, setTarifSavingMontant] = useState(false);
   const [tarifSendingNotify, setTarifSendingNotify] = useState(false);
   const [tarifRetracting, setTarifRetracting] = useState(false);
@@ -403,7 +404,7 @@ export default function AdminDossiersPage() {
 
   const getDossierStatutDisplayLabel = (dossier: any) => {
     const statut = String(dossier?.statut || '').trim();
-    if (!statut) return '—';
+    if (!statut) return '-';
     const effectiveEtapes = getEffectiveEtapes(dossier);
     const matched = effectiveEtapes.find((etape: any) => adminSelectStatutMatchesEtape(statut, etape));
     if (matched?.label) return String(matched.label);
@@ -415,7 +416,7 @@ export default function AdminDossiersPage() {
     return edited.filter((step: any) => !DEFAULT_ADMIN_ETAPES_IDS.has(String(step?.id || '')));
   };
 
-  const maskStrict = (value: string, fallback: string = '—') => {
+  const maskStrict = (value: string, fallback: string = '-') => {
     if (!strictPrivacyMode) return value || fallback;
     return value ? '••••••' : fallback;
   };
@@ -427,7 +428,7 @@ export default function AdminDossiersPage() {
 
   const getDossierClientDisplayName = (dossier: any) => {
     const raw = dossier.user && typeof dossier.user === 'object'
-      ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '—'
+      ? [dossier.user.firstName, dossier.user.lastName].filter(Boolean).join(' ') || dossier.user.email || '-'
       : [dossier.clientPrenom, dossier.clientNom].filter(Boolean).join(' ') || dossier.clientEmail || 'Non renseigné';
     return strictPrivacyMode ? 'Titulaire masqué' : raw;
   };
@@ -446,7 +447,7 @@ export default function AdminDossiersPage() {
       const fullName = [partenaire?.firstName, partenaire?.lastName]
         .filter(Boolean)
         .join(' ')
-        .trim() || partenaire?.email || '—';
+        .trim() || partenaire?.email || '-';
       const nomOrganisme = partenaire?.partenaireInfo?.nomOrganisme || partenaire?.organisationName;
       return { typeLabel, fullName, nomOrganisme };
     });
@@ -454,7 +455,7 @@ export default function AdminDossiersPage() {
 
   const getDossierTransmissionSummary = (partners: Array<{ fullName: string }>) => {
     if (!partners.length) return 'Aucune';
-    const first = partners[0]?.fullName || '—';
+    const first = partners[0]?.fullName || '-';
     return partners.length > 1 ? `${first} +${partners.length - 1}` : first;
   };
 
@@ -1744,6 +1745,7 @@ export default function AdminDossiersPage() {
     setShowTarifModal(dossier);
     setTarifMontantInput(cur > 0 ? String(cur) : '');
     setTarifNotifyMessage('');
+    setTarifDevise((dossier?.tarificationDevise as 'EUR' | 'XOF') || 'EUR');
     setTarifExonerer(!!dossier?.fraisExoneres);
     setTarifExoMotif(dossier?.fraisExoneresMotif ? String(dossier.fraisExoneresMotif) : '');
     setTarifPrestations(
@@ -1761,6 +1763,7 @@ export default function AdminDossiersPage() {
     setShowTarifModal(null);
     setTarifMontantInput('');
     setTarifNotifyMessage('');
+    setTarifDevise('EUR');
     setTarifExonerer(false);
     setTarifExoMotif('');
     setTarifPrestations([]);
@@ -1823,12 +1826,9 @@ export default function AdminDossiersPage() {
       .filter((p) => p.label && p.montant !== null)
       .map((p) => ({ label: p.label, montant: p.montant as number, statut: p.statut }));
     const parsed = parseMontantSaisieFlexible(tarifMontantInput);
-    if (parsed === null) {
+    if (parsed === null && trimmedMontant !== '') {
       setToast({
-        message:
-          trimmedMontant === ''
-            ? 'Saisissez un montant (chiffres). Utilisez 0 pour retirer le montant fixe du dossier.'
-            : 'Format de montant non reconnu. Exemples : 1500, 1500,50, 1 500,50 ou 1.500,50. Utilisez 0 pour retirer le montant fixe.',
+        message: 'Format de montant non reconnu. Exemples : 1500, 1500,50, 1 500,50 ou 1.500,50. Utilisez 0 pour retirer le montant fixe.',
         type: 'error',
       });
       return;
@@ -1836,47 +1836,58 @@ export default function AdminDossiersPage() {
     setTarifSavingMontant(true);
     setError(null);
     try {
-      const { data } = await dossiersAPI.updateDossier(dossierId, {
-        montantTarificationFixe: parsed,
+      const patchPayload: Record<string, unknown> = {
         tarificationPrestations: prestationsPayload,
+        tarificationDevise: tarifDevise,
         skipDossierModificationNotify: true,
-      });
+      };
+      if (parsed !== null) patchPayload.montantTarificationFixe = parsed;
+      const { data } = await dossiersAPI.updateDossier(dossierId, patchPayload);
       if (!data?.success) {
         setToast({
-          message: data?.message || 'Enregistrement du montant refusé par le serveur.',
+          message: data?.message || 'Enregistrement refusé par le serveur.',
           type: 'error',
         });
         return;
       }
       await loadDossiers();
       setToast({
-        message: parsed > 0 ? 'Montant enregistré (aucune notification envoyée).' : 'Montant fixe retiré.',
+        message:
+          parsed === null
+            ? 'Devise enregistrée (aucune notification envoyée).'
+            : parsed > 0
+            ? 'Montant enregistré (aucune notification envoyée).'
+            : 'Montant fixe retiré.',
         type: 'success',
       });
-      if (parsed > 0) {
+      if (parsed !== null && parsed > 0) {
         setTarifExonerer(false);
         setTarifExoMotif('');
-      } else {
+      } else if (parsed === 0) {
         setTarifMontantInput('');
       }
       setShowTarifModal((prev: any) => {
         if (!prev || String(prev._id || prev.id) !== dossierId) return prev;
-        if (parsed > 0) {
+        const withDevise = { ...prev, tarificationDevise: tarifDevise };
+        if (parsed !== null && parsed > 0) {
           return {
-            ...prev,
+            ...withDevise,
             montantTarificationFixe: parsed,
             montantTarificationFixeAt: new Date().toISOString(),
             fraisExoneres: false,
             fraisExoneresMotif: undefined,
           };
         }
-        const {
-          montantTarificationFixe: _rm,
-          montantTarificationFixeAt: _ra,
-          montantTarificationFixeBy: _rb,
-          ...rest
-        } = prev;
-        return rest;
+        if (parsed === 0) {
+          const {
+            montantTarificationFixe: _rm,
+            montantTarificationFixeAt: _ra,
+            montantTarificationFixeBy: _rb,
+            ...rest
+          } = withDevise;
+          return rest;
+        }
+        return withDevise;
       });
     } catch (err: any) {
       const message = err?.response?.data?.message || 'Enregistrement du montant impossible';
@@ -1913,7 +1924,7 @@ export default function AdminDossiersPage() {
     setTarifSendingNotify(true);
     setError(null);
     try {
-      const payload: Record<string, unknown> = { notifyTarificationClient: true };
+      const payload: Record<string, unknown> = { notifyTarificationClient: true, tarificationDevise: tarifDevise };
       if (montantRaw !== '') {
         const p = parseMontantSaisieFlexible(tarifMontantInput);
         if (p !== null) {
@@ -2482,14 +2493,14 @@ export default function AdminDossiersPage() {
             </div>
           ) : (
             <>
-              {/* Agenda : échéances, jalons datés, tâches — 15 jours + retards */}
+              {/* Agenda : échéances, jalons datés, tâches - 15 jours + retards */}
               <div className="mb-3 rounded-lg border border-primary/20 bg-gradient-to-br from-primary/5 to-background px-2.5 py-2 shadow-sm">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <h2 className="text-xs sm:text-sm font-semibold text-foreground leading-tight">
                       Actions à prévoir (15 j + retards)
                     </h2>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate" title="Échéances dossier, jalons, tâches et docs en préparation — hors clôturés / archivés.">
+                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate" title="Échéances dossier, jalons, tâches et docs en préparation - hors clôturés / archivés.">
                       Échéances, jalons, tâches et docs en préparation.
                     </p>
                     <p className="text-[10px] text-muted-foreground">
@@ -3032,7 +3043,7 @@ export default function AdminDossiersPage() {
                                 Réf. {dossier.numero || dossier.numeroDossier}
                               </p>
                             )}
-                            {/* Client / créateur du dossier — toujours visible, même plié (photo profil si inscrit) */}
+                            {/* Client / créateur du dossier - toujours visible, même plié (photo profil si inscrit) */}
                             <button
                               type="button"
                               className="flex items-center gap-2 mt-1 min-w-0 rounded-md px-1 py-0.5 -ml-1 hover:bg-blue-50 transition-colors text-left"
@@ -3071,7 +3082,7 @@ export default function AdminDossiersPage() {
                                 {getDossierClientDisplayName(dossier)}
                               </p>
                             </button>
-                            {/* Toujours visible — une seule ligne, icônes uniquement */}
+                            {/* Toujours visible - une seule ligne, icônes uniquement */}
                             <div className="mt-3 space-y-2">
                               <div className="flex items-center justify-between gap-1 rounded-lg border border-gray-100 bg-gray-50/80 px-1.5 py-1 transition-colors hover:border-primary/35 hover:bg-gray-100/90">
                                 <button
@@ -3201,7 +3212,7 @@ export default function AdminDossiersPage() {
                                     Tâches
                                   </p>
                                   <p className="text-sm font-semibold text-foreground tabular-nums leading-tight">
-                                    {tasksCount > 0 ? tasksCount : '—'}
+                                    {tasksCount > 0 ? tasksCount : '-'}
                                   </p>
                                 </button>
                                 <button
@@ -3235,7 +3246,7 @@ export default function AdminDossiersPage() {
                           {dossier.fraisExoneres ? (
                             <span
                               className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-100 text-emerald-900 border border-emerald-200"
-                              title={dossier.fraisExoneresMotif ? String(dossier.fraisExoneresMotif) : 'Aucune formule requise — frais exonérés'}
+                              title={dossier.fraisExoneresMotif ? String(dossier.fraisExoneresMotif) : 'Aucune formule requise - frais exonérés'}
                             >
                               Frais exonérés
                             </span>
@@ -3248,7 +3259,7 @@ export default function AdminDossiersPage() {
                               }`}
                               title={dossier.tarificationPrestations
                                 .slice(0, 10)
-                                .map((p: any) => `${p?.label || 'Prestation'}: ${formatTarifMontantFr(Number(p?.montant || 0))} EUR`)
+                                .map((p: any) => `${p?.label || 'Prestation'}: ${formatTarifMontantFr(Number(p?.montant || 0))} ${dossier.tarificationDevise || 'EUR'}`)
                                 .join(' | ')}
                             >
                               Prestations : {dossier.tarificationPrestations.length}
@@ -3261,7 +3272,7 @@ export default function AdminDossiersPage() {
                                   : 'bg-blue-100 text-blue-900 border-blue-200'
                               }`}
                               title={[
-                                "Montant fixé par Ada Papers — le client n'a pas à choisir Standard / Premium.",
+                                "Montant fixé par Ada Papers - le client n'a pas à choisir Standard / Premium.",
                                 dossier.montantTarificationFixeAt
                                   ? `Dernière fixation / modification : ${new Date(dossier.montantTarificationFixeAt).toLocaleString('fr-FR')}.`
                                   : '',
@@ -3273,7 +3284,7 @@ export default function AdminDossiersPage() {
                                 .join(' ')}
                             >
                               Montant :{' '}
-                              {formatTarifMontantFr(normalizeMontantTarifField(dossier.montantTarificationFixe))} EUR
+                              {formatTarifMontantFr(normalizeMontantTarifField(dossier.montantTarificationFixe))} {dossier.tarificationDevise || 'EUR'}
                             </span>
                           ) : dossier.formuleTarifaire ? (
                             <span
@@ -3345,7 +3356,7 @@ export default function AdminDossiersPage() {
                     {/* Contenu détaillé (affiché uniquement si le dossier est déplié) */}
                     {isExpanded && (
                       <>
-                    {/* Client — informations affichées dans la vue simplifiée (sans redirection vers Utilisateurs) */}
+                    {/* Client - informations affichées dans la vue simplifiée (sans redirection vers Utilisateurs) */}
                     <div className="mb-4 pb-4 border-b border-gray-200 rounded-md">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Client</p>
                       <div className="flex items-center gap-3">
@@ -3372,14 +3383,14 @@ export default function AdminDossiersPage() {
                               <p className="font-semibold text-sm text-foreground truncate">
                                 {strictPrivacyMode ? 'Titulaire masqué' : `${dossier.user.firstName} ${dossier.user.lastName}`}
                               </p>
-                              <p className="text-xs text-muted-foreground truncate">{maskStrict(dossier.user.email || '', '—')}</p>
+                              <p className="text-xs text-muted-foreground truncate">{maskStrict(dossier.user.email || '', '-')}</p>
                             </>
                           ) : (
                             <>
                               <p className="font-semibold text-sm text-foreground truncate">
                                 {strictPrivacyMode ? 'Titulaire masqué' : `${dossier.clientPrenom} ${dossier.clientNom}`}
                               </p>
-                              <p className="text-xs text-muted-foreground truncate">{maskStrict(dossier.clientEmail || '', '—')}</p>
+                              <p className="text-xs text-muted-foreground truncate">{maskStrict(dossier.clientEmail || '', '-')}</p>
                               <span className="text-xs text-amber-600">(Non inscrit)</span>
                             </>
                           )}
@@ -3486,7 +3497,7 @@ export default function AdminDossiersPage() {
                       return null;
                     })()}
 
-                    {/* Documents en préparation — brouillons collaboratifs + brouillons Ada Papers (éditeur riche, export .docx) */}
+                    {/* Documents en préparation - brouillons collaboratifs + brouillons Ada Papers (éditeur riche, export .docx) */}
                     <div id={`admin-dossier-${dossierId}-section-drafts`} className="mb-3 scroll-mt-24">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                         Documents en préparation
@@ -3549,8 +3560,8 @@ export default function AdminDossiersPage() {
                                   {d.createdBy
                                     ? `${d.createdBy.firstName || ''} ${d.createdBy.lastName || ''}`.trim() ||
                                       d.createdBy.role ||
-                                      '—'
-                                    : '—'}
+                                      '-'
+                                    : '-'}
                                   {dueLabel ? (
                                     <>
                                       {' '}
@@ -3572,7 +3583,7 @@ export default function AdminDossiersPage() {
                                         )
                                         .filter(Boolean)
                                         .join(', ')
-                                    ) || '—'}
+                                    ) || '-'}
                                   </p>
                                 )}
                               </Link>
@@ -3603,7 +3614,7 @@ export default function AdminDossiersPage() {
                       )}
                     </div>
 
-                    {/* Informations du dossier — version compacte */}
+                    {/* Informations du dossier - version compacte */}
                     <div className="mb-3 pb-3 border-b border-gray-200">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span>
@@ -3625,7 +3636,7 @@ export default function AdminDossiersPage() {
                           <span className="text-foreground">
                             {dossier.assignedTo
                               ? `${dossier.assignedTo.firstName || ""} ${dossier.assignedTo.lastName || ""}`.trim() ||
-                                (dossier.assignedTo.email ?? "—")
+                                (dossier.assignedTo.email ?? "-")
                               : "Non assigné"}
                           </span>
                         </span>
@@ -4002,7 +4013,7 @@ export default function AdminDossiersPage() {
                                     </span>
                                   )}
                                   {pendingRequests.length === 0 && receivedPiecesCount === 0 && (
-                                    <span className="text-muted-foreground">—</span>
+                                    <span className="text-muted-foreground">-</span>
                                   )}
                                 </p>
                               </div>
@@ -4783,9 +4794,9 @@ export default function AdminDossiersPage() {
               <p className="text-sm"><span className="font-medium text-muted-foreground">Email :</span> <span className="text-foreground break-all">{email || 'Non renseigné'}</span></p>
               <p className="text-sm"><span className="font-medium text-muted-foreground">Téléphone :</span> <span className="text-foreground">{phone || 'Non renseigné'}</span></p>
               <p className="text-sm"><span className="font-medium text-muted-foreground">Type :</span> <span className="text-foreground">{isRegisteredUser ? 'Compte inscrit' : 'Client non inscrit'}</span></p>
-              <p className="text-sm"><span className="font-medium text-muted-foreground">Rôle :</span> <span className="text-foreground">{role || '—'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Rôle :</span> <span className="text-foreground">{role || '-'}</span></p>
               <p className="text-sm"><span className="font-medium text-muted-foreground">Compte :</span> <span className="text-foreground">{isActive ? 'Actif' : 'Inactif'}</span></p>
-              <p className="text-sm"><span className="font-medium text-muted-foreground">Créé le :</span> <span className="text-foreground">{createdAt ? new Date(createdAt).toLocaleDateString('fr-FR') : '—'}</span></p>
+              <p className="text-sm"><span className="font-medium text-muted-foreground">Créé le :</span> <span className="text-foreground">{createdAt ? new Date(createdAt).toLocaleDateString('fr-FR') : '-'}</span></p>
               <p className="text-sm"><span className="font-medium text-muted-foreground">Date de naissance :</span> <span className="text-foreground">{dateNaissance ? new Date(dateNaissance).toLocaleDateString('fr-FR') : 'Non renseigné'}</span></p>
               <p className="text-sm"><span className="font-medium text-muted-foreground">Nationalité :</span> <span className="text-foreground">{nationalite || 'Non renseigné'}</span></p>
               <p className="text-sm"><span className="font-medium text-muted-foreground">Adresse :</span> <span className="text-foreground">{adressePostale || 'Non renseignée'}</span></p>
@@ -4888,19 +4899,33 @@ export default function AdminDossiersPage() {
         </div>
       )}
 
-      {/* Modal Ada Papers : tarification — montant fixe (prioritaire sur le choix de formule client) + notification */}
+      {/* Modal Ada Papers : tarification - montant fixe (prioritaire sur le choix de formule client) + notification */}
       {showTarifModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Tarification — {showTarifModal.titre || showTarifModal.numero || 'Dossier'}</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Tarification - {showTarifModal.titre || showTarifModal.numero || 'Dossier'}</h3>
               <p className="text-sm text-muted-foreground mt-1">
                 Un <strong>montant fixe</strong> enregistré par Ada Papers <strong>remplace</strong> le choix entre les deux formules côté client. Vous pouvez l’enregistrer avec notification au client en <strong>un seul clic</strong>, ou sans notification.
               </p>
             </div>
 
             <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Montant fixe Ada Papers (EUR)</p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Montant fixe Ada Papers</p>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="tarif-devise" className="text-xs text-muted-foreground whitespace-nowrap">Devise</label>
+                  <select
+                    id="tarif-devise"
+                    value={tarifDevise}
+                    onChange={(e) => setTarifDevise(e.target.value as 'EUR' | 'XOF')}
+                    className="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-semibold"
+                  >
+                    <option value="EUR">EUR - Euro</option>
+                    <option value="XOF">XOF - Franc CFA</option>
+                  </select>
+                </div>
+              </div>
               <p className="text-[11px] text-muted-foreground">
                 <strong>Champ rempli</strong> : ce montant est envoyé au serveur (notification ou enregistrement silencieux).{' '}
                 <strong>Champ vide</strong> : le montant en base n’est pas modifié lors de la notification. Saisissez{' '}
@@ -4910,7 +4935,7 @@ export default function AdminDossiersPage() {
                 Montant actuellement en base :{' '}
                 <span className="font-semibold text-gray-900 tabular-nums">
                   {normalizeMontantTarifField(showTarifModal.montantTarificationFixe) > 0
-                    ? `${formatTarifMontantFr(normalizeMontantTarifField(showTarifModal.montantTarificationFixe))} EUR`
+                    ? `${formatTarifMontantFr(normalizeMontantTarifField(showTarifModal.montantTarificationFixe))} ${showTarifModal.tarificationDevise || 'EUR'}`
                     : 'aucun'}
                 </span>
               </div>
@@ -4921,7 +4946,7 @@ export default function AdminDossiersPage() {
                 id="tarif-montant"
                 value={tarifMontantInput}
                 onChange={(e) => setTarifMontantInput(e.target.value)}
-                placeholder="Ex. 1500 — vide = ne pas changer — 0 = retirer"
+                placeholder="Ex. 1500 - vide = ne pas changer - 0 = retirer"
                 className="w-full font-mono text-base"
               />
               {(() => {
@@ -4931,13 +4956,13 @@ export default function AdminDossiersPage() {
                 if (p === null) {
                   return (
                     <p className="text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1.5">
-                      Montant illisible — corrigez la saisie.
+                      Montant illisible - corrigez la saisie.
                     </p>
                   );
                 }
                 return (
                   <p className="text-sm font-semibold text-gray-900 bg-emerald-50 border border-emerald-200 rounded px-3 py-2 tabular-nums">
-                    Sera enregistré : <span className="text-emerald-900">{formatTarifMontantFr(p)} EUR</span>
+                    Sera enregistré : <span className="text-emerald-900">{formatTarifMontantFr(p)} {tarifDevise}</span>
                     {p === 0 ? ' (montant fixe retiré du dossier)' : null}
                   </p>
                 );
@@ -4975,7 +5000,7 @@ export default function AdminDossiersPage() {
                   const reglees = tarifPrestations.filter((p) => p.statut === 'reglee').length;
                   return (
                     <div className="rounded border border-blue-200 bg-white px-2 py-1.5 text-[11px] text-blue-900">
-                      Total prestations: <strong>{formatTarifMontantFr(total)} EUR</strong> · Réglées: {reglees}/
+                      Total prestations: <strong>{formatTarifMontantFr(total)} {tarifDevise}</strong> · Réglées: {reglees}/
                       {tarifPrestations.length}
                     </div>
                   );
@@ -5615,7 +5640,7 @@ export default function AdminDossiersPage() {
           <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-6 shadow-2xl">
             <h3 className="text-lg font-semibold">Inviter un tiers à déposer un document</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Dossier : {guestInviteModalDossier.titre || guestInviteModalDossier.numero || '—'}
+              Dossier : {guestInviteModalDossier.titre || guestInviteModalDossier.numero || '-'}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
               Lien valable 7 jours, plusieurs dépôts possibles. Les fichiers seront confidentiels pour le client tant que vous n’autoriserez pas l’accès.

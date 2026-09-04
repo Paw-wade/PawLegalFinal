@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const crypto = require('crypto');
 const multer = require('multer');
 const path = require('path');
@@ -207,7 +207,7 @@ router.post('/public/:token', (req, res, next) => {
       });
     } catch (uploadErr) {
       removeLocalUploadTempFile(req.file);
-      console.error('Échec upload distant (invité) — document non créé:', uploadErr.message);
+      console.error('Échec upload distant (invité) - document non créé:', uploadErr.message);
       return res.status(503).json({
         success: false,
         message:
@@ -228,7 +228,7 @@ router.post('/public/:token', (req, res, next) => {
       dossierId: invite.dossierId,
       cabinetId: cabinet?._id || null,
       visibleToClient: false,
-      confidentialReason: 'Document transmis par un tiers via lien sécurisé — en attente de validation par le cabinet.',
+      confidentialReason: 'Document transmis par un tiers via lien sécurisé - en attente de validation par le cabinet.',
       uploadedViaGuestLink: true,
       guestUploadInviteId: invite._id,
       guestContributorName: guestName,
@@ -365,6 +365,31 @@ router.get('/suivi/:token', async (req, res) => {
           .map((c) => ({ libelle: c.libelle || c.nom || '', valeur: String(c.valeur) }))
       : [];
 
+    const tarification = (() => {
+      if (dossier.fraisExoneres) return { fraisExoneres: true };
+      const montantFixe = typeof dossier.montantTarificationFixe === 'number' && dossier.montantTarificationFixe > 0
+        ? dossier.montantTarificationFixe : null;
+      const prestations = (Array.isArray(dossier.tarificationPrestations) ? dossier.tarificationPrestations : [])
+        .filter((p) => p && p.montant > 0)
+        .map((p) => ({ label: String(p.label || ''), montant: Number(p.montant), statut: p.statut || 'a_regler' }));
+      const echeances = (Array.isArray(dossier.tarificationEcheances) ? dossier.tarificationEcheances : [])
+        .filter((e) => e && e.montant > 0 && e.dateEcheance)
+        .map((e) => ({ id: String(e._id), label: e.label || null, montant: Number(e.montant), dateEcheance: e.dateEcheance, statut: e.statut || 'a_regler' }));
+      const configured = montantFixe || prestations.length > 0 || dossier.formuleTarifaire || echeances.length > 0;
+      if (!configured) return null;
+      return {
+        fraisExoneres: false,
+        formuleTarifaire: dossier.formuleTarifaire || null,
+        montantTarificationFixe: montantFixe,
+        tarificationPrestations: prestations,
+        paiementTarificationEffectue: !!dossier.paiementTarificationEffectue,
+        tarificationPaiementEnPlusieursFoisAutorise: !!dossier.tarificationPaiementEnPlusieursFoisAutorise,
+        tarificationEcheances: echeances,
+        tarificationLastNotifySummary: dossier.tarificationLastNotifySummary || null,
+        tarificationDevise: dossier.tarificationDevise || 'EUR',
+      };
+    })();
+
     return res.json({
       success: true,
       dossier: {
@@ -425,6 +450,7 @@ router.get('/suivi/:token', async (req, res) => {
       })),
       fiches: fichesRemplies.map((f) => ({ id: String(f._id), typeFiche: f.typeFiche, titre: f.titre || '', createdAt: f.createdAt })),
       pieceRequests: pieceRequestsList.map((p) => ({ id: String(p._id), libelle: p.libelle, nature: p.nature, pourPersonne: p.pourPersonne || '', note: p.note || '', statut: p.statut, validationStatus: p.validationStatus || 'en_attente', validationMotif: p.validationMotif || '', documentId: p.document ? String(p.document) : null })),
+      tarification,
     });
   } catch (err) {
     console.error('[suivi] GET:', err?.message || err);
@@ -489,7 +515,7 @@ router.post('/suivi/:token/documents', (req, res, next) => {
       dossierId: dossier._id,
       cabinetId: cabinet?._id || null,
       visibleToClient: false,
-      confidentialReason: 'Document déposé par le demandeur via le lien de suivi — en attente de validation.',
+      confidentialReason: 'Document déposé par le demandeur via le lien de suivi - en attente de validation.',
       uploadedViaGuestLink: true,
       guestContributorName: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim().slice(0, 200),
     });
@@ -569,7 +595,7 @@ router.post('/suivi/:token/message', async (req, res) => {
       name: auteur,
       email: contactEmail || 'non-renseigne@adapapers.fr',
       phone: contactTel,
-      subject: `Message via lien de suivi — ${dossierTitle}`.slice(0, 200),
+      subject: `Message via lien de suivi - ${dossierTitle}`.slice(0, 200),
       message: contenu,
     });
     try {
@@ -599,10 +625,10 @@ router.post('/suivi/:token/message', async (req, res) => {
           toName: 'Équipe Ada Papers',
           variables: { auteur, email: contactEmail, telephone: contactTel, titre: dossierTitle, contenu, dossierUrl },
           fallback: {
-            subject: `Message du demandeur — ${dossierTitle}`,
+            subject: `Message du demandeur - ${dossierTitle}`,
             htmlContent: `<p>${escapeHtml(auteur)} a envoyé un message via le lien de suivi du dossier <strong>${escapeHtml(dossierTitle)}</strong> :</p>
 <blockquote style="border-left:3px solid #cbd5e1;padding-left:12px;color:#334155">${escapeHtml(contenu).replace(/\n/g, '<br>')}</blockquote>
-<p><strong>Contact :</strong> ${escapeHtml(contactEmail || '—')}${contactTel ? ` · ${escapeHtml(contactTel)}` : ''}</p>
+<p><strong>Contact :</strong> ${escapeHtml(contactEmail || '-')}${contactTel ? ` · ${escapeHtml(contactTel)}` : ''}</p>
 <p>Ouvrir le dossier : <a href="${escapeHtml(dossierUrl)}">${escapeHtml(dossierUrl)}</a></p>`,
             textContent: `${auteur} a envoyé un message via le lien de suivi du dossier « ${dossierTitle} » :\n\n${contenu}\n\n${coordTxt}\n\nDossier : ${dossierUrl}`,
           },
@@ -699,7 +725,7 @@ router.post('/suivi/:token/recommandations/:recId/decision', async (req, res) =>
           toName: 'Équipe Ada Papers',
           variables: { titre, decision: verbe, dossierUrl },
           fallback: {
-            subject: `Recommandation ${verbe}e — ${titre}`,
+            subject: `Recommandation ${verbe}e - ${titre}`,
             htmlContent: `<p>Le demandeur a <strong>${escapeHtml(verbe)}</strong> une recommandation sur le dossier « ${escapeHtml(titre)} » via son lien de suivi.</p><p>Ouvrir le dossier : <a href="${escapeHtml(dossierUrl)}">${escapeHtml(dossierUrl)}</a></p>`,
             textContent: `Le demandeur a ${verbe} une recommandation sur le dossier « ${titre} » via son lien de suivi.\nDossier : ${dossierUrl}`,
           },
@@ -782,7 +808,7 @@ router.post('/suivi/:token/fiche-requests/:reqId/remplir', async (req, res) => {
           templateCode: 'dossier_fiche_remplie', eventKey: 'dossier_fiche_remplie', to: adminEmail, toName: 'Équipe Ada Papers',
           variables: { titre, fiche: fiche.titre, dossierUrl },
           fallback: {
-            subject: `Fiche remplie — ${titre}`,
+            subject: `Fiche remplie - ${titre}`,
             htmlContent: `<p>Le demandeur a rempli la fiche <strong>${escapeHtml(fiche.titre)}</strong> sur le dossier « ${escapeHtml(titre)} » via son lien de suivi.</p><p>Ouvrir le dossier : <a href="${escapeHtml(dossierUrl)}">${escapeHtml(dossierUrl)}</a></p>`,
             textContent: `Le demandeur a rempli la fiche « ${fiche.titre} » sur le dossier « ${titre} ».\nDossier : ${dossierUrl}`,
           },
@@ -812,7 +838,7 @@ router.post('/suivi/:token/etat-civil-request', async (req, res) => {
     const nom = String((req.body && req.body.pourPersonne) || '').trim();
     await FicheRequest.create({
       dossier: dossier._id, typeFiche: 'etat_civil',
-      titre: nom ? `${ec.titre} — ${nom}` : ec.titre, pourPersonne: nom,
+      titre: nom ? `${ec.titre} - ${nom}` : ec.titre, pourPersonne: nom,
     });
     return res.status(201).json({ success: true, message: 'Fiche d\'état civil ajoutée.' });
   } catch (err) {
@@ -973,7 +999,7 @@ router.get('/suivi/:token/recap.pdf', async (req, res) => {
     doc.moveDown(0.5);
     doc.fontSize(10).fillColor('#333');
     if (dossier.numero) doc.text(`Numéro de dossier : ${dossier.numero}`);
-    doc.text(`Statut actuel : ${dossier.statut || '—'}`);
+    doc.text(`Statut actuel : ${dossier.statut || '-'}`);
     doc.text(`Demande déposée le : ${fmt(dossier.createdAt)}`);
     if (dossier.clientPrenom || dossier.clientNom) doc.text(`Demandeur : ${`${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim()}`);
     doc.moveDown(1);
@@ -1001,7 +1027,7 @@ router.get('/suivi/:token/recap.pdf', async (req, res) => {
       doc.fontSize(10).fillColor('#333');
       const statutLabel = (s) => (s === 'acceptee' ? 'Acceptée' : s === 'refusee' ? 'Refusée' : 'En attente');
       recos.forEach((r, i) => {
-        doc.text(`• Recommandation ${i + 1} — ${statutLabel(r.statut)}`);
+        doc.text(`• Recommandation ${i + 1} - ${statutLabel(r.statut)}`);
         if (r.formeJuridiqueRecommandee) doc.text(`   Forme juridique conseillée : ${r.formeJuridiqueRecommandee}`);
         if (r.demarcheRecommandee) doc.text(`   Démarche : ${r.demarcheRecommandee}`);
       });
@@ -1100,7 +1126,7 @@ router.post(
         to: invite.recipientEmail,
         variables: emailVariables,
         fallback: {
-          subject: 'Dépôt de document — Ada Papers',
+          subject: 'Dépôt de document - Ada Papers',
           htmlContent:
             '<p>Bonjour,</p><p>Ada Papers vous invite à transmettre un document pour le dossier <strong>{{dossierTitle}}</strong>.</p>{{cabinetMessageBlock}}<p>Utilisez le lien ci-dessous pour déposer votre fichier (valable 7 jours, plusieurs dépôts possibles) :</p><p><a href="{{depotUrl}}">{{depotUrl}}</a></p><p>Ce lien expire le {{expiryLabel}}.</p><p>Merci de ne pas transférer ce lien à d’autres personnes.</p>',
           textContent:

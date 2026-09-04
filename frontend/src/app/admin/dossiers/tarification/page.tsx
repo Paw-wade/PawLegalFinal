@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -83,8 +83,12 @@ function fold(value: unknown) {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-function formatEuro(value: number) {
+function formatMontant(value: number) {
   return value.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function getDevise(dossier: any): string {
+  return dossier?.tarificationDevise || 'EUR';
 }
 
 function getPrestationsARegler(dossier: any) {
@@ -847,7 +851,7 @@ export default function AdminDossiersTarificationPage() {
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1 font-medium text-foreground">
                 <CreditCard className="h-3.5 w-3.5" aria-hidden />
-                {dueAmount > 0 ? `${formatEuro(dueAmount)} EUR dus` : 'Aucun montant dû'}
+                {dueAmount > 0 ? `${formatMontant(dueAmount)} ${getDevise(dossier)} dus` : 'Aucun montant dû'}
               </span>
               {dossier?.tarificationNotificationSentAt ? (
                 <span className="inline-flex items-center gap-1">
@@ -861,10 +865,10 @@ export default function AdminDossiersTarificationPage() {
               ) : null}
             </div>
             {fixedAmount > 0 ? (
-              <p className="text-xs text-muted-foreground">Montant fixé : {formatEuro(fixedAmount)} EUR</p>
+              <p className="text-xs text-muted-foreground">Montant fixé : {formatMontant(fixedAmount)} {getDevise(dossier)}</p>
             ) : dossier?.formuleTarifaire ? (
               <p className="text-xs text-muted-foreground">
-                Formule : {getFormuleTarificationDisplay(dossier)?.label || '—'}
+                Formule : {getFormuleTarificationDisplay(dossier)?.label || '-'}
               </p>
             ) : dossier?.tarificationNotificationSentAt ? (
               <p className="text-xs text-muted-foreground">En attente de réponse client sur la tarification.</p>
@@ -968,7 +972,7 @@ export default function AdminDossiersTarificationPage() {
               onClick={() => toggleDossierExpanded(id)}
             >
               <span>
-                Prestations à régler ({prestationsARegler.length}) · {formatEuro(totalPrestationsARegler)} EUR
+                Prestations à régler ({prestationsARegler.length}) · {formatMontant(totalPrestationsARegler)} {getDevise(dossier)}
               </span>
               <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden />
             </button>
@@ -982,7 +986,7 @@ export default function AdminDossiersTarificationPage() {
                   return (
                     <div key={prestationId || `${label}-${idx}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                       <span>
-                        {label} · {formatEuro(Number.isFinite(m) ? m : 0)} EUR
+                        {label} · {formatMontant(Number.isFinite(m) ? m : 0)} {getDevise(dossier)}
                       </span>
                       <button
                         type="button"
@@ -1046,14 +1050,14 @@ export default function AdminDossiersTarificationPage() {
                       <p className="text-xs text-muted-foreground truncate max-w-xs">{dossier?.titre || 'Sans titre'}</p>
                     </td>
                     <td className="px-4 py-3 align-top">{renderBadges(dossier)}</td>
-                    <td className="px-4 py-3 align-top font-medium">{dueAmount > 0 ? `${formatEuro(dueAmount)} EUR` : '—'}</td>
+                    <td className="px-4 py-3 align-top font-medium">{dueAmount > 0 ? `${formatMontant(dueAmount)} ${getDevise(dossier)}` : '-'}</td>
                     <td className="px-4 py-3 align-top text-xs text-muted-foreground">
                       {dossier?.tarificationNotificationSentAt
                         ? new Date(dossier.tarificationNotificationSentAt).toLocaleString('fr-FR', {
                             dateStyle: 'short',
                             timeStyle: 'short',
                           })
-                        : '—'}
+                        : '-'}
                     </td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex flex-wrap justify-end gap-1.5">
@@ -1129,7 +1133,7 @@ export default function AdminDossiersTarificationPage() {
             [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || user?.email || 'Utilisateur';
           const amountText =
             req?.amount != null && Number.isFinite(Number(req.amount))
-              ? `${formatEuro(Number(req.amount))} EUR`
+              ? `${formatMontant(Number(req.amount))} EUR`
               : 'Montant non précisé';
 
           return (
@@ -1513,7 +1517,7 @@ export default function AdminDossiersTarificationPage() {
                     </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {getClientName(installmentModalDossier)} · montant tarifaire{' '}
-                  {formatEuro(getTarificationReferenceAmount(installmentModalDossier))} EUR. Le client est notifié 3
+                  {formatMontant(getTarificationReferenceAmount(installmentModalDossier))} {getDevise(installmentModalDossier)}. Le client est notifié 3
                   jours avant chaque échéance.
                 </p>
               </div>
@@ -1562,7 +1566,7 @@ export default function AdminDossiersTarificationPage() {
                     </div>
                     <div className="space-y-1">
                       <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Montant (EUR)
+                        Montant ({getDevise(installmentModalDossier)})
                       </label>
                       <input
                         type="text"

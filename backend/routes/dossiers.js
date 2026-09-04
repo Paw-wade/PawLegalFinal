@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const Dossier = require('../models/Dossier');
@@ -16,7 +16,7 @@ const { sendSMS, formatPhoneNumber } = require('../sendSMS');
 const router = express.Router();
 const MIN_REMINDER_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48h
 
-/** Montant fixe Ada Papers (number, chaîne, Decimal128, etc.) — même logique que le front. */
+/** Montant fixe Ada Papers (number, chaîne, Decimal128, etc.) - même logique que le front. */
 function normalizeMontantTarificationFixe(v) {
   if (v == null || v === '') return 0;
   if (typeof v === 'number' && Number.isFinite(v)) return Math.max(0, v);
@@ -234,21 +234,21 @@ const handlePublicDemandeNotifications = async ({ dossier, existingUser, clientN
         toName: 'Équipe Ada Papers',
         variables: { fullName, email, telephone: clientTelephone || '', titre, categorie: dossier.categorie || '', adminUrl },
         fallback: {
-          subject: `Nouvelle demande à valider — ${titre}`,
+          subject: `Nouvelle demande à valider - ${titre}`,
           htmlContent: `<p>Une nouvelle demande a été déposée depuis le site :</p>
 <ul>
 <li><strong>Demandeur :</strong> ${escapeHtml(fullName)}</li>
 <li><strong>Email :</strong> ${escapeHtml(email)}</li>
-<li><strong>Téléphone :</strong> ${escapeHtml(clientTelephone || '—')}</li>
-<li><strong>Type :</strong> ${escapeHtml(dossier.categorie || '—')}</li>
+<li><strong>Téléphone :</strong> ${escapeHtml(clientTelephone || '-')}</li>
+<li><strong>Type :</strong> ${escapeHtml(dossier.categorie || '-')}</li>
 <li><strong>Objet :</strong> ${escapeHtml(titre)}</li>
 </ul>
 <p>Elle est en attente de validation dans le back-office : <a href="${escapeHtml(adminUrl)}">${escapeHtml(adminUrl)}</a></p>`,
           textContent: `Nouvelle demande déposée depuis le site.
 Demandeur : ${fullName}
 Email : ${email}
-Téléphone : ${clientTelephone || '—'}
-Type : ${dossier.categorie || '—'}
+Téléphone : ${clientTelephone || '-'}
+Type : ${dossier.categorie || '-'}
 Objet : ${titre}
 À valider : ${adminUrl}`,
         },
@@ -281,7 +281,7 @@ Objet : ${titre}
           toName: fullName,
           variables: { prenom, titre, espaceUrl: `${frontUrl}/client/dossiers` },
           fallback: {
-            subject: 'Votre demande a bien été prise en compte — Ada Papers',
+            subject: 'Votre demande a bien été prise en compte - Ada Papers',
             htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Votre demande « ${escapeHtml(titre)} » a bien été <strong>prise en compte</strong>. Notre équipe vous contactera dans les plus brefs délais.</p><p>Vous pouvez la suivre depuis votre espace : <a href="${escapeHtml(frontUrl)}/client/dossiers">${escapeHtml(frontUrl)}/client/dossiers</a></p>`,
             textContent: `Bonjour ${prenom || ''},
 
@@ -302,7 +302,7 @@ Suivi : ${frontUrl}/client/dossiers`,
         toName: fullName,
         variables: { prenom, titre, signupUrl, email },
         fallback: {
-          subject: 'Votre demande a bien été prise en compte — Ada Papers',
+          subject: 'Votre demande a bien été prise en compte - Ada Papers',
           htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Votre demande « ${escapeHtml(titre)} » a bien été <strong>prise en compte</strong>. Notre équipe vous contactera dans les plus brefs délais.</p>${suiviUrl ? `<p><strong>Suivez l'avancement de votre dossier</strong> et déposez les documents demandés directement depuis votre lien de suivi :</p><p><a href="${escapeHtml(suiviUrl)}" style="display:inline-block;padding:10px 18px;background:#f97316;color:#fff;border-radius:6px;text-decoration:none;">Suivre mon dossier</a></p>` : ''}<p>Vous pouvez aussi créer un compte avec cette même adresse e-mail pour un suivi permanent : <a href="${escapeHtml(signupUrl)}">créer mon compte</a>.</p>`,
           textContent: `Bonjour ${prenom || ''},
 
@@ -371,7 +371,7 @@ function statutLabelForDossier(dossier, statut) {
 const notifyDossierModification = async (dossier, modifier, changes = {}) => {
   try {
     if (changes.skipAllPingAndSms === true) {
-      console.log('⏭️ notifyDossierModification ignorée (montant tarification — aucun ping / email).');
+      console.log('⏭️ notifyDossierModification ignorée (montant tarification - aucun ping / email).');
       return;
     }
     const modifierName = `${modifier.firstName} ${modifier.lastName}`;
@@ -449,7 +449,7 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
         );
       }
       
-      // Email au client uniquement (priorité email — pas de SMS en doublon)
+      // Email au client uniquement (priorité email - pas de SMS en doublon)
       if (
         userInfo.role === 'client' &&
         !skipClientPing &&
@@ -462,7 +462,7 @@ const notifyDossierModification = async (dossier, modifier, changes = {}) => {
           await sendTransactionalEmail({
             to: userInfo.user.email,
             toName: `${userInfo.user.firstName || ''} ${userInfo.user.lastName || ''}`.trim(),
-            subject: 'Votre dossier a été mis à jour — Ada Papers',
+            subject: 'Votre dossier a été mis à jour - Ada Papers',
             htmlContent: `<p>Bonjour,</p><p>Nous vous informons qu’une mise à jour a été effectuée sur votre dossier.</p><p>${escapeHtml(notificationMessage)}</p><p>Nous vous invitons à consulter votre espace client pour prendre connaissance des informations détaillées.</p>`,
             textContent: `Bonjour,
 
@@ -565,7 +565,7 @@ router.post(
         }
       }
 
-      // Réponses structurées du formulaire (rubriques) — séparées de la description libre.
+      // Réponses structurées du formulaire (rubriques) - séparées de la description libre.
       const champsFormulaireClean = Array.isArray(req.body.champsFormulaire)
         ? req.body.champsFormulaire
             .filter((c) => c && c.valeur !== undefined && c.valeur !== null && String(c.valeur).trim() !== '')
@@ -688,7 +688,7 @@ router.post(
             toName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
             variables: { prenom: user.firstName || '', titre: dossier.titre || 'votre dossier', suiviUrl, espaceUrl: `${frontUrl}/client/dossiers` },
             fallback: {
-              subject: 'Votre dossier a bien été créé — Ada Papers',
+              subject: 'Votre dossier a bien été créé - Ada Papers',
               htmlContent: `<p>Bonjour ${escapeHtml(user.firstName || '')},</p><p>Votre dossier « ${escapeHtml(dossier.titre || '')} » a bien été créé.</p><p>Vous pouvez suivre son évolution :</p><ul><li>depuis votre <a href="${escapeHtml(frontUrl)}/client/dossiers">espace personnel</a> ;</li>${suiviUrl ? `<li>ou via votre <a href="${escapeHtml(suiviUrl)}">lien de suivi</a>.</li>` : ''}</ul>`,
               textContent: `Bonjour ${user.firstName || ''},
 
@@ -726,7 +726,7 @@ Lien de suivi : ${suiviUrl}` : ''}`,
           if (rendezVous) {
             // Notifier le client (utilisateur connecté ou coordonnées du rendez-vous)
             if (finalUserId && user) {
-              // Client connecté — notification + email
+              // Client connecté - notification + email
               try {
                 await createNotification(
                   finalUserId,
@@ -746,7 +746,7 @@ Lien de suivi : ${suiviUrl}` : ''}`,
                     await sendTransactionalEmail({
                       to: user.email,
                       toName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-                      subject: 'Nouveau dossier créé — Ada Papers',
+                      subject: 'Nouveau dossier créé - Ada Papers',
                       htmlContent: `<p>Bonjour ${escapeHtml(user.firstName || '')},</p><p>Nous vous confirmons la création de votre dossier « ${escapeHtml(dossier.titre)} » à la suite de votre rendez-vous.</p><p><strong>Date du rendez-vous :</strong> ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p><p>Votre dossier est désormais pris en charge par notre équipe. Vous serez informé(e) des prochaines étapes depuis votre espace client.</p>`,
                       textContent: `Bonjour ${user.firstName || ''},
 
@@ -785,7 +785,7 @@ Votre dossier est désormais pris en charge par notre équipe. Vous serez inform
                       await sendTransactionalEmail({
                         to: userByEmail.email,
                         toName: `${userByEmail.firstName || ''} ${userByEmail.lastName || ''}`.trim(),
-                        subject: 'Nouveau dossier créé — Ada Papers',
+                        subject: 'Nouveau dossier créé - Ada Papers',
                         htmlContent: `<p>Bonjour,</p><p>Nous vous confirmons la création du dossier « ${escapeHtml(dossier.titre)} » à la suite de votre rendez-vous.</p><p><strong>Date du rendez-vous :</strong> ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p><p>Notre équipe assurera le suivi de votre dossier et vous contactera en cas de besoin complémentaire.</p>`,
                         textContent: `Bonjour,
 
@@ -803,7 +803,7 @@ Notre équipe assurera le suivi de votre dossier et vous contactera en cas de be
                     await sendTransactionalEmail({
                       to: String(clientEmail).trim(),
                       toName: `${clientPrenom || ''} ${clientNom || ''}`.trim(),
-                      subject: 'Nouveau dossier créé — Ada Papers',
+                      subject: 'Nouveau dossier créé - Ada Papers',
                       htmlContent: `<p>Bonjour,</p><p>Nous vous confirmons la création du dossier « ${escapeHtml(dossier.titre)} » à la suite de votre rendez-vous.</p><p><strong>Date du rendez-vous :</strong> ${escapeHtml(new Date(rendezVous.date).toLocaleDateString('fr-FR'))} à ${escapeHtml(rendezVous.heure)}.</p><p>Nos équipes reviendront vers vous en cas de pièce ou information complémentaire.</p>`,
                       textContent: `Bonjour,
 
@@ -938,7 +938,7 @@ router.patch(
             toName: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim() || email,
             variables: { prenom, titre: dossier.titre || 'votre demande', espaceUrl: `${frontUrl}/client/dossiers`, signupUrl, suiviUrl },
             fallback: {
-              subject: 'Votre demande a été prise en compte — Ada Papers',
+              subject: 'Votre demande a été prise en compte - Ada Papers',
               htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Bonne nouvelle : votre demande « ${escapeHtml(dossier.titre || '')} » a été <strong>prise en compte</strong> par notre équipe. Nous vous <strong>contacterons rapidement</strong> afin de recueillir les informations complémentaires nécessaires au traitement de votre dossier.</p><p>Suivez son avancement et déposez les documents demandés :</p><ul><li>via votre <a href="${escapeHtml(suiviUrl)}">lien de suivi</a> ;</li><li>ou depuis votre <a href="${escapeHtml(frontUrl)}/client/dossiers">espace personnel</a> si vous avez un compte.</li></ul>`,
               textContent: `Bonjour ${prenom || ''},
 
@@ -1037,7 +1037,7 @@ router.post(
             toName: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim() || email,
             variables: { prenom, titre, formeJuridique: formeJuridiqueRecommandee, demarche: demarcheRecommandee, motif, suiviUrl, espaceUrl },
             fallback: {
-              subject: `Une recommandation pour votre dossier — ${titre}`,
+              subject: `Une recommandation pour votre dossier - ${titre}`,
               htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Après examen de votre demande « ${escapeHtml(titre)} », notre équipe vous propose une <strong>recommandation</strong> :</p><ul>${formeJuridiqueRecommandee ? `<li><strong>Forme juridique conseillée :</strong> ${escapeHtml(formeJuridiqueRecommandee)}</li>` : ''}${demarcheRecommandee ? `<li><strong>Démarche à suivre :</strong> ${escapeHtml(demarcheRecommandee)}</li>` : ''}${motif ? `<li><strong>Pourquoi :</strong> ${escapeHtml(motif)}</li>` : ''}</ul><p>Vous pouvez l'<strong>accepter</strong> ou la <strong>refuser</strong> :</p><p>${suiviUrl ? `via votre <a href="${escapeHtml(suiviUrl)}">lien de suivi</a>` : ''}${suiviUrl ? ' ou ' : ''}depuis votre <a href="${escapeHtml(espaceUrl)}">espace personnel</a> si vous avez un compte.</p>`,
               textContent: `Bonjour ${prenom || ''},\n\nAprès examen de votre demande « ${titre} », notre équipe vous propose une recommandation :\n${formeJuridiqueRecommandee ? `- Forme juridique conseillée : ${formeJuridiqueRecommandee}\n` : ''}${demarcheRecommandee ? `- Démarche à suivre : ${demarcheRecommandee}\n` : ''}${motif ? `- Pourquoi : ${motif}\n` : ''}\nAcceptez ou refusez :\n${suiviUrl ? `Lien de suivi : ${suiviUrl}\n` : ''}Espace personnel : ${espaceUrl}`,
             },
@@ -1115,7 +1115,7 @@ router.patch('/:id/recommandations/:recId/decision', async (req, res) => {
           toName: 'Équipe Ada Papers',
           variables: { titre, decision: verbe, dossierUrl },
           fallback: {
-            subject: `Recommandation ${verbe}e — ${titre}`,
+            subject: `Recommandation ${verbe}e - ${titre}`,
             htmlContent: `<p>Le demandeur a <strong>${escapeHtml(verbe)}</strong> une recommandation sur le dossier « ${escapeHtml(titre)} ».</p><p>Ouvrir le dossier : <a href="${escapeHtml(dossierUrl)}">${escapeHtml(dossierUrl)}</a></p>`,
             textContent: `Le demandeur a ${verbe} une recommandation sur le dossier « ${titre} ».\nDossier : ${dossierUrl}`,
           },
@@ -1139,7 +1139,7 @@ router.post('/:id/fiche-requests', authorize('admin', 'superadmin', 'assistant',
     const dossier = await Dossier.findById(req.params.id);
     if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
     const { getSchema } = require('../fiches/registry');
-    // Accepte un type unique (typeFiche) ou plusieurs (typeFiches[]) — dédupliqués.
+    // Accepte un type unique (typeFiche) ou plusieurs (typeFiches[]) - dédupliqués.
     const rawTypes = Array.isArray(req.body && req.body.typeFiches) && req.body.typeFiches.length
       ? req.body.typeFiches
       : [(req.body && req.body.typeFiche) || ''];
@@ -1183,7 +1183,7 @@ router.post('/:id/fiche-requests', authorize('admin', 'superadmin', 'assistant',
           toName: `${dossier.clientPrenom || ''} ${dossier.clientNom || ''}`.trim() || email,
           variables: { prenom, titre: titreDossier, fiche: titresTexte, suiviUrl, espaceUrl },
           fallback: {
-            subject: `${titres.length > 1 ? 'Des fiches' : 'Une fiche'} à remplir pour votre dossier — ${titreDossier}`,
+            subject: `${titres.length > 1 ? 'Des fiches' : 'Une fiche'} à remplir pour votre dossier - ${titreDossier}`,
             htmlContent: `<p>Bonjour ${escapeHtml(prenom || '')},</p><p>Pour avancer sur votre dossier « ${escapeHtml(titreDossier)} », merci de remplir en ligne ${titres.length > 1 ? 'les fiches suivantes' : 'la fiche suivante'} :</p>${listeHtml}<p>${suiviUrl ? `via votre <a href="${escapeHtml(suiviUrl)}">lien de suivi</a>` : ''}${suiviUrl ? ' ou ' : ''}depuis votre <a href="${escapeHtml(espaceUrl)}">espace personnel</a> si vous avez un compte.</p>`,
             textContent: `Bonjour ${prenom || ''},\n\nMerci de remplir en ligne ${titres.length > 1 ? 'les fiches suivantes' : 'la fiche suivante'} pour votre dossier « ${titreDossier} » :\n- ${titres.join('\n- ')}\n${suiviUrl ? `Lien de suivi : ${suiviUrl}\n` : ''}Espace personnel : ${espaceUrl}`,
           },
@@ -1324,7 +1324,7 @@ router.post('/:id/etat-civil-request', async (req, res) => {
     const nom = String((req.body && req.body.pourPersonne) || '').trim();
     const fr = await FicheRequest.create({
       dossier: dossier._id, typeFiche: 'etat_civil',
-      titre: nom ? `${ec.titre} — ${nom}` : ec.titre, pourPersonne: nom, requestedBy: req.user.id,
+      titre: nom ? `${ec.titre} - ${nom}` : ec.titre, pourPersonne: nom, requestedBy: req.user.id,
     });
     return res.status(201).json({ success: true, ficheRequest: fr });
   } catch (error) {
@@ -1636,7 +1636,7 @@ router.get('/', async (req, res) => {
 
 // @route   GET /api/user/dossiers/admin
 // @desc    Récupérer tous les dossiers (équipe Ada Papers)
-// @access  Private — rôles admin / équipe
+// @access  Private - rôles admin / équipe
 router.get(
   '/admin',
   authorize('admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'),
@@ -1724,7 +1724,7 @@ router.get(
 //          /admin/dossiers doivent toujours refléter les totaux globaux, même
 //          pour un admin en accès restreint (qui ne voit que ses dossiers dans la
 //          liste). La classification reproduit exactement celle du front.
-// @access  Private — rôles staff
+// @access  Private - rôles staff
 router.get(
   '/stats/global',
   authorize('admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire', 'visiteur'),
@@ -2881,7 +2881,7 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
       const statutLabel = (s) => (s === 'acceptee' ? 'Acceptée' : s === 'refusee' ? 'Refusée' : 'En attente');
       recap.dossier.recommandations.forEach((r, idx) => {
         doc.font('Helvetica-Bold');
-        yPosition = addText(`Recommandation ${idx + 1} — ${statutLabel(r.statut)}`, margin, yPosition, { width: doc.page.width - 2 * margin });
+        yPosition = addText(`Recommandation ${idx + 1} - ${statutLabel(r.statut)}`, margin, yPosition, { width: doc.page.width - 2 * margin });
         doc.font('Helvetica');
         if (r.formeJuridiqueRecommandee) yPosition = addText(`Forme juridique conseillée : ${r.formeJuridiqueRecommandee}`, margin, yPosition, { width: doc.page.width - 2 * margin });
         if (r.demarcheRecommandee) yPosition = addMultilineText(`Démarche : ${r.demarcheRecommandee}`, margin, yPosition, { width: doc.page.width - 2 * margin });
@@ -2925,15 +2925,15 @@ router.get('/:id/recap/pdf', protect, async (req, res) => {
     }
     yPosition += sectionSpacing;
     
-    // Explication du dossier (compléments au récit, visibles par tous) — placés AVANT les documents
+    // Explication du dossier (compléments au récit, visibles par tous) - placés AVANT les documents
     if (recap.complementsRecit && recap.complementsRecit.length > 0) {
       yPosition = addSection('EXPLICATION DU DOSSIER', yPosition);
       doc.fontSize(10);
       recap.complementsRecit.forEach((c, index) => {
         const dateStr = c.addedAt ? new Date(c.addedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
         const authorLabel = [c.authorName, c.role].filter(Boolean).join(' • ');
-        const titlePart = c.title && String(c.title).trim() ? ` — ${String(c.title).trim()}` : '';
-        yPosition = addText(`${index + 1}. Le ${dateStr} — ${authorLabel}${titlePart}`, margin, yPosition);
+        const titlePart = c.title && String(c.title).trim() ? ` - ${String(c.title).trim()}` : '';
+        yPosition = addText(`${index + 1}. Le ${dateStr} - ${authorLabel}${titlePart}`, margin, yPosition);
         yPosition += lineHeight * 0.5;
         yPosition = addMultilineText(c.text, margin + 10, yPosition, {
           width: doc.page.width - 2 * margin - 10,
@@ -3224,7 +3224,7 @@ router.post(
           emailSent = await sendTransactionalEmail({
             to: mailUser.email,
             toName: mailUser.firstName || '',
-            subject: 'Rappel : tarification — Ada Papers',
+            subject: 'Rappel : tarification - Ada Papers',
             htmlContent: `<p>Bonjour,</p><p>${escapeHtml(messageInApp)}</p><p>Nous vous invitons à régulariser la situation depuis votre espace client, rubrique Tarification.</p><p>En cas de difficulté, notre équipe reste à votre disposition.</p>`,
             textContent: `${messageInApp}
 
@@ -3240,7 +3240,7 @@ En cas de difficulté, notre équipe reste à votre disposition.`,
 
       const parts = ['notification in-app'];
       if (emailSent) parts.push('email');
-      const hint = emailSent ? '' : ` — email non envoyé${emailSkipped ? ` (${emailSkipped})` : ''}`;
+      const hint = emailSent ? '' : ` - email non envoyé${emailSkipped ? ` (${emailSkipped})` : ''}`;
 
       return res.json({
         success: true,
@@ -3549,7 +3549,7 @@ router.post(
           emailSent = await sendTransactionalEmail({
             to: user.email,
             toName: user.firstName || '',
-            subject: `${title} — Ada Papers`,
+            subject: `${title} - Ada Papers`,
             htmlContent: `<p>Bonjour ${escapeHtml(user.firstName || userDisplay)},</p><p>${escapeHtml(message).replace(/\n/g, '<br/>')}</p>`,
             textContent: `Bonjour ${user.firstName || userDisplay},\n\n${message}`,
           });
@@ -3691,7 +3691,7 @@ router.post(
           emailSent = await sendTransactionalEmail({
             to: adminUser.email,
             toName: `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim(),
-            subject: `${adminTitle} — Ada Papers`,
+            subject: `${adminTitle} - Ada Papers`,
             htmlContent: `<p>${escapeHtml(adminMessage)}</p>`,
             textContent: adminMessage,
           });
@@ -3832,7 +3832,7 @@ router.post('/tarification-standalone/:requestId/remind', protect, authorize('ad
         emailSent = await sendTransactionalEmail({
           to: user.email,
           toName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-          subject: 'Rappel : paiement requis — Ada Papers',
+          subject: 'Rappel : paiement requis - Ada Papers',
           htmlContent: `<p>Bonjour ${escapeHtml(userDisplay)},</p><p>${escapeHtml(message).replace(/\n/g, '<br/>')}</p>`,
           textContent: `Bonjour ${userDisplay},\n\n${message}`,
         });
@@ -3949,7 +3949,7 @@ router.post('/tarification-standalone/:requestId/cancel', protect, authorize('ad
 
 // @route   PATCH /api/user/dossiers/:id/formule-tarifaire
 // @desc    Client (ou équipe Ada Papers) enregistre la formule Standard / Premium
-// @access  Private — client propriétaire / email dossier, ou admin / superadmin
+// @access  Private - client propriétaire / email dossier, ou admin / superadmin
 router.patch(
   '/:id/formule-tarifaire',
   [body('formule').isIn(['standard', 'premium']).withMessage('Formule invalide (standard ou premium).')],
@@ -4293,6 +4293,7 @@ router.put(
         notifyTarificationClient,
         retractTarificationChoiceRequest,
         tarificationClientMessage,
+        tarificationDevise,
         isStandby,
         standbyReason,
         standbyUntil,
@@ -4327,7 +4328,7 @@ router.put(
       const skipMontantSilentNotify =
         (req.body.skipDossierModificationNotify === true || req.body.skipDossierModificationNotify === 'true') &&
         isCabinetTarifRole &&
-        isMontantTarificationPatch &&
+        (isMontantTarificationPatch || tarificationDevise !== undefined) &&
         !shouldNotifyTarificationClientNow;
 
       if (
@@ -4570,6 +4571,14 @@ router.put(
         }
       }
 
+      // Devise de tarification (admin / superadmin)
+      if (isCabinetTarifRole && tarificationDevise !== undefined) {
+        const deviseValue = String(tarificationDevise || '').toUpperCase();
+        if (deviseValue === 'EUR' || deviseValue === 'XOF') {
+          dossier.tarificationDevise = deviseValue;
+        }
+      }
+
       // Tarifications multiples par prestations (admin / superadmin)
       if (isCabinetTarifRole && tarificationPrestations !== undefined) {
         if (!Array.isArray(tarificationPrestations)) {
@@ -4724,7 +4733,7 @@ router.put(
         dossier.tarificationEcheances = [];
       }
 
-      // Gérer l'assignation (référent) — synchroniser teamMembers pour l'accès restreint
+      // Gérer l'assignation (référent) - synchroniser teamMembers pour l'accès restreint
       if (assignedTo !== undefined) {
         const previousAssignedTo = dossier.assignedTo ? dossier.assignedTo.toString() : null;
         const leaderId = dossier.teamLeader
@@ -5048,7 +5057,7 @@ router.put(
               toName: `${dossierForNotification.clientPrenom || ''} ${dossierForNotification.clientNom || ''}`.trim() || dossierForNotification.clientEmail,
               variables: { prenom: prenomGuest, titre: dossierForNotification.titre || 'votre dossier', statut: newStatutLabelGuest, suiviUrl: suiviUrlGuest },
               fallback: {
-                subject: `Votre dossier a évolué : ${newStatutLabelGuest} — Ada Papers`,
+                subject: `Votre dossier a évolué : ${newStatutLabelGuest} - Ada Papers`,
                 htmlContent: `<p>Bonjour ${escapeHtml(prenomGuest || '')},</p><p>Votre dossier « ${escapeHtml(dossierForNotification.titre || '')} » est passé à l'étape : <strong>${escapeHtml(newStatutLabelGuest)}</strong>.</p><p>Suivez son avancement et déposez les documents demandés depuis votre lien de suivi : <a href="${escapeHtml(suiviUrlGuest)}">${escapeHtml(suiviUrlGuest)}</a></p>`,
                 textContent: `Bonjour ${prenomGuest || ''},
 
@@ -5167,7 +5176,7 @@ Suivi : ${suiviUrlGuest}`,
               await sendTransactionalEmail({
                 to: mailUserExo.email,
                 toName: mailUserExo.firstName || '',
-                subject: 'Frais de tarification exonérés — Ada Papers',
+                subject: 'Frais de tarification exonérés - Ada Papers',
                 htmlContent: `<p>${escapeHtml(messageExo).replace(/\n/g, '<br/>')}</p><p>Cette information est également consultable dans votre espace client, rubrique Tarification.</p>`,
                 textContent: `${messageExo}
 
@@ -5244,7 +5253,7 @@ Cette information est également consultable dans votre espace client, rubrique 
                 dossierForNotification.formuleTarifaire === 'premium'
                   ? 'Tawfekh (Premium)'
                   : 'Standard';
-              titreTarif = 'Tarification — formule enregistrée';
+              titreTarif = 'Tarification - formule enregistrée';
               messageTarif = `Pour le dossier « ${dossierTitle} », la formule « ${formuleLabel} » est déjà enregistrée sur votre compte. Merci de procéder au réglement.`;
             }
 
@@ -5253,7 +5262,7 @@ Cette information est également consultable dans votre espace client, rubrique 
                 ? String(tarificationClientMessage).trim().slice(0, 2000)
                 : '';
             if (tarifMsgExtra) {
-              messageTarif = `${messageTarif}\n\n— Message de l’équipe —\n${tarifMsgExtra}`;
+              messageTarif = `${messageTarif}\n\n- Message de l’équipe -\n${tarifMsgExtra}`;
             }
 
             await createNotification(
@@ -5277,7 +5286,7 @@ Cette information est également consultable dans votre espace client, rubrique 
               await sendTransactionalEmail({
                 to: mailUserTarif.email,
                 toName: mailUserTarif.firstName || '',
-                subject: `${titreTarif} — Ada Papers`,
+                subject: `${titreTarif} - Ada Papers`,
                 htmlContent: `<p>${escapeHtml(messageTarif).replace(/\n/g, '<br/>')}</p><p>Nous vous remercions de réaliser les actions demandées depuis votre espace client dans les meilleurs délais.</p>`,
                 textContent: `${messageTarif}
 
@@ -5351,7 +5360,7 @@ Nous vous remercions de réaliser les actions demandées depuis votre espace cli
               await sendTransactionalEmail({
                 to: mailUserInstallments.email,
                 toName: mailUserInstallments.firstName || '',
-                subject: 'Échéances de tarification — Ada Papers',
+                subject: 'Échéances de tarification - Ada Papers',
                 htmlContent: `<p>${escapeHtml(messageInstallments).replace(/\n/g, '<br/>')}</p><p>Consultez la rubrique Tarification de votre espace client pour le détail et les modalités de paiement.</p>`,
                 textContent: `${messageInstallments}
 
@@ -5923,7 +5932,7 @@ router.post('/:id/transmit', authorize('admin', 'superadmin'), async (req, res) 
             partenaire.partenaireInfo?.nomOrganisme ||
             `${partenaire.firstName || ''} ${partenaire.lastName || ''}`.trim() ||
             'Partenaire',
-          subject: 'Nouveau dossier transmis — Ada Papers',
+          subject: 'Nouveau dossier transmis - Ada Papers',
           htmlContent: `<p>Bonjour,</p><p>Un nouveau dossier vous a été transmis : <strong>${escapeHtml(titre)}</strong>.</p><p>Nous vous invitons à vous connecter à votre espace partenaire afin de consulter les pièces disponibles et donner suite à cette transmission.</p>`,
           textContent: `Bonjour,
 
@@ -5960,7 +5969,7 @@ Nous vous invitons à vous connecter à votre espace partenaire afin de consulte
           await sendTransactionalEmail({
             to: clientUser.email,
             toName: clientUser.firstName || '',
-            subject: 'Votre dossier a été transmis — Ada Papers',
+            subject: 'Votre dossier a été transmis - Ada Papers',
             htmlContent: `<p>Bonjour,</p><p>Nous vous informons que votre dossier <strong>${escapeHtml(titre)}</strong> a été transmis à <strong>${escapeHtml(pn)}</strong>.</p><p>Cette transmission vise à permettre le traitement de votre demande dans les meilleures conditions.</p>`,
             textContent: `Bonjour,
 
