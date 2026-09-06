@@ -31,9 +31,18 @@ const calendarEventSchema = new mongoose.Schema(
     emailCorps: { type: String, trim: true, default: '' },
     emailEnvoye: { type: Boolean, default: false },
     emailEnvoyeAt: { type: Date, default: null },
-    // Rappel
-    rappelVeille: { type: Boolean, default: true },
+    // Rappel simple (legacy)
+    rappelVeille: { type: Boolean, default: false },
     rappelVeilleSent: { type: Boolean, default: false },
+    // Rappels configures
+    rappels: [
+      {
+        triggerAt: { type: Date, required: true },
+        canaux: { type: [String], enum: ['email', 'inapp', 'sms'], default: ['email', 'inapp'] },
+        sent: { type: Boolean, default: false },
+        sentAt: { type: Date, default: null },
+      },
+    ],
   },
   { timestamps: true }
 );

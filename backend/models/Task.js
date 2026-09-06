@@ -100,6 +100,15 @@ const taskSchema = new mongoose.Schema({
   archivedAt: {
     type: Date
   },
+  // Rappels configures
+  rappels: [
+    {
+      triggerAt: { type: Date, required: true },
+      canaux: { type: [String], enum: ['email', 'inapp', 'sms'], default: ['email', 'inapp'] },
+      sent: { type: Boolean, default: false },
+      sentAt: { type: Date, default: null },
+    },
+  ],
   createdAt: {
     type: Date,
     default: Date.now

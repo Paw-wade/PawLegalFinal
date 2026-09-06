@@ -287,7 +287,8 @@ router.post(
         dateEcheance,
         dateDebut,
         dossier,
-        notes
+        notes,
+        rappels,
       } = req.body;
 
       // Normaliser assignedTo en tableau (optionnel)
@@ -343,6 +344,19 @@ router.post(
       }
 
       console.log('✅ Création de la tâche...');
+      const VALID_CANAUX_TASK = ['email', 'inapp', 'sms'];
+      const rappelsNormalized = Array.isArray(rappels)
+        ? rappels
+            .filter((r) => r && r.triggerAt && !isNaN(new Date(r.triggerAt)))
+            .slice(0, 10)
+            .map((r) => ({
+              triggerAt: new Date(r.triggerAt),
+              canaux: Array.isArray(r.canaux)
+                ? r.canaux.filter((c) => VALID_CANAUX_TASK.includes(c))
+                : ['email', 'inapp'],
+            }))
+        : [];
+
       const taskDataToCreate = {
         titre: finalTitre,
         description: description || '',
@@ -352,7 +366,8 @@ router.post(
         dateEcheance: dateEcheance || null,
         dateDebut: dateDebut || null,
         dossier: dossier || null,
-        notes: notes || ''
+        notes: notes || '',
+        rappels: rappelsNormalized,
       };
 
       // Ajouter assignedTo seulement s'il y a des utilisateurs assignés

@@ -41,6 +41,7 @@ const notificationSchema = new mongoose.Schema({
       'tarification_installment_reminder',
       'tarification_installment_plan',
       'tarification_prestation_paid',
+      'calendar_rappel',
       'other'
     ]
   },

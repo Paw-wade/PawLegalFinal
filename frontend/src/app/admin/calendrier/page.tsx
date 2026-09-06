@@ -331,6 +331,159 @@ interface CreateEventModalProps {
   onCreated: () => void;
 }
 
+// ─── Types rappels ────────────────────────────────────────────────────────────
+
+interface RappelEntry {
+  id: string;
+  preset: '15m' | '1h' | '2h' | '1j' | '1s' | 'custom';
+  customDateTime: string;
+  sms: boolean;
+}
+
+const RAPPEL_PRESETS = [
+  { value: '15m', label: '15 min avant' },
+  { value: '1h',  label: '1 heure avant' },
+  { value: '2h',  label: '2 heures avant' },
+  { value: '1j',  label: '1 jour avant' },
+  { value: '1s',  label: '1 semaine avant' },
+  { value: 'custom', label: 'Date et heure precises' },
+] as const;
+
+const PRESET_OFFSET_MIN: Record<string, number> = {
+  '15m': -15,
+  '1h':  -60,
+  '2h':  -120,
+  '1j':  -24 * 60,
+  '1s':  -7 * 24 * 60,
+};
+
+function computeTriggerAt(preset: string, customDateTime: string, eventDate: string, heureDebut: string): string {
+  if (preset === 'custom') return customDateTime;
+  const timeStr = heureDebut || '09:00';
+  const eventDT = new Date(`${eventDate}T${timeStr}:00`);
+  const offsetMs = (PRESET_OFFSET_MIN[preset] ?? -24 * 60) * 60 * 1000;
+  return new Date(eventDT.getTime() + offsetMs).toISOString();
+}
+
+function newRappel(): RappelEntry {
+  return { id: Math.random().toString(36).slice(2), preset: '1j', customDateTime: '', sms: false };
+}
+
+// ─── RappelsSection ───────────────────────────────────────────────────────────
+
+function RappelsSection({
+  rappels,
+  setRappels,
+  eventDate,
+  heureDebut,
+  inputCls,
+}: {
+  rappels: RappelEntry[];
+  setRappels: React.Dispatch<React.SetStateAction<RappelEntry[]>>;
+  eventDate: string;
+  heureDebut: string;
+  inputCls: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-xs font-semibold text-gray-600">Rappels</label>
+        <button
+          type="button"
+          onClick={() => setRappels((r) => [...r, newRappel()])}
+          className="text-xs text-orange-600 hover:text-orange-800 font-semibold px-2 py-0.5 rounded hover:bg-orange-50"
+        >
+          + Ajouter
+        </button>
+      </div>
+
+      {rappels.length === 0 && (
+        <p className="text-xs text-gray-400 italic">Aucun rappel configure. Email + notification in-app seront envoyes si vous en ajoutez.</p>
+      )}
+
+      <div className="space-y-2">
+        {rappels.map((r) => (
+          <div key={r.id} className="border border-gray-200 rounded-lg p-2.5 bg-gray-50">
+            <div className="flex items-start gap-2">
+              <div className="flex-1 space-y-1.5">
+                <select
+                  value={r.preset}
+                  onChange={(e) =>
+                    setRappels((list) =>
+                      list.map((x) => x.id === r.id ? { ...x, preset: e.target.value as RappelEntry['preset'] } : x)
+                    )
+                  }
+                  className={inputCls}
+                >
+                  {RAPPEL_PRESETS.map((p) => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+
+                {r.preset === 'custom' && (
+                  <input
+                    type="datetime-local"
+                    value={r.customDateTime}
+                    onChange={(e) =>
+                      setRappels((list) =>
+                        list.map((x) => x.id === r.id ? { ...x, customDateTime: e.target.value } : x)
+                      )
+                    }
+                    className={inputCls}
+                  />
+                )}
+
+                <div className="flex items-center gap-4 mt-1">
+                  <span className="text-[11px] text-gray-500 flex items-center gap-1">
+                    <span>📧</span> Email
+                    <span className="ml-0.5 text-gray-400">(toujours)</span>
+                  </span>
+                  <span className="text-[11px] text-gray-500 flex items-center gap-1">
+                    <span>🔔</span> In-app
+                    <span className="ml-0.5 text-gray-400">(toujours)</span>
+                  </span>
+                  <label className="flex items-center gap-1 cursor-pointer text-[11px] text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={r.sms}
+                      onChange={(e) =>
+                        setRappels((list) =>
+                          list.map((x) => x.id === r.id ? { ...x, sms: e.target.checked } : x)
+                        )
+                      }
+                      className="accent-orange-500"
+                    />
+                    <span>📱 SMS</span>
+                  </label>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRappels((list) => list.filter((x) => x.id !== r.id))}
+                className="text-gray-400 hover:text-red-500 text-lg leading-none pt-0.5 shrink-0"
+                title="Supprimer ce rappel"
+              >
+                &times;
+              </button>
+            </div>
+
+            {r.preset !== 'custom' && eventDate && (
+              <p className="text-[10px] text-gray-400 mt-1.5">
+                Envoi prevu le{' '}
+                {new Date(computeTriggerAt(r.preset, '', eventDate, heureDebut)).toLocaleString('fr-FR', {
+                  day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                })}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── CreateEventModal ─────────────────────────────────────────────────────────
+
 function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModalProps) {
   const [tab, setTab] = useState<TabType>('evenement');
   const [saving, setSaving] = useState(false);
@@ -338,6 +491,7 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [staffSearch, setStaffSearch] = useState('');
   const [selectedDate, setSelectedDate] = useState(isoDate(date));
+  const [rappels, setRappels] = useState<RappelEntry[]>([]);
 
   const [evForm, setEvForm] = useState({
     titre: '',
@@ -347,7 +501,6 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
     couleur: 'blue',
     visibilite: 'equipe',
     participants: [] as string[],
-    rappelVeille: true,
   });
 
   const [tForm, setTForm] = useState({ titre: '', description: '', priorite: 'normale' });
@@ -357,7 +510,6 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
     emailSujet: '',
     emailCorps: '',
     visibilite: 'equipe',
-    rappelVeille: true,
   });
 
   useEffect(() => { fetchStaff().then(setStaff); }, []);
@@ -381,6 +533,14 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
       );
     });
 
+  const buildRappelPayload = (eventDate: string, heureDebut: string) =>
+    rappels
+      .filter((r) => r.preset !== 'custom' || r.customDateTime)
+      .map((r) => ({
+        triggerAt: computeTriggerAt(r.preset, r.customDateTime, eventDate, heureDebut),
+        canaux: ['email', 'inapp', ...(r.sms ? ['sms'] : [])],
+      }));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -395,6 +555,7 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
           dateEcheance: new Date(selectedDate).toISOString(),
           statut: 'a_faire',
           assignedTo: userId,
+          rappels: buildRappelPayload(selectedDate, ''),
         });
       } else if (tab === 'evenement') {
         if (!evForm.titre.trim()) { setError('Le titre est requis'); setSaving(false); return; }
@@ -408,7 +569,7 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
           couleur: evForm.couleur,
           visibilite: evForm.visibilite,
           participants: evForm.participants,
-          rappelVeille: evForm.rappelVeille,
+          rappels: buildRappelPayload(selectedDate, evForm.heureDebut),
         });
       } else {
         if (!emForm.emailTo.trim()) { setError('Le destinataire est requis'); setSaving(false); return; }
@@ -420,10 +581,10 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
           date: selectedDate,
           couleur: 'indigo',
           visibilite: emForm.visibilite,
-          rappelVeille: emForm.rappelVeille,
           emailTo: emForm.emailTo.trim(),
           emailSujet: emForm.emailSujet.trim(),
           emailCorps: emForm.emailCorps.trim(),
+          rappels: buildRappelPayload(selectedDate, ''),
         });
       }
       onCreated();
@@ -627,15 +788,13 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
                 </div>
               )}
 
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={evForm.rappelVeille}
-                  onChange={(e) => setEvForm((f) => ({ ...f, rappelVeille: e.target.checked }))}
-                  className="accent-orange-500"
-                />
-                Rappel email la veille (createur + participants)
-              </label>
+              <RappelsSection
+                rappels={rappels}
+                setRappels={setRappels}
+                eventDate={selectedDate}
+                heureDebut={evForm.heureDebut}
+                inputCls={inputCls}
+              />
             </>
           )}
 
@@ -675,6 +834,13 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
                   <option value="urgente">Urgente</option>
                 </select>
               </div>
+              <RappelsSection
+                rappels={rappels}
+                setRappels={setRappels}
+                eventDate={selectedDate}
+                heureDebut=""
+                inputCls={inputCls}
+              />
             </>
           )}
 
@@ -734,15 +900,13 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
                   ))}
                 </div>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={emForm.rappelVeille}
-                  onChange={(e) => setEmForm((f) => ({ ...f, rappelVeille: e.target.checked }))}
-                  className="accent-orange-500"
-                />
-                Rappel veille (notification a l'equipe)
-              </label>
+              <RappelsSection
+                rappels={rappels}
+                setRappels={setRappels}
+                eventDate={selectedDate}
+                heureDebut=""
+                inputCls={inputCls}
+              />
             </>
           )}
 

@@ -1011,6 +1011,7 @@ export const tasksAPI = {
     dateDebut?: string;
     dossier?: string;
     notes?: string;
+    rappels?: Array<{ triggerAt: string; canaux: string[] }>;
   }) => {
     return api.post('/tasks', data);
   },

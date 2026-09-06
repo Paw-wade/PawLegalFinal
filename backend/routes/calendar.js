@@ -297,7 +297,7 @@ router.post('/custom-events', async (req, res) => {
     const {
       type, titre, description, date, heureDebut, heureFin,
       couleur, visibilite, participants, rappelVeille, dossierId,
-      emailTo, emailSujet, emailCorps,
+      emailTo, emailSujet, emailCorps, rappels,
     } = req.body;
 
     if (!type || !['evenement', 'email_programme'].includes(type)) {
@@ -321,6 +321,19 @@ router.post('/custom-events', async (req, res) => {
       }
     }
 
+    const VALID_CANAUX = ['email', 'inapp', 'sms'];
+    const rappelsNormalized = Array.isArray(rappels)
+      ? rappels
+          .filter((r) => r && r.triggerAt && !isNaN(new Date(r.triggerAt)))
+          .slice(0, 10)
+          .map((r) => ({
+            triggerAt: new Date(r.triggerAt),
+            canaux: Array.isArray(r.canaux)
+              ? r.canaux.filter((c) => VALID_CANAUX.includes(c))
+              : ['email', 'inapp'],
+          }))
+      : [];
+
     const ev = await CalendarEvent.create({
       type,
       titre: String(titre).trim(),
@@ -334,7 +347,8 @@ router.post('/custom-events', async (req, res) => {
       participants: Array.isArray(participants)
         ? participants.filter((id) => mongoose.Types.ObjectId.isValid(id))
         : [],
-      rappelVeille: rappelVeille !== false,
+      rappelVeille: false,
+      rappels: rappelsNormalized,
       dossierId: dossierId && mongoose.Types.ObjectId.isValid(dossierId) ? dossierId : null,
       emailTo: type === 'email_programme' ? String(emailTo || '').trim() : '',
       emailSujet: type === 'email_programme' ? String(emailSujet || '').trim() : '',
