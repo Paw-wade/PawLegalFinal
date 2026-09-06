@@ -18,6 +18,8 @@ type EventType =
   | 'evenement'
   | 'email_programme';
 
+type ViewType = 'mois' | 'semaine' | 'jour' | 'membre';
+
 interface CalEvent {
   id: string;
   type: EventType;
@@ -36,6 +38,7 @@ interface CalEvent {
   visibilite?: string;
   participants?: string[];
   createdByName?: string;
+  assignedToNames?: string[];
   emailTo?: string;
   emailEnvoye?: boolean;
 }
@@ -90,6 +93,31 @@ const TYPE_EMOJI: Record<string, string> = {
 
 const JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const MOIS = ['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
+const MOIS_SHORT = ['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
+
+function getWeekMonday(d: Date): Date {
+  const day = new Date(d);
+  const dow = (day.getDay() + 6) % 7;
+  day.setDate(day.getDate() - dow);
+  day.setHours(0, 0, 0, 0);
+  return day;
+}
+
+function getWeekDays(anchor: Date): Date[] {
+  const mon = getWeekMonday(anchor);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    return d;
+  });
+}
+
+function eventBelongsToMember(ev: CalEvent, name: string): boolean {
+  if (ev.createdByName === name) return true;
+  if (Array.isArray(ev.participants) && ev.participants.includes(name)) return true;
+  if (Array.isArray(ev.assignedToNames) && ev.assignedToNames.includes(name)) return true;
+  return false;
+}
 
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -930,6 +958,250 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
   );
 }
 
+// ─── WeekView ────────────────────────────────────────────────────────────────
+
+function WeekView({
+  days,
+  byDate,
+  todayStr,
+  onEventClick,
+  onDayClick,
+  isLoading,
+}: {
+  days: Date[];
+  byDate: Record<string, CalEvent[]>;
+  todayStr: string;
+  onEventClick: (e: CalEvent) => void;
+  onDayClick: (d: Date) => void;
+  isLoading: boolean;
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+      {/* Header */}
+      <div className="grid grid-cols-7 border-b border-gray-100">
+        {days.map((day) => {
+          const isToday = isoDate(day) === todayStr;
+          return (
+            <div key={isoDate(day)} className="px-1 py-3 text-center border-r border-gray-50 last:border-r-0">
+              <p className="text-[10px] text-gray-400 uppercase tracking-wide">{JOURS[(day.getDay() + 6) % 7]}</p>
+              <span
+                className={`mt-1 text-sm font-bold w-8 h-8 mx-auto flex items-center justify-center rounded-full ${
+                  isToday ? 'bg-orange-500 text-white' : 'text-gray-700'
+                }`}
+              >
+                {day.getDate()}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {/* Body */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-48">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-7 min-h-[350px]">
+          {days.map((day) => {
+            const ds = isoDate(day);
+            const dayEvents = byDate[ds] || [];
+            const isToday = ds === todayStr;
+            return (
+              <div
+                key={ds}
+                onClick={() => onDayClick(day)}
+                className={`p-1.5 border-r border-gray-50 last:border-r-0 cursor-pointer hover:bg-orange-50/30 transition min-h-[350px] ${
+                  isToday ? 'bg-orange-50/20' : ''
+                }`}
+              >
+                <div className="space-y-0.5">
+                  {dayEvents.map((ev) => (
+                    <Pill key={ev.id} event={ev} onClick={() => onEventClick(ev)} />
+                  ))}
+                  {dayEvents.length === 0 && (
+                    <p className="text-[9px] text-gray-300 text-center pt-4">Vide</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DayView ──────────────────────────────────────────────────────────────────
+
+const DAY_HOURS = Array.from({ length: 15 }, (_, i) => i + 7); // 7h-21h
+
+function DayView({
+  date,
+  events,
+  todayStr,
+  onEventClick,
+  onAddAtHour,
+  isLoading,
+}: {
+  date: Date;
+  events: CalEvent[];
+  todayStr: string;
+  onEventClick: (e: CalEvent) => void;
+  onAddAtHour: (d: Date) => void;
+  isLoading: boolean;
+}) {
+  const allDay = events.filter((ev) => !ev.heure);
+  const timed = events.filter((ev) => ev.heure);
+  const isToday = isoDate(date) === todayStr;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+      {/* All-day strip */}
+      {allDay.length > 0 && (
+        <div className="border-b border-gray-100 px-4 py-2 bg-gray-50">
+          <p className="text-[10px] text-gray-400 uppercase mb-1 font-semibold">Toute la journee</p>
+          <div className="flex flex-wrap gap-1">
+            {allDay.map((ev) => (
+              <Pill key={ev.id} event={ev} onClick={() => onEventClick(ev)} />
+            ))}
+          </div>
+        </div>
+      )}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+        </div>
+      ) : (
+        <div>
+          {DAY_HOURS.map((h) => {
+            const hourEvents = timed.filter((ev) => {
+              const evH = ev.heure ? parseInt(ev.heure.split(':')[0], 10) : -1;
+              return evH === h;
+            });
+            const isNowHour = isToday && new Date().getHours() === h;
+            const addDate = new Date(date);
+            addDate.setHours(h, 0, 0, 0);
+            return (
+              <div
+                key={h}
+                className={`flex border-b border-gray-50 group cursor-pointer hover:bg-orange-50/20 transition ${
+                  isNowHour ? 'bg-orange-50/30' : ''
+                }`}
+                onClick={() => onAddAtHour(addDate)}
+              >
+                <div className="w-16 shrink-0 text-[11px] text-gray-400 pt-3 pl-4 select-none">
+                  {String(h).padStart(2, '0')}:00
+                </div>
+                <div className="flex-1 px-2 py-2 min-h-[52px]">
+                  <div className="flex flex-wrap gap-1">
+                    {hourEvents.map((ev) => (
+                      <div key={ev.id} onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}>
+                        <Pill event={ev} onClick={() => onEventClick(ev)} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="w-6 shrink-0 flex items-center opacity-0 group-hover:opacity-40 pr-2">
+                  <span className="text-orange-500 font-bold text-sm">+</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MemberView ───────────────────────────────────────────────────────────────
+
+function MemberView({
+  days,
+  events,
+  staff,
+  todayStr,
+  onEventClick,
+  onDayClick,
+  isLoading,
+}: {
+  days: Date[];
+  events: CalEvent[];
+  staff: StaffMember[];
+  todayStr: string;
+  onEventClick: (e: CalEvent) => void;
+  onDayClick: (d: Date) => void;
+  isLoading: boolean;
+}) {
+  const byDate = groupByDate(events);
+
+  if (staff.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow-md border border-gray-100 flex items-center justify-center h-40">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden overflow-x-auto">
+      <div className="min-w-max">
+        {/* Header: empty corner + member columns */}
+        <div className="flex border-b border-gray-100 bg-gray-50 sticky top-0">
+          <div className="w-24 shrink-0 px-3 py-3" />
+          {staff.map((m) => (
+            <div key={m._id} className="w-44 shrink-0 border-l border-gray-100 px-2 py-3 text-center">
+              <p className="text-xs font-bold text-gray-700 truncate">{m.firstName} {m.lastName}</p>
+              <p className="text-[10px] text-gray-400 capitalize">{m.role}</p>
+            </div>
+          ))}
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center h-48">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+          </div>
+        ) : (
+          days.map((day) => {
+            const ds = isoDate(day);
+            const dayEvents = byDate[ds] || [];
+            const isToday = ds === todayStr;
+            return (
+              <div key={ds} className={`flex border-b border-gray-50 ${isToday ? 'bg-orange-50/20' : ''}`}>
+                {/* Date label */}
+                <div className="w-24 shrink-0 px-3 py-2 border-r border-gray-50">
+                  <p className={`text-[10px] font-semibold uppercase tracking-wide ${isToday ? 'text-orange-500' : 'text-gray-400'}`}>
+                    {JOURS[(day.getDay() + 6) % 7]}
+                  </p>
+                  <p className={`text-sm font-bold ${isToday ? 'text-orange-500' : 'text-gray-700'}`}>{day.getDate()}</p>
+                </div>
+
+                {/* Member columns */}
+                {staff.map((m) => {
+                  const memberName = `${m.firstName} ${m.lastName}`.trim();
+                  const memberEvents = dayEvents.filter((ev) => eventBelongsToMember(ev, memberName));
+                  return (
+                    <div
+                      key={m._id}
+                      className="w-44 shrink-0 border-l border-gray-50 px-1 py-1.5 min-h-[52px] cursor-pointer hover:bg-orange-50/30 transition"
+                      onClick={() => onDayClick(day)}
+                    >
+                      {memberEvents.map((ev) => (
+                        <div key={ev.id} className="mb-0.5" onClick={(e) => { e.stopPropagation(); onEventClick(ev); }}>
+                          <Pill event={ev} onClick={() => onEventClick(ev)} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Legend ───────────────────────────────────────────────────────────────────
 
 function Legend() {
@@ -964,8 +1236,12 @@ export default function CalendrierPage() {
   const router = useRouter();
 
   const today = new Date();
-  const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const todayStr = isoDate(today);
+
+  const [view, setView] = useState<ViewType>('mois');
+  const [currentDate, setCurrentDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [events, setEvents] = useState<CalEvent[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
@@ -982,9 +1258,31 @@ export default function CalendrierPage() {
     }
   }, [session, status, router]);
 
+  // Charger les membres quand on passe en vue membre
+  useEffect(() => {
+    if (view === 'membre' && staff.length === 0) {
+      fetchStaff().then(setStaff);
+    }
+  }, [view]);
+
   const loadEvents = useCallback(async () => {
-    const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-    const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59);
+    let start: Date, end: Date;
+    if (view === 'mois') {
+      const y = currentDate.getFullYear(), m = currentDate.getMonth();
+      start = new Date(y, m, 1);
+      end = new Date(y, m + 1, 0, 23, 59, 59);
+    } else if (view === 'semaine' || view === 'membre') {
+      const mon = getWeekMonday(currentDate);
+      start = new Date(mon);
+      end = new Date(mon);
+      end.setDate(mon.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+    } else {
+      start = new Date(currentDate);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(currentDate);
+      end.setHours(23, 59, 59, 999);
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -995,21 +1293,47 @@ export default function CalendrierPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentMonth]);
+  }, [currentDate, view]);
 
   useEffect(() => { loadEvents(); }, [loadEvents]);
 
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
+  const navigate = (dir: -1 | 1) => {
+    const d = new Date(currentDate);
+    if (view === 'mois') { d.setMonth(d.getMonth() + dir); d.setDate(1); }
+    else if (view === 'semaine' || view === 'membre') { d.setDate(d.getDate() + dir * 7); }
+    else { d.setDate(d.getDate() + dir); }
+    setCurrentDate(d);
+  };
+
+  const goToday = () => {
+    const d = new Date();
+    if (view === 'mois') { d.setDate(1); }
+    setCurrentDate(d);
+  };
+
+  const navLabel = (): string => {
+    if (view === 'mois') {
+      return `${MOIS[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+    }
+    if (view === 'semaine' || view === 'membre') {
+      const days = getWeekDays(currentDate);
+      const s = days[0], e = days[6];
+      if (s.getMonth() === e.getMonth()) {
+        return `${s.getDate()}-${e.getDate()} ${MOIS_SHORT[s.getMonth()]} ${s.getFullYear()}`;
+      }
+      return `${s.getDate()} ${MOIS_SHORT[s.getMonth()]} - ${e.getDate()} ${MOIS_SHORT[e.getMonth()]} ${e.getFullYear()}`;
+    }
+    return `${JOURS[(currentDate.getDay() + 6) % 7]} ${currentDate.getDate()} ${MOIS[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+  };
+
+  // Derivees mois
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
   const grid = buildGrid(year, month);
+  const weekDays = getWeekDays(currentDate);
 
   const filteredEvents = filterType === 'all' ? events : events.filter((e) => e.type === filterType);
   const byDate = groupByDate(filteredEvents);
-  const todayStr = isoDate(today);
-
-  const prevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
-  const nextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
-  const goToday = () => setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
 
   const urgentCount = events.filter((e) => e.urgence).length;
   const rdvCount = events.filter((e) => e.type === 'rdv').length;
@@ -1030,25 +1354,47 @@ export default function CalendrierPage() {
       <div className="max-w-7xl mx-auto">
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Calendrier d'equipe</h1>
             <p className="text-sm text-gray-500 mt-0.5">Evenements, taches, echeances et rappels</p>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center">
             <button onClick={goToday} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 font-medium">
               Aujourd'hui
             </button>
-            <button onClick={prevMonth} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50">
+            <button onClick={() => navigate(-1)} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50">
               &lsaquo;
             </button>
-            <span className="text-sm font-semibold text-gray-700 min-w-[120px] text-center">
-              {MOIS[month]} {year}
+            <span className="text-sm font-semibold text-gray-700 min-w-[140px] text-center">
+              {navLabel()}
             </span>
-            <button onClick={nextMonth} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50">
+            <button onClick={() => navigate(1)} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50">
               &rsaquo;
             </button>
           </div>
+        </div>
+
+        {/* Selecteur de vue */}
+        <div className="flex gap-1 mb-5 bg-white border border-gray-200 rounded-xl p-1 shadow-sm w-fit">
+          {([
+            { v: 'mois', label: 'Mois' },
+            { v: 'semaine', label: 'Semaine' },
+            { v: 'jour', label: 'Jour' },
+            { v: 'membre', label: 'Membre' },
+          ] as { v: ViewType; label: string }[]).map(({ v, label }) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-4 py-1.5 text-sm font-semibold rounded-lg transition ${
+                view === v
+                  ? 'bg-orange-500 text-white shadow'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* Cartes resume */}
@@ -1108,70 +1454,105 @@ export default function CalendrierPage() {
         {/* Legende */}
         <div className="mb-4"><Legend /></div>
 
-        {/* Grille calendrier */}
+        {/* Calendrier */}
         {error ? (
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700 text-sm">{error}</div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
-            <div className="grid grid-cols-7 border-b border-gray-100">
-              {JOURS.map((j) => (
-                <div key={j} className="px-2 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  {j}
+          <>
+            {/* Vue Mois */}
+            {view === 'mois' && (
+              <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+                <div className="grid grid-cols-7 border-b border-gray-100">
+                  {JOURS.map((j) => (
+                    <div key={j} className="px-2 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      {j}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-
-            {isLoading ? (
-              <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-7">
-                {grid.map((day, idx) => {
-                  const dayStr = isoDate(day);
-                  const isCurrentMonth = day.getMonth() === month;
-                  const isToday = dayStr === todayStr;
-                  const dayEvents = byDate[dayStr] || [];
-
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => setCreateDate(day)}
-                      className={`min-h-[90px] sm:min-h-[110px] p-1.5 border-b border-r border-gray-50 cursor-pointer hover:bg-orange-50/40 transition group ${
-                        !isCurrentMonth ? 'bg-gray-50/60' : ''
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span
-                          className={`text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full ${
-                            isToday
-                              ? 'bg-orange-500 text-white'
-                              : isCurrentMonth
-                              ? 'text-gray-700'
-                              : 'text-gray-300'
+                {isLoading ? (
+                  <div className="flex items-center justify-center h-64">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-7">
+                    {grid.map((day, idx) => {
+                      const dayStr = isoDate(day);
+                      const isCurrentMonth = day.getMonth() === month;
+                      const isToday = dayStr === todayStr;
+                      const dayEvents = byDate[dayStr] || [];
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => setCreateDate(day)}
+                          className={`min-h-[90px] sm:min-h-[110px] p-1.5 border-b border-r border-gray-50 cursor-pointer hover:bg-orange-50/40 transition group ${
+                            !isCurrentMonth ? 'bg-gray-50/60' : ''
                           }`}
                         >
-                          {day.getDate()}
-                        </span>
-                        <span className="opacity-0 group-hover:opacity-100 text-orange-300 text-xs transition font-bold">+</span>
-                      </div>
-
-                      <div className="space-y-0.5 overflow-hidden">
-                        {dayEvents.slice(0, 3).map((ev) => (
-                          <Pill key={ev.id} event={ev} onClick={() => setSelectedEvent(ev)} />
-                        ))}
-                        {dayEvents.length > 3 && (
-                          <span className="text-[9px] text-gray-400 pl-1">
-                            +{dayEvents.length - 3} autre(s)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                          <div className="flex items-center justify-between mb-1">
+                            <span
+                              className={`text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full ${
+                                isToday ? 'bg-orange-500 text-white'
+                                : isCurrentMonth ? 'text-gray-700'
+                                : 'text-gray-300'
+                              }`}
+                            >
+                              {day.getDate()}
+                            </span>
+                            <span className="opacity-0 group-hover:opacity-100 text-orange-300 text-xs transition font-bold">+</span>
+                          </div>
+                          <div className="space-y-0.5 overflow-hidden">
+                            {dayEvents.slice(0, 3).map((ev) => (
+                              <Pill key={ev.id} event={ev} onClick={() => setSelectedEvent(ev)} />
+                            ))}
+                            {dayEvents.length > 3 && (
+                              <span className="text-[9px] text-gray-400 pl-1">+{dayEvents.length - 3} autre(s)</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
-          </div>
+
+            {/* Vue Semaine */}
+            {view === 'semaine' && (
+              <WeekView
+                days={weekDays}
+                byDate={byDate}
+                todayStr={todayStr}
+                onEventClick={(ev) => setSelectedEvent(ev)}
+                onDayClick={(d) => setCreateDate(d)}
+                isLoading={isLoading}
+              />
+            )}
+
+            {/* Vue Jour */}
+            {view === 'jour' && (
+              <DayView
+                date={currentDate}
+                events={filteredEvents.filter((ev) => isoDate(new Date(ev.date)) === isoDate(currentDate))}
+                todayStr={todayStr}
+                onEventClick={(ev) => setSelectedEvent(ev)}
+                onAddAtHour={(d) => setCreateDate(d)}
+                isLoading={isLoading}
+              />
+            )}
+
+            {/* Vue Membre */}
+            {view === 'membre' && (
+              <MemberView
+                days={weekDays}
+                events={filteredEvents}
+                staff={staff}
+                todayStr={todayStr}
+                onEventClick={(ev) => setSelectedEvent(ev)}
+                onDayClick={(d) => setCreateDate(d)}
+                isLoading={isLoading}
+              />
+            )}
+          </>
         )}
 
         {/* Urgences du mois */}
