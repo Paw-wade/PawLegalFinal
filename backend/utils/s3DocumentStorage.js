@@ -116,9 +116,14 @@ function buildDocumentObjectKey(fileName, subfolder = 'documents', prefixOverrid
   return `${prefix}${subfolder}/${safeName}`.replace(/\/+/g, '/');
 }
 
+// Cache en memoire pour les prefixes deja verifies (pas d'expiration — le .keep marker ne bouge pas)
+const ensuredPrefixes = new Set();
+
 async function ensureS3PrefixExists(prefixOverride) {
   if (!isS3Configured()) return false;
   const prefix = resolveStoragePrefix(prefixOverride);
+  if (ensuredPrefixes.has(prefix)) return true;
+
   const markerKey = `${prefix}.keep`;
   const client = getS3Client();
   const { bucket } = getS3Config();
@@ -126,6 +131,7 @@ async function ensureS3PrefixExists(prefixOverride) {
     await client.send(
       new HeadObjectCommand({ Bucket: bucket, Key: markerKey })
     );
+    ensuredPrefixes.add(prefix);
     return true;
   } catch {
     /* create marker */
@@ -138,6 +144,7 @@ async function ensureS3PrefixExists(prefixOverride) {
       ContentType: 'application/octet-stream',
     })
   );
+  ensuredPrefixes.add(prefix);
   return true;
 }
 
