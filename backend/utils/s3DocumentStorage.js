@@ -8,8 +8,33 @@ const {
   HeadObjectCommand,
   CopyObjectCommand,
 } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const S3_URI_PREFIX = 's3://';
+
+// Cache en memoire des resultats HeadObject pour eviter les requetes repetees
+// TTL : 10 minutes. Taille max : 2000 entrees (rotation FIFO simple).
+const HEAD_CACHE_TTL_MS = 10 * 60 * 1000;
+const HEAD_CACHE_MAX = 2000;
+const headCache = new Map();
+
+function headCacheGet(key) {
+  const entry = headCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.ts > HEAD_CACHE_TTL_MS) {
+    headCache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+}
+
+function headCacheSet(key, value) {
+  if (headCache.size >= HEAD_CACHE_MAX) {
+    // Supprimer la plus ancienne entree
+    headCache.delete(headCache.keys().next().value);
+  }
+  headCache.set(key, { value, ts: Date.now() });
+}
 
 function normalizePrefix(raw) {
   let prefix = String(raw || '').trim().replace(/^\/+/, '');
@@ -119,14 +144,22 @@ async function ensureS3PrefixExists(prefixOverride) {
 async function verifyS3ObjectByKey(key, expectedSize = null) {
   if (!key || !isS3Configured()) return false;
   const { bucket } = getS3Config();
+  // Pas de cache si on verifie la taille exacte (apres upload)
+  const cacheKey = expectedSize == null ? `key:${bucket}:${key}` : null;
+  if (cacheKey) {
+    const cached = headCacheGet(cacheKey);
+    if (cached !== undefined) return cached;
+  }
   try {
     const client = getS3Client();
     const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
     if (expectedSize != null && Number(head.ContentLength) !== Number(expectedSize)) {
       return false;
     }
+    if (cacheKey) headCacheSet(cacheKey, true);
     return true;
   } catch {
+    if (cacheKey) headCacheSet(cacheKey, false);
     return false;
   }
 }
@@ -134,7 +167,7 @@ async function verifyS3ObjectByKey(key, expectedSize = null) {
 async function uploadBufferToS3(buffer, { fileName, contentType, subfolder = 'documents', prefix = null } = {}) {
   assertS3UploadReady();
   if (!isS3Configured()) {
-    throw new Error('S3 non configuré (AWS_S3_BUCKET, AWS_REGION, clés IAM)');
+    throw new Error('S3 non configure (AWS_S3_BUCKET, AWS_REGION, cles IAM)');
   }
   if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
     throw new Error('Buffer vide');
@@ -150,11 +183,11 @@ async function uploadBufferToS3(buffer, { fileName, contentType, subfolder = 'do
       ContentType: contentType || 'application/octet-stream',
     })
   );
-  const verified = await verifyS3ObjectByKey(key, buffer.length);
-  if (!verified) {
-    throw new Error(`Vérification S3 échouée après upload (HeadObject): ${key}`);
-  }
-  return buildS3StorageUri(key);
+  // PutObject leve une exception si le PUT echoue — pas besoin d'un HeadObject supplementaire
+  const uri = buildS3StorageUri(key);
+  // Invalider le cache pour cette cle apres un upload
+  headCache.delete(`key:${bucket}:${key}`);
+  return uri;
 }
 
 async function headS3ObjectByKey(key) {
@@ -185,17 +218,18 @@ async function uploadLocalFileToS3(file, { subfolder = 'documents', prefix = nul
     })
   );
 
-  const verified = await verifyS3ObjectByKey(key, body.length);
-  if (!verified) {
-    throw new Error(`Vérification S3 échouée après upload (HeadObject): ${key}`);
-  }
-
-  return buildS3StorageUri(key);
+  // PutObject leve une exception si le PUT echoue — HeadObject supplementaire supprime
+  const uri = buildS3StorageUri(key);
+  headCache.delete(`key:${bucket}:${key}`);
+  return uri;
 }
 
 async function headS3Object(storagePath) {
   const parsed = parseS3StorageUri(storagePath);
   if (!parsed || !isS3Configured()) return false;
+  const cacheKey = `uri:${storagePath}`;
+  const cached = headCacheGet(cacheKey);
+  if (cached !== undefined) return cached;
   try {
     const client = getS3Client();
     await client.send(
@@ -204,8 +238,10 @@ async function headS3Object(storagePath) {
         Key: parsed.key,
       })
     );
+    headCacheSet(cacheKey, true);
     return true;
   } catch {
+    headCacheSet(cacheKey, false);
     return false;
   }
 }
@@ -273,6 +309,24 @@ async function archiveS3Object(storagePath) {
   return buildS3StorageUri(archiveKey);
 }
 
+async function getS3PresignedUrl(storagePath, { expiresIn = 900, inline = false, fileName = '' } = {}) {
+  const parsed = parseS3StorageUri(storagePath);
+  if (!parsed || !isS3Configured()) return null;
+  try {
+    const client = getS3Client();
+    const safeName = String(fileName || '').replace(/[^\w.\-]/g, '_') || 'document';
+    const disposition = inline ? `inline; filename="${safeName}"` : `attachment; filename="${safeName}"`;
+    const cmd = new GetObjectCommand({
+      Bucket: parsed.bucket,
+      Key: parsed.key,
+      ResponseContentDisposition: disposition,
+    });
+    return await getSignedUrl(client, cmd, { expiresIn });
+  } catch {
+    return null;
+  }
+}
+
 async function tryServeDocumentFromS3(document, res, { inline = false } = {}) {
   const parsed = parseS3StorageUri(document?.cheminFichier);
   if (!parsed || !isS3Configured()) return false;
@@ -334,5 +388,6 @@ module.exports = {
   headS3Object,
   deleteS3Object,
   archiveS3Object,
+  getS3PresignedUrl,
   tryServeDocumentFromS3,
 };

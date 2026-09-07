@@ -28,6 +28,8 @@ const {
   deleteS3Object,
   archiveS3Object,
   tryServeDocumentFromS3,
+  getS3PresignedUrl,
+  isS3StoragePath,
 } = require('../utils/s3DocumentStorage');
 const { uploadDocumentToRemoteStorage, removeLocalUploadTempFile } = require('../utils/documentRemoteUpload');
 const { resolveCabinetForUser } = require('../utils/cabinetResolver');
@@ -259,7 +261,23 @@ async function sendDocumentToClient(document, res, { inline = false } = {}) {
     if (ok) return true;
   }
 
-  if (await tryServeDocumentFromS3(document, res, { inline })) return true;
+  // Pour les documents stockes sur S3 : presigned URL (302 redirect vers S3)
+  // Le client telecharge directement depuis S3, evitant de faire transiter
+  // les donnees a travers Node.js. Le navigateur met en cache la reponse S3.
+  if (isS3StoragePath(document?.cheminFichier)) {
+    const fileName = resolveDocumentDownloadFileName(document);
+    const presignedUrl = await getS3PresignedUrl(document.cheminFichier, {
+      expiresIn: 900,
+      inline,
+      fileName,
+    });
+    if (presignedUrl) {
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.redirect(302, presignedUrl);
+    }
+    // Fallback vers streaming direct si la generation echoue
+    return tryServeDocumentFromS3(document, res, { inline });
+  }
 
   const localPath = await resolveDocumentPhysicalPath(document);
   if (localPath) {

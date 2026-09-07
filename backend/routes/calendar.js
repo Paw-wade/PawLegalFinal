@@ -190,11 +190,21 @@ router.get('/events', async (req, res) => {
     const tasksEch = await Task.find({
       ...taskBaseFilter,
       dateEcheance: { $gte: startDate, $lte: endDate },
-    }).populate('dossier', 'titre numero _id').lean();
+    })
+      .populate('assignedTo', 'firstName lastName')
+      .populate('createdBy', 'firstName lastName')
+      .populate('dossier', 'titre numero _id')
+      .lean();
 
     for (const t of tasksEch) {
       const dl = daysUntil(t.dateEcheance);
       const pColor = t.priorite === 'urgente' ? 'red' : t.priorite === 'haute' ? 'orange' : 'purple';
+      const assignedToNames = (t.assignedTo || [])
+        .map((u) => `${u.firstName || ''} ${u.lastName || ''}`.trim())
+        .filter(Boolean);
+      const taskCreatorName = t.createdBy
+        ? `${t.createdBy.firstName || ''} ${t.createdBy.lastName || ''}`.trim()
+        : '';
       events.push({
         id: `tache_${t._id}`,
         type: 'tache',
@@ -207,6 +217,8 @@ router.get('/events', async (req, res) => {
         statut: t.statut,
         urgence: dl <= 3,
         priorite: t.priorite,
+        assignedToNames,
+        createdByName: taskCreatorName,
       });
     }
 
