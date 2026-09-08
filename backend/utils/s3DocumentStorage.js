@@ -47,19 +47,28 @@ function resolveStoragePrefix(prefixOverride) {
   return normalizePrefix(process.env.AWS_S3_PREFIX || 'Cabinet-adapapers/');
 }
 
+function getR2Endpoint() {
+  if (process.env.R2_ENDPOINT) return process.env.R2_ENDPOINT;
+  const accountId = String(process.env.R2_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || '').trim();
+  if (accountId) return `https://${accountId}.r2.cloudflarestorage.com`;
+  return null;
+}
+
 function getS3Config() {
+  const r2Endpoint = getR2Endpoint();
   return {
-    region: process.env.AWS_REGION || 'eusc-de-east-1',
-    bucket: process.env.AWS_S3_BUCKET || 'adapapers-248310411895-eusc-de-east-1-an',
+    region: r2Endpoint ? 'auto' : (process.env.AWS_REGION || 'us-east-1'),
+    bucket: String(process.env.R2_BUCKET || process.env.AWS_S3_BUCKET || '').trim(),
     prefix: normalizePrefix(process.env.AWS_S3_PREFIX || 'Cabinet-adapapers/'),
-    accessKeyId: String(process.env.AWS_ACCESS_KEY_ID || '').trim(),
-    secretAccessKey: String(process.env.AWS_SECRET_ACCESS_KEY || '').trim(),
+    accessKeyId: String(process.env.R2_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '').trim(),
+    secretAccessKey: String(process.env.R2_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim(),
+    endpoint: r2Endpoint,
   };
 }
 
 function isS3Configured() {
-  const { bucket, region, accessKeyId, secretAccessKey } = getS3Config();
-  if (!bucket || !region) return false;
+  const { bucket, accessKeyId, secretAccessKey } = getS3Config();
+  if (!bucket) return false;
   if (accessKeyId && secretAccessKey) return true;
   return String(process.env.AWS_USE_DEFAULT_CREDENTIALS || '').toLowerCase() === 'true';
 }
@@ -71,7 +80,7 @@ function isS3UploadMode() {
 function assertS3UploadReady() {
   if (!isS3UploadMode()) return;
   if (!isS3Configured()) {
-    throw new Error('UPLOAD_STORAGE=s3 mais S3 non configuré (AWS_S3_BUCKET, AWS_REGION, clés IAM)');
+    throw new Error('UPLOAD_STORAGE=s3 mais stockage non configure (R2_BUCKET + R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY + R2_ACCOUNT_ID)');
   }
 }
 
@@ -79,8 +88,9 @@ let cachedClient = null;
 
 function getS3Client() {
   if (cachedClient) return cachedClient;
-  const { region, accessKeyId, secretAccessKey } = getS3Config();
+  const { region, accessKeyId, secretAccessKey, endpoint } = getS3Config();
   const opts = { region };
+  if (endpoint) opts.endpoint = endpoint;
   if (accessKeyId && secretAccessKey) {
     opts.credentials = { accessKeyId, secretAccessKey };
   }
