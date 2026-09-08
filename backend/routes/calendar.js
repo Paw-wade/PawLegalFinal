@@ -355,10 +355,14 @@ router.get('/events', async (req, res) => {
           urgence: false,
           customId: ev._id.toString(),
           deletable: isCreator || isAdmin,
+          editable: isCreator || isAdmin,
           visibilite: ev.visibilite,
           participants: participantNames,
+          participantIds: (ev.participants || []).map((p) => p._id.toString()),
           createdByName: creatorName,
           emailTo: ev.type === 'email_programme' ? ev.emailTo : undefined,
+          emailSujet: ev.type === 'email_programme' ? ev.emailSujet : undefined,
+          emailCorps: ev.type === 'email_programme' ? ev.emailCorps : undefined,
           emailEnvoye: ev.type === 'email_programme' ? ev.emailEnvoye : undefined,
         });
       }
@@ -447,6 +451,56 @@ router.post('/custom-events', async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur POST /calendar/custom-events:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   PATCH /api/calendar/custom-events/:id
+// @desc    Modifier un evenement personnalise (createur ou admin)
+// @access  Private staff
+router.patch('/custom-events/:id', async (req, res) => {
+  try {
+    const ev = await CalendarEvent.findById(req.params.id);
+    if (!ev) return res.status(404).json({ success: false, message: 'Evenement introuvable' });
+
+    const isCreator = ev.createdBy.toString() === req.user.id;
+    const isAdmin = ['admin', 'superadmin'].includes(req.user.role);
+    if (!isCreator && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Vous ne pouvez pas modifier cet evenement' });
+    }
+
+    const {
+      titre, description, date, heureDebut, heureFin,
+      couleur, visibilite, participants, dossierId,
+      emailTo, emailSujet, emailCorps,
+    } = req.body;
+
+    if (titre !== undefined) {
+      if (!String(titre).trim()) return res.status(400).json({ success: false, message: 'Le titre est requis' });
+      ev.titre = String(titre).trim();
+    }
+    if (description !== undefined) ev.description = String(description).trim();
+    if (date !== undefined) ev.date = new Date(date);
+    if (heureDebut !== undefined) ev.heureDebut = String(heureDebut || '').trim();
+    if (heureFin !== undefined) ev.heureFin = String(heureFin || '').trim();
+    if (couleur !== undefined && VALID_COULEURS.includes(couleur)) ev.couleur = couleur;
+    if (visibilite !== undefined && VALID_VISIBILITES.includes(visibilite)) ev.visibilite = visibilite;
+    if (Array.isArray(participants)) {
+      ev.participants = participants.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    }
+    if (dossierId !== undefined) {
+      ev.dossierId = dossierId && mongoose.Types.ObjectId.isValid(dossierId) ? dossierId : null;
+    }
+    if (ev.type === 'email_programme') {
+      if (emailTo !== undefined) ev.emailTo = String(emailTo || '').trim();
+      if (emailSujet !== undefined) ev.emailSujet = String(emailSujet || '').trim();
+      if (emailCorps !== undefined) ev.emailCorps = String(emailCorps || '').trim();
+    }
+
+    await ev.save();
+    return res.json({ success: true, event: { id: ev._id, titre: ev.titre } });
+  } catch (error) {
+    console.error('Erreur PATCH /calendar/custom-events/:id:', error);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

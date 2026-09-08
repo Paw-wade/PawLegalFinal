@@ -35,11 +35,15 @@ interface CalEvent {
   priorite?: string;
   customId?: string;
   deletable?: boolean;
+  editable?: boolean;
   visibilite?: string;
   participants?: string[];
+  participantIds?: string[];
   createdByName?: string;
   assignedToNames?: string[];
   emailTo?: string;
+  emailSujet?: string;
+  emailCorps?: string;
   emailEnvoye?: boolean;
 }
 
@@ -208,6 +212,20 @@ async function deleteCustomEvent(id: string): Promise<void> {
   if (!res.ok) throw new Error('Erreur suppression');
 }
 
+async function updateCustomEvent(id: string, payload: Record<string, unknown>): Promise<void> {
+  const url = `${getApiBaseUrl()}/calendar/custom-events/${id}`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { ...authHeader(), 'Content-Type': 'application/json' },
+    credentials: 'omit',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error((json as any).message || 'Erreur modification');
+  }
+}
+
 // ─── Pill ─────────────────────────────────────────────────────────────────────
 
 function Pill({ event, onClick }: { event: CalEvent; onClick: () => void }) {
@@ -231,10 +249,12 @@ function EventDetail({
   event,
   onClose,
   onDeleted,
+  onEdit,
 }: {
   event: CalEvent;
   onClose: () => void;
   onDeleted: () => void;
+  onEdit?: () => void;
 }) {
   const c = COLOR_MAP[event.couleur] || COLOR_MAP.amber;
   const navLink = resolveEventLink(event);
@@ -317,7 +337,15 @@ function EventDetail({
         {delError && <p className="text-xs text-red-600 mb-2">{delError}</p>}
 
         <div className="flex items-center justify-between gap-2 mt-4">
-          <div>
+          <div className="flex gap-2">
+            {event.editable && onEdit && (
+              <button
+                onClick={() => { onClose(); onEdit(); }}
+                className="px-3 py-2 text-xs text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50"
+              >
+                Modifier
+              </button>
+            )}
             {event.deletable && (
               <button
                 onClick={handleDelete}
@@ -961,6 +989,292 @@ function CreateEventModal({ date, userId, onClose, onCreated }: CreateEventModal
   );
 }
 
+// ─── EditEventModal ───────────────────────────────────────────────────────────
+
+function EditEventModal({
+  event,
+  onClose,
+  onSaved,
+}: {
+  event: CalEvent;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const isEmail = event.type === 'email_programme';
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [staffSearch, setStaffSearch] = useState('');
+
+  const [form, setForm] = useState({
+    titre: event.titre,
+    description: !isEmail ? (event.details || '') : '',
+    date: isoDate(new Date(event.date)),
+    heureDebut: event.heure || '',
+    heureFin: event.heureFin || '',
+    couleur: event.couleur || 'blue',
+    visibilite: event.visibilite || 'equipe',
+    participants: event.participantIds || [],
+    emailTo: event.emailTo || '',
+    emailSujet: event.emailSujet || event.titre,
+    emailCorps: event.emailCorps || '',
+  });
+
+  useEffect(() => {
+    if (!isEmail) fetchStaff().then(setStaff);
+  }, [isEmail]);
+
+  const toggleParticipant = (id: string) => {
+    setForm((f) => ({
+      ...f,
+      participants: f.participants.includes(id)
+        ? f.participants.filter((p) => p !== id)
+        : [...f.participants, id],
+    }));
+  };
+
+  const filteredStaff = staff.filter((m) => {
+    const q = staffSearch.toLowerCase();
+    return `${m.firstName} ${m.lastName}`.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.titre.trim()) { setError('Le titre est requis'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const payload: Record<string, unknown> = { titre: form.titre.trim(), date: form.date };
+      if (!isEmail) {
+        payload.description = form.description.trim();
+        payload.heureDebut = form.heureDebut;
+        payload.heureFin = form.heureFin;
+        payload.couleur = form.couleur;
+        payload.visibilite = form.visibilite;
+        payload.participants = form.participants;
+      } else {
+        if (!form.emailTo.trim()) { setError('Le destinataire est requis'); setSaving(false); return; }
+        if (!form.emailSujet.trim()) { setError("L'objet est requis"); setSaving(false); return; }
+        payload.emailTo = form.emailTo.trim();
+        payload.emailSujet = form.emailSujet.trim();
+        payload.emailCorps = form.emailCorps.trim();
+        payload.visibilite = form.visibilite;
+      }
+      await updateCustomEvent(event.customId!, payload);
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Erreur lors de la modification');
+      setSaving(false);
+    }
+  };
+
+  const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 max-h-[92vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-lg text-gray-900">
+            {isEmail ? "Modifier l'email" : "Modifier l'evenement"}
+          </h3>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Date</label>
+            <input
+              type="date"
+              value={form.date}
+              onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+              className={inputCls}
+            />
+          </div>
+
+          {!isEmail ? (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Titre *</label>
+                <input
+                  autoFocus
+                  value={form.titre}
+                  onChange={(e) => setForm((f) => ({ ...f, titre: e.target.value }))}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Description</label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  className={`${inputCls} resize-none`}
+                  rows={2}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Heure debut</label>
+                  <input type="time" value={form.heureDebut} onChange={(e) => setForm((f) => ({ ...f, heureDebut: e.target.value }))} className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Heure fin</label>
+                  <input type="time" value={form.heureFin} onChange={(e) => setForm((f) => ({ ...f, heureFin: e.target.value }))} className={inputCls} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-2">Couleur</label>
+                <div className="flex gap-2 flex-wrap">
+                  {COLORS_CONFIG.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, couleur: c.id }))}
+                      className={`w-7 h-7 rounded-full ${c.tw} transition-transform ${
+                        form.couleur === c.id ? 'ring-2 ring-offset-2 ring-gray-500 scale-110' : 'opacity-60 hover:opacity-100 hover:scale-105'
+                      }`}
+                      title={c.id}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-2">Visibilite</label>
+                <div className="flex flex-wrap gap-4">
+                  {[{ val: 'prive', label: 'Prive' }, { val: 'equipe', label: 'Equipe' }, { val: 'tous', label: 'Tous' }].map((v) => (
+                    <label key={v.val} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                      <input
+                        type="radio"
+                        value={v.val}
+                        checked={form.visibilite === v.val}
+                        onChange={() => setForm((f) => ({ ...f, visibilite: v.val }))}
+                        className="accent-orange-500"
+                      />
+                      {v.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {staff.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Participants</label>
+                  <input
+                    type="text"
+                    value={staffSearch}
+                    onChange={(e) => setStaffSearch(e.target.value)}
+                    placeholder="Rechercher un membre..."
+                    className={`${inputCls} mb-2`}
+                  />
+                  <div className="max-h-32 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+                    {filteredStaff.map((m) => {
+                      const isSelected = form.participants.includes(m._id);
+                      return (
+                        <button
+                          key={m._id}
+                          type="button"
+                          onClick={() => toggleParticipant(m._id)}
+                          className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition ${
+                            isSelected ? 'bg-orange-50 text-orange-700' : 'hover:bg-gray-50 text-gray-700'
+                          }`}
+                        >
+                          <span>{m.firstName} {m.lastName}</span>
+                          {isSelected ? <span className="text-orange-500 text-xs font-bold">Inclus</span> : <span className="text-gray-300 text-xs">+</span>}
+                        </button>
+                      );
+                    })}
+                    {filteredStaff.length === 0 && (
+                      <p className="text-xs text-gray-400 px-3 py-2">Aucun membre trouve</p>
+                    )}
+                  </div>
+                  {form.participants.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {form.participants.map((pid) => {
+                        const m = staff.find((s) => s._id === pid);
+                        return m ? (
+                          <span key={pid} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs flex items-center gap-1">
+                            {m.firstName} {m.lastName}
+                            <button type="button" onClick={() => toggleParticipant(pid)} className="text-orange-400 hover:text-orange-700 ml-0.5">&times;</button>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Destinataire *</label>
+                <input
+                  autoFocus
+                  type="email"
+                  value={form.emailTo}
+                  onChange={(e) => setForm((f) => ({ ...f, emailTo: e.target.value }))}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Objet *</label>
+                <input
+                  value={form.emailSujet}
+                  onChange={(e) => setForm((f) => ({ ...f, emailSujet: e.target.value }))}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Corps du message</label>
+                <textarea
+                  value={form.emailCorps}
+                  onChange={(e) => setForm((f) => ({ ...f, emailCorps: e.target.value }))}
+                  className={`${inputCls} resize-none`}
+                  rows={5}
+                  placeholder="Contenu de l'email..."
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-2">Visibilite</label>
+                <div className="flex gap-4">
+                  {[{ val: 'prive', label: 'Prive' }, { val: 'equipe', label: 'Equipe' }].map((v) => (
+                    <label key={v.val} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                      <input
+                        type="radio"
+                        value={v.val}
+                        checked={form.visibilite === v.val}
+                        onChange={() => setForm((f) => ({ ...f, visibilite: v.val }))}
+                        className="accent-orange-500"
+                      />
+                      {v.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {error && <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1">{error}</p>}
+
+          <div className="flex gap-3 justify-end pt-1">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 text-sm bg-orange-500 text-white rounded-lg font-semibold hover:bg-orange-600 disabled:opacity-50"
+            >
+              {saving ? 'Enregistrement...' : 'Enregistrer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── WeekView ────────────────────────────────────────────────────────────────
 
 function WeekView({
@@ -1248,6 +1562,7 @@ export default function CalendrierPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
+  const [editEvent, setEditEvent] = useState<CalEvent | null>(null);
   const [createDate, setCreateDate] = useState<Date | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
 
@@ -1598,6 +1913,14 @@ export default function CalendrierPage() {
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
           onDeleted={() => { setSelectedEvent(null); loadEvents(); }}
+          onEdit={() => { setEditEvent(selectedEvent); setSelectedEvent(null); }}
+        />
+      )}
+      {editEvent && (
+        <EditEventModal
+          event={editEvent}
+          onClose={() => setEditEvent(null)}
+          onSaved={() => { setEditEvent(null); loadEvents(); }}
         />
       )}
       {createDate && (
