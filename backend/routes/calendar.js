@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const { protect, authorize } = require('../middleware/auth');
 const { userHasPermission, getAssignedDossierIds } = require('../utils/accessScope');
+const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const RendezVous = require('../models/RendezVous');
 const Dossier = require('../models/Dossier');
 const Task = require('../models/Task');
@@ -14,6 +15,75 @@ router.use(protect);
 const STAFF_ROLES = ['admin', 'superadmin', 'assistant', 'secretaire', 'juriste', 'comptable'];
 const VALID_COULEURS = ['blue', 'green', 'purple', 'orange', 'red', 'amber', 'indigo', 'pink'];
 const VALID_VISIBILITES = ['prive', 'equipe', 'tous'];
+
+function buildEventEmailHtml(ev, creator) {
+  const dateStr = new Date(ev.date).toLocaleDateString('fr-FR', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+  const heureStr = ev.heureDebut
+    ? `${ev.heureDebut}${ev.heureFin ? ` - ${ev.heureFin}` : ''}`
+    : '';
+  const creatorName = creator
+    ? escapeHtml(`${creator.firstName || ''} ${creator.lastName || ''}`.trim())
+    : 'Un membre de l\'equipe';
+  const desc = ev.description ? `<p>${escapeHtml(ev.description)}</p>` : '';
+  const heure = heureStr ? `<p><strong>Heure :</strong> ${escapeHtml(heureStr)}</p>` : '';
+
+  return `
+<p><strong>${escapeHtml(creator ? (creator.firstName || '') : '')}</strong> a ajoute un evenement au calendrier de l'equipe.</p>
+<table style="border-left:4px solid #6366f1;padding:12px 16px;background:#f5f3ff;border-radius:4px;margin:16px 0">
+  <tr><td><strong>Evenement :</strong> ${escapeHtml(ev.titre)}</td></tr>
+  <tr><td><strong>Date :</strong> ${escapeHtml(dateStr)}</td></tr>
+  ${heure ? `<tr><td>${heure}</td></tr>` : ''}
+  ${ev.description ? `<tr><td><strong>Description :</strong> ${escapeHtml(ev.description)}</td></tr>` : ''}
+</table>
+<p>Cree par : ${creatorName}</p>
+<p><a href="${escapeHtml(process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_API_URL || '')}/admin/calendrier" style="background:#6366f1;color:#fff;padding:8px 16px;border-radius:4px;text-decoration:none">Voir le calendrier</a></p>
+`;
+}
+
+async function notifyNewCalendarEvent(ev, creatorId) {
+  try {
+    const creator = await User.findById(creatorId).select('firstName lastName email').lean();
+
+    const recipientIds = new Set();
+
+    if (Array.isArray(ev.participants)) {
+      for (const pid of ev.participants) {
+        if (String(pid) !== String(creatorId)) recipientIds.add(String(pid));
+      }
+    }
+
+    if (ev.visibilite === 'equipe' || ev.visibilite === 'tous') {
+      const staff = await User.find({
+        role: { $in: STAFF_ROLES },
+        isActive: { $ne: false },
+        _id: { $ne: creatorId },
+      }).select('_id').lean();
+      for (const u of staff) recipientIds.add(String(u._id));
+    }
+
+    if (recipientIds.size === 0) return;
+
+    const recipients = await User.find({ _id: { $in: [...recipientIds] } })
+      .select('firstName lastName email').lean();
+
+    const subject = `Nouvel evenement : ${ev.titre}`;
+    const html = buildEventEmailHtml(ev, creator);
+
+    for (const u of recipients) {
+      if (!u.email) continue;
+      sendTransactionalEmail({
+        to: u.email,
+        toName: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+        subject,
+        htmlContent: html,
+      }).catch((e) => console.warn(`[calendar] email non envoye a ${u.email}:`, e.message));
+    }
+  } catch (e) {
+    console.warn('[calendar] notifyNewCalendarEvent erreur:', e.message);
+  }
+}
 
 function urgencyColor(daysLeft) {
   if (daysLeft <= 3) return 'red';
@@ -366,6 +436,10 @@ router.post('/custom-events', async (req, res) => {
       emailSujet: type === 'email_programme' ? String(emailSujet || '').trim() : '',
       emailCorps: type === 'email_programme' ? String(emailCorps || '').trim() : '',
     });
+
+    if (ev.type === 'evenement') {
+      void notifyNewCalendarEvent(ev, req.user.id);
+    }
 
     return res.status(201).json({
       success: true,

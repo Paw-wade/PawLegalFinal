@@ -29,7 +29,6 @@ const {
   archiveS3Object,
   tryServeDocumentFromS3,
   getS3PresignedUrl,
-  isS3StoragePath,
 } = require('../utils/s3DocumentStorage');
 const { uploadDocumentToRemoteStorage, removeLocalUploadTempFile } = require('../utils/documentRemoteUpload');
 const { resolveCabinetForUser } = require('../utils/cabinetResolver');

@@ -147,7 +147,9 @@ try { app.use('/api/fiche-invitations', require('./routes/ficheInvitations')); }
 
 try {
   app.use('/api/user/documents', require('./routes/documents'));
-} catch (e) {}
+} catch (e) {
+  console.error('FATAL: impossible de charger /api/user/documents:', e.message);
+}
 
 try {
   app.use('/api/document-requests', require('./routes/document-requests'));
@@ -272,6 +274,13 @@ try {
 try {
   app.use('/api', require('./routes/recours'));
 } catch (e) {}
+
+try {
+  app.use('/api', require('./routes/guides'));
+  console.log('Route /api/guides enregistree');
+} catch (e) {
+  console.error("Impossible d'enregistrer /api/guides:", e.message);
+}
 
 /* =========================
    ERREURS

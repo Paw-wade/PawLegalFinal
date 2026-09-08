@@ -113,12 +113,17 @@ export default function SignupPage() {
   }, []);
 
   // Pré-remplir l'email depuis le lien d'invitation (?email=) reçu après une demande publique.
+  // Stocker le redirect param pour l'activation ultérieure.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const emailParam = params.get('email');
     if (emailParam) {
       setFormData((prev) => (prev.email ? prev : { ...prev, email: emailParam }));
+    }
+    const redirectParam = params.get('redirect');
+    if (redirectParam) {
+      try { localStorage.setItem('ada_signup_redirect', redirectParam); } catch { /* rien */ }
     }
   }, []);
 
@@ -259,15 +264,12 @@ export default function SignupPage() {
 
         if (emailSent) {
           setSuccess(
-            'Un email avec un lien sécurisé pour choisir votre mot de passe vous a été envoyé. Redirection automatique vers l’accueil…'
+            `Un email d’activation a été envoyé à ${email}. Cliquez sur le lien dans cet email pour choisir votre mot de passe et activer votre compte. Vérifiez aussi vos courriers indésirables si vous ne le recevez pas.`
           );
           if (redirectTimerRef.current) {
             clearTimeout(redirectTimerRef.current);
-          }
-          redirectTimerRef.current = setTimeout(() => {
             redirectTimerRef.current = null;
-            router.push('/');
-          }, REDIRECT_DELAY_MS);
+          }
         } else {
           setSuccess(
             response.data.message ||
@@ -569,8 +571,8 @@ export default function SignupPage() {
                   >
                     {success ? (
                       <span className="flex items-center justify-center gap-2">
-                        <span className="animate-pulse">✓</span>
-                        <span>Redirection vers l'accueil…</span>
+                        <span>✓</span>
+                        <span>Email envoyé</span>
                       </span>
                     ) : isLoading ? (
                       <span className="flex items-center gap-2">

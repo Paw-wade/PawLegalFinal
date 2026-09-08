@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import SessionProvider from '@/providers/SessionProvider';
 import { PushNotificationsBootstrap } from '@/components/PushNotificationsBootstrap';
+import { GuidePopup } from '@/components/ui/GuidePopup';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -41,6 +42,7 @@ export default function RootLayout({
       <body className="antialiased overflow-x-hidden min-w-0 max-w-[100vw]">
         <SessionProvider>
           <PushNotificationsBootstrap />
+          <GuidePopup />
           {children}
         </SessionProvider>
       </body>

@@ -138,7 +138,15 @@ function ActivateForm() {
           window.location.href = '/auth/complete-profile';
           return;
         }
-        window.location.href = '/client';
+        let redirectTo = '/client';
+        try {
+          const saved = localStorage.getItem('ada_signup_redirect');
+          if (saved) {
+            localStorage.removeItem('ada_signup_redirect');
+            redirectTo = saved;
+          }
+        } catch { /* rien */ }
+        window.location.href = redirectTo;
         return;
       }
 

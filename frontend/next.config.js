@@ -59,6 +59,9 @@ function devApiRewriteRules(backendOrigin) {
     'recours',
     'fiches',
     'fiche-invitations',
+    'guides',
+    'parrainage',
+    'cabinets',
   ];
 
   const rules = [];

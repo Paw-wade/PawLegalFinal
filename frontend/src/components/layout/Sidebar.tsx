@@ -16,6 +16,7 @@ import {
   Calculator,
   User,
   Scale,
+  BookOpen,
 } from 'lucide-react';
 
 /** Icône cercle + € (équivalent visuel à CircleDollarSign pour la tarification en euros) */
@@ -74,6 +75,7 @@ const clientMenuItems: MenuItem[] = [
   { href: '/forum', label: 'Forum', icon: MessageSquare },
   { href: '/lexia', label: 'Paw AI', icon: Scale },
   { href: '/calculateur', label: 'Calculateur', icon: Calculator },
+  { href: '/client/guides/nouvel-arrivant', label: 'Guide nouvel arrivant', icon: BookOpen },
   { href: '/client/compte', label: 'Mon compte', icon: User },
 ];
 

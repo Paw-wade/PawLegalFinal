@@ -4,7 +4,7 @@ const OTP = require('../models/OTP');
 const User = require('../models/User');
 const EmailTemplate = require('../models/EmailTemplate');
 const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
-const { sendTransactionalEmailDetailed } = require('../utils/emailNotifications');
+const { sendTransactionalEmailDetailed, escapeHtml } = require('../utils/emailNotifications');
 const jwt = require('jsonwebtoken');
 
 const router = express.Router();
@@ -99,14 +99,15 @@ const generateOTP = () => {
 };
 
 // @route   POST /api/otp/send
-// @desc    Envoyer un code OTP par SMS
+// @desc    Envoyer un code OTP par email
 // @access  Public
 router.post(
   '/send',
   [
-    body('firstName').trim().notEmpty().withMessage('Le prénom est requis'),
+    body('firstName').trim().notEmpty().withMessage('Le prenom est requis'),
     body('lastName').trim().notEmpty().withMessage('Le nom est requis'),
-    body('phone').trim().notEmpty().withMessage('Le numéro de téléphone est requis')
+    body('phone').trim().notEmpty().withMessage('Le numero de telephone est requis'),
+    body('email').trim().isEmail().withMessage("L'adresse email est requise et doit etre valide"),
   ],
   async (req, res) => {
     try {
@@ -114,143 +115,79 @@ router.post(
       if (!errors.isEmpty()) {
         return res.status(400).json({
           success: false,
-          message: 'Erreurs de validation',
-          errors: errors.array()
+          message: errors.array()[0]?.msg || 'Erreurs de validation',
+          errors: errors.array(),
         });
       }
 
       const { firstName, lastName, phone, email } = req.body;
+      const cleanEmail = email.trim().toLowerCase();
 
-      // Formater le numéro de téléphone
+      // Formater le numero de telephone
       const formattedPhone = formatPhoneNumber(phone);
       if (!formattedPhone) {
         return res.status(400).json({
           success: false,
-          message: 'Numéro de téléphone invalide'
+          message: 'Numero de telephone invalide',
         });
       }
 
-      // Vérifier si un utilisateur avec ce numéro existe déjà
-      // Permettre la réinscription si l'utilisateur n'a pas encore défini de mot de passe
+      // Bloquer la reinscription si le compte existe et a deja un mot de passe
       const existingUser = await User.findOne({ phone: formattedPhone });
       if (existingUser && existingUser.password && !existingUser.needsPasswordSetup) {
         return res.status(400).json({
           success: false,
-          message: 'Un compte avec ce numéro de téléphone existe déjà. Veuillez vous connecter.'
+          message: 'Un compte avec ce numero de telephone existe deja. Veuillez vous connecter.',
         });
       }
 
-      // Générer un code OTP
+      // Generer le code OTP
       const code = generateOTP();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-      // Supprimer les anciens codes OTP pour ce numéro
+      // Supprimer les anciens codes pour ce numero
       await OTP.deleteMany({ phone: formattedPhone });
 
-      // Créer un nouveau code OTP
-      const otpData = {
+      await OTP.create({
         phone: formattedPhone,
         code,
         firstName,
         lastName,
-        expiresAt
-      };
+        email: cleanEmail,
+        expiresAt,
+      });
 
-      if (email && email.trim() !== '') {
-        otpData.email = email.trim().toLowerCase();
-      }
+      // Envoyer le code par email
+      const prenomEsc = escapeHtml(String(firstName).trim());
+      const { ok, error: emailError } = await sendTransactionalEmailDetailed({
+        to: cleanEmail,
+        toName: `${String(firstName).trim()} ${String(lastName).trim()}`,
+        subject: 'Votre code de verification Ada Papers',
+        htmlContent: `<p>Bonjour ${prenomEsc},</p>
+<p>Voici votre code de verification pour creer votre compte Ada Papers :</p>
+<p style="font-size:32px;font-weight:700;letter-spacing:8px;color:#ea580c;margin:24px 0;">${code}</p>
+<p style="color:#666;font-size:13px;">Ce code est valable <strong>10 minutes</strong>. Ne le communiquez a personne.</p>
+<p style="color:#666;font-size:13px;">Si vous n'avez pas demande ce code, ignorez ce message.</p>`,
+        textContent: `Bonjour ${prenomEsc},\n\nVotre code de verification Ada Papers : ${code}\n\nValable 10 minutes. Ne le communiquez a personne.`,
+      });
 
-      const otp = await OTP.create(otpData);
-
-      // Envoyer le SMS avec le code OTP (modèle `otp` éditable dans Admin → SMS)
-      try {
-        // En mode développement, permettre de continuer sans SMS réel si Twilio n'est pas configuré
-        const allowWithoutSMS = process.env.NODE_ENV === 'development' && process.env.ALLOW_OTP_WITHOUT_SMS === 'true';
-        const twilioNotConfigured = !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN;
-        
-        if (allowWithoutSMS || twilioNotConfigured) {
-          console.log(`⚠️ Mode développement: SMS simulé pour ${formattedPhone}`);
-          console.log(`📱 Code OTP généré: ${code} (valide 10 minutes)`);
-          
-          res.json({
-            success: true,
-            message: 'Code OTP généré avec succès (mode développement - SMS simulé)',
-            expiresAt: expiresAt.toISOString(),
-            code: code // Retourner le code en mode développement pour faciliter les tests
-          });
-          return;
-        }
-        
-        await sendNotificationSMS(
-          formattedPhone,
-          'otp',
-          { code },
-          {
-            skipPreferences: true,
-            context: 'otp',
-            contextId: otp._id.toString(),
-          }
-        );
-
-        console.log(`✅ Code OTP envoyé à ${formattedPhone}: ${code}`);
-        
-        res.json({
-          success: true,
-          message: 'Code OTP envoyé avec succès',
-          expiresAt: expiresAt.toISOString()
-        });
-      } catch (smsError) {
-        console.error('❌ Erreur lors de l\'envoi du SMS:', smsError);
-        console.error('❌ Détails de l\'erreur:', {
-          message: smsError.message,
-          code: smsError.code,
-          stack: process.env.NODE_ENV === 'development' ? smsError.stack : undefined
-        });
-        
-        // En mode développement, permettre de continuer même si l'envoi SMS échoue
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`⚠️ Mode développement: SMS échoué mais code OTP conservé pour ${formattedPhone}`);
-          console.log(`📱 Code OTP généré: ${code} (valide 10 minutes)`);
-          
-          res.json({
-            success: true,
-            message: 'Code OTP généré avec succès (mode développement - SMS échoué)',
-            expiresAt: expiresAt.toISOString(),
-            code: code,
-            warning: `Erreur SMS: ${smsError.message}`
-          });
-          return;
-        }
-        
-        // Supprimer le code OTP si l'envoi du SMS échoue (en production uniquement)
-        await OTP.findByIdAndDelete(otp._id);
-        
-        // Message d'erreur plus détaillé selon le type d'erreur
-        let errorMessage = 'Erreur lors de l\'envoi du SMS. Veuillez réessayer.';
-        
-        if (smsError.message?.includes('Twilio n\'est pas configuré')) {
-          errorMessage = 'Le service SMS n\'est pas configuré. Veuillez contacter l\'administrateur.';
-        } else if (smsError.message?.includes('numéro de téléphone n\'est pas vérifié')) {
-          errorMessage = 'Ce numéro de téléphone n\'est pas vérifié. En mode test, seuls les numéros vérifiés peuvent recevoir des SMS.';
-        } else if (smsError.message?.includes('Numéro de téléphone invalide')) {
-          errorMessage = 'Le numéro de téléphone fourni est invalide. Veuillez vérifier le format.';
-        } else if (smsError.message) {
-          errorMessage = `Erreur SMS: ${smsError.message}`;
-        }
-        
+      if (!ok) {
+        console.error('[otp/send] Email non envoye:', emailError);
         return res.status(500).json({
           success: false,
-          message: errorMessage,
-          error: process.env.NODE_ENV === 'development' ? smsError.message : undefined
+          message: "Impossible d'envoyer l'email de verification. Verifiez votre adresse ou reessayez.",
         });
       }
-    } catch (error) {
-      console.error('Erreur lors de l\'envoi de l\'OTP:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Erreur serveur',
-        error: error.message
+
+      console.log(`[otp/send] Code envoye par email a ${cleanEmail} (tel: ${formattedPhone})`);
+      return res.json({
+        success: true,
+        message: `Un code de verification a ete envoye a ${cleanEmail}`,
+        expiresAt: expiresAt.toISOString(),
       });
+    } catch (error) {
+      console.error('[otp/send] Erreur serveur:', error);
+      return res.status(500).json({ success: false, message: 'Erreur serveur' });
     }
   }
 );

@@ -1972,4 +1972,13 @@ export const emailConsoleAPI = {
     api.get('/email/logs', { params }),
 };
 
+export const guidesAPI = {
+  getNouvelArrivant: () => api.get('/guides/nouvel-arrivant'),
+};
+
+export const parrainageAPI = {
+  submitBnp: (data: { nom: string; prenom: string; email: string }) =>
+    api.post('/parrainage/bnp', data),
+};
+
 
