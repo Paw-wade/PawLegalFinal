@@ -34,12 +34,26 @@ const stepSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const bonPlanSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, trim: true },
+    titre: { type: String, required: true, trim: true },
+    categorie: { type: String, required: true, trim: true },
+    description: { type: String, trim: true, default: '' },
+    lien: { type: String, trim: true, default: null },
+    portee_geographique: { type: String, trim: true, default: 'national' },
+    date_verification: { type: String, trim: true, default: '' },
+  },
+  { _id: false }
+);
+
 const guideConfigSchema = new mongoose.Schema(
   {
     slug: { type: String, required: true, unique: true, trim: true },
     titre: { type: String, required: true, trim: true },
     intro: { type: String, trim: true, default: '' },
     steps: { type: [stepSchema], default: [] },
+    bonsPlans: { type: [bonPlanSchema], default: [] },
   },
   { timestamps: true }
 );
