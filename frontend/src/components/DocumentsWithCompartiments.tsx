@@ -57,6 +57,16 @@ export function DocumentsWithCompartiments({
   const [isExportingZip, setIsExportingZip] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ compId: string | null; done: number; total: number } | null>(null);
 
+  // Multi-select
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
+  const [bulkTarget, setBulkTarget] = useState('');
+  const [bulkMoving, setBulkMoving] = useState(false);
+
+  // Drag & drop
+  const [draggingDocId, setDraggingDocId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const dragCounters = useRef<Map<string, number>>(new Map());
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetRef = useRef<string | null>(null);
 
@@ -86,7 +96,7 @@ export function DocumentsWithCompartiments({
 
   const handleCreate = async () => {
     const nom = newName.trim();
-    if (!nom) return;
+    if (!nom || creating) return;
     setCreating(true);
     try {
       await documentsAPI.createCompartiment({ dossierId, nom });
@@ -148,11 +158,32 @@ export function DocumentsWithCompartiments({
     }
   };
 
+  const handleBulkMove = async (compartimentId: string) => {
+    if (selectedDocIds.size === 0 || bulkMoving) return;
+    setBulkMoving(true);
+    try {
+      await Promise.all(
+        Array.from(selectedDocIds).map((id) =>
+          documentsAPI.moveDocumentToCompartiment(id, compartimentId === '__none__' ? null : compartimentId)
+        )
+      );
+      setSelectedDocIds(new Set());
+      setBulkTarget('');
+      onDocumentsChanged?.();
+    } catch (e) {
+      console.error('Erreur deplacement groupe:', e);
+      alert('Impossible de deplacer les documents');
+    } finally {
+      setBulkMoving(false);
+    }
+  };
+
   const handleDeleteDoc = async (docId: string) => {
     if (!window.confirm('Supprimer definitivement ce document ?')) return;
     setDeletingDocId(docId);
     try {
       await documentsAPI.deleteDocument(docId);
+      setSelectedDocIds((prev) => { const n = new Set(prev); n.delete(docId); return n; });
       onDocumentsChanged?.();
     } catch (e) {
       console.error('Erreur suppression document:', e);
@@ -228,6 +259,73 @@ export function DocumentsWithCompartiments({
     }
   };
 
+  // Drag & drop handlers
+  const handleDragStart = (e: React.DragEvent, docId: string) => {
+    e.dataTransfer.setData('text/plain', docId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingDocId(docId);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingDocId(null);
+    setDragOverId(null);
+    dragCounters.current.clear();
+  };
+
+  const handleDropZoneEnter = (e: React.DragEvent, zoneId: string) => {
+    e.preventDefault();
+    const count = (dragCounters.current.get(zoneId) || 0) + 1;
+    dragCounters.current.set(zoneId, count);
+    setDragOverId(zoneId);
+  };
+
+  const handleDropZoneLeave = (e: React.DragEvent, zoneId: string) => {
+    const count = (dragCounters.current.get(zoneId) || 1) - 1;
+    dragCounters.current.set(zoneId, count);
+    if (count <= 0) {
+      dragCounters.current.delete(zoneId);
+      setDragOverId((prev) => (prev === zoneId ? null : prev));
+    }
+  };
+
+  const handleDropZoneOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, compartimentId: string) => {
+    e.preventDefault();
+    dragCounters.current.delete(compartimentId);
+    setDragOverId(null);
+    const docId = e.dataTransfer.getData('text/plain');
+    setDraggingDocId(null);
+    if (!docId) return;
+    const doc = documents.find((d) => (d._id || d.id) === docId);
+    const currentCId = doc ? (doc.compartiment?._id || doc.compartiment || '__none__') : '__none__';
+    if (currentCId === compartimentId) return;
+    await handleMove(docId, compartimentId);
+  };
+
+  // Selection helpers
+  const toggleSelect = (docId: string) => {
+    setSelectedDocIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(docId)) n.delete(docId); else n.add(docId);
+      return n;
+    });
+  };
+
+  const toggleSelectGroup = (groupDocs: any[]) => {
+    const groupIds = groupDocs.map((d) => d._id || d.id);
+    const allSelected = groupIds.length > 0 && groupIds.every((id) => selectedDocIds.has(id));
+    setSelectedDocIds((prev) => {
+      const n = new Set(prev);
+      if (allSelected) groupIds.forEach((id) => n.delete(id));
+      else groupIds.forEach((id) => n.add(id));
+      return n;
+    });
+  };
+
   const grouped = (() => {
     const map = new Map<string, any[]>();
     map.set('__none__', []);
@@ -242,40 +340,46 @@ export function DocumentsWithCompartiments({
 
   const renderDoc = (doc: any) => {
     const docId = doc._id || doc.id;
-    const currentCId = (doc.compartiment?._id || doc.compartiment || '__none__') as string;
     const isHighlighted = targetDocId && String(docId) === String(targetDocId);
     const isMoving = movingDocId === docId;
     const isDelDoc = deletingDocId === docId;
+    const isSelected = selectedDocIds.has(docId);
+    const isDragging = draggingDocId === docId;
 
     return (
       <div
         key={docId}
         id={`doc-${docId}`}
-        className={`flex items-center gap-2 py-1.5 min-w-0 border-b border-gray-100 last:border-0 transition-colors ${
-          isHighlighted ? 'bg-amber-50 -mx-1 px-1 rounded' : ''
-        }`}
+        draggable={isAdmin}
+        onDragStart={(e) => handleDragStart(e, docId)}
+        onDragEnd={handleDragEnd}
+        className={`flex items-center gap-2 py-1.5 min-w-0 border-b border-gray-100 last:border-0 transition-colors rounded
+          ${isHighlighted ? 'bg-amber-50 -mx-1 px-1' : ''}
+          ${isDragging ? 'opacity-40' : ''}
+          ${isSelected ? 'bg-orange-50' : ''}
+        `}
       >
-        <p
-          className="text-sm flex-1 min-w-0 truncate text-gray-800 cursor-default"
-          title={doc.nom}
-        >
+        {isAdmin && (
+          <input
+            type="checkbox"
+            className="shrink-0 accent-orange-500 cursor-pointer"
+            checked={isSelected}
+            onChange={() => toggleSelect(docId)}
+          />
+        )}
+        {isAdmin && (
+          <span
+            className="text-gray-300 cursor-grab active:cursor-grabbing shrink-0 select-none text-base leading-none"
+            title="Glisser pour deplacer"
+          >
+            ⠿
+          </span>
+        )}
+        <p className="text-sm flex-1 min-w-0 truncate text-gray-800 cursor-default" title={doc.nom}>
           {doc.nom}
         </p>
         <div className="flex items-center gap-1 shrink-0">
-          {isAdmin && (
-            <select
-              className="h-6 text-xs border border-gray-200 rounded px-1 bg-white w-[90px]"
-              value={currentCId}
-              disabled={isMoving}
-              onChange={(e) => handleMove(docId, e.target.value)}
-              title="Deplacer vers..."
-            >
-              <option value="__none__">Non classes</option>
-              {compartiments.map((c) => (
-                <option key={c._id} value={c._id}>{c.nom}</option>
-              ))}
-            </select>
-          )}
+          {isMoving && <span className="text-xs text-orange-500">...</span>}
           <button
             className="text-xs h-6 px-1.5 rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 shrink-0"
             onClick={() => onPreviewDocument(doc)}
@@ -312,11 +416,30 @@ export function DocumentsWithCompartiments({
     const isEditing = editingId === id;
     const isDeleting = deletingId === id;
     const isConfirming = deletingConfirmId === id;
-    const isUploading = uploadProgress !== null && uploadProgress.compId === id;
+    const isUploading = uploadProgress !== null && uploadProgress.compId === (isNone ? null : id);
+    const isDragOver = dragOverId === id && draggingDocId !== null;
+    const groupIds = docs.map((d) => d._id || d.id);
+    const allGroupSelected = groupIds.length > 0 && groupIds.every((gid) => selectedDocIds.has(gid));
 
     return (
-      <div key={id} className="mb-5">
+      <div
+        key={id}
+        className={`mb-4 rounded-lg p-2 -mx-2 transition-all duration-150 ${isDragOver ? 'bg-orange-50 ring-2 ring-orange-300 ring-inset' : ''}`}
+        onDragEnter={(e) => isAdmin && handleDropZoneEnter(e, id)}
+        onDragLeave={(e) => isAdmin && handleDropZoneLeave(e, id)}
+        onDragOver={(e) => isAdmin && handleDropZoneOver(e)}
+        onDrop={(e) => isAdmin && handleDrop(e, id)}
+      >
         <div className="flex flex-wrap items-center gap-2 mb-2 pb-1.5 border-b border-gray-100">
+          {isAdmin && !isNone && docs.length > 0 && (
+            <input
+              type="checkbox"
+              className="shrink-0 accent-orange-500 cursor-pointer"
+              checked={allGroupSelected}
+              onChange={() => toggleSelectGroup(docs)}
+              title="Tout selectionner"
+            />
+          )}
           <span>📂</span>
           {isEditing ? (
             <>
@@ -384,18 +507,25 @@ export function DocumentsWithCompartiments({
                   </button>
                 </>
               )}
+              {isDragOver && (
+                <span className="text-xs text-orange-600 font-semibold ml-auto animate-pulse">
+                  Deposer ici
+                </span>
+              )}
             </>
           )}
         </div>
-        <div className="pl-2">
+        <div className={`pl-2 ${isDragOver && docs.length === 0 ? 'min-h-[2rem]' : ''}`}>
           {docs.length === 0 ? (
-            <p className="text-xs text-gray-400 italic py-1">Aucun document</p>
+            <p className="text-xs text-gray-400 italic py-1">
+              {isDragOver ? 'Deposer ici...' : 'Aucun document'}
+            </p>
           ) : (
             docs.map(renderDoc)
           )}
         </div>
         {isAdmin && (
-          <div className="pl-2 mt-1.5">
+          <div className="pl-2 mt-2">
             {isUploading ? (
               <p className="text-xs text-orange-600">
                 Envoi {uploadProgress!.done}/{uploadProgress!.total}...
@@ -403,7 +533,7 @@ export function DocumentsWithCompartiments({
             ) : (
               <button
                 className="text-xs text-orange-600 hover:text-orange-800 border border-dashed border-orange-300 rounded px-2 py-1 hover:bg-orange-50"
-                onClick={() => triggerUpload(id)}
+                onClick={() => triggerUpload(isNone ? null : id)}
               >
                 + Ajouter des fichiers
               </button>
@@ -415,17 +545,15 @@ export function DocumentsWithCompartiments({
   };
 
   const hasContent = documents.length > 0;
-  const showNone = hasContent && (grouped.get('__none__') || []).length > 0;
+  const hasCompartiments = compartiments.length > 0;
+  const noneGroupDocs = grouped.get('__none__') || [];
+  const selectionCount = selectedDocIds.size;
+  const showNoneGroup = !hasCompartiments || noneGroupDocs.length > 0 || draggingDocId !== null;
 
   return (
     <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 min-w-0">
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={handleFileChange}
-      />
+      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h2 className="text-xl font-bold break-words">📁 Documents du dossier</h2>
         {isAdmin && (
@@ -440,29 +568,53 @@ export function DocumentsWithCompartiments({
         )}
       </div>
 
+      {/* Barre de selection groupee */}
+      {isAdmin && selectionCount > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+          <span className="text-xs font-semibold text-orange-700">
+            {selectionCount} document{selectionCount > 1 ? 's' : ''} selectionne{selectionCount > 1 ? 's' : ''}
+          </span>
+          <select
+            className="h-7 text-xs border border-orange-300 rounded px-2 bg-white flex-1 min-w-0 max-w-[180px]"
+            value={bulkTarget}
+            onChange={(e) => setBulkTarget(e.target.value)}
+          >
+            <option value="">Deplacer vers...</option>
+            <option value="__none__">Non classes</option>
+            {compartiments.map((c) => (
+              <option key={c._id} value={c._id}>{c.nom}</option>
+            ))}
+          </select>
+          <Btn
+            className="h-7 text-xs px-3 shrink-0"
+            disabled={!bulkTarget || bulkMoving}
+            onClick={() => bulkTarget && handleBulkMove(bulkTarget)}
+          >
+            {bulkMoving ? '...' : 'Deplacer'}
+          </Btn>
+          <button
+            className="text-xs text-gray-500 hover:text-gray-700"
+            onClick={() => { setSelectedDocIds(new Set()); setBulkTarget(''); }}
+          >
+            Annuler
+          </button>
+        </div>
+      )}
+
       {isLoading || loadingCompartiments ? (
         <p className="text-sm text-muted-foreground">Chargement...</p>
-      ) : !hasContent ? (
-        <div>
-          <p className="text-sm text-muted-foreground mb-2">Aucun document</p>
-          {isAdmin && (
-            <button
-              className="text-xs text-orange-600 hover:text-orange-800 border border-dashed border-orange-300 rounded px-2 py-1 hover:bg-orange-50"
-              onClick={() => triggerUpload(null)}
-            >
-              + Ajouter des fichiers
-            </button>
-          )}
-        </div>
       ) : (
         <>
+          {/* Compartiments nommes -- toujours rendus meme sans documents */}
           {compartiments.map((c) => renderGroup(c._id, c.nom, grouped.get(c._id) || []))}
-          {(showNone || compartiments.length === 0) && renderGroup('__none__', 'Non classes', grouped.get('__none__') || [])}
+
+          {/* Non classes -- visible si pas de compartiments, ou docs non classes, ou drag en cours */}
+          {showNoneGroup && renderGroup('__none__', 'Non classes', noneGroupDocs)}
         </>
       )}
 
       {isAdmin && (
-        <div className={`mt-4 pt-4 border-t border-gray-100 ${!hasContent && compartiments.length === 0 ? 'mt-0 pt-0 border-0' : ''}`}>
+        <div className={`mt-4 pt-4 border-t border-gray-100 ${!hasContent && !hasCompartiments ? 'mt-2 pt-0 border-0' : ''}`}>
           <p className="text-xs font-semibold text-gray-500 mb-2">Nouveau compartiment</p>
           <div className="flex gap-2">
             <input
