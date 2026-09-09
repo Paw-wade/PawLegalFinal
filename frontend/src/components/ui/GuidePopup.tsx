@@ -12,6 +12,7 @@ export function GuidePopup() {
 
   useEffect(() => {
     if (status === 'loading') return;
+    if (status === 'authenticated') return;
     try {
       if (localStorage.getItem('ada_guide_popup_v2')) return;
     } catch { /* rien */ }
