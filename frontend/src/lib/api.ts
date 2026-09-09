@@ -50,7 +50,9 @@ function shouldSkip401SessionHandling(requestUrl: string): boolean {
     u.includes('/auth/reset-password') ||
     u.includes('/auth/setup-password') ||
     u.includes('/auth/complete-signup') ||
-    u.includes('/auth/resend-activation')
+    u.includes('/auth/resend-activation') ||
+    u.includes('/guides/') ||
+    u.endsWith('/guides/nouvel-arrivant')
   );
 }
 

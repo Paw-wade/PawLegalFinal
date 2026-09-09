@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import { guidesAPI, parrainageAPI } from '@/lib/api';
 
 type GuideLink = { label: string; url: string };
@@ -217,7 +216,6 @@ function CtaBanner() {
 
 export default function GuideNouvelArrivantPublicPage() {
   const { status } = useSession();
-  const router = useRouter();
   const [guide, setGuide] = useState<Guide | null>(null);
   const [loading, setLoading] = useState(true);
   const [openIdx, setOpenIdx] = useState<number>(-1);
@@ -225,11 +223,6 @@ export default function GuideNouvelArrivantPublicPage() {
   const isAuthenticated = status === 'authenticated';
 
   useEffect(() => {
-    // Si l'utilisateur est connecté, rediriger vers la version espace client
-    if (status === 'authenticated') {
-      router.replace('/client/guides/nouvel-arrivant');
-      return;
-    }
     if (status === 'loading') return;
 
     guidesAPI
@@ -239,7 +232,7 @@ export default function GuideNouvelArrivantPublicPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [status, router]);
+  }, [status]);
 
   if (status === 'loading' || loading) {
     return (
