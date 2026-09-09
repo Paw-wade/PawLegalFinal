@@ -46,6 +46,7 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
     }
 
     let cancelled = false;
+    const abortController = new AbortController();
 
     const revokeCurrentBlob = () => {
       if (blobRef.current) {
@@ -84,21 +85,71 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
       const baseUrl = getApiBaseUrl();
       const url = `${baseUrl}/user/documents/${encodeURIComponent(documentId)}/preview`;
 
-      // Utiliser le token en query param pour eviter le CORS sur le redirect 302 vers R2.
-      // Le navigateur charge le contenu via navigation directe, sans fetch cross-origin.
-      const secureUrl = `${url}?token=${encodeURIComponent(token)}`;
-
       if (canWord) {
+        const secureUrl = `${url}?token=${encodeURIComponent(token)}`;
         const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(secureUrl)}`;
         setPreviewUrl(officeViewerUrl);
         setIsLoading(false);
         return;
       }
 
-      if (!cancelled) {
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: 'omit',
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error('Session expirée ou token invalide. Veuillez vous reconnecter.');
+          }
+          if (response.status === 403) {
+            throw new Error('Accès non autorisé à ce document.');
+          }
+          if (response.status === 404) {
+            let detail =
+              'Document ou fichier introuvable. Si le document est ancien, le fichier peut avoir été perdu sur le serveur - importez-le à nouveau.';
+            try {
+              const ct = response.headers.get('content-type');
+              if (ct?.includes('application/json')) {
+                const j = (await response.json()) as { code?: string; message?: string };
+                if (j.code === 'FILE_NOT_FOUND') {
+                  detail =
+                    'Le fichier est absent du dossier de stockage du serveur (uploads). Ré-uploadez le document ou contactez l\'administrateur.';
+                } else if (j.code === 'DOCUMENT_NOT_FOUND') {
+                  detail = "Ce document n'existe plus en base de données.";
+                } else if (j.message) {
+                  detail = j.message;
+                }
+              }
+            } catch {
+              /* ignore parse */
+            }
+            throw new Error(detail);
+          }
+          const t = await response.text().catch(() => '');
+          throw new Error(
+            `Erreur ${response.status}${t ? `: ${t.slice(0, 160)}` : ''}`
+          );
+        }
+
+        const blob = await response.blob();
+        if (cancelled) return;
+
+        const objectUrl = URL.createObjectURL(blob);
         revokeCurrentBlob();
-        setPreviewUrl(secureUrl);
-        setIsLoading(false);
+        blobRef.current = objectUrl;
+        setPreviewUrl(objectUrl);
+      } catch (err: unknown) {
+        if (cancelled || (err instanceof Error && err.name === 'AbortError')) return;
+        const message = err instanceof Error ? err.message : 'Impossible de prévisualiser ce document.';
+        setError(message);
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
     };
 
@@ -106,6 +157,7 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
 
     return () => {
       cancelled = true;
+      abortController.abort();
       revokeCurrentBlob();
       setPreviewUrl(null);
     };
@@ -129,6 +181,12 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
   const isImage = isImageDoc(document);
   const isWord = isWordDoc(document);
   const canPreview = isPDF || isImage || isWord;
+
+  const openBlobInNewTab = () => {
+    if (previewUrl?.startsWith('blob:')) {
+      window.open(previewUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
 
   const modal = (
@@ -249,13 +307,13 @@ export function DocumentPreview({ document, isOpen, onClose }: DocumentPreviewPr
         {/* Footer */}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-white px-3 py-3 sm:px-4">
           <p className="min-w-0 text-xs text-muted-foreground">
-            {canPreview ? 'Prévisualisation sécurisée' : 'Téléchargement requis'}
+            {canPreview ? 'Prévisualisation sécurisée (fichier chargé en mémoire)' : 'Téléchargement requis'}
           </p>
           <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:justify-end">
-            {previewUrl && (
+            {previewUrl?.startsWith('blob:') && (
               <button
                 type="button"
-                onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+                onClick={openBlobInNewTab}
                 className="flex-1 rounded-md bg-gray-100 px-3 py-2 text-sm transition-colors hover:bg-gray-200 sm:flex-none sm:px-4"
               >
                 Nouvel onglet

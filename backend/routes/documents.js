@@ -260,21 +260,9 @@ async function sendDocumentToClient(document, res, { inline = false } = {}) {
     if (ok) return true;
   }
 
-  // Pour les documents stockes sur S3 : presigned URL (302 redirect vers S3)
-  // Le client telecharge directement depuis S3, evitant de faire transiter
-  // les donnees a travers Node.js. Le navigateur met en cache la reponse S3.
+  // Pour les documents sur R2/S3 : streaming direct via le backend.
+  // Evite les problemes CORS et de redirection 302 vers r2.cloudflarestorage.com.
   if (isS3StoragePath(document?.cheminFichier)) {
-    const fileName = resolveDocumentDownloadFileName(document);
-    const presignedUrl = await getS3PresignedUrl(document.cheminFichier, {
-      expiresIn: 900,
-      inline,
-      fileName,
-    });
-    if (presignedUrl) {
-      res.setHeader('Cache-Control', 'private, no-store');
-      return res.redirect(302, presignedUrl);
-    }
-    // Fallback vers streaming direct si la generation echoue
     return tryServeDocumentFromS3(document, res, { inline });
   }
 
