@@ -190,7 +190,7 @@ export function GuidePopup() {
             lineHeight: 1.6,
             marginBottom: '18px',
           }}>
-            Notre guide recapitule chaque demarche administrative a effectuer des votre arrivee en France.
+            Notre guide récapitule les démarches administratives à effectuer dès votre arrivée en France.
           </p>
 
 
