@@ -94,8 +94,8 @@ export default function DocumentsPage() {
       setDossiers(list);
 
       const byId = new Map<string, any>();
-      await Promise.all(
-        list.map(async (d: any) => {
+      await Promise.all([
+        ...list.map(async (d: any) => {
           const id = (d._id || d.id)?.toString();
           if (!id || !/^[a-f0-9]{24}$/i.test(id)) return;
           try {
@@ -111,8 +111,22 @@ export default function DocumentsPage() {
               console.error(`Erreur documents dossier ${id}:`, e);
             }
           }
-        })
-      );
+        }),
+        (async () => {
+          try {
+            const res = await documentsAPI.getMyDocuments();
+            if (res.data.success) {
+              (res.data.documents || []).forEach((doc: any) => {
+                if (doc.dossierId) return;
+                const docId = (doc._id || doc.id)?.toString();
+                if (docId) byId.set(docId, doc);
+              });
+            }
+          } catch (e: any) {
+            console.error('Erreur docs sans dossier:', e);
+          }
+        })(),
+      ]);
 
       const merged = Array.from(byId.values()).sort(
         (a, b) =>

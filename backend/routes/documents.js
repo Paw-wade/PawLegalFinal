@@ -503,7 +503,10 @@ router.get('/admin', protect, async (req, res) => {
       const canViewAll = await userHasPermission(req.user, 'documents', 'consulter');
       if (!canViewAll) {
         const assignedIds = await getAssignedDossierIds(req.user.id);
-        query.dossierId = { $in: assignedIds };
+        query.$or = [
+          { dossierId: { $in: assignedIds } },
+          { user: req.user.id },
+        ];
         console.log('🔒 Accès restreint documents - dossiers assignés:', assignedIds.length);
       }
     }
