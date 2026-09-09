@@ -73,7 +73,7 @@ function BnpForm() {
       await parrainageAPI.submitBnp(form);
       setSuccess(true);
     } catch {
-      setError('Une erreur est survenue. Veuillez reessayer.');
+      setError('Une erreur est survenue. Veuillez réessayer.');
     } finally {
       setSubmitting(false);
     }
@@ -82,14 +82,14 @@ function BnpForm() {
   if (success) {
     return (
       <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">
-        Demande enregistree. Ada Papers vous contactera pour finaliser le parrainage.
+        Demande enregistrée. Ada Papers vous contactera pour finaliser le parrainage.
       </p>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-2">
-      <input required type="text" placeholder="Prenom" value={form.prenom}
+      <input required type="text" placeholder="Prénom" value={form.prenom}
         onChange={(e) => setForm((f) => ({ ...f, prenom: e.target.value }))}
         className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white" />
       <input required type="text" placeholder="Nom" value={form.nom}
@@ -112,7 +112,7 @@ function BnpFormGated({ isAuthenticated }: { isAuthenticated: boolean }) {
     return (
       <a href="/auth/signup?redirect=/guides/nouvel-arrivant"
         className="inline-flex items-center gap-1.5 text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg transition-colors">
-        Creer un compte pour acceder au parrainage
+        Créer un compte pour accéder au parrainage
       </a>
     );
   }
@@ -245,7 +245,7 @@ export default function GuideNouvelArrivantPublicPage() {
                 Se connecter
               </a>
               <a href="/auth/signup" className="text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg transition-colors">
-                Creer un compte
+                Créer un compte
               </a>
             </div>
           )}
@@ -284,7 +284,7 @@ export default function GuideNouvelArrivantPublicPage() {
 
         <div className="border border-gray-200 rounded-xl bg-gray-50 px-5 py-4 flex flex-col sm:flex-row items-center gap-3 justify-between">
           <p className="text-xs text-gray-500 text-center sm:text-left">
-            Pour plus d&apos;informations, notre equipe est disponible pour vous accompagner.
+            Pour plus d&apos;informations, notre équipe est disponible pour vous accompagner.
           </p>
           <div className="flex gap-2 flex-shrink-0">
             <a href="/client/messages"
@@ -293,7 +293,7 @@ export default function GuideNouvelArrivantPublicPage() {
             </a>
             <a href="/forum"
               className="inline-flex items-center gap-1.5 text-xs font-semibold border border-gray-300 bg-white hover:bg-gray-100 text-gray-700 px-3 py-2 rounded-lg transition-colors">
-              Acceder au forum
+              Accéder au forum
             </a>
           </div>
         </div>

@@ -74,7 +74,7 @@ export function GuidePopup() {
         <div style={{ position: 'relative', height: 'min(260px, 38vh)' }}>
           <img
             src="/photo%20guide%20nouvel%20arrivant.jpg"
-            alt="Etudiants internationaux"
+            alt="Étudiants internationaux"
             style={{
               width: '100%',
               height: '100%',
@@ -142,7 +142,7 @@ export function GuidePopup() {
               textTransform: 'uppercase',
               marginBottom: '6px',
             }}>
-              Arrive recemment en France ?
+              Arrivé récemment en France ?
             </p>
             <h2 style={{
               fontSize: '26px',
@@ -152,8 +152,8 @@ export function GuidePopup() {
               margin: 0,
               textShadow: '0 2px 8px rgba(0,0,0,0.3)',
             }}>
-              Toutes vos demarches,<br />
-              <span style={{ color: '#fb923c' }}>etape par etape.</span>
+              Toutes vos démarches,<br />
+              <span style={{ color: '#fb923c' }}>étape par étape.</span>
             </h2>
           </div>
         </div>

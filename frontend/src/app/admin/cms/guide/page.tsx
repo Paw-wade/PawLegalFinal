@@ -99,7 +99,7 @@ function StepEditor({ step, idx, onChange, onRemove, onMoveUp, onMoveDown, isFir
         <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${open ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
           {step.order}
         </span>
-        <span className="flex-1 text-sm font-semibold text-gray-800 truncate">{step.titre || <em className="text-gray-400 font-normal">Titre de l&apos;etape</em>}</span>
+        <span className="flex-1 text-sm font-semibold text-gray-800 truncate">{step.titre || <em className="text-gray-400 font-normal">Titre de l&apos;étape</em>}</span>
         <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
           <button type="button" onClick={onMoveUp} disabled={isFirst} className="p-1 rounded text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Monter">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
@@ -117,29 +117,29 @@ function StepEditor({ step, idx, onChange, onRemove, onMoveUp, onMoveDown, isFir
       {open && (
         <div className="px-4 py-4 border-t border-gray-100 space-y-4">
           <div>
-            <Label>Titre de l&apos;etape *</Label>
+            <Label>Titre de l&apos;étape *</Label>
             <Input value={step.titre} onChange={(v) => set('titre', v)} placeholder="ex: Valider le visa VLS-TS" />
           </div>
 
           <div>
             <Label>Description</Label>
-            <Textarea value={step.description} onChange={(v) => set('description', v)} placeholder="Description detaillee de l'etape..." rows={4} />
+            <Textarea value={step.description} onChange={(v) => set('description', v)} placeholder="Description détaillée de l'étape..." rows={4} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Delai</Label>
+              <Label>Délai</Label>
               <Input value={step.deadline} onChange={(v) => set('deadline', v)} placeholder="ex: Dans les 3 mois" />
             </div>
             <div>
-              <Label>Cout</Label>
+              <Label>Coût</Label>
               <Input value={step.cost} onChange={(v) => set('cost', v)} placeholder="ex: Gratuit / 103 euros" />
             </div>
           </div>
 
           <div>
             <Label>Note avertissement</Label>
-            <Textarea value={step.warningNote} onChange={(v) => set('warningNote', v)} placeholder="Attention, delai a respecter..." rows={2} />
+            <Textarea value={step.warningNote} onChange={(v) => set('warningNote', v)} placeholder="Attention, délai à respecter..." rows={2} />
           </div>
 
           <div>
@@ -295,7 +295,7 @@ export default function GuideEditorPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch {
-      setError('Erreur lors de la sauvegarde. Veuillez reessayer.');
+      setError('Erreur lors de la sauvegarde. Veuillez réessayer.');
     } finally {
       setSaving(false);
     }
@@ -320,7 +320,7 @@ export default function GuideEditorPage() {
             </button>
           </div>
           <h1 className="text-xl font-bold text-gray-900">Guide Nouvel Arrivant</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Editez le contenu affiche sur la page publique du guide.</p>
+          <p className="text-sm text-gray-500 mt-0.5">Éditez le contenu affiché sur la page publique du guide.</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <a href="/guides/nouvel-arrivant" target="_blank" rel="noopener noreferrer"
@@ -356,20 +356,20 @@ export default function GuideEditorPage() {
       )}
 
       <div className="border border-gray-200 rounded-xl p-5 space-y-4 bg-white">
-        <h2 className="text-sm font-semibold text-gray-700">Informations generales</h2>
+        <h2 className="text-sm font-semibold text-gray-700">Informations générales</h2>
         <div>
           <Label>Titre *</Label>
-          <Input value={guide.titre} onChange={(v) => setGuide((g) => ({ ...g, titre: v }))} placeholder="Guide du nouvel arrivant - Etudiant international en France" />
+          <Input value={guide.titre} onChange={(v) => setGuide((g) => ({ ...g, titre: v }))} placeholder="Guide du nouvel arrivant - Étudiant international en France" />
         </div>
         <div>
           <Label>Introduction</Label>
-          <Textarea value={guide.intro} onChange={(v) => setGuide((g) => ({ ...g, intro: v }))} placeholder="Ce guide recapitule les demarches..." rows={3} />
+          <Textarea value={guide.intro} onChange={(v) => setGuide((g) => ({ ...g, intro: v }))} placeholder="Ce guide récapitule les démarches..." rows={3} />
         </div>
       </div>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700">Etapes ({guide.steps.length})</h2>
+          <h2 className="text-sm font-semibold text-gray-700">Étapes ({guide.steps.length})</h2>
         </div>
         {guide.steps.map((step, idx) => (
           <StepEditor
@@ -390,7 +390,7 @@ export default function GuideEditorPage() {
           className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-200 rounded-xl text-sm font-medium text-gray-400 hover:border-orange-300 hover:text-orange-500 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          Ajouter une etape
+          Ajouter une étape
         </button>
       </div>
 
