@@ -27,6 +27,7 @@ const stepSchema = new mongoose.Schema(
     cost: { type: String, trim: true, default: '' },
     links: { type: [linkSchema], default: [] },
     warningNote: { type: String, trim: true, default: '' },
+    promoNote: { type: String, trim: true, default: '' },
     special: { type: String, enum: ['banque', ''], default: '' },
     banqueOptions: { type: [banqueOptionSchema], default: [] },
   },

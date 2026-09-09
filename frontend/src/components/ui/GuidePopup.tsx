@@ -35,11 +35,7 @@ export function GuidePopup() {
 
   const goToGuide = () => {
     dismiss();
-    if (status === 'authenticated') {
-      router.push('/client/guides/nouvel-arrivant');
-    } else {
-      router.push('/auth/signup?redirect=/client/guides/nouvel-arrivant');
-    }
+    router.push('/guides/nouvel-arrivant');
   };
 
   if (!visible) return null;

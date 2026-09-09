@@ -3,6 +3,7 @@ import './globals.css';
 import SessionProvider from '@/providers/SessionProvider';
 import { PushNotificationsBootstrap } from '@/components/PushNotificationsBootstrap';
 import { GuidePopup } from '@/components/ui/GuidePopup';
+import { GuideFloatingButton } from '@/components/ui/GuideFloatingButton';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -43,6 +44,7 @@ export default function RootLayout({
         <SessionProvider>
           <PushNotificationsBootstrap />
           <GuidePopup />
+          <GuideFloatingButton />
           {children}
         </SessionProvider>
       </body>

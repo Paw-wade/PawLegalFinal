@@ -7,6 +7,14 @@
       "runtimeArgs": ["next", "dev", "-p", "3004", "--turbopack"],
       "port": 3004,
       "cwd": "frontend"
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["nodemon", "server.js"],
+      "port": 3005,
+      "autoPort": false,
+      "cwd": "backend"
     }
   ]
 }

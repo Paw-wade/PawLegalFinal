@@ -180,12 +180,23 @@ export default function AdminCmsPage() {
     <div className="min-h-screen min-w-0 max-w-[100vw] overflow-x-hidden bg-background">
       <main className="mx-auto min-w-0 max-w-7xl px-3 py-6 sm:px-4 sm:py-8">
         <div className="mb-6 flex min-w-0 flex-col gap-1">
-          <h1 className="break-words text-xl font-bold text-gray-900 sm:text-2xl">
-            CMS de contenu
-          </h1>
-          <p className="break-words text-sm text-gray-500">
-            Gérez les textes affichés sur le site (par page, section et clé).
-          </p>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="break-words text-xl font-bold text-gray-900 sm:text-2xl">
+                CMS de contenu
+              </h1>
+              <p className="break-words text-sm text-gray-500">
+                Gérez les textes affichés sur le site (par page, section et clé).
+              </p>
+            </div>
+            <a
+              href="/admin/cms/guide"
+              className="inline-flex items-center gap-2 text-sm font-semibold bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors flex-shrink-0"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+              Guide Nouvel Arrivant
+            </a>
+          </div>
         </div>
 
         {error && (

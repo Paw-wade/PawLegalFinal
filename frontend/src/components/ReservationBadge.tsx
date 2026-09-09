@@ -36,11 +36,11 @@ export function ReservationBadge({ onOpen, alwaysVisible = false }: ReservationB
   return (
     <button
       onClick={onOpen}
-      className="fixed bottom-6 right-6 z-50 bg-primary text-primary-foreground rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2 px-4 py-3 animate-in fade-in slide-in-from-bottom-4"
+      className="fixed bottom-6 right-6 z-50 bg-primary text-primary-foreground rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-1.5 px-3 py-2 animate-in fade-in slide-in-from-bottom-4"
       aria-label="Prendre un rendez-vous"
     >
-      <span className="text-lg">📅</span>
-      <span className="font-medium text-sm">Prendre RDV</span>
+      <span className="text-sm">📅</span>
+      <span className="font-medium text-xs">Prendre RDV</span>
     </button>
   );
 }

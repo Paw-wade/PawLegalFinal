@@ -50,7 +50,8 @@ function shouldSkip401SessionHandling(requestUrl: string): boolean {
     u.includes('/auth/reset-password') ||
     u.includes('/auth/setup-password') ||
     u.includes('/auth/complete-signup') ||
-    u.includes('/auth/resend-activation')
+    u.includes('/auth/resend-activation') ||
+    u.includes('/guides/')
   );
 }
 
@@ -1952,6 +1953,11 @@ export const emailConsoleAPI = {
 
 export const guidesAPI = {
   getNouvelArrivant: () => api.get('/guides/nouvel-arrivant'),
+};
+
+export const guidesAdminAPI = {
+  getGuide: () => api.get('/admin/guides/nouvel-arrivant'),
+  updateGuide: (data: unknown) => api.put('/admin/guides/nouvel-arrivant', data),
 };
 
 export const parrainageAPI = {

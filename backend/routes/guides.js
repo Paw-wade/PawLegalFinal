@@ -14,7 +14,7 @@ const router = express.Router();
 // @route   GET /api/guides/nouvel-arrivant
 // @desc    Retourne le contenu du guide etudiant international
 // @access  Private (client connecte)
-router.get('/guides/nouvel-arrivant', protect, async (req, res) => {
+router.get('/guides/nouvel-arrivant', async (req, res) => {
   try {
     const guide = await GuideConfig.findOne({ slug: 'nouvel-arrivant' }).lean();
     if (!guide) {
@@ -23,6 +23,47 @@ router.get('/guides/nouvel-arrivant', protect, async (req, res) => {
     return res.json({ success: true, guide });
   } catch (e) {
     console.error('Erreur GET /guides/nouvel-arrivant:', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   GET /api/admin/guides/nouvel-arrivant
+// @desc    Retourne le guide complet pour edition (admin)
+// @access  Private (admin)
+router.get('/admin/guides/nouvel-arrivant', protect, async (req, res) => {
+  try {
+    if (!ADMIN_ROLES.includes(req.user?.role)) {
+      return res.status(403).json({ success: false, message: 'Acces reserve aux administrateurs' });
+    }
+    const guide = await GuideConfig.findOne({ slug: 'nouvel-arrivant' }).lean();
+    if (!guide) return res.status(404).json({ success: false, message: 'Guide introuvable' });
+    return res.json({ success: true, guide });
+  } catch (e) {
+    console.error('Erreur GET /admin/guides/nouvel-arrivant:', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   PUT /api/admin/guides/nouvel-arrivant
+// @desc    Met a jour le guide nouvel arrivant (admin)
+// @access  Private (admin)
+router.put('/admin/guides/nouvel-arrivant', protect, async (req, res) => {
+  try {
+    if (!ADMIN_ROLES.includes(req.user?.role)) {
+      return res.status(403).json({ success: false, message: 'Acces reserve aux administrateurs' });
+    }
+    const { titre, intro, steps } = req.body;
+    if (!titre || !String(titre).trim()) {
+      return res.status(400).json({ success: false, message: 'Le titre est requis' });
+    }
+    const guide = await GuideConfig.findOneAndUpdate(
+      { slug: 'nouvel-arrivant' },
+      { titre: String(titre).trim(), intro: String(intro || '').trim(), steps: steps || [] },
+      { new: true, upsert: true, runValidators: false }
+    ).lean();
+    return res.json({ success: true, guide });
+  } catch (e) {
+    console.error('Erreur PUT /admin/guides/nouvel-arrivant:', e);
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

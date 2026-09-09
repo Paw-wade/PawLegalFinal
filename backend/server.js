@@ -107,6 +107,13 @@ app.use('/api/auth', (req, res) => {
   });
 });
 
+try {
+  app.use('/api', require('./routes/guides'));
+  console.log('Route /api/guides enregistree');
+} catch (e) {
+  console.error("Impossible d'enregistrer /api/guides:", e.message);
+}
+
 // ✅ Légifrance - ajoute ces lignes
 try {
   app.use('/api/legal', require('./routes/legal'));
@@ -274,13 +281,6 @@ try {
 try {
   app.use('/api', require('./routes/recours'));
 } catch (e) {}
-
-try {
-  app.use('/api', require('./routes/guides'));
-  console.log('Route /api/guides enregistree');
-} catch (e) {
-  console.error("Impossible d'enregistrer /api/guides:", e.message);
-}
 
 /* =========================
    ERREURS
