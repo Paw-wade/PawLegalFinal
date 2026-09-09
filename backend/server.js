@@ -256,13 +256,6 @@ try {
 } catch (e) {}
 
 try {
-  app.use('/api', require('./routes/guides'));
-  console.log('Route /api/guides enregistree');
-} catch (e) {
-  console.error("Impossible d'enregistrer /api/guides:", e.message);
-}
-
-try {
   app.use('/api', require('./routes/calculators'));
 } catch (e) {}
 
@@ -281,6 +274,13 @@ try {
 try {
   app.use('/api', require('./routes/recours'));
 } catch (e) {}
+
+try {
+  app.use('/api', require('./routes/guides'));
+  console.log('Route /api/guides enregistree');
+} catch (e) {
+  console.error("Impossible d'enregistrer /api/guides:", e.message);
+}
 
 /* =========================
    ERREURS
