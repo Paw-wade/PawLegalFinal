@@ -140,11 +140,39 @@ function BanqueCards({ options, isAuthenticated }: { options: BanqueOption[]; is
   );
 }
 
+const INLINE_LINK_RE = /(\[[^\]]+\]\([^)]+\))/g;
+
+function renderDescription(text: string) {
+  const parts = text.split(INLINE_LINK_RE);
+  return parts.map((part, i) => {
+    const m = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (m) {
+      const [, label, url] = m;
+      const external = !url.startsWith('/');
+      return (
+        <a
+          key={i}
+          href={url}
+          target={external ? '_blank' : '_self'}
+          rel={external ? 'noopener noreferrer' : undefined}
+          className="inline-flex items-center gap-0.5 text-orange-600 hover:text-orange-700 underline underline-offset-2 font-medium"
+        >
+          {label}
+          {external && <ExternalLinkIcon />}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 function StepBody({ step, isAuthenticated }: { step: GuideStep; isAuthenticated: boolean }) {
   return (
     <div className="px-4 pb-5 pt-3 border-t border-gray-100 space-y-4">
       {step.description && (
-        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{step.description}</p>
+        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+          {renderDescription(step.description)}
+        </p>
       )}
 
       {(step.deadline || step.cost) && (
@@ -176,18 +204,6 @@ function StepBody({ step, isAuthenticated }: { step: GuideStep; isAuthenticated:
         <div className="flex gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
           <WarningIcon />
           <p className="text-xs text-amber-800 leading-relaxed">{step.warningNote}</p>
-        </div>
-      )}
-
-      {step.links && step.links.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {step.links.map((link) => (
-            <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-full transition-colors">
-              {link.label}
-              <ExternalLinkIcon />
-            </a>
-          ))}
         </div>
       )}
 
