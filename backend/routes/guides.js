@@ -13,8 +13,8 @@ const router = express.Router();
 
 // @route   GET /api/guides/nouvel-arrivant
 // @desc    Retourne le contenu du guide etudiant international
-// @access  Private (client connecte)
-router.get('/guides/nouvel-arrivant', protect, async (req, res) => {
+// @access  Public
+router.get('/guides/nouvel-arrivant', async (req, res) => {
   try {
     const guide = await GuideConfig.findOne({ slug: 'nouvel-arrivant' }).lean();
     if (!guide) {

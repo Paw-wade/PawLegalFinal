@@ -244,10 +244,10 @@ export default function GuideNouvelArrivantPage() {
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.push('/auth/signin');
+      router.replace('/guides/nouvel-arrivant');
       return;
     }
-    if (status === 'authenticated') {
+    if (status !== 'loading') {
       guidesAPI
         .getNouvelArrivant()
         .then((res) => {
