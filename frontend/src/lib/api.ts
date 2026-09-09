@@ -1417,34 +1417,12 @@ export const documentsAPI = {
     });
   },
   
-  // Prévisualiser un document (blob URL - à révoquer avec URL.revokeObjectURL quand terminé)
+  // Prévisualiser un document via URL directe avec token en query param.
+  // Evite le CORS que fetch() declenche sur le redirect 302 vers R2.
   previewDocument: async (id: string): Promise<string> => {
     const token = typeof window !== 'undefined' ? await getAuthToken() : null;
-    const url = `${getApiBaseUrl()}/user/documents/${encodeURIComponent(id)}/preview`;
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token || ''}`,
-      },
-      credentials: 'omit',
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      if (response.status === 401) {
-        throw new Error('Session expirée ou token invalide. Reconnectez-vous.');
-      }
-      if (response.status === 403) {
-        throw new Error('Accès non autorisé à ce document.');
-      }
-      if (response.status === 404) {
-        throw new Error('Document ou fichier introuvable sur le serveur.');
-      }
-      throw new Error(`Erreur prévisualisation (${response.status})${errText ? `: ${errText.slice(0, 120)}` : ''}`);
-    }
-
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    const base = `${getApiBaseUrl()}/user/documents/${encodeURIComponent(id)}/preview`;
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   },
 
   /** URL d’API preview (sans token) - préférer previewDocument + blob pour l’affichage */
