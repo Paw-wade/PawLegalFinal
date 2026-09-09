@@ -198,21 +198,6 @@ function StepBody({ step, isAuthenticated }: { step: GuideStep; isAuthenticated:
   );
 }
 
-function CtaBanner() {
-  return (
-    <div className="sticky bottom-4 z-10 mx-auto max-w-3xl px-4">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-400 px-5 py-4 shadow-xl">
-        <p className="text-sm font-semibold text-white text-center sm:text-left">
-          Besoin d&apos;aide pour vos démarches ? Ada Papers vous accompagne.
-        </p>
-        <a href="/auth/signup?redirect=/guides/nouvel-arrivant"
-          className="shrink-0 rounded-xl bg-white px-5 py-2 text-sm font-bold text-orange-600 hover:bg-orange-50 transition-colors">
-          Créer mon dossier →
-        </a>
-      </div>
-    </div>
-  );
-}
 
 export default function GuideNouvelArrivantPublicPage() {
   const { status } = useSession();
@@ -315,8 +300,6 @@ export default function GuideNouvelArrivantPublicPage() {
 
         <p className="text-xs text-gray-400 text-center pb-2">Guide fourni par Ada Papers.</p>
       </main>
-
-      <CtaBanner />
     </>
   );
 }
