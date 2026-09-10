@@ -115,7 +115,7 @@ function BnpForm() {
       {error && <p className="text-xs text-red-600">{error}</p>}
       <button type="submit" disabled={submitting}
         className="w-full text-xs font-semibold bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white px-3 py-2 rounded-lg transition-colors">
-        {submitting ? 'Envoi en cours...' : 'Demander le parrainage'}
+        {submitting ? 'Envoi en cours...' : 'Envoyer ma demande'}
       </button>
     </form>
   );
@@ -126,7 +126,7 @@ function BnpFormGated({ isAuthenticated }: { isAuthenticated: boolean }) {
     return (
       <a href="/auth/signup?redirect=/guides/nouvel-arrivant"
         className="inline-flex items-center gap-1.5 text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg transition-colors">
-        Créer un compte pour accéder au parrainage
+        Créer un compte pour continuer
       </a>
     );
   }
@@ -134,19 +134,32 @@ function BnpFormGated({ isAuthenticated }: { isAuthenticated: boolean }) {
 }
 
 function BanqueCards({ options, isAuthenticated }: { options: BanqueOption[]; isAuthenticated: boolean }) {
+  const [bnpOpen, setBnpOpen] = useState(false);
   return (
     <div className="grid gap-3 sm:grid-cols-3 pt-1">
       {options.map((opt) => (
-        <div key={opt.nom} className="border border-stone-200 rounded-xl p-4 space-y-3 bg-stone-50">
+        <div key={opt.nom} className="border border-stone-200 rounded-xl p-4 bg-stone-50 space-y-3">
           <p className="font-semibold text-stone-900 text-sm">{opt.nom}</p>
           {opt.type === 'lien' ? (
             <a href={opt.url} target="_blank" rel="noopener noreferrer"
               className="flex items-center justify-center gap-1.5 w-full text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg transition-colors">
-              {opt.label || 'Ouvrir via parrainage'}
+              Ouvrir un compte
               <ExternalLinkIcon />
             </a>
           ) : (
-            <BnpFormGated isAuthenticated={isAuthenticated} />
+            <>
+              <button
+                type="button"
+                onClick={() => setBnpOpen((v) => !v)}
+                className="flex items-center justify-center gap-1.5 w-full text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg transition-colors"
+              >
+                Ouvrir un compte
+                <svg className={`w-3 h-3 transition-transform duration-200 ${bnpOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {bnpOpen && <BnpFormGated isAuthenticated={isAuthenticated} />}
+            </>
           )}
         </div>
       ))}
@@ -198,7 +211,9 @@ function StepBody({ step, isAuthenticated }: { step: GuideStep; isAuthenticated:
       )}
 
       {step.special === 'banque' && step.banqueOptions && step.banqueOptions.length > 0 && (
-        <BanqueCards options={step.banqueOptions} isAuthenticated={isAuthenticated} />
+        <div id="bank-cards">
+          <BanqueCards options={step.banqueOptions} isAuthenticated={isAuthenticated} />
+        </div>
       )}
     </div>
   );
@@ -220,6 +235,7 @@ const CAT_COLORS: Record<string, { badge: string; border: string; dot: string }>
   transport:    { badge: 'bg-orange-50 text-orange-700 border-orange-200', border: 'border-l-orange-400', dot: 'bg-orange-400' },
   culture:      { badge: 'bg-pink-50 text-pink-700 border-pink-200', border: 'border-l-pink-400', dot: 'bg-pink-400' },
 };
+
 
 function BonPlanCard({ plan }: { plan: BonPlan }) {
   const colors = CAT_COLORS[plan.categorie] || { badge: 'bg-stone-50 text-stone-600 border-stone-200', border: 'border-l-stone-300', dot: 'bg-stone-300' };
@@ -249,6 +265,46 @@ function BonPlanCard({ plan }: { plan: BonPlan }) {
         </a>
       )}
     </div>
+  );
+}
+
+function BankCtaSidebar({ onCtaClick }: { onCtaClick: () => void }) {
+  return (
+    <aside className="hidden xl:block xl:w-80 flex-shrink-0">
+      <div className="sticky top-6 pl-8 pr-2 pt-6">
+        <button
+          type="button"
+          onClick={onCtaClick}
+          className="w-full text-left bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200 group"
+          aria-label="Voir les options pour ouvrir un compte bancaire"
+        >
+          {/* Photo */}
+          <div className="relative h-64 overflow-hidden">
+            <img
+              src="/image creation compte bancaire.avif"
+              alt=""
+              aria-hidden="true"
+              className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+            <div className="absolute bottom-2 left-3 right-3 drop-shadow">
+              <p className="text-white text-[11px] font-bold leading-tight">
+                Ouvre ton compte bancaire en France
+              </p>
+              <p className="text-orange-300 text-[10px] font-semibold leading-tight mt-0.5">
+                Gagnez jusqu&apos;à 160 euros de prime de bienvenue
+              </p>
+            </div>
+          </div>
+          {/* Bouton */}
+          <div className="p-3">
+            <div className="w-full text-center text-[11px] font-semibold bg-orange-500 group-hover:bg-orange-600 text-white py-1.5 rounded-xl transition-colors">
+              Voir les options
+            </div>
+          </div>
+        </button>
+      </div>
+    </aside>
   );
 }
 
@@ -294,6 +350,17 @@ export default function GuideNouvelArrivantPublicPage() {
   const [mainTab, setMainTab] = useState<'guide' | 'bons-plans'>('guide');
 
   const isAuthenticated = status === 'authenticated';
+
+  const handleBankCtaClick = () => {
+    if (!guide) return;
+    const bankIdx = guide.steps.findIndex((s) => s.special === 'banque');
+    if (bankIdx !== -1) {
+      setOpenIdx(bankIdx);
+      setTimeout(() => {
+        document.getElementById('bank-cards')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 250);
+    }
+  };
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -357,35 +424,43 @@ export default function GuideNouvelArrivantPublicPage() {
           )}
           {/* Onglets dans le hero */}
           {hasBonsPlans && (
-            <div className="inline-flex bg-orange-100 rounded-lg p-1 gap-1">
-              <button
-                type="button"
-                onClick={() => setMainTab('guide')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  mainTab === 'guide'
-                    ? 'bg-white text-stone-900 shadow-sm'
-                    : 'text-stone-500 hover:text-stone-700'
-                }`}
-              >
-                Guide
-              </button>
-              <button
-                type="button"
-                onClick={() => setMainTab('bons-plans')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  mainTab === 'bons-plans'
-                    ? 'bg-white text-stone-900 shadow-sm'
-                    : 'text-stone-500 hover:text-stone-700'
-                }`}
-              >
-                Bons plans
-              </button>
+            <div className="flex justify-center">
+              <div className="inline-flex bg-orange-100 rounded-xl p-1.5 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setMainTab('guide')}
+                  className={`px-6 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    mainTab === 'guide'
+                      ? 'bg-white text-stone-900 shadow-sm'
+                      : 'text-stone-500 hover:text-stone-700'
+                  }`}
+                >
+                  Guide
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMainTab('bons-plans')}
+                  className={`px-6 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    mainTab === 'bons-plans'
+                      ? 'bg-white text-stone-900 shadow-sm'
+                      : 'text-stone-500 hover:text-stone-700'
+                  }`}
+                >
+                  Bons plans
+                </button>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      <main className="max-w-3xl mx-auto px-4 pb-16">
+      <div className="xl:flex">
+        {mainTab === 'guide' && (
+          <BankCtaSidebar onCtaClick={handleBankCtaClick} />
+        )}
+
+        <main className="flex-1 min-w-0 pb-16 xl:pb-16 pb-28">
+          <div className="max-w-3xl mx-auto px-4">
 
         {/* Onglet Guide */}
         {mainTab === 'guide' && (
@@ -396,7 +471,7 @@ export default function GuideNouvelArrivantPublicPage() {
                 const isOpen = openIdx === idx;
                 const isLast = idx === guide.steps.length - 1;
                 return (
-                  <div key={step.order} className="flex">
+                  <div key={step.order} id={step.special === 'banque' ? 'bank-step' : undefined} className="flex">
                     {/* Colonne gauche : numéro + ligne verticale */}
                     <div className="flex flex-col items-center" style={{ width: '52px', flexShrink: 0, paddingRight: '16px' }}>
                       <button
@@ -424,9 +499,7 @@ export default function GuideNouvelArrivantPublicPage() {
                         className="w-full text-left pt-4 group flex items-start justify-between gap-2"
                       >
                         <div className="flex-1 min-w-0">
-                          <h3 className={`text-base font-medium leading-snug mb-2 transition-colors ${
-                            isOpen ? 'text-stone-900' : 'text-stone-700 group-hover:text-stone-900'
-                          }`}>
+                          <h3 className="text-base font-semibold leading-snug mb-2 text-stone-900">
                             {step.titre}
                           </h3>
                           {(step.deadline || step.cost) && !isOpen && (
@@ -490,7 +563,38 @@ export default function GuideNouvelArrivantPublicPage() {
             <BonsPlansSection plans={guide.bonsPlans!} />
           </div>
         )}
-      </main>
+          </div>
+        </main>
+
+        {mainTab === 'guide' && (
+          <div className="hidden xl:block xl:w-80 flex-shrink-0" aria-hidden="true" />
+        )}
+      </div>
+
+      {/* Mobile : bandeau sticky en bas */}
+      {mainTab === 'guide' && guide && (
+        <div className="xl:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-stone-200 shadow-lg">
+          <button
+            type="button"
+            onClick={handleBankCtaClick}
+            className="w-full flex items-center gap-3 px-4 py-3"
+          >
+            <img
+              src="/image creation compte bancaire.avif"
+              alt=""
+              aria-hidden="true"
+              className="w-12 h-12 rounded-xl object-cover flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-xs font-bold text-stone-900 leading-tight">Compte bancaire en France</p>
+              <p className="text-[11px] text-orange-600 font-semibold leading-tight mt-0.5">Jusqu&apos;à 160€ de prime de bienvenue</p>
+            </div>
+            <div className="flex-shrink-0 text-xs font-semibold bg-orange-500 text-white px-3 py-2 rounded-xl">
+              Voir
+            </div>
+          </button>
+        </div>
+      )}
     </>
   );
 }
