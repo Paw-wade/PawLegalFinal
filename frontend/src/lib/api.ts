@@ -74,10 +74,7 @@ function isSessionInvalidMessage(message: string): boolean {
 function scheduleSessionExpiredRedirect(apiMessage?: string): void {
   if (typeof window === 'undefined' || authSessionExpiredRedirectScheduled) return;
   authSessionExpiredRedirectScheduled = true;
-  const hint =
-    typeof apiMessage === 'string' && apiMessage.trim()
-      ? apiMessage.trim()
-      : "Votre session a expiré ou n'est plus valide. Reconnectez-vous.";
+  const hint = "Votre session a expiré. Veuillez vous reconnecter.";
   void (async () => {
     clearStoredAuthToken();
     try {
@@ -410,7 +407,7 @@ api.interceptors.response.use(
         const hadBearer = requestHadBearerToken(error.config);
         const apiMsg =
           typeof error.response?.data?.message === 'string' ? error.response.data.message : '';
-        if (hadBearer || isSessionInvalidMessage(apiMsg)) {
+        if (hadBearer && isSessionInvalidMessage(apiMsg)) {
           if (IS_DEV) {
             console.warn('⚠️ Session expirée ou non autorisée, redirection connexion:', reqUrl);
           }

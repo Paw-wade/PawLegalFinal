@@ -15,6 +15,11 @@ export function GuidePopup() {
     if (status === 'authenticated') return;
     try {
       if (localStorage.getItem('ada_guide_popup_v2')) return;
+      const dismissed = localStorage.getItem('ada_guide_popup_dismissed_at');
+      if (dismissed) {
+        const elapsed = Date.now() - parseInt(dismissed, 10);
+        if (elapsed < 24 * 60 * 60 * 1000) return;
+      }
     } catch { /* rien */ }
     const t = setTimeout(() => {
       setVisible(true);
@@ -26,6 +31,7 @@ export function GuidePopup() {
   const dismiss = () => {
     setMounted(false);
     setTimeout(() => setVisible(false), 300);
+    try { localStorage.setItem('ada_guide_popup_dismissed_at', String(Date.now())); } catch { /* rien */ }
   };
 
   const dismissForever = () => {
@@ -242,15 +248,15 @@ export function GuidePopup() {
               border: 'none',
               cursor: 'pointer',
               fontSize: '11px',
-              color: '#d1d5db',
+              color: '#9ca3af',
               textDecoration: 'underline',
               textDecorationStyle: 'dotted',
               padding: 0,
               width: '100%',
               textAlign: 'center',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#9ca3af')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#d1d5db')}
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#6b7280')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
           >
             Ne plus afficher ce message
           </button>

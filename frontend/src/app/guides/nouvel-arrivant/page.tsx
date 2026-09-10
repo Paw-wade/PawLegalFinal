@@ -158,7 +158,7 @@ function BanqueCards({ options, isAuthenticated }: { options: BanqueOption[]; is
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-              {bnpOpen && <BnpFormGated isAuthenticated={isAuthenticated} />}
+              {bnpOpen && <BnpForm />}
             </>
           )}
         </div>
@@ -572,7 +572,7 @@ export default function GuideNouvelArrivantPublicPage() {
       </div>
 
       {/* Mobile : bandeau sticky en bas */}
-      {mainTab === 'guide' && guide && (
+      {guide && (
         <div className="xl:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-stone-200 shadow-lg">
           <button
             type="button"

@@ -48,6 +48,7 @@ export default function SignInPage() {
   const [isCheckingProviders, setIsCheckingProviders] = useState(true);
   const [isGoogleAvailable, setIsGoogleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -75,6 +76,10 @@ export default function SignInPage() {
     const serverMsg = params.get('message');
     const decodedMsg = serverMsg ? (() => { try { return decodeURIComponent(serverMsg); } catch { return serverMsg; } })() : '';
     if (!authError && !decodedMsg) return;
+    if (authError === 'session') {
+      setSessionInfo("Votre session a expiré. Veuillez vous reconnecter.");
+      return;
+    }
     if (authError === 'google' && decodedMsg) {
       setError(decodedMsg);
       return;
@@ -271,7 +276,14 @@ export default function SignInPage() {
             </div>
 
           <div className="p-4 sm:p-6">
-            {/* Message d'erreur amélioré */}
+            {sessionInfo && (
+              <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">ℹ️</span>
+                  <p className="text-sm font-medium text-blue-800">{sessionInfo}</p>
+                </div>
+              </div>
+            )}
             {error && (
               <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm">
                 <div className="flex items-center gap-2">

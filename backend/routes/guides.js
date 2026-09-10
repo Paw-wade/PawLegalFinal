@@ -70,8 +70,8 @@ router.put('/admin/guides/nouvel-arrivant', protect, async (req, res) => {
 
 // @route   POST /api/parrainage/bnp
 // @desc    Enregistre une demande de parrainage BNP Paribas et notifie Ada Papers
-// @access  Private (client connecte)
-router.post('/parrainage/bnp', protect, async (req, res) => {
+// @access  Public (formulaire accessible sans connexion)
+router.post('/parrainage/bnp', async (req, res) => {
   try {
     const { nom, prenom, email } = req.body;
 
@@ -92,7 +92,7 @@ router.post('/parrainage/bnp', protect, async (req, res) => {
       banque: 'BNP Paribas',
     });
 
-    void notifyParrainage(parrainage, nom, prenom, email, req.user.id);
+    void notifyParrainage(parrainage, nom, prenom, email, req.user?.id);
 
     return res.status(201).json({ success: true, id: parrainage._id });
   } catch (e) {
