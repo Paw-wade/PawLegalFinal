@@ -73,6 +73,8 @@ const dossierSchema = new mongoose.Schema({
       'nationalite_francaise',
       'eloignement_urgence',
       'constitution_societe',
+      'constitution_societe_senegal',
+      'constitution_societe_france',
       'autre'
     ],
     default: 'autre'

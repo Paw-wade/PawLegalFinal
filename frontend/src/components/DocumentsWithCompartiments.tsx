@@ -62,6 +62,17 @@ export function DocumentsWithCompartiments({
   const [bulkTarget, setBulkTarget] = useState('');
   const [bulkMoving, setBulkMoving] = useState(false);
 
+  // Collapse/expand compartiments (vide = tout replie par defaut)
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (id: string) => {
+    setOpenGroups((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
   // Drag & drop
   const [draggingDocId, setDraggingDocId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -88,6 +99,9 @@ export function DocumentsWithCompartiments({
 
   useEffect(() => {
     if (!targetDocId || isLoading || documents.length === 0) return;
+    const doc = documents.find((d) => String(d._id || d.id) === String(targetDocId));
+    const cId = doc ? (doc.compartiment?._id || doc.compartiment || '__none__') : '__none__';
+    setOpenGroups((prev) => { const n = new Set(prev); n.add(String(cId)); return n; });
     const t = window.setTimeout(() => {
       document.getElementById(`doc-${targetDocId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 300);
@@ -230,20 +244,57 @@ export function DocumentsWithCompartiments({
     setIsExportingZip(true);
     try {
       const JSZip = (await import('jszip')).default;
+      const { blobFromDownloadResponse, resolveFileNameFromDownloadResponse } = await import('@/lib/downloadFile');
       const zip = new JSZip();
+
+      // Construire un Map id -> nom pour les compartiments
+      const compNomById = new Map<string, string>();
+      for (const c of compartiments) {
+        const cid = String(c._id || '').trim();
+        if (cid) compNomById.set(cid, String(c.nom || 'Dossier').trim());
+      }
+
+      // Sanitize un segment de chemin ZIP (retire les caracteres interdits)
+      const sanitize = (s: string) =>
+        s.replace(/[/\\:*?"<>|]/g, '_').replace(/\.{2,}/g, '_').trim() || 'Dossier';
+
+      // Suivre les noms de fichiers par dossier pour eviter les doublons
+      const usedNamesInFolder = new Map<string, Set<string>>();
+      const uniqueNameInFolder = (folder: string, rawName: string): string => {
+        if (!usedNamesInFolder.has(folder)) usedNamesInFolder.set(folder, new Set());
+        const used = usedNamesInFolder.get(folder)!;
+        if (!used.has(rawName)) { used.add(rawName); return rawName; }
+        const dot = rawName.lastIndexOf('.');
+        const base = dot >= 0 ? rawName.slice(0, dot) : rawName;
+        const ext = dot >= 0 ? rawName.slice(dot) : '';
+        let i = 2;
+        while (used.has(`${base} (${i})${ext}`)) i++;
+        const unique = `${base} (${i})${ext}`;
+        used.add(unique);
+        return unique;
+      };
+
       for (const doc of documents) {
         const docId = doc._id || doc.id;
         if (!docId) continue;
         try {
           const response = await documentsAPI.downloadDocument(docId);
-          const { blobFromDownloadResponse, resolveFileNameFromDownloadResponse } = await import('@/lib/downloadFile');
           const blob = blobFromDownloadResponse(response);
-          const fileName = resolveFileNameFromDownloadResponse(response, doc.nom || doc.originalName || 'document');
-          zip.file(fileName, blob);
+          const rawFileName = resolveFileNameFromDownloadResponse(response, doc.nom || doc.originalName || 'document');
+
+          // Determiner le dossier de destination dans le ZIP
+          const cId = (doc.compartiment?._id || doc.compartiment) as string | null;
+          const folderName = cId && compNomById.has(cId)
+            ? sanitize(compNomById.get(cId)!)
+            : 'Non classes';
+
+          const fileName = uniqueNameInFolder(folderName, rawFileName);
+          zip.file(`${folderName}/${fileName}`, blob);
         } catch (err) {
           console.warn('Document ignore dans le ZIP:', docId, err);
         }
       }
+
       const blob = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(blob);
       const a = window.document.createElement('a');
@@ -413,6 +464,7 @@ export function DocumentsWithCompartiments({
 
   const renderGroup = (id: string, nom: string, docs: any[]) => {
     const isNone = id === '__none__';
+    const isOpen = openGroups.has(id);
     const isEditing = editingId === id;
     const isDeleting = deletingId === id;
     const isConfirming = deletingConfirmId === id;
@@ -424,13 +476,20 @@ export function DocumentsWithCompartiments({
     return (
       <div
         key={id}
-        className={`mb-4 rounded-lg p-2 -mx-2 transition-all duration-150 ${isDragOver ? 'bg-orange-50 ring-2 ring-orange-300 ring-inset' : ''}`}
+        className={`mb-2 rounded-lg transition-all duration-150 ${isDragOver ? 'bg-orange-50 ring-2 ring-orange-300 ring-inset' : ''}`}
         onDragEnter={(e) => isAdmin && handleDropZoneEnter(e, id)}
         onDragLeave={(e) => isAdmin && handleDropZoneLeave(e, id)}
         onDragOver={(e) => isAdmin && handleDropZoneOver(e)}
         onDrop={(e) => isAdmin && handleDrop(e, id)}
       >
-        <div className="flex flex-wrap items-center gap-2 mb-2 pb-1.5 border-b border-gray-100">
+        {/* En-tete cliquable pour replier/deplier */}
+        <div
+          className="flex flex-wrap items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-gray-50 cursor-pointer select-none"
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('input, button')) return;
+            toggleGroup(id);
+          }}
+        >
           {isAdmin && !isNone && docs.length > 0 && (
             <input
               type="checkbox"
@@ -438,8 +497,10 @@ export function DocumentsWithCompartiments({
               checked={allGroupSelected}
               onChange={() => toggleSelectGroup(docs)}
               title="Tout selectionner"
+              onClick={(e) => e.stopPropagation()}
             />
           )}
+          <span className="text-gray-400 text-xs w-3 shrink-0">{isOpen ? '▼' : '▶'}</span>
           <span>📂</span>
           {isEditing ? (
             <>
@@ -451,12 +512,13 @@ export function DocumentsWithCompartiments({
                   if (e.key === 'Enter') handleRename(id);
                   if (e.key === 'Escape') { setEditingId(null); setEditingName(''); }
                 }}
+                onClick={(e) => e.stopPropagation()}
                 autoFocus
               />
-              <Btn className="h-7 text-xs px-2" onClick={() => handleRename(id)} disabled={savingRename}>
+              <Btn className="h-7 text-xs px-2" onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleRename(id); }} disabled={savingRename}>
                 {savingRename ? '...' : 'OK'}
               </Btn>
-              <Btn variant="outline" className="h-7 text-xs px-2" onClick={() => { setEditingId(null); setEditingName(''); }}>
+              <Btn variant="outline" className="h-7 text-xs px-2" onClick={(e: React.MouseEvent) => { e.stopPropagation(); setEditingId(null); setEditingName(''); }}>
                 Annuler
               </Btn>
             </>
@@ -466,20 +528,20 @@ export function DocumentsWithCompartiments({
               <button
                 className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-300 disabled:opacity-40"
                 disabled={isDeleting}
-                onClick={() => handleDeleteCompartiment(id, false)}
+                onClick={(e) => { e.stopPropagation(); handleDeleteCompartiment(id, false); }}
               >
                 Deplacer vers Non classes
               </button>
               <button
                 className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 border border-red-300 disabled:opacity-40"
                 disabled={isDeleting}
-                onClick={() => handleDeleteCompartiment(id, true)}
+                onClick={(e) => { e.stopPropagation(); handleDeleteCompartiment(id, true); }}
               >
                 Supprimer les documents
               </button>
               <button
                 className="text-xs px-2 py-1 rounded text-gray-500 hover:text-gray-700"
-                onClick={() => setDeletingConfirmId(null)}
+                onClick={(e) => { e.stopPropagation(); setDeletingConfirmId(null); }}
               >
                 Annuler
               </button>
@@ -493,15 +555,17 @@ export function DocumentsWithCompartiments({
               {isAdmin && !isNone && (
                 <>
                   <button
-                    className="text-xs text-blue-600 hover:underline ml-1"
-                    onClick={() => { setEditingId(id); setEditingName(nom); }}
+                    className="text-xs text-blue-500 hover:text-blue-700 ml-1"
+                    title="Renommer"
+                    onClick={(e) => { e.stopPropagation(); setEditingId(id); setEditingName(nom); }}
                   >
-                    ✏️ Renommer
+                    ✏️
                   </button>
                   <button
-                    className="text-xs text-red-500 hover:underline"
+                    className="text-xs text-red-400 hover:text-red-600"
                     disabled={isDeleting}
-                    onClick={() => setDeletingConfirmId(id)}
+                    title="Supprimer"
+                    onClick={(e) => { e.stopPropagation(); setDeletingConfirmId(id); }}
                   >
                     {isDeleting ? '...' : '🗑️'}
                   </button>
@@ -515,28 +579,34 @@ export function DocumentsWithCompartiments({
             </>
           )}
         </div>
-        <div className={`pl-2 ${isDragOver && docs.length === 0 ? 'min-h-[2rem]' : ''}`}>
-          {docs.length === 0 ? (
-            <p className="text-xs text-gray-400 italic py-1">
-              {isDragOver ? 'Deposer ici...' : 'Aucun document'}
-            </p>
-          ) : (
-            docs.map(renderDoc)
-          )}
-        </div>
-        {isAdmin && (
-          <div className="pl-2 mt-2">
-            {isUploading ? (
-              <p className="text-xs text-orange-600">
-                Envoi {uploadProgress!.done}/{uploadProgress!.total}...
-              </p>
-            ) : (
-              <button
-                className="text-xs text-orange-600 hover:text-orange-800 border border-dashed border-orange-300 rounded px-2 py-1 hover:bg-orange-50"
-                onClick={() => triggerUpload(isNone ? null : id)}
-              >
-                + Ajouter des fichiers
-              </button>
+
+        {/* Contenu repliable */}
+        {isOpen && (
+          <div className="pl-4 pr-2 pb-2">
+            <div className={`${isDragOver && docs.length === 0 ? 'min-h-[2rem]' : ''}`}>
+              {docs.length === 0 ? (
+                <p className="text-xs text-gray-400 italic py-1">
+                  {isDragOver ? 'Deposer ici...' : 'Aucun document'}
+                </p>
+              ) : (
+                docs.map(renderDoc)
+              )}
+            </div>
+            {isAdmin && (
+              <div className="mt-2">
+                {isUploading ? (
+                  <p className="text-xs text-orange-600">
+                    Envoi {uploadProgress!.done}/{uploadProgress!.total}...
+                  </p>
+                ) : (
+                  <button
+                    className="text-xs text-orange-600 hover:text-orange-800 border border-dashed border-orange-300 rounded px-2 py-1 hover:bg-orange-50"
+                    onClick={() => triggerUpload(isNone ? null : id)}
+                  >
+                    + Ajouter des fichiers
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

@@ -1950,6 +1950,8 @@ export const emailConsoleAPI = {
 
 export const guidesAPI = {
   getNouvelArrivant: () => api.get('/guides/nouvel-arrivant'),
+  trackView: () => api.post('/guides/nouvel-arrivant/view'),
+  getStats: () => api.get('/admin/guides/stats'),
 };
 
 export const guidesAdminAPI = {

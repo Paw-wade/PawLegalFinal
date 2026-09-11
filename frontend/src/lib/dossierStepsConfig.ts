@@ -6,6 +6,8 @@ export type DossierCategorie =
   | 'nationalite_francaise'
   | 'eloignement_urgence'
   | 'constitution_societe'
+  | 'constitution_societe_senegal'
+  | 'constitution_societe_france'
   | 'autre';
 
 export interface SuggestedStep {
@@ -70,6 +72,24 @@ export const SUGGESTED_STEPS_BY_CATEGORY: Record<DossierCategorie, SuggestedStep
     { id: 'formalites_depot', label: 'Dépôt des formalités (greffe, RCCM, INPI ou équivalent)' },
     { id: 'immatriculation', label: 'Immatriculation et obtention des extrait(s) / Kbis / NINEA' },
     { id: 'suivi_post_creation', label: 'Suivi post-création (comptabilité, obligations déclaratives)' },
+  ],
+  constitution_societe_senegal: [
+    { id: 'onboarding', label: "En attente d'onboarding" },
+    { id: 'pieces_manquantes', label: 'Pièces manquantes' },
+    { id: 'verification_pieces', label: 'Vérification des pièces' },
+    { id: 'devis', label: 'Devis' },
+    { id: 'redaction_actes', label: 'Rédaction des actes constitutifs' },
+    { id: 'signature_statuts', label: 'Signature des statuts' },
+    { id: 'immatriculation', label: 'Immatriculation' },
+    { id: 'remise_documents', label: 'Remise des documents de la société' },
+    { id: 'ouverture_compte', label: 'Ouverture de compte bancaire' },
+  ],
+  constitution_societe_france: [
+    { id: 'analyse_projet', label: 'Analyse du projet et choix de la forme juridique' },
+    { id: 'collecte_actes', label: 'Collecte des pièces et rédaction des actes constitutifs' },
+    { id: 'formalites_depot', label: 'Dépôt des formalités (greffe, INPI)' },
+    { id: 'immatriculation', label: 'Immatriculation (Kbis)' },
+    { id: 'suivi_post_creation', label: 'Suivi post-création' },
   ],
   autre: [
     { id: 'analyse_situation', label: 'Analyse de la situation' },

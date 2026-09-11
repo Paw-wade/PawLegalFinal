@@ -3,6 +3,7 @@ const { protect } = require('../middleware/auth');
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 
 const GuideConfig = require('../models/GuideConfig');
+const GuideView = require('../models/GuideView');
 const Parrainage = require('../models/Parrainage');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
@@ -165,5 +166,79 @@ ${coordonneesHtml}
     console.warn('[parrainage] notifs admin echouees:', e.message);
   }
 }
+
+// @route   POST /api/guides/nouvel-arrivant/view
+// @desc    Enregistre une visite du guide (anonyme ou connecte)
+// @access  Public
+router.post('/guides/nouvel-arrivant/view', async (req, res) => {
+  try {
+    let userId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
+        userId = decoded.id || decoded._id || null;
+      } catch (_) {}
+    }
+    await GuideView.create({ slug: 'nouvel-arrivant', userId: userId || null });
+    return res.status(201).json({ success: true });
+  } catch (e) {
+    console.error('Erreur POST /guides/nouvel-arrivant/view:', e);
+    return res.status(500).json({ success: false });
+  }
+});
+
+// @route   GET /api/admin/guides/stats
+// @desc    Statistiques de consultation du guide (admin)
+// @access  Private (admin)
+router.get('/admin/guides/stats', protect, async (req, res) => {
+  try {
+    if (!ADMIN_ROLES.includes(req.user?.role)) {
+      return res.status(403).json({ success: false, message: 'Acces reserve aux administrateurs' });
+    }
+
+    const totalViews = await GuideView.countDocuments({ slug: 'nouvel-arrivant' });
+    const uniqueUsers = await GuideView.distinct('userId', { slug: 'nouvel-arrivant', userId: { $ne: null } });
+    const anonymousViews = await GuideView.countDocuments({ slug: 'nouvel-arrivant', userId: null });
+
+    // Vues par jour sur les 30 derniers jours
+    const since30 = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const viewsByDay = await GuideView.aggregate([
+      { $match: { slug: 'nouvel-arrivant', viewedAt: { $gte: since30 } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$viewedAt' } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    // Derniers utilisateurs connectes ayant consulte
+    const recentUsers = await GuideView.find({ slug: 'nouvel-arrivant', userId: { $ne: null } })
+      .sort({ viewedAt: -1 })
+      .limit(50)
+      .populate('userId', 'firstName lastName email role')
+      .lean();
+
+    return res.json({
+      success: true,
+      stats: {
+        totalViews,
+        uniqueConnectedUsers: uniqueUsers.length,
+        anonymousViews,
+        viewsByDay,
+        recentUsers: recentUsers.map((v) => ({
+          user: v.userId,
+          viewedAt: v.viewedAt,
+        })),
+      },
+    });
+  } catch (e) {
+    console.error('Erreur GET /admin/guides/stats:', e);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
 
 module.exports = router;

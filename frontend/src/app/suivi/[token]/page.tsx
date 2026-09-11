@@ -86,6 +86,8 @@ const ACCEPTED_FILES = '.pdf,.jpg,.jpeg,.png,.heic,.doc,.docx,.xls,.xlsx';
 
 const CATEGORIE_LABELS: Record<string, string> = {
   constitution_societe: 'Création de société',
+  constitution_societe_senegal: 'Création de société - Sénégal',
+  constitution_societe_france: 'Création de société - France',
   titre_sejour: 'Titre de séjour',
   sejour_titres: 'Titre de séjour',
   sejour: 'Titre de séjour',

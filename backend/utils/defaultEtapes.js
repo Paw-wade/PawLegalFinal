@@ -24,6 +24,18 @@ const ETAPES_CONSTITUTION_SOCIETE = [
   'Cloture du dossier',
 ];
 
+const ETAPES_CONSTITUTION_SOCIETE_SENEGAL = [
+  'En attente d onboarding',
+  'Pieces manquantes',
+  'Verification des pieces',
+  'Devis',
+  'Redaction des actes constitutifs',
+  'Signature des statuts',
+  'Immatriculation',
+  'Remise des documents de la societe',
+  'Ouverture de compte bancaire',
+];
+
 /**
  * Retourne le tableau d etapes par defaut pour une categorie donnee.
  * Retourne un tableau vide si la categorie n a pas d etapes predefinies.
@@ -35,6 +47,8 @@ function getDefaultEtapes(categorie, createdById = null) {
   let labels = [];
   if (categorie === 'constitution_societe') {
     labels = ETAPES_CONSTITUTION_SOCIETE;
+  } else if (categorie === 'constitution_societe_senegal') {
+    labels = ETAPES_CONSTITUTION_SOCIETE_SENEGAL;
   }
   return labels.map((label, idx) => ({
     id: `default_${idx + 1}`,

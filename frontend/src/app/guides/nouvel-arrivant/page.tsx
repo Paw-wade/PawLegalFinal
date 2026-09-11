@@ -371,6 +371,7 @@ export default function GuideNouvelArrivantPublicPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+    guidesAPI.trackView().catch(() => {});
   }, [status]);
 
   if (status === 'loading' || loading) {

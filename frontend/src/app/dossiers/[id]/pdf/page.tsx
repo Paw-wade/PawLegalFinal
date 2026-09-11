@@ -14,6 +14,8 @@ const categories = {
   nationalite_francaise: { label: 'Nationalité française' },
   eloignement_urgence: { label: 'Éloignement et urgence' },
   constitution_societe: { label: 'Constitution de société' },
+  constitution_societe_senegal: { label: 'Constitution de société - Sénégal' },
+  constitution_societe_france: { label: 'Constitution de société - France' },
   autre: { label: 'Autre' }
 };
 

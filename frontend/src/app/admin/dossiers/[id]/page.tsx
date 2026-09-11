@@ -427,6 +427,48 @@ export default function AdminDossierDetailPage() {
                 </div>
               </div>
 
+              {/* Bloc Création de société - Sénégal */}
+              <div className="border border-green-100 rounded-xl p-3 bg-green-50/50">
+                <p className="text-xs font-semibold text-green-800 mb-2">🇸🇳 Création de société - Sénégal</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: 'sn_onboarding', label: "En attente d'onboarding" },
+                    { id: 'sn_pieces_manquantes', label: 'Pièces manquantes' },
+                    { id: 'sn_verification_pieces', label: 'Vérification des pièces' },
+                    { id: 'sn_devis', label: 'Devis' },
+                    { id: 'sn_redaction_actes', label: 'Rédaction des actes constitutifs' },
+                    { id: 'sn_signature_statuts', label: 'Signature des statuts' },
+                    { id: 'sn_immatriculation', label: 'Immatriculation' },
+                    { id: 'sn_remise_documents', label: 'Remise des documents de la société' },
+                    { id: 'sn_ouverture_compte', label: 'Ouverture de compte bancaire' },
+                  ].map((step) => {
+                    const alreadySelected = localSteps.some(
+                      (s) => s.id === step.id || s.label === step.label
+                    );
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        disabled={alreadySelected}
+                        onClick={() => {
+                          setLocalSteps((prev) => [
+                            ...prev,
+                            { id: step.id, label: step.label, addedBy: currentUserId, createdAt: new Date().toISOString() },
+                          ]);
+                        }}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          alreadySelected
+                            ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                            : 'border-green-200 text-green-800 bg-white hover:bg-green-50'
+                        }`}
+                      >
+                        {step.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Étapes suggérées selon la catégorie */}
               {dossier.categorie && (SUGGESTED_STEPS_BY_CATEGORY as any)[dossier.categorie as DossierCategorie] && (
                 <div className="border border-orange-100 rounded-xl p-3 bg-orange-50/60">

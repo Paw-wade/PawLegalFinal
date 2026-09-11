@@ -1,18 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
 export function GuidePopup() {
   const { status } = useSession();
   const router = useRouter();
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     if (status === 'loading') return;
     if (status === 'authenticated') return;
+    if (pathname?.startsWith('/guides/nouvel-arrivant')) return;
     try {
       if (localStorage.getItem('ada_guide_popup_v2')) return;
       const dismissed = localStorage.getItem('ada_guide_popup_dismissed_at');
