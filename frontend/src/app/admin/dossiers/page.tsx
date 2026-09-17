@@ -343,6 +343,7 @@ export default function AdminDossiersPage() {
   const [tarifSavingMontant, setTarifSavingMontant] = useState(false);
   const [tarifSendingNotify, setTarifSendingNotify] = useState(false);
   const [tarifRetracting, setTarifRetracting] = useState(false);
+  const [tarifDeleting, setTarifDeleting] = useState(false);
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'pending' | 'in_progress' | 'standby' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
   >('all');
@@ -1768,6 +1769,7 @@ export default function AdminDossiersPage() {
     setTarifExoMotif('');
     setTarifPrestations([]);
     setTarifRetracting(false);
+    setTarifDeleting(false);
   };
 
   const canRetractTarificationChoiceRequest = (d: any) =>
@@ -1809,6 +1811,36 @@ export default function AdminDossiersPage() {
       setToast({ message, type: 'error' });
     } finally {
       setTarifRetracting(false);
+    }
+  };
+
+  const handleDeleteTarification = async () => {
+    if (!showTarifModal) return;
+    const dossierId = String(showTarifModal._id || showTarifModal.id || '');
+    if (!dossierId) return;
+    if (
+      !confirm(
+        `Supprimer toute la tarification pour ce dossier ?\n\nFormule, montant, prestations, notification et statut de paiement seront effacés. Le client sera notifié in-app. Cette action est irréversible.`
+      )
+    ) {
+      return;
+    }
+    setTarifDeleting(true);
+    setError(null);
+    try {
+      const { data } = await dossiersAPI.resetDossierTarification(dossierId);
+      if (!data?.success) {
+        setToast({ message: data?.message || 'Suppression refusée par le serveur.', type: 'error' });
+        return;
+      }
+      await loadDossiers();
+      setToast({ message: 'Tarification supprimée. Le client a été notifié in-app.', type: 'success' });
+      closeTarifModal();
+    } catch (err: any) {
+      const message = err?.response?.data?.message || 'Suppression impossible';
+      setToast({ message, type: 'error' });
+    } finally {
+      setTarifDeleting(false);
     }
   };
 
@@ -5071,10 +5103,32 @@ export default function AdminDossiersPage() {
                     type="button"
                     variant="outline"
                     className="w-full border-amber-300 text-amber-950 hover:bg-amber-100 text-sm"
-                    disabled={tarifRetracting || tarifSendingNotify || tarifSavingMontant}
+                    disabled={tarifRetracting || tarifSendingNotify || tarifSavingMontant || tarifDeleting}
                     onClick={() => void handleRetractTarificationChoiceRequest()}
                   >
-                    {tarifRetracting ? 'Rétractation…' : 'Rétracter la demande envoyée au client'}
+                    {tarifRetracting ? "Rétractation..." : "Rétracter la demande envoyée au client"}
+                  </Button>
+                </div>
+              ) : null}
+              {(
+                normalizeMontantTarifField(showTarifModal.montantTarificationFixe) > 0 ||
+                !!showTarifModal.formuleTarifaire ||
+                (Array.isArray(showTarifModal.tarificationPrestations) && showTarifModal.tarificationPrestations.length > 0) ||
+                !!showTarifModal.tarificationNotificationSentAt
+              ) ? (
+                <div className="rounded-lg border border-red-200 bg-red-50/60 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-red-800">Supprimer la tarification</p>
+                  <p className="text-[11px] text-red-800/80 leading-snug">
+                    Efface intégralement la tarification : montant fixe, formule, prestations, notification et statut de paiement. Le client est notifié in-app. Action irréversible.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-red-300 text-red-700 hover:bg-red-100 text-sm"
+                    disabled={tarifDeleting || tarifRetracting || tarifSendingNotify || tarifSavingMontant}
+                    onClick={() => void handleDeleteTarification()}
+                  >
+                    {tarifDeleting ? "Suppression..." : "Supprimer toute la tarification"}
                   </Button>
                 </div>
               ) : null}
@@ -5129,7 +5183,7 @@ export default function AdminDossiersPage() {
                 <Button
                   type="button"
                   onClick={() => void handleTarifSendNotification()}
-                  disabled={tarifSendingNotify || tarifSavingMontant || tarifRetracting}
+                  disabled={tarifSendingNotify || tarifSavingMontant || tarifRetracting || tarifDeleting}
                   className="w-full sm:flex-1"
                 >
                   {tarifSendingNotify ? 'Envoi…' : 'Enregistrer et notifier le client'}
@@ -5138,7 +5192,7 @@ export default function AdminDossiersPage() {
                   type="button"
                   variant="outline"
                   onClick={() => void handleTarifSaveMontantOnly()}
-                  disabled={tarifSavingMontant || tarifSendingNotify || tarifRetracting}
+                  disabled={tarifSavingMontant || tarifSendingNotify || tarifRetracting || tarifDeleting}
                   className="w-full sm:flex-1"
                 >
                   {tarifSavingMontant ? 'Enregistrement…' : 'Enregistrer sans notifier'}
@@ -5150,7 +5204,7 @@ export default function AdminDossiersPage() {
             </div>
 
             <div className="flex justify-end pt-1">
-              <Button type="button" variant="outline" onClick={closeTarifModal} disabled={tarifSavingMontant || tarifSendingNotify || tarifRetracting}>
+              <Button type="button" variant="outline" onClick={closeTarifModal} disabled={tarifSavingMontant || tarifSendingNotify || tarifRetracting || tarifDeleting}>
                 Fermer
               </Button>
             </div>

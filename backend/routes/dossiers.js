@@ -3743,7 +3743,7 @@ router.post(
 router.get('/tarification-standalone', protect, authorize('admin', 'superadmin'), async (req, res) => {
   try {
     const limitRaw = Number(req.query.limit);
-    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(200, Math.floor(limitRaw)) : 100;
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(2000, Math.floor(limitRaw)) : 100;
 
     const requests = await StandaloneTarificationRequest.find({})
       .sort({ createdAt: -1 })
@@ -3758,6 +3758,74 @@ router.get('/tarification-standalone', protect, authorize('admin', 'superadmin')
     });
   } catch (error) {
     console.error('Erreur tarification-standalone list:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+// @route   POST /api/user/dossiers/:id/tarification/reset
+// @desc    Reinitialiser tous les champs tarification d'un dossier
+// @access  Private (admin, superadmin)
+router.post('/:id/tarification/reset', protect, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const dossierId = String(req.params.id || '');
+    if (!mongoose.Types.ObjectId.isValid(dossierId)) {
+      return res.status(400).json({ success: false, message: 'Identifiant de dossier invalide.' });
+    }
+    const dossier = await Dossier.findById(dossierId).populate('user', '_id firstName lastName email');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier introuvable.' });
+    }
+
+    await Dossier.updateOne(
+      { _id: dossier._id },
+      {
+        $unset: {
+          formuleTarifaire: 1,
+          formuleTarifaireChoisieAt: 1,
+          formuleTarifaireReminderSent: 1,
+          montantTarificationFixe: 1,
+          montantTarificationFixeAt: 1,
+          montantTarificationFixeBy: 1,
+          tarificationPrestations: 1,
+          tarificationNotificationSentAt: 1,
+          tarificationLastNotifySummary: 1,
+          paiementTarificationEffectue: 1,
+          paiementTarificationEffectueAt: 1,
+          paiementTarificationEffectueBy: 1,
+          tarificationEcheances: 1,
+          tarificationPaiementEnPlusieursFoisAutorise: 1,
+        },
+      }
+    );
+
+    let clientUserId = null;
+    if (dossier.user) {
+      clientUserId = dossier.user._id ? dossier.user._id.toString() : dossier.user.toString();
+    }
+    if (clientUserId) {
+      try {
+        const dTitle = dossier.titre || dossier.numero || 'votre dossier';
+        const lien = `/client/dossiers/${dossier._id}`;
+        await createNotification(
+          clientUserId,
+          'tarification_reset',
+          'Tarification annulee',
+          `La tarification de votre dossier "${dTitle}" a ete annulee par votre conseiller. Vous serez recontacte prochainement.`,
+          lien,
+          { dossierId: dossier._id.toString() }
+        );
+      } catch (e) {
+        console.warn('Notification reset tarification:', e && e.message ? e.message : e);
+      }
+    }
+
+    return res.json({ success: true, message: 'Tarification supprimee avec succes.' });
+  } catch (error) {
+    console.error('Erreur reset tarification:', error);
     return res.status(500).json({
       success: false,
       message: 'Erreur serveur',

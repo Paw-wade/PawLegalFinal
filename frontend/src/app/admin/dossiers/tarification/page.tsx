@@ -115,6 +115,15 @@ function canTogglePayment(dossier: any) {
   return Number(dossier?.montantTarificationFixe || 0) > 0 || !!dossier?.formuleTarifaire;
 }
 
+function hasTarification(dossier: any) {
+  return (
+    Number(dossier?.montantTarificationFixe || 0) > 0 ||
+    !!dossier?.formuleTarifaire ||
+    (Array.isArray(dossier?.tarificationPrestations) && dossier.tarificationPrestations.length > 0) ||
+    !!dossier?.tarificationNotificationSentAt
+  );
+}
+
 function canRetractTarificationRequest(dossier: any) {
   return (
     !!dossier?.tarificationNotificationSentAt &&
@@ -301,6 +310,7 @@ export default function AdminDossiersTarificationPage() {
   const [cancellingStandaloneId, setCancellingStandaloneId] = useState<string | null>(null);
   const [expandedDossierIds, setExpandedDossierIds] = useState<Set<string>>(new Set());
   const [openMenuDossierId, setOpenMenuDossierId] = useState<string | null>(null);
+  const [deletingTarifId, setDeletingTarifId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -308,7 +318,7 @@ export default function AdminDossiersTarificationPage() {
       const [res, usersRes, standaloneRes] = await Promise.all([
         dossiersAPI.getAllDossiers(),
         userAPI.getAllUsers(),
-        dossiersAPI.getStandaloneTarificationRequests({ limit: 150 }),
+        dossiersAPI.getStandaloneTarificationRequests({ limit: 2000 }),
       ]);
       const list = res?.data?.dossiers || res?.data?.data || [];
       const usersList = usersRes?.data?.users || usersRes?.data?.data || usersRes?.data || [];
@@ -619,6 +629,52 @@ export default function AdminDossiersTarificationPage() {
       showFeedback('error', e?.response?.data?.message || e?.message || 'Erreur lors de la rétractation.');
     } finally {
       setRetractingId(null);
+    }
+  };
+
+  const handleDeleteTarification = async (dossier: any) => {
+    const id = String(dossier?._id || dossier?.id || '');
+    if (!id) return;
+    if (
+      !confirm(
+        `Supprimer toute la tarification pour "${dossier?.titre || dossier?.numero || id}" ?\n\nCette action est irréversible. Le client sera notifié in-app.`
+      )
+    ) {
+      return;
+    }
+    setDeletingTarifId(id);
+    try {
+      const res = await dossiersAPI.resetDossierTarification(id);
+      if (res.data?.success) {
+        showFeedback('success', res.data.message || 'Tarification supprimée.');
+        setDossiers((prev) =>
+          prev.map((item: any) => {
+            if (String(item?._id || item?.id || '') !== id) return item;
+            const updated = { ...item };
+            delete updated.formuleTarifaire;
+            delete updated.formuleTarifaireChoisieAt;
+            delete updated.formuleTarifaireReminderSent;
+            delete updated.montantTarificationFixe;
+            delete updated.montantTarificationFixeAt;
+            delete updated.montantTarificationFixeBy;
+            delete updated.tarificationPrestations;
+            delete updated.tarificationNotificationSentAt;
+            delete updated.tarificationLastNotifySummary;
+            delete updated.paiementTarificationEffectue;
+            delete updated.paiementTarificationEffectueAt;
+            delete updated.paiementTarificationEffectueBy;
+            delete updated.tarificationEcheances;
+            delete updated.tarificationPaiementEnPlusieursFoisAutorise;
+            return updated;
+          })
+        );
+      } else {
+        showFeedback('error', res.data?.message || 'Suppression refusée.');
+      }
+    } catch (e: any) {
+      showFeedback('error', e?.response?.data?.message || e?.message || 'Erreur lors de la suppression.');
+    } finally {
+      setDeletingTarifId(null);
     }
   };
 
@@ -958,6 +1014,19 @@ export default function AdminDossiersTarificationPage() {
                       Rétracter la demande
                     </button>
                   ) : null}
+                  {hasTarification(dossier) ? (
+                    <button
+                      type="button"
+                      className="block w-full rounded-md px-3 py-2 text-left text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      disabled={deletingTarifId === id}
+                      onClick={() => {
+                        setOpenMenuDossierId(null);
+                        void handleDeleteTarification(dossier);
+                      }}
+                    >
+                      {deletingTarifId === id ? 'Suppression...' : 'Supprimer la tarification'}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1259,23 +1328,53 @@ export default function AdminDossiersTarificationPage() {
       </section>
 
       <section className="space-y-3 rounded-xl border border-border bg-background p-4 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-            <input
-              id="tarification-filter"
-              type="text"
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              placeholder="Rechercher client, dossier, email, motif…"
-              className="w-full rounded-lg border border-input bg-background py-2.5 pl-9 pr-3 text-sm"
-            />
-          </div>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <input
+            id="tarification-filter"
+            type="text"
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            placeholder="Rechercher client, dossier, email, motif…"
+            className="w-full rounded-lg border border-input bg-background py-2.5 pl-9 pr-3 text-sm"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-orange-500 text-white shadow-sm'
+                    : 'border border-border bg-card text-foreground hover:bg-muted/50'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {(activeTab === 'dossiers' || activeTab === 'todo') ? (
+              <select
+                value={chipFilter}
+                onChange={(e) => setChipFilter(e.target.value as DossierChipFilter)}
+                className="rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                aria-label="Filtrer les dossiers"
+              >
+                {CHIP_FILTERS.map((chip) => (
+                  <option key={chip.id} value={chip.id}>{chip.label}</option>
+                ))}
+              </select>
+            ) : null}
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as DossierSort)}
-              className="rounded-lg border border-input bg-background px-3 py-2.5 text-sm"
+              className="rounded-lg border border-input bg-background px-3 py-2 text-sm"
               aria-label="Trier les dossiers"
             >
               <option value="due">Montant dû</option>
@@ -1284,47 +1383,11 @@ export default function AdminDossiersTarificationPage() {
             </select>
             {filterText.trim() ? (
               <Button type="button" variant="outline" size="sm" onClick={() => setFilterText('')}>
-                Réinitialiser
+                <X className="h-3.5 w-3.5" aria-hidden />
               </Button>
             ) : null}
           </div>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-orange-500 text-white shadow-sm'
-                  : 'border border-border bg-card text-foreground hover:bg-muted/50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === 'dossiers' || activeTab === 'todo' ? (
-          <div className="flex flex-wrap gap-2">
-            {CHIP_FILTERS.map((chip) => (
-              <button
-                key={chip.id}
-                type="button"
-                onClick={() => setChipFilter(chip.id)}
-                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                  chipFilter === chip.id
-                    ? 'border-orange-400 bg-orange-50 text-orange-900'
-                    : 'border-border bg-card text-muted-foreground hover:bg-muted/40'
-                }`}
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
       </section>
 
       {activeTab === 'todo' ? (

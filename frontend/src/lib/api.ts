@@ -1255,6 +1255,10 @@ export const dossiersAPI = {
   retractTarificationChoiceRequest: (dossierId: string) =>
     api.put(`/user/dossiers/${dossierId}`, { retractTarificationChoiceRequest: true }),
 
+  /** Admin / superadmin : supprimer toute la tarification d'un dossier (reset complet) */
+  resetDossierTarification: (dossierId: string) =>
+    api.post(`/user/dossiers/${dossierId}/tarification/reset`),
+
   /** Admin / superadmin : notifier un utilisateur même sans dossier (in-app/push + email + SMS +33) */
   notifyTarificationUserStandalone: (payload: { userId: string; motif: string; amount?: number | null }) =>
     api.post('/user/dossiers/tarification-notify-user', payload),
