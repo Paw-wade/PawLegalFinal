@@ -726,7 +726,7 @@ export default function AdminDossiersPage() {
   // Retour détail / historique navigateur : recentrer la carte pliée
   useEffect(() => {
     if (isLoading || dossiers.length === 0) return;
-    // Ne pas interférer avec l’ouverture expandée via ?dossierId=
+    // Ne pas interférer avec l'ouverture expandée via ?dossierId=
     if (searchParams?.get('dossierId')) return;
 
     const resolved = resolveDossierListFocusId('admin', searchParams);
@@ -1407,7 +1407,7 @@ export default function AdminDossiersPage() {
     const dossierId = String(dossier?._id || dossier?.id || '');
     if (!dossierId) return;
     if (!canManagePinnedDossiers) {
-      setToast({ message: 'Vous n’avez pas les droits pour épingler un dossier.', type: 'error' });
+      setToast({ message: 'Vous n'avez pas les droits pour épingler un dossier.', type: 'error' });
       return;
     }
     setPinningDossierId(dossierId);
@@ -1437,7 +1437,7 @@ export default function AdminDossiersPage() {
         });
       }
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Impossible de modifier l’épingle du dossier.');
+      setError(err?.response?.data?.message || 'Impossible de modifier l'épingle du dossier.');
     } finally {
       setPinningDossierId(null);
     }
@@ -1512,7 +1512,7 @@ export default function AdminDossiersPage() {
       return;
     }
     if (!guestInviteEmail.trim()) {
-      setGuestInviteError('Indiquez l’e-mail du destinataire.');
+      setGuestInviteError('Indiquez l'e-mail du destinataire.');
       return;
     }
     setGuestInviteBusy(true);
@@ -1530,27 +1530,27 @@ export default function AdminDossiersPage() {
       setGuestInviteCreatedUrl(response.data.url);
       setToast({ message: 'Invitation envoyée par e-mail.', type: 'success' });
     } catch (err: any) {
-      setGuestInviteError(err?.response?.data?.message || err?.message || 'Erreur lors de l’invitation.');
+      setGuestInviteError(err?.response?.data?.message || err?.message || 'Erreur lors de l'invitation.');
     } finally {
       setGuestInviteBusy(false);
     }
   };
 
   const handleAuthorizeClientDocument = async (doc: any) => {
-    const docId = String(doc?._id || doc?.id || ‘’);
+    const docId = String(doc?._id || doc?.id || '');
     if (!docId) return;
     setAuthorizingDocumentId(docId);
     try {
       const response = await documentsAPI.updateDocumentVisibility(docId, { visibleToClient: true });
       if (!response?.data?.success) {
-        throw new Error(response?.data?.message || ‘Mise à jour impossible.’);
+        throw new Error(response?.data?.message || 'Mise à jour impossible.');
       }
-      setToast({ message: ‘Document visible pour le client.’, type: ‘success’ });
+      setToast({ message: 'Document visible pour le client.', type: 'success' });
       await loadDossierDocuments();
     } catch (err: any) {
       setToast({
-        message: err?.response?.data?.message || err?.message || "Erreur lors de l’autorisation.",
-        type: ‘error’,
+        message: err?.response?.data?.message || err?.message || "Erreur lors de l'autorisation.",
+        type: 'error',
       });
     } finally {
       setAuthorizingDocumentId(null);
@@ -1558,20 +1558,20 @@ export default function AdminDossiersPage() {
   };
 
   const handleHideDocumentFromClient = async (doc: any) => {
-    const docId = String(doc?._id || doc?.id || ‘’);
+    const docId = String(doc?._id || doc?.id || '');
     if (!docId) return;
     setHidingDocumentId(docId);
     try {
       const response = await documentsAPI.updateDocumentVisibility(docId, { visibleToClient: false });
       if (!response?.data?.success) {
-        throw new Error(response?.data?.message || ‘Mise à jour impossible.’);
+        throw new Error(response?.data?.message || 'Mise à jour impossible.');
       }
-      setToast({ message: ‘Document masqué pour le client.’, type: ‘success’ });
+      setToast({ message: 'Document masqué pour le client.', type: 'success' });
       await loadDossierDocuments();
     } catch (err: any) {
       setToast({
-        message: err?.response?.data?.message || err?.message || ‘Erreur lors du masquage.’,
-        type: ‘error’,
+        message: err?.response?.data?.message || err?.message || 'Erreur lors du masquage.',
+        type: 'error',
       });
     } finally {
       setHidingDocumentId(null);
@@ -1806,7 +1806,7 @@ export default function AdminDossiersPage() {
     if (!dossierId || !canRetractTarificationChoiceRequest(showTarifModal)) return;
     if (
       !confirm(
-        'Rétracter la demande tarification envoyée au client ?\n\nLes marqueurs « notification envoyée » seront effacés et le client recevra une notification in-app (et push si activé) l’informant que la demande est retirée.'
+        'Rétracter la demande tarification envoyée au client ?\n\nLes marqueurs « notification envoyée » seront effacés et le client recevra une notification in-app (et push si activé) l'informant que la demande est retirée.'
       )
     ) {
       return;
@@ -2797,8 +2797,8 @@ export default function AdminDossiersPage() {
                           {(statusFilter !== 'all' || userFilter !== 'all') && <span className="block sm:hidden" />}
                           Tri jalons :{' '}
                           <span className="font-semibold text-primary">
-                            {dossierSortEtapes === 'etape_date_asc' && 'date la plus proche d’abord'}
-                            {dossierSortEtapes === 'etape_date_desc' && 'date la plus lointaine d’abord'}
+                            {dossierSortEtapes === 'etape_date_asc' && 'date la plus proche d'abord'}
+                            {dossierSortEtapes === 'etape_date_desc' && 'date la plus lointaine d'abord'}
                           </span>
                           <span className="text-muted-foreground font-normal"> (sans étape datée en bas)</span>
                         </span>
@@ -3073,10 +3073,10 @@ export default function AdminDossiersPage() {
                                   !canManagePinnedDossiers
                                     ? 'Action réservée aux administrateurs'
                                     : dossier?.isPinned
-                                    ? 'Retirer l’épingle'
+                                    ? 'Retirer l'épingle'
                                     : 'Épingler ce dossier'
                                 }
-                                aria-label={dossier?.isPinned ? 'Retirer l’épingle' : 'Épingler ce dossier'}
+                                aria-label={dossier?.isPinned ? 'Retirer l'épingle' : 'Épingler ce dossier'}
                                 aria-pressed={Boolean(dossier?.isPinned)}
                                 aria-busy={pinningDossierId === String(dossierId)}
                               >
@@ -3472,7 +3472,7 @@ export default function AdminDossiersPage() {
                             </p>
                           ) : (
                             <>
-                              {/* Mobile : défilement horizontal pour éviter le chevauchement des titres d’étapes ; sm+ : barre partagée comme avant */}
+                              {/* Mobile : défilement horizontal pour éviter le chevauchement des titres d'étapes ; sm+ : barre partagée comme avant */}
                               <div className="overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch] pb-0.5 -mx-0.5 px-0.5 sm:overflow-visible sm:mx-0 sm:px-0">
                                 <div className="w-max min-w-full sm:w-full sm:min-w-0 space-y-1.5">
                                   <div className="flex h-2 rounded-full overflow-hidden ring-1 ring-gray-200 bg-gray-100">
@@ -4485,8 +4485,8 @@ export default function AdminDossiersPage() {
                                             className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded text-xs font-medium transition-colors disabled:opacity-60"
                                           >
                                             {authorizingDocumentId === String(doc._id || doc.id)
-                                              ? ‘...’
-                                              : ‘Rendre visible au client’}
+                                              ? '...'
+                                              : 'Rendre visible au client'}
                                           </button>
                                         ) : (
                                           <button
@@ -4499,8 +4499,8 @@ export default function AdminDossiersPage() {
                                             className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded text-xs font-medium transition-colors disabled:opacity-60"
                                           >
                                             {hidingDocumentId === String(doc._id || doc.id)
-                                              ? ‘...’
-                                              : ‘Rendre confidentiel’}
+                                              ? '...'
+                                              : 'Rendre confidentiel'}
                                           </button>
                                         )}
                                         {doc.uploadedViaGuestLink && doc.validationStatus !== 'valide' && (
@@ -5006,7 +5006,7 @@ export default function AdminDossiersPage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Tarification - {showTarifModal.titre || showTarifModal.numero || 'Dossier'}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Un <strong>montant fixe</strong> enregistré par Ada Papers <strong>remplace</strong> le choix entre les deux formules côté client. Vous pouvez l’enregistrer avec notification au client en <strong>un seul clic</strong>, ou sans notification.
+                Un <strong>montant fixe</strong> enregistré par Ada Papers <strong>remplace</strong> le choix entre les deux formules côté client. Vous pouvez l'enregistrer avec notification au client en <strong>un seul clic</strong>, ou sans notification.
               </p>
             </div>
 
@@ -5028,7 +5028,7 @@ export default function AdminDossiersPage() {
               </div>
               <p className="text-[11px] text-muted-foreground">
                 <strong>Champ rempli</strong> : ce montant est envoyé au serveur (notification ou enregistrement silencieux).{' '}
-                <strong>Champ vide</strong> : le montant en base n’est pas modifié lors de la notification. Saisissez{' '}
+                <strong>Champ vide</strong> : le montant en base n'est pas modifié lors de la notification. Saisissez{' '}
                 <span className="font-mono">0</span> pour retirer le montant fixe.
               </p>
               <div className="rounded-md border border-gray-300 bg-white px-3 py-2 text-[11px] text-muted-foreground">
@@ -5040,7 +5040,7 @@ export default function AdminDossiersPage() {
                 </span>
               </div>
               <Label htmlFor="tarif-montant" className="text-sm font-medium">
-                Montant à appliquer (optionnel si vous ne faites qu’informer)
+                Montant à appliquer (optionnel si vous ne faites qu'informer)
               </Label>
               <Input
                 id="tarif-montant"
@@ -5163,7 +5163,7 @@ export default function AdminDossiersPage() {
                 <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 space-y-2">
                   <p className="text-xs font-semibold text-amber-900">Rétracter la demande</p>
                   <p className="text-[11px] text-amber-900/90 leading-snug">
-                    Une demande tarification a été envoyée au client, qui n’a pas encore enregistré de formule. Vous pouvez
+                    Une demande tarification a été envoyée au client, qui n'a pas encore enregistré de formule. Vous pouvez
                     retirer cette demande : les indicateurs « notifié » seront effacés et le client recevra une notification
                     in-app (aucun SMS automatique pour cette action).
                   </p>
@@ -5228,7 +5228,7 @@ export default function AdminDossiersPage() {
                 <span className="text-sm">
                   <span className="font-semibold text-gray-900 block">Exonérer les frais de tarification</span>
                   <span className="text-muted-foreground text-xs">
-                    À l’envoi de la notification uniquement. Incompatible avec un montant fixe {'>'} 0 (base ou champ).
+                    À l'envoi de la notification uniquement. Incompatible avec un montant fixe {'>'} 0 (base ou champ).
                   </span>
                 </span>
               </label>
@@ -5347,7 +5347,7 @@ export default function AdminDossiersPage() {
                   <span>
                     <span className="font-semibold text-emerald-900 block">Exonérer les frais de tarification</span>
                     <span className="text-sm text-emerald-800/90">
-                      Le client recevra une notification (et un SMS si configuré) l’informant de l’exonération. Il ne sera pas invité à choisir une formule.
+                      Le client recevra une notification (et un SMS si configuré) l'informant de l'exonération. Il ne sera pas invité à choisir une formule.
                     </span>
                   </span>
                 </label>
@@ -5765,7 +5765,7 @@ export default function AdminDossiersPage() {
               Dossier : {guestInviteModalDossier.titre || guestInviteModalDossier.numero || '-'}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Lien valable 7 jours, plusieurs dépôts possibles. Les fichiers seront confidentiels pour le client tant que vous n’autoriserez pas l’accès.
+              Lien valable 7 jours, plusieurs dépôts possibles. Les fichiers seront confidentiels pour le client tant que vous n'autoriserez pas l'accès.
             </p>
             <form onSubmit={handleCreateGuestUploadInvite} className="mt-4 space-y-3">
               <div>
@@ -5802,7 +5802,7 @@ export default function AdminDossiersPage() {
                   Fermer
                 </Button>
                 <Button type="submit" disabled={guestInviteBusy}>
-                  {guestInviteBusy ? 'Envoi…' : 'Envoyer l’invitation'}
+                  {guestInviteBusy ? 'Envoi…' : 'Envoyer l'invitation'}
                 </Button>
               </div>
             </form>
