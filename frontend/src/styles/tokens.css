@@ -1,0 +1,161 @@
+/*
+ * Ada Papers — Design Tokens
+ * Source of truth: design system https://claude.ai/artifact/6jFWavYGsxmgfar1nEc4tn
+ * Ne pas editer manuellement — mettre a jour le design system puis re-exporter.
+ */
+
+/* ─── Light (defaut) ─────────────────────────────────────────────────────── */
+:root {
+  /* Surface */
+  --color-background:           #ffffff;
+  --color-foreground:           #000000;
+  --color-surface-elevated:     #ffffff;
+  --color-overlay:              rgba(0,0,0,0.6);
+
+  /* Brand */
+  --color-primary:              #f97316;
+  --color-primary-foreground:   #ffffff;
+  --color-primary-hover:        #ea580c;
+  --color-primary-tint:         #fff7ed;
+  --color-primary-light:        #fed7aa;
+
+  /* Neutrals */
+  --color-secondary:            #fafafa;
+  --color-secondary-foreground: #000000;
+  --color-accent:               #fafafa;
+  --color-accent-foreground:    #000000;
+  --color-muted:                #f5f5f5;
+  --color-muted-foreground:     #737373;
+  --color-border:               #d9d9d9;
+  --color-input:                #d9d9d9;
+  --color-ring:                 #f97316;
+
+  /* Texte */
+  --color-text-strong:          #1f1f1f;
+  --color-text-body:            #374151;
+  --color-text-subtle:          #6b7280;
+  --color-text-faint:           #9ca3af;
+
+  /* Semantique */
+  --color-success:              #16a34a;
+  --color-success-light:        #dcfce7;
+  --color-danger:               #dc2626;
+  --color-danger-light:         #fee2e2;
+  --color-info:                 #2563eb;
+  --color-info-light:           #dbeafe;
+  --color-warning:              #d97706;
+  --color-warning-light:        #fef9c3;
+
+  /* Espacement */
+  --space-0:   0px;
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-8:   32px;
+  --space-10:  40px;
+  --space-12:  48px;
+  --space-16:  64px;
+
+  /* Rayons */
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:   12px;
+  --radius-2xl:  16px;
+  --radius-3xl:  24px;
+  --radius-full: 9999px;
+
+  /* Ombres */
+  --shadow-sm:    0 1px 2px 0 rgba(0,0,0,0.05);
+  --shadow-md:    0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+  --shadow-lg:    0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  --shadow-xl:    0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+  --shadow-2xl:   0 25px 50px -12px rgba(0,0,0,0.25);
+  --shadow-inner: inset 0 2px 4px 0 rgba(0,0,0,0.05);
+
+  /* Typographie */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --text-display-lg-size:   30px;
+  --text-display-lg-line:   36px;
+  --text-display-lg-weight: 700;
+
+  --text-display-md-size:   24px;
+  --text-display-md-line:   32px;
+  --text-display-md-weight: 700;
+
+  --text-body-xl-size:   20px;
+  --text-body-xl-line:   28px;
+  --text-body-xl-weight: 600;
+
+  --text-body-lg-size:   18px;
+  --text-body-lg-line:   28px;
+  --text-body-lg-weight: 400;
+
+  --text-body-base-size:   16px;
+  --text-body-base-line:   24px;
+  --text-body-base-weight: 400;
+
+  --text-body-sm-size:   14px;
+  --text-body-sm-line:   20px;
+  --text-body-sm-weight: 400;
+
+  --text-body-xs-size:   12px;
+  --text-body-xs-line:   16px;
+  --text-body-xs-weight: 500;
+
+  --text-label-micro-size:   11px;
+  --text-label-micro-line:   16px;
+  --text-label-micro-weight: 600;
+
+  --text-label-nano-size:   10px;
+  --text-label-nano-line:   14px;
+  --text-label-nano-weight: 500;
+}
+
+/* ─── Dark ───────────────────────────────────────────────────────────────── */
+:root.dark,
+.dark {
+  /* Surface */
+  --color-background:           #000000;
+  --color-foreground:           #ffffff;
+  --color-surface-elevated:     #111111;
+  --color-overlay:              rgba(0,0,0,0.75);
+
+  /* Brand (inchange en dark) */
+  --color-primary:              #f97316;
+  --color-primary-foreground:   #ffffff;
+  --color-primary-hover:        #ea580c;
+  --color-primary-tint:         #431407;
+  --color-primary-light:        #7c2d12;
+
+  /* Neutrals */
+  --color-secondary:            #1a1a1a;
+  --color-secondary-foreground: #ffffff;
+  --color-accent:               #1a1a1a;
+  --color-accent-foreground:    #ffffff;
+  --color-muted:                #262626;
+  --color-muted-foreground:     #a6a6a6;
+  --color-border:               #333333;
+  --color-input:                #333333;
+  --color-ring:                 #f97316;
+
+  /* Texte */
+  --color-text-strong:          #f5f5f5;
+  --color-text-body:            #d1d5db;
+  --color-text-subtle:          #9ca3af;
+  --color-text-faint:           #6b7280;
+
+  /* Semantique */
+  --color-success:              #22c55e;
+  --color-success-light:        #14532d;
+  --color-danger:               #ef4444;
+  --color-danger-light:         #7f1d1d;
+  --color-info:                 #60a5fa;
+  --color-info-light:           #1e3a8a;
+  --color-warning:              #fbbf24;
+  --color-warning-light:        #78350f;
+}
