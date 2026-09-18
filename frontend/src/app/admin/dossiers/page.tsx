@@ -195,7 +195,7 @@ const categories = {
 
 // Liste complète des types de documents pour les titres de séjour et visas
 const documentTypesList = [
-  // Documents d'identité
+  // Documents d\'identité
   { value: 'passeport', label: 'Passeport', category: 'identite' },
   { value: 'carte_identite', label: 'Carte d\'identité', category: 'identite' },
   { value: 'acte_naissance', label: 'Acte de naissance', category: 'identite' },
@@ -248,7 +248,7 @@ const documentTypesList = [
   { value: 'attestation_cmu', label: 'Attestation CMU/AME', category: 'sante' },
   { value: 'carte_vitale', label: 'Carte Vitale', category: 'sante' },
   
-  // Documents d'études
+  // Documents d\'études
   { value: 'diplome', label: 'Diplôme', category: 'etudes' },
   { value: 'attestation_scolarite', label: 'Attestation de scolarité', category: 'etudes' },
   { value: 'releve_notes', label: 'Relevé de notes', category: 'etudes' },
@@ -267,7 +267,7 @@ const documentTypesList = [
   { value: 'autre', label: 'Autre document', category: 'autre' }
 ];
 
-// Grouper par catégorie pour l'affichage
+// Grouper par catégorie pour l\'affichage
 const documentTypesByCategory = documentTypesList.reduce((acc, doc) => {
   if (!acc[doc.category]) {
     acc[doc.category] = [];
@@ -295,7 +295,7 @@ export default function AdminDossiersPage() {
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [globalStats, setGlobalStats] = useState<{ pending: number; in_progress: number; standby: number; closed: number; archived: number; total: number } | null>(null);
   const [utilisateurs, setUtilisateurs] = useState<any[]>([]);
-  const [teamMembers, setTeamMembers] = useState<any[]>([]); // Membres de l'équipe (admins/superadmins)
+  const [teamMembers, setTeamMembers] = useState<any[]>([]); // Membres de l\'équipe (admins/superadmins)
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -348,7 +348,7 @@ export default function AdminDossiersPage() {
     'all' | 'pending' | 'in_progress' | 'standby' | 'favorable' | 'unfavorable' | 'closed' | 'archived'
   >('all');
   const [userFilter, setUserFilter] = useState<string>('all');
-  /** Filtre catégorie : 'all' ou une catégorie précise (ex. création d'entreprise). */
+  /** Filtre catégorie : 'all' ou une catégorie précise (ex. création d\'entreprise). */
   const [categorieFilter, setCategorieFilter] = useState<'all' | 'constitution_societe'>('all');
   /** Tri liste : jalons datés dans `etapesSupplementaires` (front uniquement). */
   const [dossierSortEtapes, setDossierSortEtapes] = useState<'default' | 'etape_date_asc' | 'etape_date_desc'>('default');
@@ -395,7 +395,7 @@ export default function AdminDossiersPage() {
       addedBy: s?.addedBy,
     }));
 
-    // Conserver l'ordre des étapes custom.
+    // Conserver l\'ordre des étapes custom.
     const customExtra = normalizedCustom
       .filter((s: any) => !defaultIds.has(String(s.id)))
       .sort((a: any, b: any) => (a.ordre ?? 0) - (b.ordre ?? 0));
@@ -726,7 +726,7 @@ export default function AdminDossiersPage() {
   // Retour détail / historique navigateur : recentrer la carte pliée
   useEffect(() => {
     if (isLoading || dossiers.length === 0) return;
-    // Ne pas interférer avec l'ouverture expandée via ?dossierId=
+    // Ne pas interférer avec l\'ouverture expandée via ?dossierId=
     if (searchParams?.get('dossierId')) return;
 
     const resolved = resolveDossierListFocusId('admin', searchParams);
@@ -810,7 +810,7 @@ export default function AdminDossiersPage() {
         setDossiers(dossiersList);
 
         // Statistiques globales (tous les dossiers du cabinet), indépendantes du
-        // périmètre : les cartes doivent rester identiques quel que soit l'admin.
+        // périmètre : les cartes doivent rester identiques quel que soit l\'admin.
         dossiersAPI
           .getGlobalDossierStats()
           .then((statsRes) => {
@@ -819,12 +819,12 @@ export default function AdminDossiersPage() {
             }
           })
           .catch(() => {
-            // En cas d'échec, on retombe sur le calcul local (périmètre courant).
+            // En cas d\'échec, on retombe sur le calcul local (périmètre courant).
             setGlobalStats(null);
           });
         
         // Charger les demandes de documents pour chaque dossier
-        // Ignorer silencieusement les erreurs 404 (route peut ne pas être disponible si le serveur n'est pas redémarré)
+        // Ignorer silencieusement les erreurs 404 (route peut ne pas être disponible si le serveur n\'est pas redémarré)
         const requestsMap: Record<string, any[]> = {};
         await Promise.all(
           dossiersList.map(async (dossier: any) => {
@@ -1138,7 +1138,7 @@ export default function AdminDossiersPage() {
         dossier: dossierId
       };
       
-      // Ajouter le titre seulement s'il est fourni (optionnel)
+      // Ajouter le titre seulement s\'il est fourni (optionnel)
       if (taskFormData.titre && taskFormData.titre.trim()) {
         taskData.titre = taskFormData.titre.trim();
       }
@@ -1407,7 +1407,7 @@ export default function AdminDossiersPage() {
     const dossierId = String(dossier?._id || dossier?.id || '');
     if (!dossierId) return;
     if (!canManagePinnedDossiers) {
-      setToast({ message: 'Vous n'avez pas les droits pour épingler un dossier.', type: 'error' });
+      setToast({ message: 'Vous n\'avez pas les droits pour épingler un dossier.', type: 'error' });
       return;
     }
     setPinningDossierId(dossierId);
@@ -1437,7 +1437,7 @@ export default function AdminDossiersPage() {
         });
       }
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Impossible de modifier l'épingle du dossier.');
+      setError(err?.response?.data?.message || 'Impossible de modifier l\'épingle du dossier.');
     } finally {
       setPinningDossierId(null);
     }
@@ -1512,7 +1512,7 @@ export default function AdminDossiersPage() {
       return;
     }
     if (!guestInviteEmail.trim()) {
-      setGuestInviteError('Indiquez l'e-mail du destinataire.');
+      setGuestInviteError('Indiquez l\'e-mail du destinataire.');
       return;
     }
     setGuestInviteBusy(true);
@@ -1530,7 +1530,7 @@ export default function AdminDossiersPage() {
       setGuestInviteCreatedUrl(response.data.url);
       setToast({ message: 'Invitation envoyée par e-mail.', type: 'success' });
     } catch (err: any) {
-      setGuestInviteError(err?.response?.data?.message || err?.message || 'Erreur lors de l'invitation.');
+      setGuestInviteError(err?.response?.data?.message || err?.message || 'Erreur lors de l\'invitation.');
     } finally {
       setGuestInviteBusy(false);
     }
@@ -1549,7 +1549,7 @@ export default function AdminDossiersPage() {
       await loadDossierDocuments();
     } catch (err: any) {
       setToast({
-        message: err?.response?.data?.message || err?.message || "Erreur lors de l'autorisation.",
+        message: err?.response?.data?.message || err?.message || "Erreur lors de l\'autorisation.",
         type: 'error',
       });
     } finally {
@@ -1656,12 +1656,12 @@ export default function AdminDossiersPage() {
     setIsLoading(true);
     setError(null);
     try {
-      // Construire l'objet de mise à jour en excluant les valeurs undefined
+      // Construire l\'objet de mise à jour en excluant les valeurs undefined
       const updateData: any = { 
         statut: showStatutModal.newStatut
       };
       
-      // Ajouter notificationMessage seulement s'il n'est pas vide
+      // Ajouter notificationMessage seulement s\'il n\'est pas vide
       if (notificationMessage && notificationMessage.trim()) {
         updateData.notificationMessage = notificationMessage.trim();
       }
@@ -1806,7 +1806,7 @@ export default function AdminDossiersPage() {
     if (!dossierId || !canRetractTarificationChoiceRequest(showTarifModal)) return;
     if (
       !confirm(
-        'Rétracter la demande tarification envoyée au client ?\n\nLes marqueurs « notification envoyée » seront effacés et le client recevra une notification in-app (et push si activé) l'informant que la demande est retirée.'
+        'Rétracter la demande tarification envoyée au client ?\n\nLes marqueurs « notification envoyée » seront effacés et le client recevra une notification in-app (et push si activé) l\'informant que la demande est retirée.'
       )
     ) {
       return;
@@ -2041,7 +2041,7 @@ export default function AdminDossiersPage() {
       const response = await dossiersAPI.updateDossier(showRefuseModal.dossierId, { 
         statut: 'refuse',
         motifRefus: motifRefus.trim() || 'Dossier refusé par l\'administrateur',
-        notificationMessage: motifRefus.trim() || `Votre dossier "${showRefuseModal.dossierTitre}" a été refusé par l'administrateur.`
+        notificationMessage: motifRefus.trim() || `Votre dossier "${showRefuseModal.dossierTitre}" a été refusé par l\'administrateur.`
       });
       if (response.data.success) {
         await loadDossiers();
@@ -2077,7 +2077,7 @@ export default function AdminDossiersPage() {
   // Demande publique (visiteur) déposée depuis le site, en attente de validation par le cabinet.
   const isDemandePubliqueEnAttente = (d: any) => getRawStatut(d) === 'en_attente_validation';
   // « En attente » : une demande publique à valider, OU un dossier client dont le statut
-  // initial n'a pas encore été édité par l'admin. Les demandes visiteur (sans compte) comptent.
+  // initial n\'a pas encore été édité par l\'admin. Les demandes visiteur (sans compte) comptent.
   const isPendingDossier = (d: any) => {
     if (d?.isStandby || isClosedDossier(d) || isArchivedDossier(d)) return false;
     if (isDemandePubliqueEnAttente(d)) return true;
@@ -2085,7 +2085,7 @@ export default function AdminDossiersPage() {
     const initialStatut = !rawStatut || rawStatut === 'recu' || rawStatut === 'en_attente_onboarding';
     return !!d.user && initialStatut;
   };
-  // « En cours » : tout dossier actif qui n'est ni en attente, ni standby, ni clôturé/archivé.
+  // « En cours » : tout dossier actif qui n\'est ni en attente, ni standby, ni clôturé/archivé.
   const isInProgressDossier = (d: any) =>
     !d?.isStandby && !isClosedDossier(d) && !isArchivedDossier(d) && !isPendingDossier(d);
 
@@ -2398,7 +2398,7 @@ export default function AdminDossiersPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="dateEcheance">Date d'échéance</Label>
+                    <Label htmlFor="dateEcheance">Date d\'échéance</Label>
                     <Input
                       id="dateEcheance"
                       type="date"
@@ -2416,7 +2416,7 @@ export default function AdminDossiersPage() {
                       onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                       className="mt-1"
                       rows={2}
-                      placeholder="Notes internes pour l'équipe..."
+                      placeholder="Notes internes pour l\'équipe..."
                     />
                   </div>
 
@@ -2436,8 +2436,8 @@ export default function AdminDossiersPage() {
                       ))}
                     </select>
                     <p className="text-xs text-muted-foreground mt-1">
-                      👨‍💼 <strong>Fonction :</strong> Assignation rapide d'un membre de l'équipe pour le suivi initial du dossier. 
-                      Pour une gestion complète de l'équipe (plusieurs membres, chef d'équipe), utilisez la section "Gestion d'équipe" dans les détails du dossier.
+                      👨‍💼 <strong>Fonction :</strong> Assignation rapide d\'un membre de l\'équipe pour le suivi initial du dossier. 
+                      Pour une gestion complète de l\'équipe (plusieurs membres, chef d\'équipe), utilisez la section "Gestion d\'équipe" dans les détails du dossier.
                     </p>
                   </div>
                 </div>
@@ -2656,7 +2656,7 @@ export default function AdminDossiersPage() {
 
               {/* Statistiques rapides (badges cliquables) */}
               <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-3">
-                {/* En attente : dossiers créés par un utilisateur dont le statut n'a pas encore été édité par l'admin */}
+                {/* En attente : dossiers créés par un utilisateur dont le statut n\'a pas encore été édité par l\'admin */}
                 <button
                   type="button"
                   onClick={() => setStatusFilter('pending')}
@@ -2734,11 +2734,11 @@ export default function AdminDossiersPage() {
                     {globalStats ? globalStats.archived : dossiers.filter((d: any) => isArchivedDossier(d)).length}
                   </p>
                 </button>
-                {/* Création d'entreprise : filtre par catégorie (indépendant du statut) */}
+                {/* Création d\'entreprise : filtre par catégorie (indépendant du statut) */}
                 <button
                   type="button"
                   onClick={() => setCategorieFilter((prev) => (prev === 'constitution_societe' ? 'all' : 'constitution_societe'))}
-                  title="N'afficher que les dossiers de création d'entreprise"
+                  title="N\'afficher que les dossiers de création d\'entreprise"
                   className={`text-left bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-300/70 rounded-lg p-4 shadow-sm transition-all duration-300 ${
                     categorieFilter === 'constitution_societe'
                       ? 'ring-2 ring-indigo-500/60 shadow-md'
@@ -2797,8 +2797,8 @@ export default function AdminDossiersPage() {
                           {(statusFilter !== 'all' || userFilter !== 'all') && <span className="block sm:hidden" />}
                           Tri jalons :{' '}
                           <span className="font-semibold text-primary">
-                            {dossierSortEtapes === 'etape_date_asc' && 'date la plus proche d'abord'}
-                            {dossierSortEtapes === 'etape_date_desc' && 'date la plus lointaine d'abord'}
+                            {dossierSortEtapes === 'etape_date_asc' && 'date la plus proche d\'abord'}
+                            {dossierSortEtapes === 'etape_date_desc' && 'date la plus lointaine d\'abord'}
                           </span>
                           <span className="text-muted-foreground font-normal"> (sans étape datée en bas)</span>
                         </span>
@@ -2873,7 +2873,7 @@ export default function AdminDossiersPage() {
                     }
                   }
 
-                  // Filtre par catégorie (ex. création d'entreprise)
+                  // Filtre par catégorie (ex. création d\'entreprise)
                   if (categorieFilter !== 'all') {
                     if (String(d.categorie || '') !== categorieFilter) return false;
                   }
@@ -3073,10 +3073,10 @@ export default function AdminDossiersPage() {
                                   !canManagePinnedDossiers
                                     ? 'Action réservée aux administrateurs'
                                     : dossier?.isPinned
-                                    ? 'Retirer l'épingle'
+                                    ? 'Retirer l\'épingle'
                                     : 'Épingler ce dossier'
                                 }
-                                aria-label={dossier?.isPinned ? 'Retirer l'épingle' : 'Épingler ce dossier'}
+                                aria-label={dossier?.isPinned ? 'Retirer l\'épingle' : 'Épingler ce dossier'}
                                 aria-pressed={Boolean(dossier?.isPinned)}
                                 aria-busy={pinningDossierId === String(dossierId)}
                               >
@@ -3326,7 +3326,7 @@ export default function AdminDossiersPage() {
                                   : 'bg-blue-100 text-blue-900 border-blue-200'
                               }`}
                               title={[
-                                "Montant fixé par Ada Papers - le client n'a pas à choisir Standard / Premium.",
+                                "Montant fixé par Ada Papers - le client n\'a pas à choisir Standard / Premium.",
                                 dossier.montantTarificationFixeAt
                                   ? `Dernière fixation / modification : ${new Date(dossier.montantTarificationFixeAt).toLocaleString('fr-FR')}.`
                                   : '',
@@ -3472,7 +3472,7 @@ export default function AdminDossiersPage() {
                             </p>
                           ) : (
                             <>
-                              {/* Mobile : défilement horizontal pour éviter le chevauchement des titres d'étapes ; sm+ : barre partagée comme avant */}
+                              {/* Mobile : défilement horizontal pour éviter le chevauchement des titres d\'étapes ; sm+ : barre partagée comme avant */}
                               <div className="overflow-x-auto overscroll-x-contain touch-pan-x [-webkit-overflow-scrolling:touch] pb-0.5 -mx-0.5 px-0.5 sm:overflow-visible sm:mx-0 sm:px-0">
                                 <div className="w-max min-w-full sm:w-full sm:min-w-0 space-y-1.5">
                                   <div className="flex h-2 rounded-full overflow-hidden ring-1 ring-gray-200 bg-gray-100">
@@ -3528,7 +3528,7 @@ export default function AdminDossiersPage() {
                       );
                     })()}
 
-                    {/* Alerte d'échéance */}
+                    {/* Alerte d\'échéance */}
                     {isDeadlineApproaching(dossier.dateEcheance) && (
                       <div className="bg-red-50 border-l-4 border-red-500 p-3 mb-3 rounded-r">
                         <p className="text-xs font-semibold text-red-900">
@@ -4782,7 +4782,7 @@ export default function AdminDossiersPage() {
 
                               return (
                                 <>
-                                  {/* Si le statut actuel n'est pas dans les étapes (ex: "Reçu"), afficher une option dédiée */}
+                                  {/* Si le statut actuel n\'est pas dans les étapes (ex: "Reçu"), afficher une option dédiée */}
                                   {currentStatut && !hasCurrentOption && (
                                     <option value={currentStatut}>{getStatutLabelWithEtapes(currentStatut, dossier.etapesSupplementaires)}</option>
                                   )}
@@ -4811,7 +4811,7 @@ export default function AdminDossiersPage() {
                             onChange={(e) => handleAssignDossier(dossier._id || dossier.id, e.target.value)}
                             className="text-xs px-2 py-1.5 rounded-md border border-gray-300 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors w-full"
                             disabled={isLoading}
-                            title="Assignation rapide d'un membre pour le suivi. Pour une équipe complète, utilisez la gestion d'équipe dans les détails."
+                            title="Assignation rapide d\'un membre pour le suivi. Pour une équipe complète, utilisez la gestion d\'équipe dans les détails."
                           >
                             <option value="">Non assigné</option>
                             {teamMembers.map((member) => (
@@ -5006,7 +5006,7 @@ export default function AdminDossiersPage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Tarification - {showTarifModal.titre || showTarifModal.numero || 'Dossier'}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Un <strong>montant fixe</strong> enregistré par Ada Papers <strong>remplace</strong> le choix entre les deux formules côté client. Vous pouvez l'enregistrer avec notification au client en <strong>un seul clic</strong>, ou sans notification.
+                Un <strong>montant fixe</strong> enregistré par Ada Papers <strong>remplace</strong> le choix entre les deux formules côté client. Vous pouvez l\'enregistrer avec notification au client en <strong>un seul clic</strong>, ou sans notification.
               </p>
             </div>
 
@@ -5028,7 +5028,7 @@ export default function AdminDossiersPage() {
               </div>
               <p className="text-[11px] text-muted-foreground">
                 <strong>Champ rempli</strong> : ce montant est envoyé au serveur (notification ou enregistrement silencieux).{' '}
-                <strong>Champ vide</strong> : le montant en base n'est pas modifié lors de la notification. Saisissez{' '}
+                <strong>Champ vide</strong> : le montant en base n\'est pas modifié lors de la notification. Saisissez{' '}
                 <span className="font-mono">0</span> pour retirer le montant fixe.
               </p>
               <div className="rounded-md border border-gray-300 bg-white px-3 py-2 text-[11px] text-muted-foreground">
@@ -5040,7 +5040,7 @@ export default function AdminDossiersPage() {
                 </span>
               </div>
               <Label htmlFor="tarif-montant" className="text-sm font-medium">
-                Montant à appliquer (optionnel si vous ne faites qu'informer)
+                Montant à appliquer (optionnel si vous ne faites qu\'informer)
               </Label>
               <Input
                 id="tarif-montant"
@@ -5163,7 +5163,7 @@ export default function AdminDossiersPage() {
                 <div className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 space-y-2">
                   <p className="text-xs font-semibold text-amber-900">Rétracter la demande</p>
                   <p className="text-[11px] text-amber-900/90 leading-snug">
-                    Une demande tarification a été envoyée au client, qui n'a pas encore enregistré de formule. Vous pouvez
+                    Une demande tarification a été envoyée au client, qui n\'a pas encore enregistré de formule. Vous pouvez
                     retirer cette demande : les indicateurs « notifié » seront effacés et le client recevra une notification
                     in-app (aucun SMS automatique pour cette action).
                   </p>
@@ -5228,14 +5228,14 @@ export default function AdminDossiersPage() {
                 <span className="text-sm">
                   <span className="font-semibold text-gray-900 block">Exonérer les frais de tarification</span>
                   <span className="text-muted-foreground text-xs">
-                    À l'envoi de la notification uniquement. Incompatible avec un montant fixe {'>'} 0 (base ou champ).
+                    À l\'envoi de la notification uniquement. Incompatible avec un montant fixe {'>'} 0 (base ou champ).
                   </span>
                 </span>
               </label>
               {tarifExonerer && (
                 <div>
                   <Label htmlFor="tarif-exo-motif" className="text-sm mb-1 block">
-                    Motif d'exonération (optionnel)
+                    Motif d\'exonération (optionnel)
                   </Label>
                   <Textarea
                     id="tarif-exo-motif"
@@ -5347,7 +5347,7 @@ export default function AdminDossiersPage() {
                   <span>
                     <span className="font-semibold text-emerald-900 block">Exonérer les frais de tarification</span>
                     <span className="text-sm text-emerald-800/90">
-                      Le client recevra une notification (et un SMS si configuré) l'informant de l'exonération. Il ne sera pas invité à choisir une formule.
+                      Le client recevra une notification (et un SMS si configuré) l\'informant de l\'exonération. Il ne sera pas invité à choisir une formule.
                     </span>
                   </span>
                 </label>
@@ -5382,7 +5382,7 @@ export default function AdminDossiersPage() {
                 className="w-full"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Message optionnel qui sera envoyé à l'utilisateur et à tous les administrateurs dans leurs notifications. Si vide, un message par défaut sera utilisé.
+                Message optionnel qui sera envoyé à l\'utilisateur et à tous les administrateurs dans leurs notifications. Si vide, un message par défaut sera utilisé.
               </p>
             </div>
             <div className="flex gap-3 justify-end">
@@ -5429,7 +5429,7 @@ export default function AdminDossiersPage() {
                   const docInfo = documentTypesList.find(d => d.value === docType);
                   const documentTypeLabel = docInfo?.label || docType;
 
-                  // Utiliser le type de base pour l'enum backend (mapping)
+                  // Utiliser le type de base pour l\'enum backend (mapping)
                   const baseTypeMap: Record<string, string> = {
                     passeport: 'passeport',
                     carte_identite: 'identite',
@@ -5538,7 +5538,7 @@ export default function AdminDossiersPage() {
                   await loadDossiers();
                 } else {
                   const totalCount = documentRequestData.selectedDocumentTypes.length;
-                  setError(`${failedCount} demande(s) sur ${totalCount} n'a(ont) pas pu être créée(s). Veuillez réessayer.`);
+                  setError(`${failedCount} demande(s) sur ${totalCount} n\'a(ont) pas pu être créée(s). Veuillez réessayer.`);
                 }
               } catch (err: any) {
                 console.error('❌ Erreur lors de la création de la demande:', err);
@@ -5720,7 +5720,7 @@ export default function AdminDossiersPage() {
             >
               <div className="space-y-3 mb-4">
                 <div>
-                  <Label htmlFor="newEtapeLabel">Libellé de l'étape *</Label>
+                  <Label htmlFor="newEtapeLabel">Libellé de l\'étape *</Label>
                   <Input
                     id="newEtapeLabel"
                     value={newEtapeLabel}
@@ -5765,7 +5765,7 @@ export default function AdminDossiersPage() {
               Dossier : {guestInviteModalDossier.titre || guestInviteModalDossier.numero || '-'}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Lien valable 7 jours, plusieurs dépôts possibles. Les fichiers seront confidentiels pour le client tant que vous n'autoriserez pas l'accès.
+              Lien valable 7 jours, plusieurs dépôts possibles. Les fichiers seront confidentiels pour le client tant que vous n\'autoriserez pas l\'accès.
             </p>
             <form onSubmit={handleCreateGuestUploadInvite} className="mt-4 space-y-3">
               <div>
@@ -5802,7 +5802,7 @@ export default function AdminDossiersPage() {
                   Fermer
                 </Button>
                 <Button type="submit" disabled={guestInviteBusy}>
-                  {guestInviteBusy ? 'Envoi…' : 'Envoyer l'invitation'}
+                  {guestInviteBusy ? 'Envoi…' : 'Envoyer l\'invitation'}
                 </Button>
               </div>
             </form>

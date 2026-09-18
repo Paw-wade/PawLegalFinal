@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
@@ -348,7 +348,7 @@ export default function AdminDocumentsPage() {
       return matchesSearch && matchesCategory;
     });
     
-    // Retourner le groupe seulement s'il a des documents après filtrage
+    // Retourner le groupe seulement s\'il a des documents après filtrage
     if (filteredDocs.length > 0) {
       group.documents = filteredDocs;
       return true;
