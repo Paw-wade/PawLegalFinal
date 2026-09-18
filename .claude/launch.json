@@ -4,8 +4,9 @@
     {
       "name": "frontend",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["next", "dev", "-p", "3004", "--turbopack"],
+      "runtimeArgs": ["next", "dev", "--turbopack"],
       "port": 3004,
+      "autoPort": true,
       "cwd": "frontend"
     },
     {
@@ -13,7 +14,7 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["nodemon", "server.js"],
       "port": 3005,
-      "autoPort": false,
+      "autoPort": true,
       "cwd": "backend"
     }
   ]

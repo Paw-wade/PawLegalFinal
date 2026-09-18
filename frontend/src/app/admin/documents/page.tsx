@@ -61,6 +61,7 @@ export default function AdminDocumentsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [previewDocument, setPreviewDocument] = useState<any | null>(null);
   const [expandedDossiers, setExpandedDossiers] = useState<Set<string>>(new Set());
+  const [togglingVisibilityId, setTogglingVisibilityId] = useState<string | null>(null);
   const [shareModalDoc, setShareModalDoc] = useState<{ id: string; title: string } | null>(null);
   const [shareEmail, setShareEmail] = useState('');
   const [shareMessage, setShareMessage] = useState('');
@@ -189,6 +190,24 @@ export default function AdminDocumentsPage() {
           ? 'Fichier introuvable sur le serveur. Re-téléversez le document ou récupérez les fichiers depuis le VPS.'
           : msg || 'Erreur lors du téléchargement du document'
       );
+    }
+  };
+
+  const handleToggleVisibility = async (doc: any) => {
+    const docId = String(doc?._id || doc?.id || '');
+    if (!docId) return;
+    setTogglingVisibilityId(docId);
+    const newVisibility = doc.visibleToClient !== false;
+    try {
+      const response = await documentsAPI.updateDocumentVisibility(docId, { visibleToClient: !newVisibility });
+      if (!response?.data?.success) throw new Error(response?.data?.message || 'Mise à jour impossible.');
+      setSuccess(newVisibility ? 'Document masque pour le client.' : 'Document visible pour le client.');
+      setTimeout(() => setSuccess(null), 3000);
+      loadDocuments();
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || 'Erreur.');
+    } finally {
+      setTogglingVisibilityId(null);
     }
   };
 
@@ -657,11 +676,18 @@ export default function AdminDocumentsPage() {
                             className="flex items-center gap-2 px-4 py-1.5 min-w-0"
                           >
                             <div className="text-sm flex-1 min-w-0 overflow-hidden">
-                              <InlineDocumentRename
-                                value={docNom}
-                                className="text-sm text-gray-800 truncate"
-                                onSave={(nextName) => handleRenameDocument(docId, nextName)}
-                              />
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <InlineDocumentRename
+                                  value={docNom}
+                                  className="text-sm text-gray-800 truncate"
+                                  onSave={(nextName) => handleRenameDocument(docId, nextName)}
+                                />
+                                {doc.visibleToClient === false && (
+                                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold shrink-0">
+                                    Confidentiel client
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
                               <Button
@@ -681,6 +707,16 @@ export default function AdminDocumentsPage() {
                                 className="h-7 w-7 shrink-0 p-0"
                               >
                                 <Link2 className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => handleToggleVisibility(doc)}
+                                disabled={togglingVisibilityId === docId}
+                                title={doc.visibleToClient === false ? 'Rendre visible au client' : 'Rendre confidentiel'}
+                                aria-label={doc.visibleToClient === false ? 'Rendre visible au client' : 'Rendre confidentiel'}
+                                className={`h-7 px-2 shrink-0 text-[10px] font-medium ${doc.visibleToClient === false ? 'text-amber-800 border-amber-300 hover:bg-amber-50' : 'text-slate-600 hover:bg-slate-50'}`}
+                              >
+                                {togglingVisibilityId === docId ? '...' : doc.visibleToClient === false ? 'Visible' : 'Confidentiel'}
                               </Button>
                               <Button
                                 variant="default"

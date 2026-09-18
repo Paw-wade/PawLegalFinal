@@ -506,6 +506,7 @@ export default function AdminDossiersPage() {
   const [guestInviteError, setGuestInviteError] = useState<string | null>(null);
   const [guestInviteCreatedUrl, setGuestInviteCreatedUrl] = useState<string | null>(null);
   const [authorizingDocumentId, setAuthorizingDocumentId] = useState<string | null>(null);
+  const [hidingDocumentId, setHidingDocumentId] = useState<string | null>(null);
   const [validatingDocumentId, setValidatingDocumentId] = useState<string | null>(null);
   const [activeQuickComplementDossierId, setActiveQuickComplementDossierId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
@@ -1536,23 +1537,44 @@ export default function AdminDossiersPage() {
   };
 
   const handleAuthorizeClientDocument = async (doc: any) => {
-    const docId = String(doc?._id || doc?.id || '');
+    const docId = String(doc?._id || doc?.id || ‘’);
     if (!docId) return;
     setAuthorizingDocumentId(docId);
     try {
       const response = await documentsAPI.updateDocumentVisibility(docId, { visibleToClient: true });
       if (!response?.data?.success) {
-        throw new Error(response?.data?.message || 'Mise à jour impossible.');
+        throw new Error(response?.data?.message || ‘Mise à jour impossible.’);
       }
-      setToast({ message: 'Document visible pour le client.', type: 'success' });
+      setToast({ message: ‘Document visible pour le client.’, type: ‘success’ });
       await loadDossierDocuments();
     } catch (err: any) {
       setToast({
-        message: err?.response?.data?.message || err?.message || 'Erreur lors de l’autorisation.',
-        type: 'error',
+        message: err?.response?.data?.message || err?.message || "Erreur lors de l’autorisation.",
+        type: ‘error’,
       });
     } finally {
       setAuthorizingDocumentId(null);
+    }
+  };
+
+  const handleHideDocumentFromClient = async (doc: any) => {
+    const docId = String(doc?._id || doc?.id || ‘’);
+    if (!docId) return;
+    setHidingDocumentId(docId);
+    try {
+      const response = await documentsAPI.updateDocumentVisibility(docId, { visibleToClient: false });
+      if (!response?.data?.success) {
+        throw new Error(response?.data?.message || ‘Mise à jour impossible.’);
+      }
+      setToast({ message: ‘Document masqué pour le client.’, type: ‘success’ });
+      await loadDossierDocuments();
+    } catch (err: any) {
+      setToast({
+        message: err?.response?.data?.message || err?.message || ‘Erreur lors du masquage.’,
+        type: ‘error’,
+      });
+    } finally {
+      setHidingDocumentId(null);
     }
   };
 
@@ -4452,7 +4474,7 @@ export default function AdminDossiersPage() {
                                         >
                                           ⬇️ Télécharger
                                         </button>
-                                        {doc.visibleToClient === false && (
+                                        {doc.visibleToClient === false ? (
                                           <button
                                             type="button"
                                             onClick={async (e) => {
@@ -4463,8 +4485,22 @@ export default function AdminDossiersPage() {
                                             className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded text-xs font-medium transition-colors disabled:opacity-60"
                                           >
                                             {authorizingDocumentId === String(doc._id || doc.id)
-                                              ? '…'
-                                              : 'Autoriser l’accès client'}
+                                              ? ‘...’
+                                              : ‘Rendre visible au client’}
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              await handleHideDocumentFromClient(doc);
+                                            }}
+                                            disabled={hidingDocumentId === String(doc._id || doc.id)}
+                                            className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded text-xs font-medium transition-colors disabled:opacity-60"
+                                          >
+                                            {hidingDocumentId === String(doc._id || doc.id)
+                                              ? ‘...’
+                                              : ‘Rendre confidentiel’}
                                           </button>
                                         )}
                                         {doc.uploadedViaGuestLink && doc.validationStatus !== 'valide' && (
@@ -4567,14 +4603,21 @@ export default function AdminDossiersPage() {
                                                 >
                                                   <div className="flex items-start justify-between gap-2 mb-2">
                                                     <div className="flex-1 min-w-0">
-                                                      <InlineDocumentRename
-                                                        value={doc.nom || 'Document'}
-                                                        className="text-xs font-medium text-gray-900"
-                                                        inputClassName="text-xs"
-                                                        onSave={(nextName) =>
-                                                          handleRenameDocument(String(doc._id || doc.id), nextName)
-                                                        }
-                                                      />
+                                                      <div className="flex items-center gap-1 flex-wrap">
+                                                        <InlineDocumentRename
+                                                          value={doc.nom || 'Document'}
+                                                          className="text-xs font-medium text-gray-900"
+                                                          inputClassName="text-xs"
+                                                          onSave={(nextName) =>
+                                                            handleRenameDocument(String(doc._id || doc.id), nextName)
+                                                          }
+                                                        />
+                                                        {doc.visibleToClient === false && (
+                                                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[9px] font-semibold">
+                                                            Confidentiel
+                                                          </span>
+                                                        )}
+                                                      </div>
                                                       {doc.description && (
                                                         <p className="text-[10px] text-gray-500 line-clamp-1 mt-0.5">{doc.description}</p>
                                                       )}
@@ -4593,7 +4636,7 @@ export default function AdminDossiersPage() {
                                                       }}
                                                       className="flex-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-medium transition-colors"
                                                     >
-                                                      👁️ Voir
+                                                      Voir
                                                     </button>
                                                     <button
                                                       onClick={async (e) => {
@@ -4608,8 +4651,33 @@ export default function AdminDossiersPage() {
                                                       }}
                                                       className="flex-1 px-2 py-1 bg-green-50 hover:bg-green-100 text-green-700 rounded text-[10px] font-medium transition-colors"
                                                     >
-                                                      ⬇️ Télécharger
+                                                      Telecharger
                                                     </button>
+                                                    {doc.visibleToClient === false ? (
+                                                      <button
+                                                        onClick={async (e) => {
+                                                          e.preventDefault();
+                                                          e.stopPropagation();
+                                                          await handleAuthorizeClientDocument(doc);
+                                                        }}
+                                                        disabled={authorizingDocumentId === String(doc._id || doc.id)}
+                                                        className="flex-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded text-[10px] font-medium transition-colors disabled:opacity-60"
+                                                      >
+                                                        {authorizingDocumentId === String(doc._id || doc.id) ? '...' : 'Visible client'}
+                                                      </button>
+                                                    ) : (
+                                                      <button
+                                                        onClick={async (e) => {
+                                                          e.preventDefault();
+                                                          e.stopPropagation();
+                                                          await handleHideDocumentFromClient(doc);
+                                                        }}
+                                                        disabled={hidingDocumentId === String(doc._id || doc.id)}
+                                                        className="flex-1 px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-[10px] font-medium transition-colors disabled:opacity-60"
+                                                      >
+                                                        {hidingDocumentId === String(doc._id || doc.id) ? '...' : 'Confidentiel'}
+                                                      </button>
+                                                    )}
                                                   </div>
                                                 </div>
                                               ))}

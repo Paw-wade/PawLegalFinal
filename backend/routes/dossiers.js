@@ -12,7 +12,7 @@ const { getAssignedDossierIds, userHasPermission, isUserOnDossierTeam, getScoped
 const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
 const { sendTemplatedTransactionalEmail } = require('../utils/emailTemplateMailer');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
-const { sendSMS, formatPhoneNumber } = require('../sendSMS');
+const { sendSMS, sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 
 const router = express.Router();
 const MIN_REMINDER_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48h
@@ -3227,7 +3227,7 @@ router.post(
       let emailSent = false;
       let emailSkipped = null;
 
-      const mailUser = await User.findById(clientUserId).select('email firstName');
+      const mailUser = await User.findById(clientUserId).select('email firstName phone');
       if (dossier.isStandby) {
         emailSkipped = 'dossier_standby';
       } else if (!mailUser?.email || !String(mailUser.email).trim()) {
@@ -3238,31 +3238,67 @@ router.post(
             to: mailUser.email,
             toName: mailUser.firstName || '',
             subject: 'Rappel : tarification - Ada Papers',
-            htmlContent: `<p>Bonjour,</p><p>${escapeHtml(messageInApp)}</p><p>Nous vous invitons à régulariser la situation depuis votre espace client, rubrique Tarification.</p><p>En cas de difficulté, notre équipe reste à votre disposition.</p>`,
+            htmlContent: `<p>Bonjour,</p><p>${escapeHtml(messageInApp)}</p><p>Nous vous invitons à reguleriser la situation depuis votre espace client, rubrique Tarification.</p><p>En cas de difficulte, notre equipe reste a votre disposition.</p>`,
             textContent: `${messageInApp}
 
-Nous vous invitons à régulariser la situation depuis votre espace client, rubrique Tarification.
-En cas de difficulté, notre équipe reste à votre disposition.`,
+Nous vous invitons a regulariser la situation depuis votre espace client, rubrique Tarification.
+En cas de difficulte, notre equipe reste a votre disposition.`,
           });
           if (!emailSent) emailSkipped = 'brevo_error';
         } catch (mailErr) {
-          console.error('⚠️ Email relance tarification:', mailErr);
+          console.error('Avertissement email relance tarification:', mailErr);
           emailSkipped = mailErr.message || 'email_error';
+        }
+      }
+
+      let smsSent = false;
+      let smsSkipped = null;
+
+      const clientPhone = mailUser?.phone || dossier.clientTelephone || dossier.telephone || null;
+      if (!clientPhone || !String(clientPhone).trim()) {
+        smsSkipped = 'no_phone';
+      } else {
+        try {
+          const smsResult = await sendNotificationSMS(
+            String(clientPhone).trim(),
+            'tarification_payment_reminder',
+            { dossierId: dossierId.toString() },
+            {
+              userId: clientUserId,
+              sentBy: req.user.id?.toString?.() || String(req.user.id),
+              context: 'tarification_reminder',
+              contextId: dossierId.toString(),
+              skipPreferences: false,
+              preferPush: false,
+            }
+          );
+          if (smsResult?.skipped) {
+            smsSkipped = smsResult.reason || 'skipped';
+          } else {
+            smsSent = true;
+          }
+        } catch (smsErr) {
+          console.error('Avertissement SMS relance tarification:', smsErr);
+          smsSkipped = smsErr.message || 'sms_error';
         }
       }
 
       const parts = ['notification in-app'];
       if (emailSent) parts.push('email');
-      const hint = emailSent ? '' : ` - email non envoyé${emailSkipped ? ` (${emailSkipped})` : ''}`;
+      if (smsSent) parts.push('SMS');
+      const hint = [
+        !emailSent && emailSkipped ? `email non envoye (${emailSkipped})` : null,
+        !smsSent && smsSkipped ? `SMS non envoye (${smsSkipped})` : null,
+      ].filter(Boolean).join(', ');
 
       return res.json({
         success: true,
-        message: `Relance enregistrée (${parts.join(' + ')})${hint}.`,
+        message: `Relance enregistree (${parts.join(' + ')})${hint ? ` - ${hint}` : ''}.`,
         notificationCreated: true,
         emailSent,
         emailSkipped: emailSent ? null : emailSkipped,
-        smsSent: false,
-        smsSkipped: null,
+        smsSent,
+        smsSkipped: smsSent ? null : smsSkipped,
       });
     } catch (error) {
       console.error('Erreur relance tarification:', error);
