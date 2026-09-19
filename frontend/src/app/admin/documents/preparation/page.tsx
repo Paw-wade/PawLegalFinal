@@ -167,8 +167,7 @@ function PreparationRowMenuItems({
   menuItemClass,
   setOpenMenuKey,
   onDownloadWord,
-  onDeleteWord,
-  onDeleteCollab,
+  onRequestDelete,
   onSetCompleted,
 }: {
   row: UnifiedPreparationRow;
@@ -177,8 +176,7 @@ function PreparationRowMenuItems({
   menuItemClass: string;
   setOpenMenuKey: (k: string | null) => void;
   onDownloadWord: (id: string, title: string) => void;
-  onDeleteWord: (id: string) => void;
-  onDeleteCollab: (id: string) => void;
+  onRequestDelete: (row: UnifiedPreparationRow) => void;
   onSetCompleted: (row: UnifiedPreparationRow, completed: boolean) => void;
 }) {
   if (row.kind === 'word') {
@@ -203,7 +201,7 @@ function PreparationRowMenuItems({
           type="button"
           role="menuitem"
           className={`${menuItemClass} text-red-700`}
-          onClick={() => onDeleteWord(row._id)}
+          onClick={() => { setOpenMenuKey(null); onRequestDelete(row); }}
         >
           Supprimer
         </button>
@@ -241,7 +239,7 @@ function PreparationRowMenuItems({
           type="button"
           role="menuitem"
           className={`${menuItemClass} text-red-700`}
-          onClick={() => onDeleteCollab(row._id)}
+          onClick={() => { setOpenMenuKey(null); onRequestDelete(row); }}
         >
           Supprimer
         </button>
@@ -277,6 +275,8 @@ export default function AdminDocumentsPreparationPage() {
   const [createDueDate, setCreateDueDate] = useState('');
   const [creating, setCreating] = useState(false);
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
+  const [pendingDeleteRow, setPendingDeleteRow] = useState<UnifiedPreparationRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const paramsQ = useMemo(() => (filterQ.trim() ? { q: filterQ.trim() } : undefined), [filterQ]);
 
@@ -377,8 +377,36 @@ export default function AdminDocumentsPreparationPage() {
     }
   };
 
+  const handleRequestDelete = (row: UnifiedPreparationRow) => {
+    setPendingDeleteRow(row);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDeleteRow) return;
+    setDeleting(true);
+    const row = pendingDeleteRow;
+    setPendingDeleteRow(null);
+    try {
+      if (row.kind === 'word') {
+        await dossierDocumentDraftsAPI.remove(row._id);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('dossierDocumentDraftsUpdated'));
+        }
+      } else {
+        await collaborativeDraftsAPI.archiveDraft(row._id);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('collaborativeDraftsUpdated'));
+        }
+      }
+      loadAll();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'Suppression impossible.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleDeleteWord = async (id: string) => {
-    if (!confirm('Supprimer ce brouillon ?')) return;
     try {
       await dossierDocumentDraftsAPI.remove(id);
       if (typeof window !== 'undefined') {
@@ -408,7 +436,6 @@ export default function AdminDocumentsPreparationPage() {
   };
 
   const handleDeleteCollab = async (id: string) => {
-    if (!confirm('Archiver ce brouillon ? Il disparaîtra des listes actives.')) return;
     try {
       await collaborativeDraftsAPI.archiveDraft(id);
       if (typeof window !== 'undefined') {
@@ -477,6 +504,32 @@ export default function AdminDocumentsPreparationPage() {
       )}
       {collabWarning && !error && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-sm px-4 py-3">{collabWarning}</div>
+      )}
+
+      {pendingDeleteRow && (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm text-red-800 flex-1">
+            Supprimer <strong className="font-semibold">{pendingDeleteRow.title}</strong> ? Cette action est irréversible.
+          </p>
+          <div className="flex gap-2 shrink-0">
+            <button
+              type="button"
+              disabled={deleting}
+              className="rounded bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              onClick={handleConfirmDelete}
+            >
+              {deleting ? 'Suppression…' : 'Oui, supprimer'}
+            </button>
+            <button
+              type="button"
+              disabled={deleting}
+              className="rounded border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => setPendingDeleteRow(null)}
+            >
+              Annuler
+            </button>
+          </div>
+        </div>
       )}
 
       {createOpen && (
@@ -619,8 +672,7 @@ export default function AdminDocumentsPreparationPage() {
                           menuItemClass={menuItemClass}
                           setOpenMenuKey={setOpenMenuKey}
                           onDownloadWord={handleDownloadWord}
-                          onDeleteWord={handleDeleteWord}
-                          onDeleteCollab={handleDeleteCollab}
+                          onRequestDelete={handleRequestDelete}
                           onSetCompleted={handleSetCompleted}
                         />
                       </PreparationActionsMenu>
@@ -749,8 +801,7 @@ export default function AdminDocumentsPreparationPage() {
                               menuItemClass={menuItemClass}
                               setOpenMenuKey={setOpenMenuKey}
                               onDownloadWord={handleDownloadWord}
-                              onDeleteWord={handleDeleteWord}
-                              onDeleteCollab={handleDeleteCollab}
+                              onRequestDelete={handleRequestDelete}
                               onSetCompleted={handleSetCompleted}
                             />
                           </PreparationActionsMenu>
