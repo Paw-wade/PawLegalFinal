@@ -178,6 +178,7 @@ export default function HomePage() {
   const [hoveredLimiteIndex, setHoveredLimiteIndex] = useState<number | null>(0);
   const [hoveredPlateformeIndex, setHoveredPlateformeIndex] = useState<number | null>(0);
   const [showMobileTopBar, setShowMobileTopBar] = useState(true);
+  const [scrollPastHero, setScrollPastHero] = useState(false);
   const [isWidgetOpen, setIsWidgetOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('reservationWidgetOpen');
@@ -325,6 +326,12 @@ export default function HomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    const onScroll = () => setScrollPastHero(window.scrollY > 220);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   // Carrousel automatique pour les slides du hero
   useEffect(() => {
     if (heroSlides.length === 0) return;
@@ -347,9 +354,11 @@ export default function HomePage() {
   const lexiaHref = role === 'admin' || role === 'superadmin' ? '/admin/lexia' : '/lexia';
 
   return (
-    <div className="min-h-screen bg-background flex flex-col scroll-smooth overflow-x-hidden max-w-[100vw]">
-      {/* Header Professionnel */}
-      <Header variant="home" />
+    <div className="min-h-screen bg-ds-primary-tint flex flex-col scroll-smooth overflow-x-hidden max-w-[100vw]">
+      {/* Header sticky revelé apres defilement du hero */}
+      <div className={`fixed top-0 left-0 right-0 z-[80] transition-transform duration-300 ${scrollPastHero ? 'translate-y-0' : '-translate-y-full'}`}>
+        <Header variant="home" />
+      </div>
 
       {/* Barre de menu mobile sous le header (disparaît au scroll) */}
       {showMobileTopBar && (
@@ -400,7 +409,7 @@ export default function HomePage() {
       )}
 
       {/* Hero Section - carte flottante, formes décoratives et cadre incliné */}
-      <section className="relative overflow-hidden bg-ds-primary-tint py-10 sm:py-16">
+      <section className="relative overflow-hidden py-6 sm:py-10">
         {/* Formes décoratives (tokens du design system) */}
         <div aria-hidden className="pointer-events-none absolute inset-0">
           <div className="absolute left-[8%] top-6 h-10 w-10 rounded-full bg-ds-primary" />
@@ -412,7 +421,34 @@ export default function HomePage() {
         </div>
 
         <div className="container relative mx-auto px-3 sm:px-4">
-          <div className="relative rounded-3xl border border-transparent bg-ds-elevated px-6 py-12 shadow-xl dark:border-ds-border sm:px-10 lg:px-14 lg:py-20">
+          <div className="relative rounded-3xl border border-transparent bg-ds-elevated px-6 pt-5 pb-12 shadow-xl dark:border-ds-border sm:px-10 lg:px-14 lg:pb-20">
+            {/* Nav integree dans la carte hero */}
+            <nav className="flex items-center justify-between mb-10 lg:mb-12">
+              <Link href="/" className="font-bold text-ds-primary text-xl tracking-tight hover:opacity-80 transition-opacity">
+                Ada Papers
+              </Link>
+              <div className="hidden md:flex items-center gap-0.5">
+                {[
+                  { href: '/a-propos', label: 'A propos' },
+                  { href: '/faq', label: 'FAQ' },
+                  { href: '/calculateur', label: 'Calculateur' },
+                  { href: '/contact', label: 'Contact' },
+                ].map(({ href, label }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="px-3 py-1.5 rounded-md text-sm font-medium text-ds-body hover:bg-ds-primary-tint hover:text-ds-strong transition-colors"
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </div>
+              <Link href={session ? (role === 'admin' || role === 'superadmin' ? '/admin' : '/client') : '/auth/signin'}>
+                <button className="rounded-full bg-ds-primary px-5 py-2 text-sm font-semibold text-white hover:bg-ds-primary-hover transition-colors shadow-sm">
+                  {session ? 'Mon espace' : 'Creer mon compte'}
+                </button>
+              </Link>
+            </nav>
             <div className="grid items-center gap-12 lg:grid-cols-[1.12fr_0.88fr] lg:gap-6">
               <div className="relative min-w-0">
                 {/* Titre */}
