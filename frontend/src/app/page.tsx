@@ -795,7 +795,7 @@ export default function HomePage() {
         onMouseEnter={() =>
           setIsVisible((prev) => ({ ...prev, plateforme: true }))
         }
-        className={`border-y border-ds-border bg-ds-secondary py-16 transition-all duration-1000 transform sm:py-20 ${
+        className={`border-y border-ds-border py-16 transition-all duration-1000 transform sm:py-20 ${
           isVisible['plateforme']
             ? 'opacity-100 translate-y-0 scale-100'
             : 'opacity-0 translate-y-6 scale-95'
@@ -957,7 +957,7 @@ export default function HomePage() {
         onMouseEnter={() =>
           setIsVisible((prev) => ({ ...prev, temoignages: true }))
         }
-        className={`relative overflow-hidden border-y border-ds-border bg-ds-secondary py-16 transition-all duration-1000 transform sm:py-20 ${
+        className={`relative overflow-hidden border-y border-ds-border py-16 transition-all duration-1000 transform sm:py-20 ${
           isVisible['temoignages']
             ? 'opacity-100 translate-y-0 scale-100'
             : 'opacity-0 translate-y-6 scale-95'
