@@ -9,6 +9,21 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Design system Ada Papers : couleurs liées aux tokens de src/styles/tokens.css (clair / sombre)
+        ds: {
+          bg: 'var(--color-background)',
+          elevated: 'var(--color-surface-elevated)',
+          secondary: 'var(--color-secondary)',
+          muted: 'var(--color-muted)',
+          primary: 'var(--color-primary)',
+          'primary-hover': 'var(--color-primary-hover)',
+          'primary-tint': 'var(--color-primary-tint)',
+          'primary-light': 'var(--color-primary-light)',
+          strong: 'var(--color-text-strong)',
+          body: 'var(--color-text-body)',
+          subtle: 'var(--color-text-subtle)',
+          border: 'var(--color-border)',
+        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         primary: {
