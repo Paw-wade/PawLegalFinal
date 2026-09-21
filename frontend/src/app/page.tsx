@@ -493,11 +493,6 @@ export default function HomePage() {
                       Démarrer une demande
                     </Button>
                   </Link>
-                  <Link href="/contact">
-                    <Button variant="ghost" size="lg">
-                      {heroCtaSecondaryLabel}
-                    </Button>
-                  </Link>
                 </div>
               </div>
 
