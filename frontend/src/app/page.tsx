@@ -168,6 +168,109 @@ const LIMITES = [
   },
 ] as const;
 
+const SOLUTIONS_ENTREPRISE = [
+  {
+    title: 'SARL / EURL',
+    description:
+      "Nous vous accompagnons dans la creation d'une Societe a Responsabilite Limitee (SARL) ou d'une EURL : redaction des statuts, depot du capital, publication legale et immatriculation au Registre du Commerce et des Societes.",
+    duree: '2 a 4 semaines',
+    prix: 'Sur devis',
+    points: [
+      'Redaction des statuts sur mesure',
+      'Depot du capital social',
+      "Publication d'annonce legale au JAL",
+      'Immatriculation au RCS (extrait Kbis)',
+      'Ouverture de compte bancaire professionnel',
+      'Nomination et pouvoirs du gerant',
+    ],
+    ctaHref: '/dossiers/create?rubrique=constitution_societe',
+    ctaLabel: 'Demarrer la constitution',
+  },
+  {
+    title: 'SAS / SASU',
+    description:
+      "La Societe par Actions Simplifiee offre une grande souplesse de gouvernance, ideale pour les startups et les projets qui envisagent une levee de fonds ou une entree d'associes.",
+    duree: '2 a 4 semaines',
+    prix: 'Sur devis',
+    points: [
+      'Redaction des statuts SAS / SASU',
+      'Nomination du president',
+      "Publication d'annonce legale",
+      'Immatriculation au RCS',
+      'Pacte d\'actionnaires (optionnel)',
+      'Delegation de pouvoirs',
+    ],
+    ctaHref: '/dossiers/create?rubrique=constitution_societe',
+    ctaLabel: 'Demarrer la constitution',
+  },
+  {
+    title: 'Micro-entreprise',
+    description:
+      "Le regime de la micro-entreprise est la solution la plus rapide pour demarrer une activite independante, sans apport en capital ni depot de statuts.",
+    duree: '1 a 3 jours',
+    prix: 'Demarches gratuites (URSSAF)',
+    points: [
+      'Inscription sur guichet-entreprises.fr',
+      "Choix du code APE et de l'activite",
+      'Regime fiscal et social simplifie',
+      'Compte bancaire dedie recommande',
+      'Premiere declaration de chiffre d\'affaires',
+    ],
+    ctaHref: '/nouvelle-demande',
+    ctaLabel: 'Demarrer une demande',
+  },
+  {
+    title: 'SCI',
+    description:
+      "La Societe Civile Immobiliere est la structure de reference pour l'acquisition, la gestion et la transmission d'un patrimoine immobilier en famille ou entre associes.",
+    duree: '3 a 6 semaines',
+    prix: 'Sur devis',
+    points: [
+      'Redaction des statuts SCI',
+      'Objet social et siege social',
+      'Apports et repartition des parts',
+      'Nomination du gerant',
+      'Immatriculation au greffe',
+      'Gestion locative et fiscalite (IR / IS)',
+    ],
+    ctaHref: '/dossiers/create?rubrique=constitution_societe',
+    ctaLabel: 'Demarrer la constitution',
+  },
+] as const;
+
+const LIMITES_ENTREPRISE = [
+  {
+    label: "Pas de conseil fiscal ou comptable",
+    title: "Nous ne sommes pas experts-comptables",
+    details:
+      "Nos services couvrent les aspects juridiques et administratifs de la creation d'entreprise. Nous ne delivrons pas de conseils fiscaux ou comptables personnalises. Pour optimiser votre regime d'imposition, declarer votre TVA ou etablir vos bilans, vous devez faire appel a un expert-comptable habilite.",
+  },
+  {
+    label: "Pas d'actes notaries",
+    title: "Nous ne remplaceons pas le notaire",
+    details:
+      "Certaines operations immobilieres ou societales exigent l'intervention d'un notaire (apport d'immeuble en societe, certaines cessions de parts, pactes de preference). Nos modeles de statuts ne remplacent pas un acte notarie lorsque celui-ci est obligatoire par la loi.",
+  },
+  {
+    label: "Pas de representation au Tribunal de Commerce",
+    title: "Nous n'intervenons pas dans les contentieux commerciaux",
+    details:
+      "Si vous etes confronte a un litige avec un associe, un creancier ou votre gerant, nous ne pouvons pas vous representer devant le Tribunal de Commerce ni devant toute autre juridiction. Nous vous orientons vers un avocat specialise en droit des societes.",
+  },
+  {
+    label: "Les statuts types ne remplacent pas un conseil sur mesure",
+    title: "Nos modeles sont des bases, pas des conseils personnalises",
+    details:
+      "Les statuts que nous proposons sont adaptes aux cas courants. Toute situation particuliere (entree d'investisseurs, clause d'inaliabilite, pacte d'actionnaires complexe, minorite de blocage) necessite l'intervention d'un avocat specialise en droit des societes pour adapter la documentation a vos besoins specifiques.",
+  },
+  {
+    label: "Pas de depot de marque ou de propriete intellectuelle",
+    title: "Nous ne gerons pas la propriete intellectuelle",
+    details:
+      "La protection de votre marque, de votre logo ou de vos creations aupres de l'INPI sort de notre perimetre. Nous vous recommandons de confier cette demarche a un conseil en propriete industrielle (CPI) ou a un avocat specialise en propriete intellectuelle.",
+  },
+] as const;
+
 export default function HomePage() {
   const { data: session } = useSession();
   const [temoignages, setTemoignages] = useState<any[]>([]);
@@ -350,6 +453,8 @@ export default function HomePage() {
     return 0;
   });
   const [selectedSolutionIndex, setSelectedSolutionIndex] = useState(0);
+  const [selectedEntrepriseSolutionIndex, setSelectedEntrepriseSolutionIndex] = useState(0);
+  const [hoveredEntrepriseLimiteIndex, setHoveredEntrepriseLimiteIndex] = useState<number | null>(0);
   const role = (session?.user as { role?: string } | undefined)?.role;
   const lexiaHref = role === 'admin' || role === 'superadmin' ? '/admin/lexia' : '/lexia';
 
@@ -672,7 +777,7 @@ export default function HomePage() {
 
             <div className="grid items-start gap-8 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
               {/* Thèmes (gauche) */}
-              <div className="grid gap-2 rounded-2xl border border-ds-border bg-ds-secondary p-2" role="tablist" aria-label="Solutions">
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 md:grid md:overflow-visible md:pb-0 md:rounded-2xl md:border md:border-ds-border md:bg-ds-secondary md:p-2" role="tablist" aria-label="Solutions">
                 {solutions.map((solution, index) => (
                   <button
                     key={solution.title}
@@ -681,10 +786,10 @@ export default function HomePage() {
                     aria-selected={selectedSolutionIndex === index}
                     onClick={() => setSelectedSolutionIndex(index)}
                     onMouseEnter={() => setSelectedSolutionIndex(index)}
-                    className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                    className={`shrink-0 md:shrink rounded-xl border px-4 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                       selectedSolutionIndex === index
                         ? 'border-ds-primary bg-ds-bg font-semibold text-ds-strong shadow-sm'
-                        : 'border-transparent font-medium text-ds-body hover:border-ds-border hover:bg-ds-bg'
+                        : 'border-transparent bg-ds-secondary font-medium text-ds-body hover:border-ds-border hover:bg-ds-bg md:bg-transparent'
                     }`}
                   >
                     {solution.title}
@@ -901,7 +1006,7 @@ export default function HomePage() {
             {/* Modèle interactif : thèmes à gauche / détail à droite */}
             <div className="grid items-start gap-8 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
               {/* Thèmes (gauche) */}
-              <div className="grid gap-2 rounded-2xl border border-ds-border bg-ds-secondary p-2" role="tablist" aria-label="Limites">
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 md:grid md:overflow-visible md:pb-0 md:rounded-2xl md:border md:border-ds-border md:bg-ds-secondary md:p-2" role="tablist" aria-label="Limites">
                 {LIMITES.map((item, index) => (
                   <button
                     key={item.label}
@@ -911,10 +1016,10 @@ export default function HomePage() {
                     onClick={() => setHoveredLimiteIndex(index)}
                     onMouseEnter={() => setHoveredLimiteIndex(index)}
                     onFocus={() => setHoveredLimiteIndex(index)}
-                    className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                    className={`shrink-0 md:shrink flex items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                       hoveredLimiteIndex === index
                         ? 'border-ds-primary bg-ds-bg font-semibold text-ds-strong shadow-sm'
-                        : 'border-transparent font-medium text-ds-body hover:border-ds-border hover:bg-ds-bg'
+                        : 'border-transparent bg-ds-secondary font-medium text-ds-body hover:border-ds-border hover:bg-ds-bg md:bg-transparent'
                     }`}
                   >
                     <svg
@@ -937,6 +1042,197 @@ export default function HomePage() {
               <div className="rounded-2xl border border-ds-border bg-ds-bg p-6 shadow-sm md:p-8">
                 {(() => {
                   const item = LIMITES[hoveredLimiteIndex ?? 0] ?? LIMITES[0];
+                  return (
+                    <>
+                      <h3 className="mb-2 text-2xl font-bold text-ds-strong">{item.title}</h3>
+                      <p className="text-base leading-6 text-ds-body">{item.details}</p>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Section Solutions - Creation d'entreprise */}
+      <section
+        id="entreprise-solutions"
+        data-animate
+        onMouseEnter={() =>
+          setIsVisible((prev) => ({ ...prev, ['entreprise-solutions']: true }))
+        }
+        className={`border-t border-ds-border py-16 transition-all duration-1000 transform sm:py-20 ${
+          isVisible['entreprise-solutions']
+            ? 'opacity-100 translate-y-0 scale-100'
+            : 'opacity-0 translate-y-6 scale-95'
+        }`}
+      >
+        <div className="container mx-auto px-4">
+          <div
+            className="mx-auto max-w-6xl"
+            data-animate-item
+            data-animate-id="entreprise-solutions-title"
+          >
+            <div className={`mb-10 transition-all duration-700 ${
+              isVisible['entreprise-solutions'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}>
+              <Eyebrow>Creation d'entreprise</Eyebrow>
+              <h2 className="mb-3 max-w-[22ch] text-3xl font-bold leading-tight tracking-tight text-ds-strong sm:text-4xl lg:text-[40px] lg:leading-[46px]">
+                Choisissez votre structure juridique
+              </h2>
+              <p className="max-w-[60ch] text-lg leading-7 text-ds-subtle">
+                Selectionnez la forme societale qui correspond a votre projet pour en decouvrir les details.
+              </p>
+            </div>
+
+            <div className="grid items-start gap-8 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+              {/* Themes (gauche) */}
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 md:grid md:overflow-visible md:pb-0 md:rounded-2xl md:border md:border-ds-border md:bg-ds-secondary md:p-2" role="tablist" aria-label="Formes juridiques">
+                {SOLUTIONS_ENTREPRISE.map((sol, index) => (
+                  <button
+                    key={sol.title}
+                    type="button"
+                    role="tab"
+                    aria-selected={selectedEntrepriseSolutionIndex === index}
+                    onClick={() => setSelectedEntrepriseSolutionIndex(index)}
+                    onMouseEnter={() => setSelectedEntrepriseSolutionIndex(index)}
+                    className={`shrink-0 md:shrink rounded-xl border px-4 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                      selectedEntrepriseSolutionIndex === index
+                        ? 'border-ds-primary bg-ds-bg font-semibold text-ds-strong shadow-sm'
+                        : 'border-transparent bg-ds-secondary font-medium text-ds-body hover:border-ds-border hover:bg-ds-bg md:bg-transparent'
+                    }`}
+                  >
+                    {sol.title}
+                  </button>
+                ))}
+              </div>
+
+              {/* Detail (droite) */}
+              <div className="rounded-2xl border border-ds-border bg-ds-elevated p-6 shadow-sm md:p-8">
+                {(() => {
+                  const current = SOLUTIONS_ENTREPRISE[selectedEntrepriseSolutionIndex] ?? SOLUTIONS_ENTREPRISE[0];
+                  return (
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className="mb-2 text-2xl font-bold text-ds-strong">{current.title}</h3>
+                        <p className="text-base leading-6 text-ds-body">{current.description}</p>
+                      </div>
+
+                      {(current.duree || current.prix) && (
+                        <div className="grid gap-4 rounded-xl bg-ds-secondary p-4 text-sm sm:grid-cols-2">
+                          {current.duree && (
+                            <div>
+                              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ds-subtle">Duree</p>
+                              <p className="text-base font-semibold text-ds-strong">{current.duree}</p>
+                            </div>
+                          )}
+                          {current.prix && (
+                            <div>
+                              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ds-subtle">Tarif</p>
+                              <p className="text-base font-semibold text-ds-strong">{current.prix}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {current.points?.length ? (
+                        <div>
+                          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ds-subtle">En pratique</p>
+                          <ul className="grid gap-x-6 gap-y-3 text-sm text-ds-body sm:grid-cols-2">
+                            {current.points.map((point) => (
+                              <li key={point} className="flex gap-3 leading-5">
+                                <Check className="mt-0.5 h-4 w-4 flex-none text-ds-primary" aria-hidden />
+                                <span>{point}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      <div className="flex flex-wrap gap-3 border-t border-ds-border pt-6">
+                        <Link href={current.ctaHref}>
+                          <Button size="lg" className="min-w-[200px]">{current.ctaLabel}</Button>
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Section Limites - Creation d'entreprise */}
+      <section
+        id="entreprise-limites"
+        data-animate
+        onMouseEnter={() =>
+          setIsVisible((prev) => ({ ...prev, ['entreprise-limites']: true }))
+        }
+        className={`border-t border-ds-border py-16 transition-all duration-1000 transform sm:py-20 ${
+          isVisible['entreprise-limites']
+            ? 'opacity-100 translate-y-0 scale-100'
+            : 'opacity-0 translate-y-6 scale-95'
+        }`}
+      >
+        <div className="container mx-auto px-4">
+          <div
+            className="mx-auto max-w-6xl"
+            data-animate-item
+            data-animate-id="entreprise-limites-title"
+          >
+            <div className={`mb-10 transition-all duration-700 ${
+              isVisible['entreprise-limites'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}>
+              <Eyebrow>Perimetre</Eyebrow>
+              <h2 className="mb-3 max-w-[22ch] text-3xl font-bold leading-tight tracking-tight text-ds-strong sm:text-4xl lg:text-[40px] lg:leading-[46px]">
+                Ce que nous ne faisons pas
+              </h2>
+              <p className="max-w-[60ch] text-lg leading-7 text-ds-subtle">
+                Nos limites en matiere de creation d'entreprise.
+              </p>
+            </div>
+
+            <div className="grid items-start gap-8 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+              {/* Themes (gauche) */}
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 md:grid md:overflow-visible md:pb-0 md:rounded-2xl md:border md:border-ds-border md:bg-ds-secondary md:p-2" role="tablist" aria-label="Limites entreprise">
+                {LIMITES_ENTREPRISE.map((item, index) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    role="tab"
+                    aria-selected={hoveredEntrepriseLimiteIndex === index}
+                    onClick={() => setHoveredEntrepriseLimiteIndex(index)}
+                    onMouseEnter={() => setHoveredEntrepriseLimiteIndex(index)}
+                    onFocus={() => setHoveredEntrepriseLimiteIndex(index)}
+                    className={`shrink-0 md:shrink flex items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                      hoveredEntrepriseLimiteIndex === index
+                        ? 'border-ds-primary bg-ds-bg font-semibold text-ds-strong shadow-sm'
+                        : 'border-transparent bg-ds-secondary font-medium text-ds-body hover:border-ds-border hover:bg-ds-bg md:bg-transparent'
+                    }`}
+                  >
+                    <svg
+                      aria-hidden
+                      className="mt-0.5 h-4 w-4 flex-none fill-none stroke-ds-subtle"
+                      strokeWidth={2.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M8 12h8" />
+                    </svg>
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Detail (droite) */}
+              <div className="rounded-2xl border border-ds-border bg-ds-bg p-6 shadow-sm md:p-8">
+                {(() => {
+                  const item = LIMITES_ENTREPRISE[hoveredEntrepriseLimiteIndex ?? 0] ?? LIMITES_ENTREPRISE[0];
                   return (
                     <>
                       <h3 className="mb-2 text-2xl font-bold text-ds-strong">{item.title}</h3>
