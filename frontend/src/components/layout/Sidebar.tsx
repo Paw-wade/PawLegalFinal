@@ -149,6 +149,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       const pending = list.filter((dossier: any) => {
         if (!dossier || dossier.fraisExoneres) return false;
+        if (!dossier.tarificationNotificationSentAt) return false;
+        if (dossier.paiementTarificationEffectue) return false;
         const prestations = Array.isArray(dossier?.tarificationPrestations)
           ? dossier.tarificationPrestations
           : [];
@@ -156,7 +158,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           (p: any) => String(p?.statut || 'a_regler') === 'a_regler'
         );
         if (hasUnpaidPrestations) return true;
-        if (dossier.paiementTarificationEffectue) return false;
         const fixedAmount = normalizeMontantTarificationFixe(dossier?.montantTarificationFixe);
         return fixedAmount > 0 || !dossier?.formuleTarifaire;
       }).length;

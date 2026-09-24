@@ -158,7 +158,7 @@ export default function ClientTarificationPage() {
       }
       showToast(
         formule === 'premium'
-          ? 'Formule Premium enregistrée pour ce dossier.'
+          ? 'Formule Tawfekh enregistrée pour ce dossier.'
           : 'Formule standard enregistrée pour ce dossier.'
       );
       await load();
@@ -406,7 +406,7 @@ export default function ClientTarificationPage() {
                 currentFormule && (
                   <p className="mt-3 text-sm text-green-800 font-medium">
                     Formule actuellement enregistrée pour ce dossier :{' '}
-                    <span className="uppercase">{currentFormule === 'premium' ? 'Premium' : 'Standard'}</span>
+                    <span className="uppercase">{currentFormule === 'premium' ? 'Tawfekh' : 'Standard'}</span>
                     {selectedDossier?.formuleTarifaireChoisieAt && (
                       <span className="text-gray-600 font-normal">
                         {' '}
@@ -538,11 +538,15 @@ export default function ClientTarificationPage() {
               </div>
             )}
 
+            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 mb-6 text-sm text-gray-600">
+              Les montants indiqués sont donnés à titre informatif. Ils peuvent être revus à la hausse ou à la baisse en fonction de la nature et de la complexité de votre dossier. Le montant définitif vous sera communiqué par l'équipe Ada Papers.
+            </div>
+
             {!lockFormuleChoice ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 mb-8 text-sm text-amber-950">
-                <p className="font-semibold mb-1">💡 La formule Premium est la plus choisie par nos clients</p>
+                <p className="font-semibold mb-1">La formule Tawfekh est la plus choisie par nos clients</p>
                 <p className="text-amber-900/90">
-                  Elle couvre la délégation complète de votre demande. La Plateforme vérifie les pièces, introduit la demande, en assure le suivi et les échanges avec l'administion, fait toutes démarches nécessaires à la satisfaction rapide de la demande.
+                  Elle couvre la délégation complète de votre demande. La Plateforme vérifie les pièces, introduit la demande, en assure le suivi et les échanges avec l'administration, fait toutes démarches nécessaires à la satisfaction rapide de la demande.
                 </p>
               </div>
             ) : null}
