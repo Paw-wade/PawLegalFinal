@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
+import { LettreMissionPanel } from '@/components/dossiers/LettreMissionPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
@@ -628,6 +629,12 @@ export default function DossierDetailPage() {
             ) : null}
           </div>
         </div>
+
+        <LettreMissionPanel
+          dossierId={dossierId}
+          variant="client"
+          clientName={[dossier.user?.firstName, dossier.user?.lastName].filter(Boolean).join(' ')}
+        />
 
         {/* Vue détaillée avec téléchargement et impression */}
         <DossierDetailView dossier={dossier} variant="client" dossierFiles={documents} />

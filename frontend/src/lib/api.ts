@@ -1048,6 +1048,18 @@ export const tasksAPI = {
   },
 };
 
+export const lettreMissionAPI = {
+  get: (dossierId: string) => api.get(`/user/dossiers/${dossierId}/lettre-mission`),
+  saveBrouillon: (dossierId: string, data: { titre?: string; contenuHtml: string }) =>
+    api.put(`/user/dossiers/${dossierId}/lettre-mission/brouillon`, data),
+  envoyer: (dossierId: string, data: { titre?: string; contenuHtml: string; motifAvenant?: string }) =>
+    api.post(`/user/dossiers/${dossierId}/lettre-mission/envoyer`, data),
+  accepter: (dossierId: string, data: { nomSignature: string; consentement: boolean; numero: number }) =>
+    api.post(`/user/dossiers/${dossierId}/lettre-mission/accepter`, data),
+  pdf: (dossierId: string, numero: number) =>
+    api.get(`/user/dossiers/${dossierId}/lettre-mission/${numero}/pdf`, { responseType: 'blob' }),
+};
+
 export const dossiersAPI = {
   // Client - Récupérer ses dossiers
   getMyDossiers: () =>

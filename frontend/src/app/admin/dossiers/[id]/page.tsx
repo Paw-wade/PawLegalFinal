@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { DossierDetailView } from '@/components/DossierDetailView';
+import { LettreMissionPanel } from '@/components/dossiers/LettreMissionPanel';
 import { DossierDraftsPanel } from '@/components/DossierDraftsPanel';
 import { FichesPanel } from '@/components/fiches/FichesPanel';
 import { ConstitutionFluxGuide } from '@/components/fiches/ConstitutionFluxGuide';
@@ -1119,6 +1120,8 @@ export default function AdminDossierDetailPage() {
           </div>
           <DossierDetailView dossier={dossier} variant="admin" />
         </div>
+
+        <LettreMissionPanel dossierId={dossier._id || dossier.id} variant="admin" />
 
         {/* Section Transmission aux professionnels */}
         {((session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin' || (session?.user as any)?.role === 'secretaire') && (

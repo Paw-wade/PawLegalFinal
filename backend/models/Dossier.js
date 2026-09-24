@@ -1,5 +1,35 @@
 ﻿const mongoose = require('mongoose');
 
+/** Sous-schema lettre de mission (exclu des lectures par defaut : select false). */
+const lettreMissionSchema = new mongoose.Schema({
+    brouillon: {
+      titre: { type: String, trim: true, maxlength: 200, default: '' },
+      contenuHtml: { type: String, default: '' },
+      updatedAt: { type: Date, required: false },
+      updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+    },
+    versions: [
+      {
+        numero: { type: Number, required: true },
+        type: { type: String, enum: ['initiale', 'avenant'], default: 'initiale' },
+        motifAvenant: { type: String, trim: true, maxlength: 500, default: '' },
+        titre: { type: String, trim: true, maxlength: 200, default: '' },
+        contenuHtml: { type: String, required: true },
+        hash: { type: String, required: true },
+        statut: { type: String, enum: ['envoyee', 'acceptee', 'remplacee'], default: 'envoyee' },
+        envoyeeAt: { type: Date, default: Date.now },
+        envoyeePar: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+        accepteeAt: { type: Date, required: false },
+        accepteePar: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+        accepteeNom: { type: String, trim: true, maxlength: 200, required: false },
+        accepteeIp: { type: String, required: false },
+        accepteeUserAgent: { type: String, required: false },
+        /** Document PDF cree dans les documents du dossier a l'acceptation. */
+        documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Document', required: false },
+      },
+    ],
+}, { _id: false });
+
 const dossierSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -288,6 +318,15 @@ const dossierSchema = new mongoose.Schema({
       createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
     },
   ],
+  /**
+   * Lettre de mission (signature simple). Jamais bloquante pour le dossier.
+   * Statut affiche = derive : aucune version -> "non envoyee".
+   * Une version acceptee est figee ; toute modification passe par un avenant.
+   */
+  lettreMission: {
+    type: lettreMissionSchema,
+    select: false,
+  },
   tarificationNotificationSentAt: {
     type: Date,
     required: false
