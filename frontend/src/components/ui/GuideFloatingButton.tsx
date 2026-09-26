@@ -17,7 +17,7 @@ export function GuideFloatingButton() {
     setVisible(true);
   }, []);
 
-  if (!visible || pathname === '/guides/nouvel-arrivant') return null;
+  if (!visible || pathname === '/guides/nouvel-arrivant' || pathname?.startsWith('/recensement-kstl')) return null;
 
   const dismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
