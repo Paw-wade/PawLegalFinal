@@ -146,10 +146,10 @@ try {
   console.error('❌ Impossible d\'enregistrer /api/cabinets:', e.message);
 }
 
-try { app.use('/api/user/dossiers/:id/lettre-mission', require('./routes/lettreMission')); } catch (e) { console.error('lettre-mission:', e.message); }
 try {
   app.use('/api/user/dossiers', require('./routes/dossiers'));
 } catch (e) {}
+try { app.use('/api/user/dossiers/:id/lettre-mission', require('./routes/lettreMission')); } catch (e) { console.error('lettre-mission:', e.message); }
 try { app.use('/api/fiches', require('./routes/fiches')); } catch (e) {}
 try { app.use('/api/fiche-invitations', require('./routes/ficheInvitations')); } catch (e) {}
 

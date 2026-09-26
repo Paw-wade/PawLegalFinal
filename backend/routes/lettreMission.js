@@ -9,13 +9,9 @@ const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotificati
 const fs = require('fs');
 const path = require('path');
 const { generateLettreMissionPdf, buildFileName } = require('../utils/lettreMissionPdf');
-const {
-  sanitizeLettreHtml,
-  isLettreHtmlEmpty,
-  hashLettreHtml,
-} = require('../utils/lettreMissionHtml');
+const { sanitizeLettreHtml, isLettreHtmlEmpty, hashLettreHtml } = require('../utils/lettreMissionHtml');
 
-// Monté sur /api/user/dossiers/:id/lettre-mission
+// Monte sur /api/user/dossiers/:id/lettre-mission
 const router = express.Router({ mergeParams: true });
 router.use(protect);
 
@@ -26,7 +22,6 @@ function lastVersion(dossier) {
   return versions.length ? versions[versions.length - 1] : null;
 }
 
-/** non_envoyee | en_attente | acceptee (l'avenant en attente prime sur l'acceptation precedente). */
 function computeStatut(dossier) {
   const last = lastVersion(dossier);
   if (!last) return 'non_envoyee';
@@ -79,22 +74,18 @@ function buildPayload(dossier, { isStaff }) {
 async function loadContext(req, res) {
   const dossier = await Dossier.findById(req.params.id).select('+lettreMission');
   if (!dossier) {
-    res.status(404).json({ success: false, message: 'Dossier non trouvé' });
+    res.status(404).json({ success: false, message: 'Dossier non trouve' });
     return null;
   }
   const isStaff = await isStaffWithAccess(dossier, req.user);
   const isClient = isClientOf(dossier, req.user);
   if (!isStaff && !isClient) {
-    res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    res.status(403).json({ success: false, message: 'Acces non autorise' });
     return null;
   }
   return { dossier, isStaff, isClient };
 }
 
-/**
- * Cree le PDF de la version acceptee et l'ajoute aux documents du dossier (visible du client).
- * Best-effort : un echec est journalise mais n'annule pas l'acceptation.
- */
 async function persistAcceptedLettreAsDocument(dossier, version) {
   const { persistDocumentForDossier, BACKEND_ROOT } = require('../utils/pieceUpload');
   const Document = require('../models/Document');
@@ -104,48 +95,37 @@ async function persistAcceptedLettreAsDocument(dossier, version) {
   const filename = `lettre-mission-${dossier._id}-v${version.numero}-${Date.now()}.pdf`;
   const p = path.join(dir, filename);
   fs.writeFileSync(p, buf);
-  const label = version.type === 'avenant' ? 'Avenant à la lettre de mission' : 'Lettre de mission';
+  const label = version.type === 'avenant' ? 'Avenant a la lettre de mission' : 'Lettre de mission';
   const ownerId = dossier.user ? String(dossier.user._id || dossier.user) : String(version.accepteePar);
   const doc = await persistDocumentForDossier(
     { path: p, filename, originalname: buildFileName(dossier, version), mimetype: 'application/pdf', size: buf.length },
-    { dossierId: dossier._id, ownerUserId: ownerId, nom: `${label} (acceptée)`, reason: '' }
+    { dossierId: dossier._id, ownerUserId: ownerId, nom: `${label} (acceptee)`, reason: '' }
   );
   await Document.updateOne(
     { _id: doc._id },
-    {
-      $set: {
-        visibleToClient: true,
-        confidentialReason: '',
-        uploadedViaGuestLink: false,
-        guestContributorName: '',
-        validationStatus: 'valide',
-        categorie: 'contrat',
-      },
-    }
+    { $set: { visibleToClient: true, confidentialReason: '', uploadedViaGuestLink: false, guestContributorName: '', validationStatus: 'valide', categorie: 'contrat' } }
   );
   return doc;
 }
 
-// GET / : etat de la lettre de mission (le client ne voit jamais le brouillon)
+// GET / - etat de la lettre de mission
 router.get('/', async (req, res) => {
   try {
     const ctx = await loadContext(req, res);
     if (!ctx) return;
     res.json({ success: true, data: buildPayload(ctx.dossier, { isStaff: ctx.isStaff }) });
   } catch (error) {
-    console.error('Erreur GET lettre de mission:', error);
+    console.error('GET lettre de mission:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
-// PUT /brouillon : enregistre le texte en cours de redaction (staff)
+// PUT /brouillon - sauvegarde le brouillon (staff)
 router.put('/brouillon', authorize(...STAFF_ROLES), async (req, res) => {
   try {
     const ctx = await loadContext(req, res);
     if (!ctx) return;
-    if (!ctx.isStaff) {
-      return res.status(403).json({ success: false, message: 'Accès non autorisé' });
-    }
+    if (!ctx.isStaff) return res.status(403).json({ success: false, message: 'Acces non autorise' });
     ctx.dossier.lettreMission = ctx.dossier.lettreMission || {};
     ctx.dossier.lettreMission.brouillon = {
       titre: String(req.body?.titre || '').slice(0, 200),
@@ -157,19 +137,17 @@ router.put('/brouillon', authorize(...STAFF_ROLES), async (req, res) => {
     await ctx.dossier.save();
     res.json({ success: true, data: buildPayload(ctx.dossier, { isStaff: true }) });
   } catch (error) {
-    console.error('Erreur PUT brouillon lettre de mission:', error);
+    console.error('PUT brouillon lettre de mission:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
-// POST /envoyer : envoie la lettre (ou un avenant si la derniere version est acceptee)
+// POST /envoyer - envoie la lettre ou un avenant (staff)
 router.post('/envoyer', authorize(...STAFF_ROLES), async (req, res) => {
   try {
     const ctx = await loadContext(req, res);
     if (!ctx) return;
-    if (!ctx.isStaff) {
-      return res.status(403).json({ success: false, message: 'Accès non autorisé' });
-    }
+    if (!ctx.isStaff) return res.status(403).json({ success: false, message: 'Acces non autorise' });
     const { dossier } = ctx;
 
     const contenuHtml = sanitizeLettreHtml(req.body?.contenuHtml);
@@ -183,14 +161,11 @@ router.post('/envoyer', authorize(...STAFF_ROLES), async (req, res) => {
     const versions = dossier.lettreMission.versions;
     const last = versions.length ? versions[versions.length - 1] : null;
     const isAvenant = Boolean(last && last.statut === 'acceptee');
+
     if (isAvenant && !motifAvenant) {
-      return res.status(400).json({
-        success: false,
-        message: "La lettre est déjà acceptée : précisez l'objet de l'avenant.",
-      });
+      return res.status(400).json({ success: false, message: "La lettre est deja acceptee : precisez l'objet de l'avenant." });
     }
 
-    // Une version envoyee mais pas encore acceptee peut etre remplacee par le staff.
     if (last && last.statut === 'envoyee') last.statut = 'remplacee';
 
     const numero = versions.length + 1;
@@ -210,7 +185,7 @@ router.post('/envoyer', authorize(...STAFF_ROLES), async (req, res) => {
     await dossier.save();
 
     const sent = dossier.lettreMission.versions[dossier.lettreMission.versions.length - 1];
-    const label = sent.type === 'avenant' ? 'un avenant à votre lettre de mission' : 'votre lettre de mission';
+    const label = sent.type === 'avenant' ? 'un avenant a votre lettre de mission' : 'votre lettre de mission';
     const dossierTitle = dossier.titre || dossier.numero || 'votre dossier';
 
     try {
@@ -226,24 +201,24 @@ router.post('/envoyer', authorize(...STAFF_ROLES), async (req, res) => {
         await Notification.create({
           user: clientUserId,
           type: 'lettre_mission_envoyee',
-          titre: sent.type === 'avenant' ? 'Avenant à la lettre de mission' : 'Lettre de mission à accepter',
-          message: `Nous vous avons adressé ${label} pour le dossier « ${dossierTitle} ». Merci d'en prendre connaissance et de l'accepter depuis votre espace client.`,
+          titre: sent.type === 'avenant' ? 'Avenant a la lettre de mission' : 'Lettre de mission a accepter',
+          message: `Nous vous avons adresse ${label} pour le dossier "  ${dossierTitle}". Merci de l'accepter depuis votre espace client.`,
           lien: `/client/dossiers/${dossier._id}#lettre-mission`,
           metadata: { dossierId: String(dossier._id), versionNumero: sent.numero },
         });
       }
       if (clientUser?.email && !dossier.isStandby) {
-        const msg = `Nous vous avons adressé ${label} pour le dossier « ${dossierTitle} ». Merci d'en prendre connaissance et de l'accepter depuis votre espace client.`;
+        const msg = `Nous vous avons adresse ${label} pour le dossier "${dossierTitle}". Merci de l'accepter depuis votre espace client.`;
         await sendTransactionalEmail({
           to: clientUser.email,
           toName: clientUser.firstName || '',
-          subject: `${sent.type === 'avenant' ? 'Avenant à la lettre de mission' : 'Lettre de mission'} - Ada Papers`,
+          subject: `${sent.type === 'avenant' ? 'Avenant a la lettre de mission' : 'Lettre de mission'} - Ada Papers`,
           htmlContent: `<p>${escapeHtml(msg)}</p>`,
           textContent: msg,
         });
       }
     } catch (notifErr) {
-      console.error('Notification lettre de mission non envoyée:', notifErr);
+      console.error('Notification lettre de mission non envoyee:', notifErr);
     }
 
     try {
@@ -251,23 +226,23 @@ router.post('/envoyer', authorize(...STAFF_ROLES), async (req, res) => {
         action: 'dossier_updated',
         user: req.user.id,
         userEmail: req.user.email,
-        description: `${req.user.email} a envoyé la lettre de mission (v${sent.numero}${sent.type === 'avenant' ? ', avenant' : ''}) du dossier ${dossier._id}`,
+        description: `${req.user.email} a envoye la lettre de mission (v${sent.numero}) du dossier ${dossier._id}`,
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
         metadata: { dossierId: String(dossier._id), lettreMissionVersion: sent.numero, hash: sent.hash },
       });
     } catch (logErr) {
-      console.error('Log lettre de mission non enregistré:', logErr);
+      console.error('Log lettre de mission non enregistre:', logErr);
     }
 
     res.json({ success: true, data: buildPayload(dossier, { isStaff: true }) });
   } catch (error) {
-    console.error('Erreur POST envoyer lettre de mission:', error);
+    console.error('POST envoyer lettre de mission:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
-// POST /accepter : le client accepte la version en attente (signature simple)
+// POST /accepter - le client accepte la version en attente
 router.post('/accepter', async (req, res) => {
   try {
     const ctx = await loadContext(req, res);
@@ -287,13 +262,10 @@ router.post('/accepter', async (req, res) => {
 
     const last = lastVersion(dossier);
     if (!last || last.statut !== 'envoyee') {
-      return res.status(409).json({ success: false, message: 'Aucune lettre de mission en attente d\'acceptation.' });
+      return res.status(409).json({ success: false, message: "Aucune lettre de mission en attente d'acceptation." });
     }
     if (req.body?.numero !== undefined && Number(req.body.numero) !== last.numero) {
-      return res.status(409).json({
-        success: false,
-        message: 'La lettre a été mise à jour. Rechargez la page pour lire la dernière version.',
-      });
+      return res.status(409).json({ success: false, message: 'La lettre a ete mise a jour. Rechargez la page.' });
     }
 
     last.statut = 'acceptee';
@@ -311,7 +283,7 @@ router.post('/accepter', async (req, res) => {
       dossier.markModified('lettreMission');
       await dossier.save();
     } catch (docErr) {
-      console.error('PDF lettre de mission non ajouté aux documents du dossier:', docErr);
+      console.error('PDF lettre de mission non ajoute:', docErr);
     }
 
     try {
@@ -325,8 +297,8 @@ router.post('/accepter', async (req, res) => {
         await Notification.create({
           user: uid,
           type: 'lettre_mission_acceptee',
-          titre: 'Lettre de mission acceptée',
-          message: `Le client a accepté la lettre de mission (v${last.numero}) du dossier « ${dossierTitle} ».`,
+          titre: 'Lettre de mission acceptee',
+          message: `Le client a accepte la lettre de mission (v${last.numero}) du dossier "${dossierTitle}".`,
           lien: `/admin/dossiers/${dossier._id}`,
           metadata: { dossierId: String(dossier._id), versionNumero: last.numero },
         });
@@ -335,23 +307,23 @@ router.post('/accepter', async (req, res) => {
         action: 'dossier_updated',
         user: req.user.id,
         userEmail: req.user.email,
-        description: `${req.user.email} a accepté la lettre de mission (v${last.numero}) du dossier ${dossier._id}`,
+        description: `${req.user.email} a accepte la lettre de mission (v${last.numero}) du dossier ${dossier._id}`,
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
         metadata: { dossierId: String(dossier._id), lettreMissionVersion: last.numero, hash: last.hash },
       });
     } catch (notifErr) {
-      console.error('Notification acceptation lettre de mission non envoyée:', notifErr);
+      console.error('Notification acceptation non envoyee:', notifErr);
     }
 
     res.json({ success: true, data: buildPayload(dossier, { isStaff: false }) });
   } catch (error) {
-    console.error('Erreur POST accepter lettre de mission:', error);
+    console.error('POST accepter lettre de mission:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 
-// GET /:numero/pdf : telecharge le PDF d'une version (client ou staff)
+// GET /:numero/pdf - telecharge le PDF d'une version
 router.get('/:numero/pdf', async (req, res) => {
   try {
     const ctx = await loadContext(req, res);
@@ -367,8 +339,8 @@ router.get('/:numero/pdf', async (req, res) => {
     res.setHeader('Content-Length', buf.length);
     res.send(buf);
   } catch (error) {
-    console.error('Erreur PDF lettre de mission:', error);
-    res.status(500).json({ success: false, message: 'Impossible de générer le PDF' });
+    console.error('PDF lettre de mission:', error);
+    res.status(500).json({ success: false, message: 'Impossible de generer le PDF' });
   }
 });
 

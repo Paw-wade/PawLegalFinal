@@ -20,10 +20,6 @@ const ALLOWED_STYLES = {
   },
 };
 
-/**
- * Nettoie le HTML colle par l'admin (Word, Google Docs, etc.) en conservant la mise en forme
- * (titres, gras, couleurs, listes, tableaux, alignements) et en retirant scripts et handlers.
- */
 function sanitizeLettreHtml(html) {
   return sanitizeHtml(String(html || ''), {
     allowedTags: [
@@ -48,7 +44,6 @@ function sanitizeLettreHtml(html) {
   }).trim();
 }
 
-/** Retourne true si le HTML ne contient aucun texte visible. */
 function isLettreHtmlEmpty(html) {
   const text = sanitizeHtml(String(html || ''), { allowedTags: [], allowedAttributes: {} });
   return text.replace(/&nbsp;|\s/g, '').length === 0;

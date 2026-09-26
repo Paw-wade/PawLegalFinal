@@ -20,7 +20,6 @@ function versionLabel(version) {
   return version.type === 'avenant' ? 'Avenant' : 'Lettre de mission';
 }
 
-/** Nom de fichier propre pour le telechargement et le document du dossier. */
 function buildFileName(dossier, version) {
   const ref = String(dossier.numero || dossier._id || 'dossier').replace(/[\\/:*?"<>|\s]+/g, '-');
   const versions = (dossier.lettreMission && dossier.lettreMission.versions) || [];
@@ -29,15 +28,14 @@ function buildFileName(dossier, version) {
   return `${kind}-${ref}.pdf`;
 }
 
-/** Bloc de mention finale : acceptation electronique ou attente d'acceptation. */
 function statusLines(version) {
   if (version.statut === 'acceptee') {
     return [
-      `Acceptée électroniquement le ${fmtDate(version.accepteeAt)} par ${version.accepteeNom || 'le client'}.`,
-      `Empreinte du texte accepté (SHA-256) : ${version.hash}`,
+      `Acceptee electroniquement le ${fmtDate(version.accepteeAt)} par ${version.accepteeNom || 'le client'}.`,
+      `Empreinte du texte accepte (SHA-256) : ${version.hash}`,
     ];
   }
-  return [`Envoyée le ${fmtDate(version.envoyeeAt)} : en attente d'acceptation du client.`];
+  return [`Envoyee le ${fmtDate(version.envoyeeAt)} : en attente d'acceptation du client.`];
 }
 
 function buildHtml(dossier, version) {
@@ -65,7 +63,6 @@ h1.doc { font-size: 15pt; margin: 0 0 6px; }
 </body></html>`;
 }
 
-// Repli sans navigateur : rendu pdfkit a partir du HTML nettoye (mise en forme simplifiee).
 function renderWithPdfKit(dossier, version) {
   const PDFDocument = require('pdfkit');
   const body = sanitizeLettreHtml(version.contenuHtml);
@@ -95,7 +92,6 @@ function renderWithPdfKit(dossier, version) {
       }
       doc.moveDown(0.8);
 
-      // Collecte les segments de texte d'un bloc avec leur style.
       const collect = (node, style, out) => {
         if (node.type === 'text') {
           const t = node.data.replace(/\s+/g, ' ');
@@ -188,7 +184,6 @@ function renderWithPdfKit(dossier, version) {
   });
 }
 
-/** Genere le PDF d'une version de lettre : Chromium si disponible, sinon repli pdfkit. */
 async function generateLettreMissionPdf(dossier, version) {
   try {
     return await htmlToPdf(buildHtml(dossier, version));

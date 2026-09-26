@@ -126,7 +126,7 @@ export default function RecensementKSTLPage() {
       });
       const json = await res.json();
       if (!res.ok || !json.success) {
-        const msgs = json.errors?.map((e: any) => e.msg).join(' — ') || json.message || 'Erreur.';
+        const msgs = json.errors?.map((e: any) => e.msg).join(' - ') || json.message || 'Erreur.';
         setErreurMessage(msgs);
         setEtat('error');
         return;
@@ -233,7 +233,7 @@ export default function RecensementKSTLPage() {
             {step === 0 && (
               <>
                 <h2 className="text-base font-semibold text-[#1a6b3c] border-b border-[#1a6b3c]/20 pb-2 mb-2">
-                  Section 1 — Identification du membre
+                  Section 1 : Identification du membre
                 </h2>
                 {/* Photo */}
                 <div className="flex flex-col items-center gap-3 pb-2">
@@ -322,7 +322,7 @@ export default function RecensementKSTLPage() {
             {step === 1 && (
               <>
                 <h2 className="text-base font-semibold text-[#1a6b3c] border-b border-[#1a6b3c]/20 pb-2 mb-2">
-                  Section 2 — Categorie et anciennete
+                  Section 2 : Categorie et anciennete
                 </h2>
                 <fieldset>
                   <legend className={labelCls}>Categorie de membre <span className="text-red-500">*</span></legend>
@@ -370,7 +370,7 @@ export default function RecensementKSTLPage() {
             {step === 2 && (
               <>
                 <h2 className="text-base font-semibold text-[#1a6b3c] border-b border-[#1a6b3c]/20 pb-2 mb-2">
-                  Section 3 — Souhait d&apos;integration en commission
+                  Section 3 : Souhait d&apos;integration en commission
                 </h2>
                 <p className="text-sm text-gray-700 font-medium">
                   Dans quelle(s) commission(s) souhaitez-vous vous impliquer ?
@@ -403,7 +403,7 @@ export default function RecensementKSTLPage() {
             {step === 3 && (
               <>
                 <h2 className="text-base font-semibold text-[#1a6b3c] border-b border-[#1a6b3c]/20 pb-2 mb-2">
-                  Section 4 — Engagement
+                  Section 4 : Engagement
                 </h2>
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input type="checkbox" required checked={form.engagementCommission} onChange={(e) => set('engagementCommission', e.target.checked)} className="w-4 h-4 mt-0.5 accent-[#1a6b3c] flex-shrink-0" />
