@@ -62,6 +62,7 @@ function devApiRewriteRules(backendOrigin) {
     'guides',
     'parrainage',
     'cabinets',
+    'dahira',
     'admin',
   ];
 

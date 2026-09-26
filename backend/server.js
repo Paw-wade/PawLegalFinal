@@ -199,6 +199,8 @@ try {
   app.use('/api/appointments', require('./routes/appointments'));
 } catch (e) {}
 
+try { app.use('/api/dahira', require('./routes/dahira')); } catch (e) { console.error('dahira:', e.message); }
+
 try {
   app.use('/api/calendar', require('./routes/calendar'));
 } catch (e) {}

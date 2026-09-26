@@ -25,6 +25,7 @@ import {
   Scale,
   Trash2,
   User,
+  BookUser,
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -58,6 +59,7 @@ const adminMenuItems: MenuItem[] = [
     roles: ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'],
   },
   { href: '/admin/temoignages', label: 'Témoignages', icon: Star },
+  { href: '/admin/dahira', label: 'Données Dahira', icon: BookUser, roles: ['admin', 'superadmin'] },
   { href: '/admin/notifications', label: 'Notifications', icon: Bell },
   { href: '/admin/sms', label: 'SMS', icon: Smartphone },
   { href: '/admin/emails', label: 'Emails', icon: Mail },
