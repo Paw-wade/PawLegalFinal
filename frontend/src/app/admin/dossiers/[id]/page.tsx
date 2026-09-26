@@ -1105,6 +1105,8 @@ export default function AdminDossierDetailPage() {
 
         {detailSection === 'synthese' && (
           <>
+        <LettreMissionPanel dossierId={dossier._id || dossier.id} variant="admin" />
+
         {/* Vue détaillée du dossier */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-8 mb-6 min-w-0">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4 min-w-0">
@@ -1120,8 +1122,6 @@ export default function AdminDossierDetailPage() {
           </div>
           <DossierDetailView dossier={dossier} variant="admin" />
         </div>
-
-        <LettreMissionPanel dossierId={dossier._id || dossier.id} variant="admin" />
 
         {/* Section Transmission aux professionnels */}
         {((session?.user as any)?.role === 'admin' || (session?.user as any)?.role === 'superadmin' || (session?.user as any)?.role === 'secretaire') && (
