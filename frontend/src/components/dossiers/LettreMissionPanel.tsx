@@ -1,9 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import axios from 'axios';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+import { lettreMissionAPI } from '@/lib/api';
 
 type Version = {
   numero: number;
@@ -80,11 +78,9 @@ export function LettreMissionPanel({
   const [nomSignature, setNomSignature] = useState('');
   const [consent, setConsent] = useState(false);
 
-  const baseUrl = `${API_BASE}/user/dossiers/${dossierId}/lettre-mission`;
-
   const load = useCallback(async () => {
     try {
-      const res = await axios.get(baseUrl, { withCredentials: true });
+      const res = await lettreMissionAPI.get(dossierId);
       setData(res.data?.data || null);
       setError('');
     } catch (e: any) {
@@ -92,7 +88,7 @@ export function LettreMissionPanel({
     } finally {
       setLoading(false);
     }
-  }, [baseUrl]);
+  }, [dossierId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -114,7 +110,7 @@ export function LettreMissionPanel({
     setPdfBusy(v.numero);
     setError('');
     try {
-      const res = await axios.get(`${baseUrl}/${v.numero}/pdf`, { responseType: 'blob', withCredentials: true });
+      const res = await lettreMissionAPI.pdf(dossierId, v.numero);
       const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const a = document.createElement('a');
       a.href = url;
@@ -160,13 +156,13 @@ export function LettreMissionPanel({
 
   const saveDraft = () =>
     run(
-      () => axios.put(`${baseUrl}/brouillon`, { titre, contenuHtml: contenu }, { withCredentials: true }),
+      () => lettreMissionAPI.saveBrouillon(dossierId, { titre, contenuHtml: contenu }),
       'Brouillon enregistre.'
     );
 
   const send = async () => {
     const ok = await run(
-      () => axios.post(`${baseUrl}/envoyer`, { titre, contenuHtml: contenu, motifAvenant }, { withCredentials: true }),
+      () => lettreMissionAPI.envoyer(dossierId, { titre, contenuHtml: contenu, motifAvenant }),
       isAccepted ? 'Avenant envoye au client.' : 'Lettre de mission envoyee au client.'
     );
     if (ok) setEditing(false);
@@ -174,7 +170,7 @@ export function LettreMissionPanel({
 
   const accept = () =>
     run(
-      () => axios.post(`${baseUrl}/accepter`, { nomSignature, consentement: consent, numero: last!.numero }, { withCredentials: true }),
+      () => lettreMissionAPI.accepter(dossierId, { nomSignature, consentement: consent, numero: last!.numero }),
       'Merci, la lettre de mission est acceptee.'
     );
 
