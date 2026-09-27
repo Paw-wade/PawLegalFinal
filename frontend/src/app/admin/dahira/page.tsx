@@ -73,6 +73,9 @@ export default function AdminDahiraPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [reglementUrl, setReglementUrl] = useState('');
+  const [reglementNom, setReglementNom] = useState('');
+  const [uploadingPdf, setUploadingPdf] = useState(false);
 
   const FORM_URL = 'https://adapapers.fr/recensement-kstl';
 
@@ -99,7 +102,40 @@ export default function AdminDahiraPage() {
       .then((r) => setMembres(r.data.data || []))
       .catch(console.error)
       .finally(() => setLoading(false));
+    api.get('/dahira/reglement').then((r) => {
+      setReglementUrl(r.data?.data?.url || '');
+      setReglementNom(r.data?.data?.nom || '');
+    }).catch(() => {});
   }, [status]);
+
+  const handleUploadReglement = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPdf(true);
+    const fd = new FormData();
+    fd.append('pdf', file);
+    try {
+      const r = await api.post('/dahira/reglement', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setReglementUrl(r.data?.data?.url || '');
+      setReglementNom(r.data?.data?.nom || '');
+    } catch {
+      alert('Impossible de telecharger le PDF.');
+    } finally {
+      setUploadingPdf(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleDeleteReglement = async () => {
+    if (!confirm('Supprimer le reglement interieur ?')) return;
+    try {
+      await api.delete('/dahira/reglement');
+      setReglementUrl('');
+      setReglementNom('');
+    } catch {
+      alert('Impossible de supprimer.');
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Supprimer cette fiche ?')) return;
@@ -202,6 +238,43 @@ export default function AdminDahiraPage() {
             >
               Exporter Excel
             </button>
+          </div>
+        </div>
+
+        {/* Reglement interieur */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Reglement interieur (PDF)</p>
+              {reglementUrl
+                ? <p className="text-xs text-gray-500 mt-0.5 truncate max-w-xs">{reglementNom || 'Document en ligne'}</p>
+                : <p className="text-xs text-gray-400 mt-0.5">Aucun document publie</p>
+              }
+            </div>
+            <div className="flex items-center gap-2">
+              {reglementUrl && (
+                <>
+                  <a
+                    href={reglementUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-lg border border-[#1a6b3c] text-[#1a6b3c] text-xs font-semibold hover:bg-[#1a6b3c]/5"
+                  >
+                    Voir
+                  </a>
+                  <button
+                    onClick={handleDeleteReglement}
+                    className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50"
+                  >
+                    Supprimer
+                  </button>
+                </>
+              )}
+              <label className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${uploadingPdf ? 'bg-gray-100 text-gray-400' : 'bg-[#1a6b3c] text-white hover:bg-[#155a32]'}`}>
+                {uploadingPdf ? 'Envoi...' : reglementUrl ? 'Remplacer' : 'Publier un PDF'}
+                <input type="file" accept="application/pdf" className="hidden" onChange={handleUploadReglement} disabled={uploadingPdf} />
+              </label>
+            </div>
           </div>
         </div>
 

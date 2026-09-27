@@ -5,6 +5,7 @@ const DahiraMembreSchema = new mongoose.Schema(
     photo: { type: String }, // base64 data-URL redimensionnee
     nom: { type: String, required: true, trim: true, maxlength: 100 },
     prenom: { type: String, required: true, trim: true, maxlength: 100 },
+    sexe: { type: String, enum: ['H', 'F', ''], default: '' },
     email: { type: String, required: true, trim: true, lowercase: true, maxlength: 200 },
     telephone: { type: String, trim: true, maxlength: 30 },
     adresse: { type: String, trim: true, maxlength: 300 },
@@ -33,6 +34,7 @@ const DahiraMembreSchema = new mongoose.Schema(
     disponibilite: { type: String, trim: true, maxlength: 300 },
     engagementCommission: { type: Boolean, required: true },
     consentementDonnees: { type: Boolean, required: true },
+    acceptationReglement: { type: Boolean, required: true },
   },
   { timestamps: true }
 );
