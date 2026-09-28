@@ -9,6 +9,7 @@ import { LettreMissionPanel } from '@/components/dossiers/LettreMissionPanel';
 import { dossiersAPI, notificationsAPI, messagesAPI, documentRequestsAPI, documentsAPI } from '@/lib/api';
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
+import DossierDiscussion from '@/components/DossierDiscussion';
 import { getStatutColor, getStatutLabelWithEtapes, getPrioriteColor, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineStepsWithCustom } from '@/lib/dossierUtils';
 import {
   getDossierCustomStatutLabel,
@@ -1370,46 +1371,14 @@ export default function DossierDetailPage() {
               </div>
             </div>
 
-            {/* Messagerie liée au dossier */}
+            {/* Discussion liée au dossier */}
             <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
-              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Messagerie du dossier</h2>
-              {isLoadingMessages ? (
-                <p className="text-sm text-muted-foreground">Chargement des messages...</p>
-              ) : messagesError ? (
-                <p className="text-sm text-red-600">{messagesError}</p>
-              ) : messages.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Aucun message pour ce dossier pour le moment. Vous pouvez écrire à l'équipe juridique depuis la page Messagerie.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {messages.slice(0, 5).map((msg: any) => (
-                    <div
-                      key={msg._id || msg.id}
-                      className="border border-gray-100 rounded-lg px-3 py-2 text-sm"
-                    >
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2 mb-1">
-                        <p className="font-semibold break-words min-w-0">{msg.sujet}</p>
-                        <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap sm:whitespace-normal sm:text-right">
-                          {new Date(msg.createdAt).toLocaleDateString('fr-FR', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2">
-                        {msg.contenu}
-                      </p>
-                    </div>
-                  ))}
-                  <Link href="/client/messages" className="block mt-2">
-                    <Button variant="outline" className="w-full text-xs min-h-[44px]">
-                      Voir tous les messages
-                    </Button>
-                  </Link>
-                </div>
-              )}
+              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Discussion</h2>
+              <DossierDiscussion
+                dossierId={dossierId}
+                variant="client"
+                currentUserId={(session?.user as any)?._id || (session?.user as any)?.id}
+              />
             </div>
           </div>
         </div>

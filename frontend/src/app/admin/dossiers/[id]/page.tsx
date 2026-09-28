@@ -17,6 +17,7 @@ import { SUGGESTED_STEPS_BY_CATEGORY, DossierCategorie } from '@/lib/dossierStep
 import { DocumentRequestNotificationModal } from '@/components/DocumentRequestNotificationModal';
 import { DocumentPreview } from '@/components/DocumentPreview';
 import { AdminBookingModal, buildAdminBookingFromDossier } from '@/components/AdminBookingModal';
+import DossierDiscussion from '@/components/DossierDiscussion';
 import { getStatutColor, getStatutLabel, getPrioriteColor, calculateDaysSince, calculateDaysUntil, isDeadlineApproaching, formatRelativeTime, getNextAction, getTimelineSteps } from '@/lib/dossierUtils';
 import { isDossierStaffRole } from '@/lib/dossierAccess';
 import { rememberDossierListFocus, dossierListFocusHref } from '@/lib/dossierListFocus';
@@ -1630,46 +1631,15 @@ export default function AdminDossierDetailPage() {
 
         {detailSection === 'messages' && (
           <>
-        {/* Messages du dossier */}
+        {/* Discussion du dossier */}
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4 sm:p-6 mb-6 min-w-0">
-          <h2 className="text-xl font-bold mb-4 break-words">💬 Messagerie du dossier</h2>
-          {isLoadingMessages ? (
-            <p className="text-sm text-muted-foreground">Chargement des messages...</p>
-          ) : messagesError ? (
-            <p className="text-sm text-red-600">{messagesError}</p>
-          ) : messages.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Aucun message pour ce dossier pour le moment.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {messages.slice(0, 5).map((msg: any) => (
-                <div
-                  key={msg._id || msg.id}
-                  className="border border-gray-100 rounded-lg px-4 py-3"
-                >
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2 mb-1">
-                    <p className="font-semibold text-sm break-words min-w-0">{msg.sujet}</p>
-                    <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap sm:whitespace-normal sm:text-right">
-                      {new Date(msg.createdAt).toLocaleDateString('fr-FR', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground line-clamp-2">
-                    {msg.contenu}
-                  </p>
-                </div>
-              ))}
-              <Link href={`/admin/messages?dossierId=${dossierId}`}>
-                <Button variant="outline" className="w-full text-xs mt-2">
-                  Voir tous les messages
-                </Button>
-              </Link>
-            </div>
-          )}
+          <h2 className="text-xl font-bold mb-4 break-words">Discussion</h2>
+          <DossierDiscussion
+            dossierId={dossierId}
+            clientId={dossier?.user?._id?.toString() || dossier?.user?.toString()}
+            variant="admin"
+            currentUserId={(session?.user as any)?._id || (session?.user as any)?.id}
+          />
         </div>
 
         {/* Notifications du dossier */}
