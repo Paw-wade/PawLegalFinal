@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { getApiBaseUrl } from '@/lib/api';
-import DahiraMembreCard from '@/components/DahiraMembreCard';
 
 const COMMISSIONS: { nom: string; info: string }[] = [
   {
@@ -77,32 +76,6 @@ export default function RecensementKSTLPage() {
   const [etat, setEtat] = useState<Etat>('idle');
   const [erreurMessage, setErreurMessage] = useState('');
   const [reglementUrl, setReglementUrl] = useState('');
-  const [membreId, setMembreId] = useState('');
-  const [showCarte, setShowCarte] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const carteRef = useRef<HTMLDivElement>(null);
-
-  const handleDownloadPng = useCallback(async () => {
-    if (!carteRef.current) return;
-    setDownloading(true);
-    try {
-      const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(carteRef.current, {
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: null,
-        scale: 2,
-      });
-      const link = document.createElement('a');
-      link.download = `carte-membre-dahira.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch {
-      // silently ignore
-    } finally {
-      setDownloading(false);
-    }
-  }, []);
 
   useEffect(() => {
     const base = getApiBaseUrl().replace(/\/api$/, '');
@@ -201,7 +174,6 @@ export default function RecensementKSTLPage() {
         setEtat('error');
         return;
       }
-      if (json.data?.id) setMembreId(json.data.id);
       setEtat('success');
     } catch {
       setErreurMessage('Impossible de contacter le serveur. Veuillez reessayer.');
@@ -238,53 +210,7 @@ export default function RecensementKSTLPage() {
                 Votre recensement a ete transmis au secretariat general du Dahira Sahadatou Mouridina.
               </p>
             </div>
-
-            {membreId && !showCarte && (
-              <button
-                onClick={() => setShowCarte(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a6b3c] text-white text-sm font-semibold hover:bg-[#155a33] transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 9a6 6 0 11-12 0 6 6 0 0112 0zM9 15v6m-3-3h6" />
-                </svg>
-                Voir ma carte de membre
-              </button>
-            )}
           </div>
-
-          {membreId && showCarte && (
-            <div className="space-y-4">
-              <div className="flex justify-center overflow-x-auto pb-1">
-                <div ref={carteRef} className="inline-block">
-                  <DahiraMembreCard
-                    id={membreId}
-                    prenom={form.prenom}
-                    nom={form.nom}
-                    sexe={form.sexe as 'H' | 'F' | ''}
-                    photo={form.photo || undefined}
-                    categorieMembre={form.categorieMembre as 'actif' | 'adherent' | 'sympathisant'}
-                    dateAdhesionApprox={form.dateAdhesionApprox}
-                    anneeCreation={new Date().getFullYear().toString()}
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <button
-                  onClick={handleDownloadPng}
-                  disabled={downloading}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a6b3c] text-white text-sm font-semibold hover:bg-[#155a33] disabled:opacity-60 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  {downloading ? 'Generation...' : 'Telecharger ma carte (PNG)'}
-                </button>
-                <p className="text-xs text-gray-400">
-                  Scannez le QR code pour acceder a votre fiche personnelle.
-                </p>
-              </div>
-            </div>
-          )}
         </div>
       </main>
     );
