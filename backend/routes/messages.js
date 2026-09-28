@@ -875,15 +875,18 @@ router.post(
       const expediteurName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email;
 
       if (typeMessage === 'user_to_admins') {
-        // Notification pour tous les administrateurs
+        // Notification + email pour tous les administrateurs
         for (const adminId of destinatairesIds) {
           try {
+            const conversationPath = messageData.dossierId
+              ? `/admin/dossiers/${messageData.dossierId}?section=messages`
+              : `/admin/messages/${nouveauMessage._id}`;
             await Notification.create({
               user: adminId.toString(),
               type: 'message_received',
               titre: 'Nouveau message utilisateur',
-              message: `Un utilisateur vous a envoyé un message : "${sujet}"`,
-              lien: `/admin/messages/${nouveauMessage._id}`,
+              message: `${expediteurName} vous a envoyé un message : "${sujet}"`,
+              lien: conversationPath,
               metadata: {
                 messageId: nouveauMessage._id.toString(),
                 expediteurId: userIdObj.toString(),
@@ -891,6 +894,31 @@ router.post(
               }
             });
             console.log(`✅ Notification créée pour admin: ${adminId.toString()}`);
+
+            // Email de notification
+            const adminUser = await User.findById(adminId).select('email firstName lastName');
+            if (adminUser && adminUser.email) {
+              try {
+                const messagePreview = String(contenu || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+                const conversationUrl = `${getPrimaryFrontendUrl()}${conversationPath}`;
+                await sendTransactionalEmail({
+                  to: adminUser.email,
+                  toName: `${adminUser.firstName || ''} ${adminUser.lastName || ''}`.trim(),
+                  subject: `Nouveau message de ${expediteurName} : ${sujet || 'Sans objet'} - Ada Papers`,
+                  htmlContent: `
+                    <p>Vous avez recu un nouveau message dans votre espace Ada Papers.</p>
+                    <p><strong>Expediteur :</strong> ${escapeHtml(expediteurName)}</p>
+                    <p><strong>Objet :</strong> ${escapeHtml(sujet || 'Sans objet')}</p>
+                    <p><strong>Apercu :</strong><br/>${escapeHtml(messagePreview || '(aucun contenu)')}</p>
+                    <p><a href="${conversationUrl}" style="display:inline-block;padding:10px 20px;background:#f97316;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">Ouvrir la conversation</a></p>
+                  `,
+                  textContent: `Nouveau message de ${expediteurName}\n\nObjet : ${sujet || 'Sans objet'}\nApercu : ${messagePreview || '(aucun contenu)'}\n\nOuvrir la conversation :\n${conversationUrl}`,
+                });
+                console.log(`✅ Email envoye a l'admin: ${adminUser.email}`);
+              } catch (emailError) {
+                console.error('⚠️ Erreur email notification admin:', emailError);
+              }
+            }
           } catch (notifError) {
             console.error('❌ Erreur lors de la création de la notification:', notifError);
           }
@@ -901,17 +929,17 @@ router.post(
         
         if (destinatairePrincipal) {
           try {
+            const notifLien = destinatairePrincipal.role === 'client'
+              ? (messageData.dossierId ? `/client/dossiers/${messageData.dossierId}` : `/client/messages/${nouveauMessage._id}`)
+              : destinatairePrincipal.role === 'partenaire'
+                ? `/partenaire/messages/${nouveauMessage._id}`
+                : (messageData.dossierId ? `/admin/dossiers/${messageData.dossierId}?section=messages` : `/admin/messages/${nouveauMessage._id}`);
             await Notification.create({
               user: destinatairesIds[0].toString(),
               type: 'message_received',
               titre: 'Nouveau message',
               message: `${expediteurName} vous a envoyé un message : "${sujet}"`,
-              lien:
-                destinatairePrincipal.role === 'client'
-                  ? `/client/messages/${nouveauMessage._id}`
-                  : destinatairePrincipal.role === 'partenaire'
-                    ? `/partenaire/messages/${nouveauMessage._id}`
-                    : `/admin/messages/${nouveauMessage._id}`,
+              lien: notifLien,
               metadata: {
                 messageId: nouveauMessage._id.toString(),
                 expediteurId: userIdObj.toString(),
@@ -927,33 +955,32 @@ router.post(
                   .replace(/\s+/g, ' ')
                   .trim()
                   .slice(0, 500);
-                const conversationPath =
-                  destinatairePrincipal.role === 'client'
-                    ? `/client/messages/${nouveauMessage._id}`
-                    : destinatairePrincipal.role === 'partenaire'
-                      ? `/partenaire/messages/${nouveauMessage._id}`
-                      : `/admin/messages/${nouveauMessage._id}`;
+                // Lien : si dossierId dispo et que c'est un client, pointer sur le dossier
+                let conversationPath;
+                if (destinatairePrincipal.role === 'client') {
+                  conversationPath = messageData.dossierId
+                    ? `/client/dossiers/${messageData.dossierId}`
+                    : `/client/messages/${nouveauMessage._id}`;
+                } else if (destinatairePrincipal.role === 'partenaire') {
+                  conversationPath = `/partenaire/messages/${nouveauMessage._id}`;
+                } else {
+                  conversationPath = messageData.dossierId
+                    ? `/admin/dossiers/${messageData.dossierId}?section=messages`
+                    : `/admin/messages/${nouveauMessage._id}`;
+                }
                 const conversationUrl = `${getPrimaryFrontendUrl()}${conversationPath}`;
                 await sendTransactionalEmail({
                   to: destinatairePrincipal.email,
                   toName: `${destinatairePrincipal.firstName || ''} ${destinatairePrincipal.lastName || ''}`.trim(),
                   subject: `Nouveau message : ${sujet || 'Sans objet'} - Ada Papers`,
                   htmlContent: `
-                    <p>Vous avez reçu un nouveau message dans votre espace Ada Papers.</p>
-                    <p><strong>Expéditeur :</strong> ${escapeHtml(expediteurName)}</p>
+                    <p>Vous avez recu un nouveau message dans votre espace Ada Papers.</p>
+                    <p><strong>Expediteur :</strong> ${escapeHtml(expediteurName)}</p>
                     <p><strong>Objet :</strong> ${escapeHtml(sujet || 'Sans objet')}</p>
-                    <p><strong>Aperçu :</strong><br/>${escapeHtml(messagePreview || '(aucun contenu)')}</p>
-                    <p>Pour répondre, connectez-vous à votre espace et ouvrez la conversation.</p>
-                    <p><a href="${conversationUrl}">Ouvrir la conversation</a></p>
+                    <p><strong>Apercu :</strong><br/>${escapeHtml(messagePreview || '(aucun contenu)')}</p>
+                    <p><a href="${conversationUrl}" style="display:inline-block;padding:10px 20px;background:#f97316;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">Ouvrir la conversation</a></p>
                   `,
-                  textContent: `Vous avez reçu un nouveau message dans votre espace Ada Papers.
-
-Expéditeur : ${expediteurName}
-Objet : ${sujet || 'Sans objet'}
-Aperçu : ${messagePreview || '(aucun contenu)'}
-
-Connectez-vous à votre espace pour lire et répondre au message :
-${conversationUrl}`,
+                  textContent: `Vous avez recu un nouveau message dans votre espace Ada Papers.\n\nExpediteur : ${expediteurName}\nObjet : ${sujet || 'Sans objet'}\nApercu : ${messagePreview || '(aucun contenu)'}\n\nOuvrir la conversation :\n${conversationUrl}`,
                 });
               } catch (emailError) {
                 console.error('⚠️ Erreur lors de l\'envoi de l\'email de notification message:', emailError);
