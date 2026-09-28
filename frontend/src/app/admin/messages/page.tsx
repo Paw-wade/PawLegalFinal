@@ -94,6 +94,7 @@ export default function AdminMessagesPage() {
   const [selectedExpediteurId, setSelectedExpediteurId] = useState<string>('');
   const [selectedDestinataireId, setSelectedDestinataireId] = useState<string>('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
+  const [showCopie, setShowCopie] = useState(false);
 
   const getAutoDestinataireForDossier = (dossierId: string) => {
     if (!dossierId) return '';
@@ -1670,70 +1671,78 @@ export default function AdminMessagesPage() {
 
                 {/* Copie (CC) */}
                 <div>
-                  <Label htmlFor="copie">Copie (CC) - Optionnel</Label>
-                  <p className="text-xs text-muted-foreground mb-3">Vous pouvez mettre d'autres personnes en copie</p>
-                  <div className="mt-2 border border-input rounded-lg p-4 max-h-64 overflow-y-auto bg-background">
-                    {(() => {
-                      const { admins, clients, partenaires } = getUsersByCategory();
-                      const currentUserId = (session?.user as any)?.id;
-                      const allUsers = [...clients, ...partenaires, ...admins].filter(user => 
-                        (user._id || user.id) !== currentUserId && 
-                        (user._id || user.id) !== (composeAutoDestinataireId || formData.destinataire)
-                      );
-                      
-                      if (allUsers.length === 0) {
-                        return (
-                          <p className="text-sm text-muted-foreground text-center py-4">
-                            Aucun utilisateur disponible pour la copie
-                          </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowCopie(v => !v)}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <span>{showCopie ? '▾' : '▸'}</span>
+                    <span>Copie (CC){formData.copie.length > 0 ? ` — ${formData.copie.length} selectionne${formData.copie.length > 1 ? 's' : ''}` : ' — Optionnel'}</span>
+                  </button>
+                  {showCopie && (
+                    <div className="mt-2 border border-input rounded-lg p-4 max-h-64 overflow-y-auto bg-background">
+                      {(() => {
+                        const { admins, clients, partenaires } = getUsersByCategory();
+                        const currentUserId = (session?.user as any)?.id;
+                        const allUsers = [...clients, ...partenaires, ...admins].filter(user =>
+                          (user._id || user.id) !== currentUserId &&
+                          (user._id || user.id) !== (composeAutoDestinataireId || formData.destinataire)
                         );
-                      }
 
-                      return (
-                        <div className="space-y-2">
-                          {allUsers.map((user) => {
-                            const userId = user._id || user.id;
-                            const isInCopie = formData.copie.includes(userId);
-                            const isAdmin = user.role === 'admin' || user.role === 'superadmin';
-                            const isPartenaire = user.role === 'partenaire';
-                            const roleLabel = isAdmin
-                              ? user.role === 'superadmin'
-                                ? 'Super Admin'
-                                : 'Admin'
-                              : isPartenaire
-                                ? 'Partenaire'
-                                : 'Client';
-                            return (
-                              <label
-                                key={userId}
-                                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-accent transition-colors ${
-                                  isInCopie ? 'bg-blue-50 border-2 border-blue-300' : 'border border-transparent'
-                                }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isInCopie}
-                                  onChange={() => toggleCopieSelection(userId)}
-                                  className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
-                                />
-                                <div className="flex-1">
-                                  <div className="font-medium text-sm">
-                                    {user.firstName} {user.lastName}
+                        if (allUsers.length === 0) {
+                          return (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                              Aucun utilisateur disponible pour la copie
+                            </p>
+                          );
+                        }
+
+                        return (
+                          <div className="space-y-2">
+                            {allUsers.map((user) => {
+                              const userId = user._id || user.id;
+                              const isInCopie = formData.copie.includes(userId);
+                              const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+                              const isPartenaire = user.role === 'partenaire';
+                              const roleLabel = isAdmin
+                                ? user.role === 'superadmin'
+                                  ? 'Super Admin'
+                                  : 'Admin'
+                                : isPartenaire
+                                  ? 'Partenaire'
+                                  : 'Client';
+                              return (
+                                <label
+                                  key={userId}
+                                  className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-accent transition-colors ${
+                                    isInCopie ? 'bg-blue-50 border-2 border-blue-300' : 'border border-transparent'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isInCopie}
+                                    onChange={() => toggleCopieSelection(userId)}
+                                    className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="font-medium text-sm">
+                                      {user.firstName} {user.lastName}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">{user.email}</div>
                                   </div>
-                                  <div className="text-xs text-muted-foreground">{user.email}</div>
-                                </div>
-                                <span className={`text-xs px-2 py-1 rounded-full ${
-                                  isAdmin ? 'bg-blue-100 text-blue-800' : isPartenaire ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-800'
-                                }`}>
-                                  {roleLabel}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
+                                  <span className={`text-xs px-2 py-1 rounded-full ${
+                                    isAdmin ? 'bg-blue-100 text-blue-800' : isPartenaire ? 'bg-amber-100 text-amber-900' : 'bg-green-100 text-green-800'
+                                  }`}>
+                                    {roleLabel}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
 
                 <div>
