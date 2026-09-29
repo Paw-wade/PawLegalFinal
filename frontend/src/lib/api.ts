@@ -1552,18 +1552,18 @@ export const dossierDocumentDraftsAPI = {
     api.get(`/dossier-document-drafts/${id}/docx`, { responseType: 'blob' }),
 };
 
-// Médias publics (carrousel, etc.)
+// Medias publics (carrousel, etc.)
 export const mediaAPI = {
-  // Upload d'un média pour le carrousel du hero (admin)
   uploadHeroMedia: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     return api.post('/media/hero', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+  listHeroMedia: () => api.get('/media/hero'),
+  deleteHeroMedia: (filename: string) =>
+    api.delete(`/media/hero/${encodeURIComponent(filename)}`),
 };
 
 // Forum - discussions et réponses
