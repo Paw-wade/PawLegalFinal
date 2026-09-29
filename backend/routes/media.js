@@ -66,8 +66,57 @@ const upload = multer({
 // Toutes les routes média nécessitent un admin
 router.use(protect, authorizePermission('cms', 'consulter'));
 
+// @route   GET /api/media/hero
+// @desc    Lister les medias stockes pour le carrousel
+// @access  Private (admin, superadmin)
+router.get('/hero', async (req, res) => {
+  try {
+    const uploadDir = path.join(__dirname, '../uploads/hero-carousel');
+    if (!fs.existsSync(uploadDir)) {
+      return res.json({ success: true, media: [] });
+    }
+    const videoExts = new Set(['.mp4', '.webm', '.ogg', '.mov', '.mkv', '.avi']);
+    const files = fs.readdirSync(uploadDir).filter((f) => !f.startsWith('.'));
+    const rawHost = (req.get('host') || '').replace('127.0.0.1', 'localhost');
+    const media = files
+      .map((filename) => {
+        const ext = path.extname(filename).toLowerCase();
+        const type = videoExts.has(ext) ? 'video' : 'image';
+        const url = `${req.protocol}://${rawHost}/uploads/hero-carousel/${filename}`;
+        const stat = fs.statSync(path.join(uploadDir, filename));
+        return { filename, url, type, size: stat.size, createdAt: stat.birthtime };
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json({ success: true, media });
+  } catch (error) {
+    console.error('Erreur lecture galerie:', error);
+    res.status(500).json({ success: false, message: 'Erreur lors de la lecture de la galerie' });
+  }
+});
+
+// @route   DELETE /api/media/hero/:filename
+// @desc    Supprimer un media de la galerie
+// @access  Private (admin, superadmin)
+router.delete('/hero/:filename', authorizePermission('cms', 'modifier'), async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (filename.includes('/') || filename.includes('..') || filename.includes('\\')) {
+      return res.status(400).json({ success: false, message: 'Nom de fichier invalide' });
+    }
+    const filePath = path.join(__dirname, '../uploads/hero-carousel', filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'Fichier introuvable' });
+    }
+    fs.unlinkSync(filePath);
+    res.json({ success: true, message: 'Media supprime' });
+  } catch (error) {
+    console.error('Erreur suppression media:', error);
+    res.status(500).json({ success: false, message: 'Erreur lors de la suppression du media' });
+  }
+});
+
 // @route   POST /api/media/hero
-// @desc    Téléverser un média (image ou vidéo) pour le carrousel du hero
+// @desc    Telecharger un media (image ou video) pour le carrousel du hero
 // @access  Private (admin, superadmin)
 router.post('/hero', (req, res, next) => {
   upload.single('file')(req, res, (err) => {
@@ -102,7 +151,8 @@ router.post('/hero', (req, res, next) => {
     const isVideo = req.file.mimetype.startsWith('video/');
     const isImage = req.file.mimetype.startsWith('image/');
 
-    const publicUrl = `${req.protocol}://${req.get('host')}/uploads/hero-carousel/${req.file.filename}`;
+    const host = (req.get('host') || '').replace('127.0.0.1', 'localhost');
+    const publicUrl = `${req.protocol}://${host}/uploads/hero-carousel/${req.file.filename}`;
 
     res.status(201).json({
       success: true,

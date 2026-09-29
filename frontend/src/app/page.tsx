@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
@@ -278,6 +278,9 @@ export default function HomePage() {
   const [isVisible, setIsVisible] = useState<{ [key: string]: boolean }>({});
   const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [displaySlide, setDisplaySlide] = useState(0);
+  const [cardFlipped, setCardFlipped] = useState(false);
+  const flipLock = useRef(false);
   const [hoveredLimiteIndex, setHoveredLimiteIndex] = useState<number | null>(0);
   const [hoveredPlateformeIndex, setHoveredPlateformeIndex] = useState<number | null>(0);
   const [showMobileTopBar, setShowMobileTopBar] = useState(true);
@@ -446,6 +449,26 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [heroSlides.length]);
 
+  // Effet "jeu de cartes" : le slide courant bascule vers l'arriere, le suivant monte vers l'avant
+  useEffect(() => {
+    if (currentSlide === displaySlide) return;
+    if (flipLock.current) return;
+    flipLock.current = true;
+
+    setCardFlipped(true); // la carte bascule vers l'arriere
+
+    const t1 = setTimeout(() => {
+      setDisplaySlide(currentSlide); // le contenu change au fond
+      setCardFlipped(false); // la carte remonte vers l'avant
+    }, 380);
+
+    const t2 = setTimeout(() => {
+      flipLock.current = false;
+    }, 760);
+
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [currentSlide]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Données structurées pour la section "Solutions" (thèmes à gauche / détail à droite)
   const solutions = [...servicesConfig].sort((a, b) => {
     if (a.title === 'Consultation juridique') return 1;
@@ -605,7 +628,15 @@ export default function HomePage() {
               <div className="relative mx-auto w-full max-w-[460px] lg:mb-20 lg:max-w-none">
                 <div className="relative mx-auto h-[360px] w-[300px] sm:h-[420px] sm:w-[360px] lg:h-[440px] lg:w-[380px]">
                   <div aria-hidden className="absolute left-4 top-4 h-full w-full rotate-[4deg] rounded-3xl bg-ds-primary-light" />
-                  <div className="absolute inset-0 -rotate-[3deg] overflow-hidden rounded-3xl bg-ds-secondary shadow-lg">
+                  <div
+                    className="absolute inset-0 overflow-hidden rounded-3xl bg-ds-secondary shadow-lg"
+                    style={{
+                      transition: 'transform 0.38s cubic-bezier(0.4, 0, 0.2, 1)',
+                      transform: cardFlipped
+                        ? 'rotate(4deg) scale(0.86) translateY(14px)'
+                        : 'rotate(-3deg) scale(1) translateY(0)',
+                    }}
+                  >
                     {heroSlides.length === 0 && (
                       <svg className="h-full w-full" viewBox="0 0 380 440" aria-hidden>
                         <rect className="fill-ds-primary" x="24" y="24" width="200" height="200" rx="24" />
@@ -617,7 +648,10 @@ export default function HomePage() {
                         <rect className="fill-ds-primary" x="240" y="240" width="116" height="176" rx="16" />
                       </svg>
                     )}
-                    {heroSlides.map((slide, index) => {
+                    {(() => {
+                      const slide = heroSlides[displaySlide];
+                      if (!slide) return null;
+
                       const isYouTube =
                         slide.type === 'video' &&
                         typeof slide.src === 'string' &&
@@ -626,35 +660,23 @@ export default function HomePage() {
                       let embedUrl = slide.src;
                       if (isYouTube) {
                         try {
-                          // Extraire l'ID de la vidéo pour construire l'URL embed
                           const url = new URL(slide.src);
                           if (url.hostname.includes('youtube.com')) {
                             const v = url.searchParams.get('v');
-                            if (v) {
-                              embedUrl = `https://www.youtube.com/embed/${v}?autoplay=1&mute=1&loop=1&playlist=${v}`;
-                            }
+                            if (v) embedUrl = `https://www.youtube.com/embed/${v}?autoplay=1&mute=1&loop=1&playlist=${v}`;
                           } else if (url.hostname.includes('youtu.be')) {
                             const id = url.pathname.replace('/', '');
-                            if (id) {
-                              embedUrl = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}`;
-                            }
+                            if (id) embedUrl = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}`;
                           }
-                        } catch {
-                          // Si l'URL est invalide, on laisse embedUrl tel quel
-                        }
+                        } catch { /* URL invalide */ }
                       }
 
                       return (
-                        <div
-                          key={`${slide.src}-${index}`}
-                          className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
-                            index === currentSlide ? 'opacity-100' : 'opacity-0'
-                          }`}
-                        >
+                        <div key={`${slide.src}-${displaySlide}`} className="absolute inset-0">
                           {isYouTube ? (
                             <iframe
                               src={embedUrl}
-                              title={slide.alt || 'Vidéo du carrousel'}
+                              title={slide.alt || 'Video du carrousel'}
                               className="h-full w-full"
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                               allowFullScreen
@@ -673,13 +695,14 @@ export default function HomePage() {
                               src={slide.src}
                               alt={slide.alt || ''}
                               fill
-                              priority={index === 0}
+                              priority
                               className="object-cover"
+                              unoptimized={/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(slide.src)}
                             />
                           )}
                         </div>
                       );
-                    })}
+                    })()}
 
                     {/* Indicateurs de slide */}
                     {heroSlides.length > 1 && (
