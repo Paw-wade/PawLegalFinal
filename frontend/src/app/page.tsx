@@ -11,7 +11,7 @@ import { ReservationWidget } from '@/components/ReservationWidget';
 import { ReservationBadge } from '@/components/ReservationBadge';
 import { useCmsText } from '@/lib/contentClient';
 import { servicesConfig } from '@/data/servicesConfig';
-import { Check, FileText } from 'lucide-react';
+import { Check, ChevronDown, FileText } from 'lucide-react';
 
 // Composant Button simplifié temporairement
 function Button({ 
@@ -126,7 +126,7 @@ const PLATEFORME_BLOCKS = [
     ],
   },
   {
-    title: 'Pour les professionnels et organismes',
+    title: 'Pour les professionnels',
     points: [
       "Mise à disposition d'un espace de suivi administratif des dossiers transmis à un consulat, une association ou un avocat, à la demande de l'étranger.",
       "Mise à disposition d'un canal de communication sécurisé entre l'étranger et les acteurs concernés (consulat, avocat, association) pour échanger des documents et des informations en toute confidentialité.",
@@ -476,6 +476,7 @@ export default function HomePage() {
     return 0;
   });
   const [selectedSolutionIndex, setSelectedSolutionIndex] = useState(0);
+  const [mobileOpenSolutionIndex, setMobileOpenSolutionIndex] = useState<number | null>(null);
   const [selectedEntrepriseSolutionIndex, setSelectedEntrepriseSolutionIndex] = useState(0);
   const [hoveredEntrepriseLimiteIndex, setHoveredEntrepriseLimiteIndex] = useState<number | null>(0);
   const role = (session?.user as { role?: string } | undefined)?.role;
@@ -798,9 +799,76 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="grid items-start gap-8 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
-              {/* Thèmes (gauche) */}
-              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 md:grid md:overflow-visible md:pb-0 md:rounded-2xl md:border md:border-ds-border md:bg-ds-secondary md:p-2" role="tablist" aria-label="Solutions">
+            {/* Mobile : accordeon (masqué au-dessus de md) */}
+            <div className="md:hidden space-y-2">
+              {solutions.map((solution, index) => {
+                const isOpen = mobileOpenSolutionIndex === index;
+                return (
+                  <div key={solution.title} className="overflow-hidden rounded-2xl border border-ds-border bg-ds-elevated">
+                    <button
+                      type="button"
+                      aria-expanded={isOpen}
+                      onClick={() => setMobileOpenSolutionIndex(isOpen ? null : index)}
+                      className="flex w-full items-center justify-between px-4 py-4 text-left"
+                    >
+                      <span className={`text-sm font-semibold ${isOpen ? 'text-ds-primary' : 'text-ds-strong'}`}>
+                        {solution.title}
+                      </span>
+                      <ChevronDown
+                        className={`h-4 w-4 flex-none text-ds-subtle transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
+                        aria-hidden
+                      />
+                    </button>
+                    {isOpen && (
+                      <div className="border-t border-ds-border px-4 pb-5 pt-4 space-y-5">
+                        <p className="text-sm leading-6 text-ds-body">{solution.description}</p>
+                        {(solution.duree || solution.prix) && (
+                          <div className="grid grid-cols-2 gap-3 rounded-xl bg-ds-secondary p-4 text-sm">
+                            {solution.duree && (
+                              <div>
+                                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ds-subtle">Durée</p>
+                                <p className="font-semibold text-ds-strong">{solution.duree}</p>
+                              </div>
+                            )}
+                            {solution.prix && (
+                              <div>
+                                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ds-subtle">Tarif</p>
+                                <p className="font-semibold text-ds-strong">{solution.prix}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {solution.points?.length ? (
+                          <ul className="space-y-2 text-sm text-ds-body">
+                            {solution.points.map((point) => (
+                              <li key={point} className="flex gap-3 leading-5">
+                                <Check className="mt-0.5 h-4 w-4 flex-none text-ds-primary" aria-hidden />
+                                <span>{point}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        <div className="border-t border-ds-border pt-4">
+                          {solution.isPortal ? (
+                            <Link href="/calculateur"><Button size="sm" className="w-full">Accéder au calculateur</Button></Link>
+                          ) : solution.ctaHref ? (
+                            <Link href={solution.ctaHref}><Button size="sm" className="w-full">{solution.ctaLabel ?? 'Continuer'}</Button></Link>
+                          ) : solution.title === 'Consultation juridique' ? (
+                            <Link href="/auth/signup"><Button size="sm" className="w-full">Créer mon compte</Button></Link>
+                          ) : (
+                            <Link href="/contact"><Button variant="outline" size="sm" className="w-full">Echanger sur mon dossier</Button></Link>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop : grille tabs + détail (visible à partir de md) */}
+            <div className="hidden md:grid items-start gap-8 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+              <div className="md:grid md:rounded-2xl md:border md:border-ds-border md:bg-ds-secondary md:p-2" role="tablist" aria-label="Solutions">
                 {solutions.map((solution, index) => (
                   <button
                     key={solution.title}
@@ -809,10 +877,10 @@ export default function HomePage() {
                     aria-selected={selectedSolutionIndex === index}
                     onClick={() => setSelectedSolutionIndex(index)}
                     onMouseEnter={() => setSelectedSolutionIndex(index)}
-                    className={`shrink-0 md:shrink rounded-xl border px-4 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                    className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                       selectedSolutionIndex === index
                         ? 'border-ds-primary bg-ds-bg font-semibold text-ds-strong shadow-sm'
-                        : 'border-transparent bg-ds-secondary font-medium text-ds-body hover:border-ds-border hover:bg-ds-bg md:bg-transparent'
+                        : 'border-transparent font-medium text-ds-body hover:border-ds-border hover:bg-ds-bg md:bg-transparent'
                     }`}
                   >
                     {solution.title}
@@ -820,51 +888,34 @@ export default function HomePage() {
                 ))}
               </div>
 
-              {/* Détail (droite) */}
               <div className="rounded-2xl border border-ds-border bg-ds-elevated p-6 shadow-sm md:p-8">
                 {(() => {
                   const current = solutions[selectedSolutionIndex] || solutions[0];
                   return (
                     <div className="space-y-6">
                       <div>
-                        <h3 className="mb-2 text-2xl font-bold text-ds-strong">
-                          {current.title}
-                        </h3>
-                        <p className="text-base leading-6 text-ds-body">
-                          {current.description}
-                        </p>
+                        <h3 className="mb-2 text-2xl font-bold text-ds-strong">{current.title}</h3>
+                        <p className="text-base leading-6 text-ds-body">{current.description}</p>
                       </div>
-
                       {(current.duree || current.prix) && (
                         <div className="grid gap-4 rounded-xl bg-ds-secondary p-4 text-sm sm:grid-cols-2">
                           {current.duree && (
                             <div>
-                              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ds-subtle">
-                                Durée
-                              </p>
-                              <p className="text-base font-semibold text-ds-strong">
-                                {current.duree}
-                              </p>
+                              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ds-subtle">Durée</p>
+                              <p className="text-base font-semibold text-ds-strong">{current.duree}</p>
                             </div>
                           )}
                           {current.prix && (
                             <div>
-                              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ds-subtle">
-                                Tarif
-                              </p>
-                              <p className="text-base font-semibold text-ds-strong">
-                                {current.prix}
-                              </p>
+                              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ds-subtle">Tarif</p>
+                              <p className="text-base font-semibold text-ds-strong">{current.prix}</p>
                             </div>
                           )}
                         </div>
                       )}
-
                       {current.points?.length ? (
                         <div>
-                          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ds-subtle">
-                            En pratique
-                          </p>
+                          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ds-subtle">En pratique</p>
                           <ul className="grid gap-x-6 gap-y-3 text-sm text-ds-body sm:grid-cols-2">
                             {current.points.map((point) => (
                               <li key={point} className="flex gap-3 leading-5">
@@ -875,36 +926,15 @@ export default function HomePage() {
                           </ul>
                         </div>
                       ) : null}
-
                       <div className="flex flex-wrap gap-3 border-t border-ds-border pt-6">
                         {current.isPortal ? (
-                          <Link href="/calculateur">
-                            <Button size="lg" className="min-w-[200px]">
-                              Accéder au calculateur
-                            </Button>
-                          </Link>
+                          <Link href="/calculateur"><Button size="lg" className="min-w-[200px]">Accéder au calculateur</Button></Link>
                         ) : current.ctaHref ? (
-                          <Link href={current.ctaHref}>
-                            <Button size="lg" className="min-w-[200px]">
-                              {current.ctaLabel ?? 'Continuer'}
-                            </Button>
-                          </Link>
+                          <Link href={current.ctaHref}><Button size="lg" className="min-w-[200px]">{current.ctaLabel ?? 'Continuer'}</Button></Link>
                         ) : current.title === 'Consultation juridique' ? (
-                          <Link href="/auth/signup">
-                            <Button size="lg" className="min-w-[180px]">
-                              Créer mon compte
-                            </Button>
-                          </Link>
+                          <Link href="/auth/signup"><Button size="lg" className="min-w-[180px]">Créer mon compte</Button></Link>
                         ) : (
-                          <Link href="/contact">
-                            <Button
-                              variant="outline"
-                              size="lg"
-                              className="min-w-[200px]"
-                            >
-                              Échanger sur mon dossier
-                            </Button>
-                          </Link>
+                          <Link href="/contact"><Button variant="outline" size="lg" className="min-w-[200px]">Echanger sur mon dossier</Button></Link>
                         )}
                       </div>
                     </div>
@@ -949,7 +979,7 @@ export default function HomePage() {
 
             {/* Sélecteur de public */}
             <div
-              className="mb-8 inline-flex flex-wrap gap-1 rounded-full border border-ds-border bg-ds-bg p-1"
+              className="mb-8 inline-flex w-full gap-1 rounded-full border border-ds-border bg-ds-bg p-1"
               role="tablist"
               aria-label="Public concerné"
             >
@@ -962,7 +992,7 @@ export default function HomePage() {
                   onClick={() => setHoveredPlateformeIndex(index)}
                   onMouseEnter={() => setHoveredPlateformeIndex(index)}
                   onFocus={() => setHoveredPlateformeIndex(index)}
-                  className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                  className={`flex-1 whitespace-nowrap rounded-full px-3 py-2 text-center text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-sm ${
                     hoveredPlateformeIndex === index
                       ? 'bg-ds-primary text-white'
                       : 'text-ds-body hover:bg-ds-secondary'
