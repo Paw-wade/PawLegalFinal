@@ -115,6 +115,11 @@ const nextConfig = {
         hostname: 'pawlegalfinal.onrender.com',
         pathname: '/uploads/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'api.adapapers.fr',
+        pathname: '/uploads/**',
+      },
     ],
   },
   // Tree-shake lucide (gros catalogue) sans changer les imports existants
