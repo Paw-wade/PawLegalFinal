@@ -392,6 +392,20 @@ const dossierSchema = new mongoose.Schema({
     maxlength: 500,
     required: false
   },
+  // Tarification marquee sans objet (dossier annule apres envoi de la tarification)
+  tarificationSansObjet: {
+    type: Boolean,
+    default: false
+  },
+  tarificationSansObjetAt: {
+    type: Date,
+    required: false
+  },
+  tarificationSansObjetBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
   // Clôture / archive (filtres CLÔTURÉS / ARCHIVÉS) - synchronisés avec le statut
   estCloture: {
     type: Boolean,

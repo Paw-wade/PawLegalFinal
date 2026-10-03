@@ -311,6 +311,7 @@ export default function AdminDossiersTarificationPage() {
   const [expandedDossierIds, setExpandedDossierIds] = useState<Set<string>>(new Set());
   const [openMenuDossierId, setOpenMenuDossierId] = useState<string | null>(null);
   const [deletingTarifId, setDeletingTarifId] = useState<string | null>(null);
+  const [markingSansObjetId, setMarkingSansObjetId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -678,6 +679,36 @@ export default function AdminDossiersTarificationPage() {
     }
   };
 
+  const handleMarkSansObjet = async (dossier: any) => {
+    const id = String(dossier?._id || dossier?.id || '');
+    if (!id) return;
+    const isSansObjet = !!dossier?.tarificationSansObjet;
+    const confirmMsg = isSansObjet
+      ? `Retablir la tarification du dossier "${dossier?.titre || dossier?.numero || id}" ?`
+      : `Marquer la tarification du dossier "${dossier?.titre || dossier?.numero || id}" comme sans objet ?\n\nLa tarification restera visible mais sera indiquee comme annulee.`;
+    if (!confirm(confirmMsg)) return;
+    setMarkingSansObjetId(id);
+    try {
+      const res = await dossiersAPI.markTarificationSansObjet(id);
+      if (res.data?.success) {
+        showFeedback('success', res.data.message || (isSansObjet ? 'Tarification retablie.' : 'Tarification marquee sans objet.'));
+        setDossiers((prev) =>
+          prev.map((item: any) =>
+            String(item?._id || item?.id || '') === id
+              ? { ...item, tarificationSansObjet: res.data.sansObjet, tarificationSansObjetAt: res.data.sansObjet ? new Date().toISOString() : undefined }
+              : item
+          )
+        );
+      } else {
+        showFeedback('error', res.data?.message || 'Action refusee.');
+      }
+    } catch (e: any) {
+      showFeedback('error', e?.response?.data?.message || e?.message || 'Erreur serveur.');
+    } finally {
+      setMarkingSansObjetId(null);
+    }
+  };
+
   const handlePaymentReminder = async (dossier: any) => {
     const id = String(dossier?._id || dossier?.id || '');
     if (!id || !canTogglePayment(dossier) || dossier?.paiementTarificationEffectue) return;
@@ -894,13 +925,20 @@ export default function AdminDossiersTarificationPage() {
     }
 
     return (
-      <article key={id} className="rounded-xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-orange-300/70">
+      <article key={id} className={`rounded-xl border p-4 shadow-sm transition-colors ${dossier?.tarificationSansObjet ? 'border-gray-200 bg-gray-50/60 opacity-75' : 'border-border bg-card hover:border-orange-300/70'}`}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1 space-y-2">
             <div>
-              <Link href={`/admin/dossiers/${id}`} className="text-sm font-semibold text-foreground hover:text-orange-700">
-                {dossier?.numero || id} · {getClientName(dossier)}
-              </Link>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Link href={`/admin/dossiers/${id}`} className="text-sm font-semibold text-foreground hover:text-orange-700">
+                  {dossier?.numero || id} · {getClientName(dossier)}
+                </Link>
+                {dossier?.tarificationSansObjet && (
+                  <span className="inline-flex items-center rounded-full border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                    Sans objet
+                  </span>
+                )}
+              </div>
               <p className="truncate text-xs text-muted-foreground">{dossier?.titre || 'Sans titre'}</p>
             </div>
             {renderBadges(dossier)}
@@ -1012,6 +1050,23 @@ export default function AdminDossiersTarificationPage() {
                       }}
                     >
                       Rétracter la demande
+                    </button>
+                  ) : null}
+                  {hasTarification(dossier) ? (
+                    <button
+                      type="button"
+                      className="block w-full rounded-md px-3 py-2 text-left text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                      disabled={markingSansObjetId === id}
+                      onClick={() => {
+                        setOpenMenuDossierId(null);
+                        void handleMarkSansObjet(dossier);
+                      }}
+                    >
+                      {markingSansObjetId === id
+                        ? 'En cours...'
+                        : dossier?.tarificationSansObjet
+                        ? 'Retablir la tarification'
+                        : 'Marquer sans objet'}
                     </button>
                   ) : null}
                   {hasTarification(dossier) ? (

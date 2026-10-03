@@ -3870,6 +3870,48 @@ router.post('/:id/tarification/reset', protect, authorize('admin', 'superadmin')
   }
 });
 
+// @route   POST /api/user/dossiers/:id/tarification/sans-objet
+// @desc    Marquer (ou demarquer) la tarification d'un dossier comme sans objet
+// @access  Private (admin, superadmin)
+router.post('/:id/tarification/sans-objet', protect, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const dossierId = String(req.params.id || '');
+    if (!mongoose.Types.ObjectId.isValid(dossierId)) {
+      return res.status(400).json({ success: false, message: 'Identifiant de dossier invalide.' });
+    }
+    const dossier = await Dossier.findById(dossierId).populate('user', '_id firstName lastName email');
+    if (!dossier) {
+      return res.status(404).json({ success: false, message: 'Dossier introuvable.' });
+    }
+
+    const actorId = req.user?._id || req.user?.id || null;
+    const nowValue = !dossier.tarificationSansObjet;
+
+    await Dossier.updateOne(
+      { _id: dossier._id },
+      nowValue
+        ? { $set: { tarificationSansObjet: true, tarificationSansObjetAt: new Date(), tarificationSansObjetBy: actorId } }
+        : { $set: { tarificationSansObjet: false }, $unset: { tarificationSansObjetAt: 1, tarificationSansObjetBy: 1 } }
+    );
+
+    const label = dossier.titre || dossier.numero || 'le dossier';
+    return res.json({
+      success: true,
+      sansObjet: nowValue,
+      message: nowValue
+        ? `Tarification de "${label}" marquee sans objet.`
+        : `Tarification de "${label}" retablie.`,
+    });
+  } catch (error) {
+    console.error('Erreur tarification sans-objet:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
 // @route   POST /api/user/dossiers/tarification-standalone/:requestId/remind
 // @desc    Relance d'une demande standalone (in-app + push + email, cooldown 48h)
 // @access  Private (admin, superadmin)
