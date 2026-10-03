@@ -404,13 +404,19 @@ export default function HomePage() {
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed)) return;
 
+        const apiBase = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
+        const fixSrc = (src: string) => {
+          if (!apiBase) return src;
+          return src.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, apiBase);
+        };
+
         const normalized: HeroSlide[] = parsed
           .map((item: any): HeroSlide | null => {
             if (!item || typeof item.src !== 'string' || !item.src.trim()) return null;
             const type: HeroSlide['type'] = item.type === 'video' ? 'video' : 'image';
             return {
               type,
-              src: item.src,
+              src: fixSrc(item.src),
               alt: item.alt || '',
             };
           })
