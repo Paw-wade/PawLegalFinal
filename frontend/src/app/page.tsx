@@ -236,7 +236,7 @@ const SOLUTIONS_ENTREPRISE = [
     ctaHref: '/dossiers/create?rubrique=constitution_societe',
     ctaLabel: 'Demarrer la constitution',
   },
-] as const;
+];
 
 const LIMITES_ENTREPRISE = [
   {
