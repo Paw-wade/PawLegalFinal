@@ -74,6 +74,8 @@ export default function AdminDossierDetailPage() {
   const [showDocumentPreviewModal, setShowDocumentPreviewModal] = useState(false);
   const [showStepsModal, setShowStepsModal] = useState(false);
   const [localSteps, setLocalSteps] = useState<any[]>([]);
+  const [insertAtIndex, setInsertAtIndex] = useState<number | null>(null);
+  const [insertStepValue, setInsertStepValue] = useState('');
   const [editingTitre, setEditingTitre] = useState(false);
   const [titreEditValue, setTitreEditValue] = useState('');
   const [savingTitre, setSavingTitre] = useState(false);
@@ -379,7 +381,7 @@ export default function AdminDossierDetailPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowStepsModal(false)}
+                onClick={() => { setShowStepsModal(false); setInsertAtIndex(null); setInsertStepValue(''); }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <span className="sr-only">Fermer</span>
@@ -559,59 +561,187 @@ export default function AdminDossierDetailPage() {
               <div className="border border-gray-100 rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-700">
-                    Étapes actuellement enregistrées ({localSteps.length})
+                    Etapes actuellement enregistrees ({localSteps.length})
                   </p>
                 </div>
                 {localSteps.length === 0 ? (
                   <p className="text-xs text-gray-400">
-                    Aucune étape enregistrée pour le moment. Utilisez les suggestions ou ajoutez vos propres étapes.
+                    Aucune etape enregistree pour le moment. Utilisez les suggestions ou ajoutez vos propres etapes.
                   </p>
                 ) : (
-                  <ul className="space-y-2">
-                    {localSteps.map((step, index) => (
-                      <li
-                        key={step.id || index}
-                        className="flex items-center justify-between gap-3 px-2 py-1.5 rounded-md bg-gray-50"
+                  <div>
+                    {/* Bouton inserer avant la premiere etape */}
+                    {insertAtIndex === -1 ? (
+                      <form
+                        className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-md bg-orange-50 border border-dashed border-orange-300"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const v = insertStepValue.trim();
+                          if (!v) return;
+                          setLocalSteps((prev) => [
+                            { id: `custom_${Date.now()}`, label: v, addedBy: currentUserId, createdAt: new Date().toISOString() },
+                            ...prev,
+                          ]);
+                          setInsertAtIndex(null);
+                          setInsertStepValue('');
+                        }}
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-gray-400 font-mono">
-                            {(index + 1).toString().padStart(2, '0')}
-                          </span>
-                          <div className="flex flex-col">
-                            <span className="text-xs text-gray-800">{step.label}</span>
-                            {step.date && (
-                              <span className="text-[10px] text-gray-500">
-                                ⏰ Échéance : {new Date(step.date).toLocaleDateString('fr-FR')}
+                        <input
+                          autoFocus
+                          type="text"
+                          value={insertStepValue}
+                          onChange={(e) => setInsertStepValue(e.target.value)}
+                          placeholder="Nom de la nouvelle etape..."
+                          className="min-w-0 flex-1 px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-orange-400/50"
+                        />
+                        <button type="submit" className="shrink-0 px-2 py-1 text-[11px] font-semibold rounded bg-orange-500 text-white hover:bg-orange-600">
+                          Inserer
+                        </button>
+                        <button type="button" onClick={() => { setInsertAtIndex(null); setInsertStepValue(''); }} className="shrink-0 text-[11px] text-gray-500 hover:text-gray-700">
+                          Annuler
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="flex items-center gap-2 my-1.5 mx-1">
+                        <div className="flex-1 border-t border-dashed border-gray-200" />
+                        <button
+                          type="button"
+                          onClick={() => { setInsertAtIndex(-1); setInsertStepValue(''); }}
+                          className="text-[10px] text-gray-400 hover:text-orange-500 px-1.5 py-0.5 rounded hover:bg-orange-50 transition-colors"
+                          title="Inserer avant la premiere etape"
+                        >
+                          + inserer ici
+                        </button>
+                        <div className="flex-1 border-t border-dashed border-gray-200" />
+                      </div>
+                    )}
+
+                    <ul className="space-y-0">
+                      {localSteps.map((step, index) => (
+                        <li key={step.id || index}>
+                          {/* Ligne de l'etape */}
+                          <div className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-gray-50">
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <span className="text-[11px] text-gray-400 font-mono shrink-0 w-5">
+                                {(index + 1).toString().padStart(2, '0')}
                               </span>
-                            )}
+                              {/* Boutons monter / descendre */}
+                              <div className="flex flex-col shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={index === 0}
+                                  onClick={() =>
+                                    setLocalSteps((prev) => {
+                                      const next = [...prev];
+                                      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                                      return next;
+                                    })
+                                  }
+                                  className="leading-none text-[10px] text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed"
+                                  title="Monter"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={index === localSteps.length - 1}
+                                  onClick={() =>
+                                    setLocalSteps((prev) => {
+                                      const next = [...prev];
+                                      [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                                      return next;
+                                    })
+                                  }
+                                  className="leading-none text-[10px] text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed"
+                                  title="Descendre"
+                                >
+                                  ▼
+                                </button>
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs text-gray-800 truncate">{step.label}</span>
+                                {step.date && (
+                                  <span className="text-[10px] text-gray-500">
+                                    Echeance : {new Date(step.date).toLocaleDateString('fr-FR')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <input
+                                type="date"
+                                value={step.date ? new Date(step.date).toISOString().slice(0, 10) : ''}
+                                onChange={(e) =>
+                                  setLocalSteps((prev) =>
+                                    prev.map((s, i) => i === index ? { ...s, date: e.target.value } : s)
+                                  )
+                                }
+                                className="text-[10px] px-2 py-1 rounded border border-gray-300 bg-white"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setLocalSteps((prev) => prev.filter((_, i) => i !== index))}
+                                className="text-[11px] text-red-500 hover:text-red-600"
+                              >
+                                Supprimer
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="date"
-                            value={step.date ? new Date(step.date).toISOString().slice(0, 10) : ''}
-                            onChange={(e) =>
-                              setLocalSteps((prev) =>
-                                prev.map((s, i) =>
-                                  i === index ? { ...s, date: e.target.value } : s
-                                )
-                              )
-                            }
-                            className="text-[10px] px-2 py-1 rounded border border-gray-300 bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setLocalSteps((prev) => prev.filter((_, i) => i !== index))
-                            }
-                            className="text-[11px] text-red-500 hover:text-red-600"
-                          >
-                            Supprimer
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+
+                          {/* Barre d'insertion apres cette etape */}
+                          {insertAtIndex === index ? (
+                            <form
+                              className="flex items-center gap-2 my-1.5 px-2 py-1.5 rounded-md bg-orange-50 border border-dashed border-orange-300"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                const v = insertStepValue.trim();
+                                if (!v) return;
+                                setLocalSteps((prev) => {
+                                  const next = [...prev];
+                                  next.splice(index + 1, 0, {
+                                    id: `custom_${Date.now()}`,
+                                    label: v,
+                                    addedBy: currentUserId,
+                                    createdAt: new Date().toISOString(),
+                                  });
+                                  return next;
+                                });
+                                setInsertAtIndex(null);
+                                setInsertStepValue('');
+                              }}
+                            >
+                              <input
+                                autoFocus
+                                type="text"
+                                value={insertStepValue}
+                                onChange={(e) => setInsertStepValue(e.target.value)}
+                                placeholder="Nom de la nouvelle etape..."
+                                className="min-w-0 flex-1 px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-orange-400/50"
+                              />
+                              <button type="submit" className="shrink-0 px-2 py-1 text-[11px] font-semibold rounded bg-orange-500 text-white hover:bg-orange-600">
+                                Inserer
+                              </button>
+                              <button type="button" onClick={() => { setInsertAtIndex(null); setInsertStepValue(''); }} className="shrink-0 text-[11px] text-gray-500 hover:text-gray-700">
+                                Annuler
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="flex items-center gap-2 my-1.5 mx-1">
+                              <div className="flex-1 border-t border-dashed border-gray-200" />
+                              <button
+                                type="button"
+                                onClick={() => { setInsertAtIndex(index); setInsertStepValue(''); }}
+                                className="text-[10px] text-gray-400 hover:text-orange-500 px-1.5 py-0.5 rounded hover:bg-orange-50 transition-colors"
+                              >
+                                + inserer ici
+                              </button>
+                              <div className="flex-1 border-t border-dashed border-gray-200" />
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
             </div>
@@ -619,7 +749,7 @@ export default function AdminDossierDetailPage() {
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
               <button
                 type="button"
-                onClick={() => setShowStepsModal(false)}
+                onClick={() => { setShowStepsModal(false); setInsertAtIndex(null); setInsertStepValue(''); }}
                 className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 hover:bg-white"
               >
                 Annuler
@@ -636,6 +766,8 @@ export default function AdminDossierDetailPage() {
                       })),
                     });
                     setShowStepsModal(false);
+                    setInsertAtIndex(null);
+                    setInsertStepValue('');
                     await loadDossier();
                   } catch (err) {
                     console.error("Erreur lors de l'enregistrement des étapes:", err);
