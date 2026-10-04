@@ -704,7 +704,7 @@ export default function HomePage() {
                               fill
                               priority
                               className="object-cover"
-                              unoptimized={/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(slide.src)}
+                              unoptimized
                             />
                           )}
                         </div>
