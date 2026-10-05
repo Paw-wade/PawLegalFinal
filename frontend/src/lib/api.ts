@@ -1984,4 +1984,18 @@ export const parrainageAPI = {
     api.post('/parrainage/bnp', data),
 };
 
+export const questionnairesAPI = {
+  list: () => api.get('/questionnaires'),
+  get: (id: string) => api.get(`/questionnaires/${id}`),
+  create: (data: Record<string, unknown>) => api.post('/questionnaires', data),
+  update: (id: string, data: Record<string, unknown>) => api.put(`/questionnaires/${id}`, data),
+  remove: (id: string) => api.delete(`/questionnaires/${id}`),
+  listReponses: (id: string) => api.get(`/questionnaires/${id}/reponses`),
+  getReponse: (id: string) => api.get(`/questionnaires/reponses/${id}`),
+  rattacherDossier: (reponseId: string, dossierId: string | null) =>
+    api.patch(`/questionnaires/reponses/${reponseId}/rattacher-dossier`, { dossierId }),
+  rattacherFichier: (reponseId: string, data: { fichierId: string; dossierId: string; nom?: string }) =>
+    api.post(`/questionnaires/reponses/${reponseId}/rattacher-fichier`, data),
+};
+
 

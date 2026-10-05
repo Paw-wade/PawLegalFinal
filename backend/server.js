@@ -285,6 +285,13 @@ try {
   app.use('/api', require('./routes/recours'));
 } catch (e) {}
 
+try {
+  app.use('/api/questionnaires', require('./routes/questionnaires'));
+  console.log('Route /api/questionnaires enregistree');
+} catch (e) {
+  console.error('Impossible d\'enregistrer /api/questionnaires:', e.message);
+}
+
 /* =========================
    ERREURS
 ========================= */
