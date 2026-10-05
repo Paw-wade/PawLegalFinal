@@ -318,10 +318,21 @@ function getCabinetContact() {
   };
 }
 
-// Prochaine étape prévue : première étape supplémentaire non encore datée/atteinte.
-function computeProchaineEtape(etapes) {
+// Prochaine étape prévue : étape qui suit l'étape courante (identifiée par statut),
+// ou à défaut la première étape sans date.
+function computeProchaineEtape(etapes, currentStatut) {
   const list = Array.isArray(etapes) ? [...etapes] : [];
+  if (list.length === 0) return null;
   list.sort((a, b) => (a?.ordre ?? 0) - (b?.ordre ?? 0));
+  const s = String(currentStatut || '').trim();
+  if (s) {
+    const currentIdx = list.findIndex(
+      (e) => e && (String(e.id ?? '') === s || String(e.label ?? '') === s)
+    );
+    if (currentIdx >= 0 && currentIdx < list.length - 1) {
+      return list[currentIdx + 1]?.label || null;
+    }
+  }
   const next = list.find((e) => e && !e.date && (e.statut ? e.statut !== 'termine' : true));
   return next?.label || null;
 }
@@ -398,7 +409,7 @@ router.get('/suivi/:token', async (req, res) => {
         numero: dossier.numero || null,
         statut: dossier.statut,
         etapesSupplementaires: dossier.etapesSupplementaires || [],
-        prochaineEtape: computeProchaineEtape(dossier.etapesSupplementaires),
+        prochaineEtape: computeProchaineEtape(dossier.etapesSupplementaires, dossier.statut),
         categorie: dossier.categorie,
         description: dossier.description || '',
         champsFormulaire,

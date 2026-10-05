@@ -66,9 +66,9 @@ router.get(
         .lean();
 
       if (!entry) {
-        return res.status(404).json({
+        return res.status(200).json({
           success: false,
-          message: 'Clé non trouvée',
+          value: null,
           key,
           locale,
         });

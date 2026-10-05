@@ -407,6 +407,11 @@ export default function HomePage() {
         const apiBase = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
         const fixSrc = (src: string) => {
           if (!apiBase) return src;
+          const isLocal = typeof window !== 'undefined' && (
+            window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1'
+          );
+          if (isLocal && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(src)) return src;
           return src.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, apiBase);
         };
 

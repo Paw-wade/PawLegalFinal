@@ -28,6 +28,18 @@ function formatBytes(b: number) {
   return `${(b / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
+const inputClass =
+  'w-full border border-gray-300 rounded-md bg-gray-50 px-3 py-[9px] text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-100 transition-colors';
+
+function SectionDot({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.07em] text-gray-600 mb-4">
+      <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+      {label}
+    </div>
+  );
+}
+
 export default function QuestionnairePage() {
   const params = useParams();
   const token = params?.token as string;
@@ -66,8 +78,7 @@ export default function QuestionnairePage() {
     for (const q of qData.questions) {
       if (!q.requis || q.type === 'section') continue;
       if (q.type === 'fichier') {
-        const files = fileValues[q.id] || [];
-        if (files.length === 0) errs[q.id] = 'Ce champ est obligatoire.';
+        if ((fileValues[q.id] || []).length === 0) errs[q.id] = 'Ce champ est obligatoire.';
       } else if (q.type === 'choix_multiple') {
         const val = choiceValues[q.id] || [];
         if (!Array.isArray(val) || val.length === 0) errs[q.id] = 'Selectionnez au moins une option.';
@@ -95,13 +106,10 @@ export default function QuestionnairePage() {
     for (const q of qData.questions) {
       if (q.type === 'section') continue;
       if (q.type === 'fichier') {
-        const files = fileValues[q.id] || [];
-        for (const f of files) formData.append(`fichier_${q.id}`, f);
+        for (const f of fileValues[q.id] || []) formData.append(`fichier_${q.id}`, f);
       } else if (q.type === 'choix_multiple') {
         const vals = choiceValues[q.id] || [];
-        if (Array.isArray(vals)) {
-          for (const v of vals) formData.append(`q_${q.id}`, v);
-        }
+        if (Array.isArray(vals)) for (const v of vals) formData.append(`q_${q.id}`, v);
       } else {
         formData.append(`q_${q.id}`, textValues[q.id] || '');
       }
@@ -146,7 +154,7 @@ export default function QuestionnairePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/20">
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -154,11 +162,11 @@ export default function QuestionnairePage() {
 
   if (loadError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/20 p-4">
-        <div className="bg-background rounded-2xl shadow-sm border border-border p-8 max-w-md w-full text-center space-y-3">
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 max-w-md w-full text-center space-y-3">
           <AlertCircle className="h-10 w-10 text-red-500 mx-auto" />
-          <h1 className="text-lg font-semibold">Questionnaire indisponible</h1>
-          <p className="text-sm text-muted-foreground">{loadError}</p>
+          <h1 className="text-lg font-semibold text-gray-800">Questionnaire indisponible</h1>
+          <p className="text-sm text-gray-500">{loadError}</p>
         </div>
       </div>
     );
@@ -166,11 +174,11 @@ export default function QuestionnairePage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/20 p-4">
-        <div className="bg-background rounded-2xl shadow-sm border border-border p-10 max-w-md w-full text-center space-y-4">
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-10 max-w-md w-full text-center space-y-4">
           <CheckCircle2 className="h-14 w-14 text-green-500 mx-auto" />
-          <h1 className="text-xl font-bold">Reponse envoyee !</h1>
-          <p className="text-sm text-muted-foreground leading-relaxed">
+          <h1 className="text-xl font-bold text-gray-800">Reponse envoyee !</h1>
+          <p className="text-sm text-gray-500 leading-relaxed">
             Merci pour vos reponses. L'equipe les traitera dans les meilleurs delais et vous contactera si necessaire.
           </p>
         </div>
@@ -180,48 +188,70 @@ export default function QuestionnairePage() {
 
   if (!qData) return null;
 
+  const hasRequiredFields = qData.questions.some(q => q.requis && q.type !== 'section');
+
   return (
-    <div className="min-h-screen bg-muted/20 py-10 px-4">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="bg-primary rounded-2xl px-6 py-8 text-white shadow-sm">
-          <h1 className="text-2xl font-bold">{qData.titre}</h1>
+    <div className="min-h-screen bg-gray-100 py-10 px-4">
+      <div className="max-w-2xl mx-auto space-y-3">
+
+        {/* En-tete */}
+        <div className="mb-5">
+          <h1 className="text-2xl font-bold text-gray-900">{qData.titre}</h1>
           {qData.description && (
-            <p className="mt-2 text-primary-foreground/80 text-sm leading-relaxed">{qData.description}</p>
+            <p className="mt-1.5 text-sm text-gray-500 leading-relaxed">{qData.description}</p>
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="bg-background rounded-2xl border border-border p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Vos coordonnees (optionnel)</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <input
-                className="border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
-                placeholder="Nom"
-                value={expediteur.nom}
-                onChange={e => setExpediteur(p => ({ ...p, nom: e.target.value }))}
-              />
-              <input
-                type="email"
-                className="border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
-                placeholder="Email"
-                value={expediteur.email}
-                onChange={e => setExpediteur(p => ({ ...p, email: e.target.value }))}
-              />
-              <input
-                type="tel"
-                className="border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
-                placeholder="Telephone"
-                value={expediteur.tel}
-                onChange={e => setExpediteur(p => ({ ...p, tel: e.target.value }))}
-              />
+        <form onSubmit={handleSubmit} className="space-y-3">
+
+          {/* Coordonnees */}
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <SectionDot label="Vos coordonnees (optionnel)" />
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Nom</label>
+                  <input
+                    className={inputClass}
+                    placeholder="Jean Dupont"
+                    value={expediteur.nom}
+                    onChange={e => setExpediteur(p => ({ ...p, nom: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-600">Email</label>
+                  <input
+                    type="email"
+                    className={inputClass}
+                    placeholder="jean@exemple.fr"
+                    value={expediteur.email}
+                    onChange={e => setExpediteur(p => ({ ...p, email: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-600">Telephone</label>
+                <input
+                  type="tel"
+                  className={inputClass}
+                  placeholder="06 12 34 56 78"
+                  value={expediteur.tel}
+                  onChange={e => setExpediteur(p => ({ ...p, tel: e.target.value }))}
+                />
+              </div>
             </div>
           </div>
 
-          {qData.questions.map((q, idx) => {
+          {/* Questions */}
+          {qData.questions.map(q => {
             if (q.type === 'section') {
               return (
-                <div key={q.id} className="pt-2">
-                  <h2 className="text-base font-semibold text-foreground border-b border-border pb-2">{q.label || 'Section'}</h2>
+                <div key={q.id} className="pt-3 pb-1">
+                  <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.07em] text-gray-500">
+                    <span className="flex-1 h-px bg-gray-200" />
+                    <span>{q.label || 'Section'}</span>
+                    <span className="flex-1 h-px bg-gray-200" />
+                  </div>
                 </div>
               );
             }
@@ -231,18 +261,18 @@ export default function QuestionnairePage() {
             return (
               <div
                 key={q.id}
-                className={`bg-background rounded-2xl border p-5 space-y-3 transition-colors ${
-                  hasError ? 'border-red-300' : 'border-border'
+                className={`bg-white border rounded-xl p-5 space-y-3 transition-colors ${
+                  hasError ? 'border-red-300' : 'border-gray-200'
                 }`}
               >
-                <label className="block text-sm font-medium text-foreground">
+                <label className="block text-sm font-medium text-gray-700">
                   {q.label}
-                  {q.requis && <span className="text-red-500 ml-1">*</span>}
+                  {q.requis && <span className="text-primary ml-1">*</span>}
                 </label>
 
                 {q.type === 'texte_court' && (
                   <input
-                    className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    className={inputClass}
                     value={textValues[q.id] || ''}
                     onChange={e => {
                       setTextValues(p => ({ ...p, [q.id]: e.target.value }));
@@ -253,7 +283,7 @@ export default function QuestionnairePage() {
 
                 {q.type === 'texte_long' && (
                   <textarea
-                    className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+                    className={`${inputClass} resize-none`}
                     rows={4}
                     value={textValues[q.id] || ''}
                     onChange={e => {
@@ -266,7 +296,7 @@ export default function QuestionnairePage() {
                 {q.type === 'date' && (
                   <input
                     type="date"
-                    className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    className={inputClass}
                     value={textValues[q.id] || ''}
                     onChange={e => {
                       setTextValues(p => ({ ...p, [q.id]: e.target.value }));
@@ -278,7 +308,7 @@ export default function QuestionnairePage() {
                 {q.type === 'choix_unique' && (
                   <div className="space-y-2">
                     {q.options.map(opt => (
-                      <label key={opt} className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                      <label key={opt} className="flex items-center gap-3 cursor-pointer p-2.5 rounded-lg border border-transparent hover:border-gray-200 hover:bg-gray-50 transition-colors">
                         <input
                           type="radio"
                           name={`radio_${q.id}`}
@@ -286,7 +316,7 @@ export default function QuestionnairePage() {
                           onChange={() => toggleChoice(q.id, opt, false)}
                           className="h-4 w-4 text-primary"
                         />
-                        <span className="text-sm">{opt}</span>
+                        <span className="text-sm text-gray-700">{opt}</span>
                       </label>
                     ))}
                   </div>
@@ -297,14 +327,14 @@ export default function QuestionnairePage() {
                     {q.options.map(opt => {
                       const vals = (choiceValues[q.id] as string[]) || [];
                       return (
-                        <label key={opt} className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                        <label key={opt} className="flex items-center gap-3 cursor-pointer p-2.5 rounded-lg border border-transparent hover:border-gray-200 hover:bg-gray-50 transition-colors">
                           <input
                             type="checkbox"
                             checked={vals.includes(opt)}
                             onChange={() => toggleChoice(q.id, opt, true)}
                             className="h-4 w-4 rounded text-primary"
                           />
-                          <span className="text-sm">{opt}</span>
+                          <span className="text-sm text-gray-700">{opt}</span>
                         </label>
                       );
                     })}
@@ -314,7 +344,7 @@ export default function QuestionnairePage() {
                 {q.type === 'fichier' && (
                   <div className="space-y-2">
                     <div
-                      className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                      className="border-2 border-dashed border-orange-200 rounded-xl p-6 text-center cursor-pointer bg-orange-50 hover:border-primary/60 hover:bg-orange-50/80 transition-colors"
                       onClick={() => fileInputRefs.current[q.id]?.click()}
                       onDragOver={e => e.preventDefault()}
                       onDrop={e => {
@@ -322,12 +352,17 @@ export default function QuestionnairePage() {
                         addFiles(q.id, Array.from(e.dataTransfer.files));
                       }}
                     >
-                      <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">
-                        Cliquez ou glissez vos fichiers ici
+                      <div className="w-10 h-10 rounded-xl bg-white border border-orange-200 flex items-center justify-center mx-auto mb-3">
+                        <Upload className="h-5 w-5 text-primary" />
+                      </div>
+                      <p className="text-sm font-medium text-gray-700">
+                        Deposer ou <span className="text-primary">parcourir</span>
                       </p>
                       {q.typesAcceptes && (
-                        <p className="text-xs text-muted-foreground/60 mt-1">{q.typesAcceptes}</p>
+                        <p className="text-xs text-gray-400 mt-1">{q.typesAcceptes}</p>
+                      )}
+                      {!q.typesAcceptes && (
+                        <p className="text-xs text-gray-400 mt-1">PDF, JPG, PNG - 10 Mo max</p>
                       )}
                       <input
                         type="file"
@@ -339,14 +374,17 @@ export default function QuestionnairePage() {
                       />
                     </div>
                     {(fileValues[q.id] || []).length > 0 && (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         {fileValues[q.id].map((f, i) => (
-                          <div key={i} className="flex items-center gap-3 bg-muted/50 rounded-lg px-3 py-2">
-                            <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <span className="text-sm flex-1 truncate">{f.name}</span>
-                            <span className="text-xs text-muted-foreground">{formatBytes(f.size)}</span>
-                            <button type="button" onClick={() => removeFile(q.id, i)}
-                              className="p-0.5 hover:bg-red-100 text-red-400 rounded transition-colors">
+                          <div key={i} className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                            <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-700 flex-1 truncate">{f.name}</span>
+                            <span className="text-xs text-gray-400">{formatBytes(f.size)}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeFile(q.id, i)}
+                              className="p-0.5 hover:bg-red-50 text-red-400 rounded transition-colors"
+                            >
                               <X className="h-4 w-4" />
                             </button>
                           </div>
@@ -357,8 +395,8 @@ export default function QuestionnairePage() {
                 )}
 
                 {hasError && (
-                  <p className="text-xs text-red-500 flex items-center gap-1">
-                    <AlertCircle className="h-3.5 w-3.5" />
+                  <p className="text-xs text-red-500 flex items-center gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
                     {errors[q.id]}
                   </p>
                 )}
@@ -373,18 +411,28 @@ export default function QuestionnairePage() {
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full py-3 bg-primary text-white rounded-xl font-medium hover:bg-primary/90 disabled:opacity-60 transition-colors flex items-center justify-center gap-2"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Envoi en cours...
-              </>
-            ) : 'Envoyer mes reponses'}
-          </button>
+          {/* Ligne soumission */}
+          <div className="flex items-center justify-between pt-1 pb-4">
+            {hasRequiredFields ? (
+              <p className="text-xs text-gray-400">
+                <span className="text-primary">*</span> Champs obligatoires
+              </p>
+            ) : (
+              <span />
+            )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="h-11 px-7 bg-primary text-white rounded-lg font-semibold text-sm hover:bg-primary/90 disabled:opacity-60 transition-colors flex items-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Envoi en cours...
+                </>
+              ) : 'Envoyer mes reponses'}
+            </button>
+          </div>
         </form>
       </div>
     </div>

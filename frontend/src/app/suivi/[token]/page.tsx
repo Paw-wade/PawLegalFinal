@@ -1004,13 +1004,27 @@ export default function SuiviDossierPage() {
               </div>
               {etapes.length > 0 ? (
                 <ol className="ml-1 space-y-4 border-l-2 border-primary/20 pl-5">
-                  {etapes.map((e: any, i: number) => (
-                    <li key={e.id || e._id || i} className="relative">
-                      <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full bg-primary ring-4 ring-white" />
-                      <p className="text-sm font-medium text-foreground">{e.label}</p>
-                      {e.date && <p className="text-xs text-muted-foreground">{fmtDate(e.date)}</p>}
-                    </li>
-                  ))}
+                  {etapes.map((e: any, i: number) => {
+                    const isTermine = !!e.date || e.statut === 'termine';
+                    const isCurrent = !isTermine && data && (
+                      String(e.id ?? '') === String(data.dossier.statut ?? '') ||
+                      String(e.label ?? '') === String(data.dossier.statut ?? '')
+                    );
+                    const dotCls = isTermine
+                      ? 'bg-green-500 ring-4 ring-white'
+                      : isCurrent
+                      ? 'bg-primary ring-4 ring-white'
+                      : 'bg-gray-300 ring-4 ring-white';
+                    return (
+                      <li key={e.id || e._id || i} className="relative">
+                        <span className={`absolute -left-[27px] top-1 h-3 w-3 rounded-full ${dotCls}`} />
+                        <p className={`text-sm font-medium ${isTermine ? 'text-muted-foreground line-through' : isCurrent ? 'text-primary' : 'text-foreground'}`}>
+                          {e.label}
+                        </p>
+                        {e.date && <p className="text-xs text-muted-foreground">{fmtDate(e.date)}</p>}
+                      </li>
+                    );
+                  })}
                 </ol>
               ) : (
                 <p className="text-sm text-muted-foreground">

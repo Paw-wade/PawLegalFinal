@@ -175,11 +175,10 @@ ${hasFiles ? '<p>Des pieces jointes ont ete uploadees.</p>' : ''}
 // ROUTES PROTEGEES (admin)
 // ============================================================
 
-router.use(protect);
-router.use(authorize('admin', 'superadmin'));
+const adminOnly = [protect, authorize('admin', 'superadmin')];
 
 // GET /api/questionnaires
-router.get('/', async (req, res) => {
+router.get('/', ...adminOnly, async (req, res) => {
   try {
     const questionnaires = await Questionnaire.find()
       .sort({ createdAt: -1 })
@@ -209,7 +208,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/questionnaires
-router.post('/', async (req, res) => {
+router.post('/', ...adminOnly, async (req, res) => {
   try {
     const { titre, description, questions, statut, dossier, expiresAt } = req.body;
     if (!titre || !titre.trim()) {
@@ -233,7 +232,7 @@ router.post('/', async (req, res) => {
 });
 
 // GET /api/questionnaires/reponses/:id  (AVANT /:id)
-router.get('/reponses/:id', async (req, res) => {
+router.get('/reponses/:id', ...adminOnly, async (req, res) => {
   try {
     const reponse = await QuestionnaireReponse.findById(req.params.id)
       .populate('questionnaire', 'titre questions token')
@@ -249,7 +248,7 @@ router.get('/reponses/:id', async (req, res) => {
 });
 
 // PATCH /api/questionnaires/reponses/:id/rattacher-dossier
-router.patch('/reponses/:id/rattacher-dossier', async (req, res) => {
+router.patch('/reponses/:id/rattacher-dossier', ...adminOnly, async (req, res) => {
   try {
     const { dossierId } = req.body;
     const reponse = await QuestionnaireReponse.findById(req.params.id).populate('questionnaire');
@@ -270,7 +269,7 @@ router.patch('/reponses/:id/rattacher-dossier', async (req, res) => {
 });
 
 // POST /api/questionnaires/reponses/:id/rattacher-fichier
-router.post('/reponses/:id/rattacher-fichier', async (req, res) => {
+router.post('/reponses/:id/rattacher-fichier', ...adminOnly, async (req, res) => {
   try {
     const { fichierId, dossierId, nom } = req.body;
     const reponse = await QuestionnaireReponse.findById(req.params.id);
@@ -324,7 +323,7 @@ router.post('/reponses/:id/rattacher-fichier', async (req, res) => {
 });
 
 // GET /api/questionnaires/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', ...adminOnly, async (req, res) => {
   try {
     const q = await Questionnaire.findById(req.params.id)
       .populate('dossier', 'reference clientNom')
@@ -337,7 +336,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /api/questionnaires/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', ...adminOnly, async (req, res) => {
   try {
     const { titre, description, questions, statut, dossier, expiresAt } = req.body;
     const q = await Questionnaire.findById(req.params.id);
@@ -358,7 +357,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/questionnaires/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', ...adminOnly, async (req, res) => {
   try {
     const q = await Questionnaire.findById(req.params.id);
     if (!q) return res.status(404).json({ success: false, message: 'Questionnaire introuvable.' });
@@ -371,7 +370,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET /api/questionnaires/:id/reponses
-router.get('/:id/reponses', async (req, res) => {
+router.get('/:id/reponses', ...adminOnly, async (req, res) => {
   try {
     const q = await Questionnaire.findById(req.params.id);
     if (!q) return res.status(404).json({ success: false, message: 'Questionnaire introuvable.' });
