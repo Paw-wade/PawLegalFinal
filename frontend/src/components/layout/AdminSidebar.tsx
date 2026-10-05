@@ -26,6 +26,7 @@ import {
   Trash2,
   User,
   BookUser,
+  ClipboardList,
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -51,6 +52,7 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/calendrier', label: 'Calendrier equipe', icon: CalendarRange },
   { href: '/admin/creneaux', label: 'Créneaux', icon: Clock },
   { href: '/admin/messages', label: 'Messages', icon: MessageSquare },
+  { href: '/admin/questionnaires', label: 'Questionnaires', icon: ClipboardList },
   { href: '/admin/documents', label: 'Documents', icon: FileText },
   {
     href: '/admin/documents/preparation',
