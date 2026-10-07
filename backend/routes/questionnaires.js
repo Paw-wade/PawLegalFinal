@@ -10,8 +10,10 @@ const Dossier = require('../models/Dossier');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
-const { sendTransactionalEmail } = require('../utils/emailNotifications');
+const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
+const { sendTemplatedTransactionalEmail } = require('../utils/emailTemplateMailer');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
+const { sendSMS, formatPhoneNumber } = require('../sendSMS');
 
 const router = express.Router();
 
@@ -317,6 +319,120 @@ router.post('/reponses/:id/rattacher-fichier', ...adminOnly, async (req, res) =>
     await reponse.save();
 
     return res.json({ success: true, document: doc, message: 'Fichier rattache au dossier.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/questionnaires/reponses/:id/creer-dossier
+router.post('/reponses/:id/creer-dossier', ...adminOnly, async (req, res) => {
+  try {
+    const reponse = await QuestionnaireReponse.findById(req.params.id).populate('questionnaire');
+    if (!reponse) return res.status(404).json({ success: false, message: 'Reponse introuvable.' });
+    if (reponse.dossierRattache) {
+      return res.status(400).json({ success: false, message: 'Un dossier est deja rattache a cette reponse.' });
+    }
+
+    const { prenom, nom, email, tel, titre, categorie } = req.body;
+    if (!nom || !String(nom).trim()) {
+      return res.status(400).json({ success: false, message: 'Le nom est requis.' });
+    }
+    if (!prenom || !String(prenom).trim()) {
+      return res.status(400).json({ success: false, message: 'Le prenom est requis.' });
+    }
+
+    const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+    const suiviToken = require('crypto').randomBytes(24).toString('hex');
+    const clientEmail = email ? String(email).toLowerCase().trim() : '';
+    const clientNom = String(nom).trim();
+    const clientPrenom = String(prenom).trim();
+    const clientTel = tel ? String(tel).trim() : '';
+    const titreDossier = titre ? String(titre).trim() : `Demande de ${clientPrenom} ${clientNom}`;
+
+    const existingUser = clientEmail ? await User.findOne({ email: clientEmail }) : null;
+
+    const dossier = await Dossier.create({
+      user: existingUser ? existingUser._id : null,
+      clientNom,
+      clientPrenom,
+      clientEmail,
+      clientTelephone: clientTel,
+      titre: titreDossier,
+      categorie: categorie || 'autre',
+      statut: 'recu',
+      suiviToken,
+      createdBy: req.user._id || req.user.id,
+    });
+
+    await QuestionnaireReponse.updateOne({ _id: reponse._id }, { dossierRattache: dossier._id });
+
+    const fullName = `${clientPrenom} ${clientNom}`.trim();
+    const suiviUrl = `${frontUrl}/suivi/${suiviToken}`;
+    let invitationSent = false;
+    let smsSent = false;
+
+    if (clientEmail) {
+      if (!existingUser) {
+        const signupUrl = `${frontUrl}/auth/signup?email=${encodeURIComponent(clientEmail)}`;
+        try {
+          await sendTemplatedTransactionalEmail({
+            templateCode: 'demande_publique_invitation',
+            eventKey: 'demande_publique_invitation',
+            to: clientEmail,
+            toName: fullName,
+            variables: { prenom: clientPrenom, titre: titreDossier, signupUrl, email: clientEmail },
+            fallback: {
+              subject: 'Votre dossier a ete cree - Ada Papers',
+              htmlContent: `<p>Bonjour ${escapeHtml(clientPrenom)},</p><p>Un dossier <strong>${escapeHtml(titreDossier)}</strong> a ete cree pour vous par notre equipe.</p><p><a href="${escapeHtml(suiviUrl)}">Suivre mon dossier</a></p><p>Creez un compte avec cette adresse : <a href="${escapeHtml(signupUrl)}">creer mon compte</a>.</p>`,
+              textContent: `Bonjour ${clientPrenom},\n\nUn dossier "${titreDossier}" a ete cree pour vous.\nSuivi : ${suiviUrl}\nCreer un compte : ${signupUrl}`,
+            },
+          });
+          dossier.invitationSentAt = new Date();
+          await dossier.save();
+          invitationSent = true;
+        } catch (e) {
+          console.error('Email invitation creer-dossier:', e.message || e);
+        }
+
+        if (clientTel) {
+          const formattedPhone = formatPhoneNumber(clientTel);
+          if (formattedPhone && formattedPhone.startsWith('+')) {
+            try {
+              const smsText = `Ada Papers : un dossier "${titreDossier}" a ete cree pour vous. Suivez-le : ${suiviUrl}`;
+              await sendSMS(formattedPhone, smsText);
+              smsSent = true;
+            } catch (e) {
+              console.error('SMS invitation creer-dossier:', e.message || e);
+            }
+          }
+        }
+      } else {
+        try {
+          await sendTemplatedTransactionalEmail({
+            templateCode: 'demande_publique_recue',
+            eventKey: 'demande_publique_recue',
+            to: clientEmail,
+            toName: fullName,
+            variables: { prenom: clientPrenom, titre: titreDossier, espaceUrl: `${frontUrl}/client/dossiers` },
+            fallback: {
+              subject: 'Votre dossier a ete cree - Ada Papers',
+              htmlContent: `<p>Bonjour ${escapeHtml(clientPrenom)},</p><p>Un dossier <strong>${escapeHtml(titreDossier)}</strong> a ete cree pour vous. Consultez votre espace client.</p>`,
+              textContent: `Bonjour ${clientPrenom},\n\nUn dossier "${titreDossier}" a ete cree pour vous.\nEspace client : ${frontUrl}/client/dossiers`,
+            },
+          });
+        } catch (e) {
+          console.error('Email confirmation creer-dossier:', e.message || e);
+        }
+      }
+    }
+
+    return res.status(201).json({
+      success: true,
+      dossier,
+      invitationSent,
+      smsSent,
+      message: 'Dossier cree et rattache a la reponse.',
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

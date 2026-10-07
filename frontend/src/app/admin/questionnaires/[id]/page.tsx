@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { questionnairesAPI, dossiersAPI } from '@/lib/api';
 import {
   ArrowLeft, Plus, Trash2, ChevronUp, ChevronDown, Copy, Check,
-  ExternalLink, Link2, Paperclip, FolderOpen, Eye, EyeOff
+  ExternalLink, Link2, Paperclip, FolderOpen, Eye, EyeOff, X
 } from 'lucide-react';
 
 type QuestionType = 'texte_court' | 'texte_long' | 'choix_unique' | 'choix_multiple' | 'date' | 'fichier' | 'section';
@@ -82,6 +82,122 @@ function formatBytes(b: number) {
   return `${(b / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
+interface DossierOption {
+  _id: string;
+  titre?: string;
+  clientNom?: string;
+  clientPrenom?: string;
+  reference?: string;
+}
+
+function dossierOptionLabel(d: DossierOption): string {
+  const client = [d.clientPrenom, d.clientNom].filter(Boolean).join(' ');
+  const parts: string[] = [];
+  if (d.titre) parts.push(d.titre);
+  if (client) parts.push(client);
+  if (d.reference) parts.push(d.reference);
+  return parts.join(' - ') || d._id;
+}
+
+function DossierPicker({
+  selectedId,
+  selectedLabel,
+  onSelect,
+  placeholder = 'Rechercher un dossier...',
+}: {
+  selectedId: string;
+  selectedLabel: string;
+  onSelect: (id: string, label: string) => void;
+  placeholder?: string;
+}) {
+  const [query, setQuery] = useState('');
+  const [options, setOptions] = useState<DossierOption[]>([]);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (!query.trim()) { setOptions([]); return; }
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(async () => {
+      try {
+        const r = await dossiersAPI.getAllDossiers({ search: query });
+        setOptions((r.data.dossiers || []).slice(0, 8));
+      } catch { /* ignore */ }
+    }, 300);
+  }, [query]);
+
+  function select(d: DossierOption) {
+    const label = dossierOptionLabel(d);
+    onSelect(d._id, label);
+    setQuery('');
+    setOpen(false);
+    setOptions([]);
+  }
+
+  function clear() {
+    onSelect('', '');
+    setQuery('');
+    setOptions([]);
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      {selectedId && !open ? (
+        <div className="flex items-center gap-2 border border-input rounded-lg px-3 py-2 text-sm bg-background cursor-pointer"
+          onClick={() => setOpen(true)}>
+          <FolderOpen className="h-4 w-4 text-primary flex-shrink-0" />
+          <span className="flex-1 truncate text-foreground">{selectedLabel || selectedId}</span>
+          <button type="button" onClick={e => { e.stopPropagation(); clear(); }}
+            className="text-muted-foreground hover:text-foreground transition-colors">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : (
+        <input
+          className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+          placeholder={placeholder}
+          value={query}
+          autoFocus={open}
+          onFocus={() => setOpen(true)}
+          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+        />
+      )}
+      {open && options.length > 0 && (
+        <ul className="absolute z-50 w-full mt-1 border border-border rounded-lg bg-background shadow-lg max-h-56 overflow-y-auto">
+          {options.map(d => (
+            <li key={d._id}>
+              <button type="button" onMouseDown={() => select(d)}
+                className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted transition-colors">
+                <p className="font-medium truncate">{d.titre || 'Sans titre'}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {[d.clientPrenom, d.clientNom].filter(Boolean).join(' ')}
+                  {d.reference ? ` - ${d.reference}` : ''}
+                </p>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && query.length > 0 && options.length === 0 && (
+        <div className="absolute z-50 w-full mt-1 border border-border rounded-lg bg-background shadow-lg px-3 py-3 text-sm text-muted-foreground">
+          Aucun dossier trouve.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function QuestionnaireDetailPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -98,10 +214,17 @@ export default function QuestionnaireDetailPage() {
   const [saving, setSaving] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [expandedReponse, setExpandedReponse] = useState<string | null>(null);
-  const [dossierInput, setDossierInput] = useState('');
-  const [dossierOptions, setDossierOptions] = useState<any[]>([]);
   const [rattacherModal, setRattacherModal] = useState<{ reponseId: string; fichierId: string; nomOriginal: string } | null>(null);
   const [rattacherDossierId, setRattacherDossierId] = useState('');
+  const [rattacherDossierLabel, setRattacherDossierLabel] = useState('');
+  const [creerDossierModal, setCreerDossierModal] = useState<{ reponseId: string } | null>(null);
+  const [creerPrenom, setCreerPrenom] = useState('');
+  const [creerNom, setCreerNom] = useState('');
+  const [creerEmail, setCreerEmail] = useState('');
+  const [creerTel, setCreerTel] = useState('');
+  const [creerTitre, setCreerTitre] = useState('');
+  const [creerCategorie, setCreerCategorie] = useState('autre');
+  const [creerLoading, setCreerLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
 
   // Champs editables
@@ -111,6 +234,7 @@ export default function QuestionnaireDetailPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [expiresAt, setExpiresAt] = useState('');
   const [lieDossier, setLieDossier] = useState<string>('');
+  const [lieDossierLabel, setLieDossierLabel] = useState<string>('');
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
@@ -128,6 +252,10 @@ export default function QuestionnaireDetailPage() {
       setQuestions(q.questions || []);
       setExpiresAt(q.expiresAt ? q.expiresAt.slice(0, 10) : '');
       setLieDossier(q.dossier?._id || '');
+      if (q.dossier) {
+        const client = [q.dossier.clientNom].filter(Boolean).join(' ');
+        setLieDossierLabel([q.dossier.reference, client].filter(Boolean).join(' - ') || q.dossier._id);
+      }
     } catch {
       showToast('Impossible de charger le questionnaire.', 'err');
     } finally {
@@ -252,11 +380,56 @@ export default function QuestionnaireDetailPage() {
       showToast('Fichier rattache au dossier.', 'ok');
       setRattacherModal(null);
       setRattacherDossierId('');
+      setRattacherDossierLabel('');
       // Refresh reponses
       const r = await questionnairesAPI.listReponses(id);
       setReponses(r.data.reponses || []);
     } catch {
       showToast('Erreur lors du rattachement.', 'err');
+    }
+  }
+
+  function openCreerDossierModal(r: Reponse) {
+    setCreerPrenom('');
+    setCreerNom(r.expediteur.nom || '');
+    setCreerEmail(r.expediteur.email || '');
+    setCreerTel(r.expediteur.tel || '');
+    setCreerTitre(questionnaire ? `Demande - ${questionnaire.titre}` : '');
+    setCreerCategorie('autre');
+    setCreerDossierModal({ reponseId: r._id });
+  }
+
+  async function handleCreerDossier() {
+    if (!creerDossierModal) return;
+    if (!creerNom.trim() || !creerPrenom.trim()) {
+      showToast('Nom et prenom obligatoires.', 'err');
+      return;
+    }
+    setCreerLoading(true);
+    try {
+      const res = await questionnairesAPI.creerDossier(creerDossierModal.reponseId, {
+        prenom: creerPrenom.trim(),
+        nom: creerNom.trim(),
+        email: creerEmail.trim(),
+        tel: creerTel.trim(),
+        titre: creerTitre.trim() || `Demande de ${creerPrenom.trim()} ${creerNom.trim()}`,
+        categorie: creerCategorie,
+      });
+      const newDossier = res.data.dossier;
+      setReponses(prev => prev.map(rep =>
+        rep._id === creerDossierModal.reponseId
+          ? { ...rep, dossierRattache: { _id: newDossier._id, reference: newDossier.reference || '', clientNom: `${creerPrenom.trim()} ${creerNom.trim()}` } }
+          : rep
+      ));
+      const msgs: string[] = ['Dossier cree et rattache.'];
+      if (res.data.invitationSent) msgs.push('Invitation envoyee par email.');
+      if (res.data.smsSent) msgs.push('SMS envoye.');
+      showToast(msgs.join(' '), 'ok');
+      setCreerDossierModal(null);
+    } catch (e: any) {
+      showToast(e?.response?.data?.message || 'Erreur lors de la creation du dossier.', 'err');
+    } finally {
+      setCreerLoading(false);
     }
   }
 
@@ -287,6 +460,7 @@ export default function QuestionnaireDetailPage() {
                   onClick={() => {
                     setRattacherModal({ reponseId: expandedReponse!, fichierId: f._id, nomOriginal: f.nomOriginal });
                     setRattacherDossierId('');
+                    setRattacherDossierLabel('');
                   }}
                   className="text-xs px-2 py-1 border border-primary text-primary rounded hover:bg-primary/10 transition-colors flex items-center gap-1"
                 >
@@ -328,14 +502,13 @@ export default function QuestionnaireDetailPage() {
             <h3 className="font-semibold">Rattacher au dossier</h3>
             <p className="text-sm text-muted-foreground">{rattacherModal.nomOriginal}</p>
             <div>
-              <label className="block text-sm font-medium mb-1">ID du dossier</label>
-              <input
-                className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
-                placeholder="ID MongoDB du dossier"
-                value={rattacherDossierId}
-                onChange={e => setRattacherDossierId(e.target.value)}
+              <label className="block text-sm font-medium mb-1">Dossier cible</label>
+              <DossierPicker
+                selectedId={rattacherDossierId}
+                selectedLabel={rattacherDossierLabel}
+                onSelect={(id, label) => { setRattacherDossierId(id); setRattacherDossierLabel(label); }}
+                placeholder="Rechercher par nom, reference..."
               />
-              <p className="text-xs text-muted-foreground mt-1">Collez l'identifiant du dossier cible.</p>
             </div>
             <div className="flex gap-3">
               <button
@@ -346,7 +519,105 @@ export default function QuestionnaireDetailPage() {
                 Rattacher
               </button>
               <button
-                onClick={() => setRattacherModal(null)}
+                onClick={() => { setRattacherModal(null); setRattacherDossierLabel(''); }}
+                className="flex-1 py-2 border border-input rounded-lg text-sm hover:bg-muted transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {creerDossierModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Creer un dossier</h3>
+              <button type="button" onClick={() => setCreerDossierModal(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1">Prenom <span className="text-red-500">*</span></label>
+                <input
+                  className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  value={creerPrenom}
+                  onChange={e => setCreerPrenom(e.target.value)}
+                  placeholder="Prenom"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Nom <span className="text-red-500">*</span></label>
+                <input
+                  className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  value={creerNom}
+                  onChange={e => setCreerNom(e.target.value)}
+                  placeholder="Nom de famille"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Email</label>
+              <input
+                type="email"
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={creerEmail}
+                onChange={e => setCreerEmail(e.target.value)}
+                placeholder="email@exemple.com"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Telephone</label>
+              <input
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={creerTel}
+                onChange={e => setCreerTel(e.target.value)}
+                placeholder="+33 6 00 00 00 00"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Titre du dossier</label>
+              <input
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={creerTitre}
+                onChange={e => setCreerTitre(e.target.value)}
+                placeholder="Ex: Demande titre de sejour"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Categorie</label>
+              <select
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={creerCategorie}
+                onChange={e => setCreerCategorie(e.target.value)}
+              >
+                <option value="sejour_titres">Titres de sejour</option>
+                <option value="contentieux_administratif">Contentieux administratif</option>
+                <option value="asile">Asile</option>
+                <option value="regroupement_familial">Regroupement familial</option>
+                <option value="nationalite_francaise">Nationalite francaise</option>
+                <option value="eloignement_urgence">Eloignement / urgence</option>
+                <option value="constitution_societe">Constitution de societe</option>
+                <option value="autre">Autre</option>
+              </select>
+            </div>
+            {creerEmail && (
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                Un email sera envoye a {creerEmail}. Si aucun compte n'existe, une invitation a s'inscrire sera incluse.
+              </p>
+            )}
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={handleCreerDossier}
+                disabled={creerLoading || !creerNom.trim() || !creerPrenom.trim()}
+                className="flex-1 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors"
+              >
+                {creerLoading ? 'Creation...' : 'Creer le dossier'}
+              </button>
+              <button
+                onClick={() => setCreerDossierModal(null)}
                 className="flex-1 py-2 border border-input rounded-lg text-sm hover:bg-muted transition-colors"
               >
                 Annuler
@@ -424,12 +695,12 @@ export default function QuestionnaireDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Dossier lie (ID)</label>
-                <input
-                  className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  placeholder="ID dossier (optionnel)"
-                  value={lieDossier}
-                  onChange={e => setLieDossier(e.target.value)}
+                <label className="block text-sm font-medium mb-1">Dossier lie</label>
+                <DossierPicker
+                  selectedId={lieDossier}
+                  selectedLabel={lieDossierLabel}
+                  onSelect={(id, label) => { setLieDossier(id); setLieDossierLabel(label); }}
+                  placeholder="Rechercher par nom, reference..."
                 />
               </div>
             </div>
@@ -613,13 +884,14 @@ export default function QuestionnaireDetailPage() {
                     })}
                   </div>
 
-                  <div className="pt-3 border-t border-border">
+                  <div className="pt-3 border-t border-border space-y-2">
                     <div className="flex items-center gap-3 flex-wrap">
                       <span className="text-xs text-muted-foreground">Rattacher au dossier :</span>
                       {r.dossierRattache ? (
                         <>
-                          <span className="text-xs text-green-700 font-medium">
-                            {r.dossierRattache.reference || r.dossierRattache.clientNom || r.dossierRattache._id}
+                          <span className="text-xs text-green-700 font-medium flex items-center gap-1">
+                            <FolderOpen className="h-3 w-3" />
+                            {r.dossierRattache.clientNom || r.dossierRattache.reference || r.dossierRattache._id}
                           </span>
                           <button
                             onClick={() => handleRattacherDossier(r._id, null)}
@@ -629,9 +901,25 @@ export default function QuestionnaireDetailPage() {
                           </button>
                         </>
                       ) : (
-                        <DossierSelector
-                          onSelect={dossierId => handleRattacherDossier(r._id, dossierId)}
-                        />
+                        <>
+                          <DossierSelector
+                            onSelect={(dossierId, dossierLabel) => {
+                              setReponses(prev => prev.map(rep =>
+                                rep._id === r._id
+                                  ? { ...rep, dossierRattache: { _id: dossierId, reference: '', clientNom: dossierLabel } }
+                                  : rep
+                              ));
+                              handleRattacherDossier(r._id, dossierId);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => openCreerDossierModal(r)}
+                            className="text-xs px-3 py-1 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors flex items-center gap-1"
+                          >
+                            <Plus className="h-3 w-3" /> Creer un dossier
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -645,71 +933,116 @@ export default function QuestionnaireDetailPage() {
   );
 }
 
-function DossierSelector({ onSelect }: { onSelect: (id: string) => void }) {
+function DossierSelector({ onSelect }: { onSelect: (id: string, label: string) => void }) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[]>([]);
+  const [allDossiers, setAllDossiers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+  const inputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function search(q: string) {
-    if (!q.trim()) { setResults([]); return; }
+  function makeDossierLabel(d: any): string {
+    const client = [d.clientPrenom, d.clientNom].filter(Boolean).join(' ');
+    const parts: string[] = [];
+    if (d.titre) parts.push(d.titre);
+    if (client) parts.push(client);
+    if (d.reference) parts.push(d.reference);
+    return parts.join(' - ') || 'Dossier sans titre';
+  }
+
+  async function loadDossiers(q: string) {
     setLoading(true);
     try {
-      const r = await dossiersAPI.getAllDossiers({ search: q });
-      setResults((r?.data?.dossiers || r?.data?.data || []).slice(0, 8));
+      const r = await dossiersAPI.getAllDossiers(q.trim() ? { search: q } : {});
+      setAllDossiers((r?.data?.dossiers || []).slice(0, 30));
     } catch {
-      setResults([]);
+      setAllDossiers([]);
     } finally {
       setLoading(false);
     }
   }
 
+  function handleOpen() {
+    setOpen(true);
+    loadDossiers('');
+    // Positionner le dropdown en fixed par rapport au viewport
+    setTimeout(() => {
+      if (inputRef.current) {
+        const rect = inputRef.current.getBoundingClientRect();
+        setDropdownStyle({ top: rect.bottom + 4, left: rect.left, width: Math.max(rect.width, 280) });
+      }
+    }, 0);
+  }
+
   useEffect(() => {
-    const t = setTimeout(() => search(query), 300);
-    return () => clearTimeout(t);
-  }, [query]);
+    if (!open) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => loadDossiers(query), 300);
+  }, [query, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as Node;
+      if (inputRef.current && !inputRef.current.contains(target)) {
+        // Laisser onMouseDown des items s'executer avant de fermer
+        setTimeout(() => setOpen(false), 150);
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
 
   if (!open) {
     return (
       <button
-        onClick={() => setOpen(true)}
-        className="text-xs px-3 py-1 border border-input rounded-md hover:bg-muted transition-colors"
+        type="button"
+        onClick={handleOpen}
+        className="text-xs px-3 py-1 border border-input rounded-md hover:bg-muted transition-colors flex items-center gap-1"
       >
-        Choisir un dossier
+        <FolderOpen className="h-3 w-3" /> Choisir un dossier
       </button>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 flex-1">
+    <>
       <input
+        ref={inputRef}
         autoFocus
-        className="border border-input rounded-lg px-2 py-1 text-xs bg-background w-48 focus:outline-none focus:ring-2 focus:ring-primary/40"
-        placeholder="Rechercher un dossier..."
+        className="border border-input rounded-lg px-2.5 py-1.5 text-xs bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 min-w-[220px] flex-1"
+        placeholder="Filtrer par nom, titre, reference..."
         value={query}
         onChange={e => setQuery(e.target.value)}
       />
-      {loading && <span className="text-xs text-muted-foreground">...</span>}
-      {results.length > 0 && (
-        <div className="absolute bg-background border border-border rounded-lg shadow-lg mt-1 z-20 max-w-xs w-full">
-          {results.map((d: any) => (
+      <div
+        style={{ position: 'fixed', top: dropdownStyle.top, left: dropdownStyle.left, width: dropdownStyle.width, zIndex: 9999 }}
+        className="border border-border rounded-lg bg-background shadow-xl max-h-64 overflow-y-auto"
+      >
+        {loading && <p className="px-3 py-2 text-xs text-muted-foreground">Chargement...</p>}
+        {!loading && allDossiers.length === 0 && (
+          <p className="px-3 py-2 text-xs text-muted-foreground">Aucun dossier trouve.</p>
+        )}
+        {!loading && allDossiers.map((d: any) => {
+          const label = makeDossierLabel(d);
+          const client = [d.clientPrenom, d.clientNom].filter(Boolean).join(' ');
+          return (
             <button
               key={d._id}
-              onClick={() => { onSelect(d._id); setOpen(false); setQuery(''); setResults([]); }}
-              className="w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors"
+              type="button"
+              onMouseDown={() => { onSelect(d._id, label); setOpen(false); setQuery(''); }}
+              className="w-full text-left px-3 py-2.5 hover:bg-muted transition-colors border-b border-border/50 last:border-0"
             >
-              <span className="font-medium">{d.reference || d._id}</span>
-              {d.clientNom && <span className="text-muted-foreground ml-2">{d.clientNom}</span>}
+              <p className="text-xs font-semibold text-foreground truncate">{d.titre || 'Sans titre'}</p>
+              <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                {client && <span>{client}</span>}
+                {d.reference && <span className="ml-1 text-primary/80">- {d.reference}</span>}
+              </p>
             </button>
-          ))}
-        </div>
-      )}
-      <button
-        onClick={() => setOpen(false)}
-        className="text-xs text-muted-foreground hover:underline"
-      >
-        Annuler
-      </button>
-    </div>
+          );
+        })}
+      </div>
+    </>
   );
 }

@@ -191,8 +191,14 @@ export default function QuestionnairePage() {
   const hasRequiredFields = qData.questions.some(q => q.requis && q.type !== 'section');
 
   return (
-    <div className="min-h-screen bg-gray-100 py-10 px-4">
-      <div className="max-w-2xl mx-auto space-y-3">
+    <div className="min-h-screen bg-gray-100">
+      <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto">
+          <span className="text-xl font-bold text-orange-500">Ada Papers</span>
+        </div>
+      </header>
+
+      <div className="max-w-2xl mx-auto space-y-3 py-10 px-4">
 
         {/* En-tete */}
         <div className="mb-5">

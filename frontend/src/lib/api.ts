@@ -1996,6 +1996,8 @@ export const questionnairesAPI = {
     api.patch(`/questionnaires/reponses/${reponseId}/rattacher-dossier`, { dossierId }),
   rattacherFichier: (reponseId: string, data: { fichierId: string; dossierId: string; nom?: string }) =>
     api.post(`/questionnaires/reponses/${reponseId}/rattacher-fichier`, data),
+  creerDossier: (reponseId: string, data: { prenom: string; nom: string; email: string; tel: string; titre: string; categorie: string }) =>
+    api.post(`/questionnaires/reponses/${reponseId}/creer-dossier`, data),
 };
 
 
