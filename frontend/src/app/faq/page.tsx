@@ -9,7 +9,7 @@ import { Footer } from '@/components/layout/Footer';
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-colors';
   const variantClasses = {
-    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
+    default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md font-semibold',
     outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
     ghost: 'hover:bg-accent hover:text-accent-foreground',
   };
@@ -598,7 +598,7 @@ Pourquoi ce mécanisme existe ? Sans cette règle, une personne pourrait rester 
                       : 'bg-transparent border border-transparent hover:bg-white/60'
                   }`}
                 >
-                  <span className="mt-0.5 h-6 w-6 flex items-center justify-center rounded-full bg-orange-50 text-orange-500 text-xs font-semibold">
+                  <span className="mt-0.5 h-6 w-6 flex items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
                     {index + 1}
                   </span>
                   <p className="font-medium text-foreground">{section.title}</p>
@@ -692,7 +692,7 @@ Pourquoi ce mécanisme existe ? Sans cette règle, une personne pourrait rester 
                         : 'hover:bg-muted/30'
                     }`}
                   >
-                    <span className="mt-0.5 h-6 w-6 flex items-center justify-center rounded-full bg-orange-50 text-orange-500 text-xs font-semibold">
+                    <span className="mt-0.5 h-6 w-6 flex items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
                       {index + 1}
                     </span>
                     <p className="font-medium text-foreground">{section.title}</p>

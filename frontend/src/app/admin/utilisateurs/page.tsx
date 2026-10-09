@@ -9,6 +9,7 @@ import { UserPermissionsModal } from '@/components/admin/UserPermissionsModal';
 import jsPDF from 'jspdf';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
+import { canViewAdminDomain, getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 // Libellés lisibles des rôles. Les rôles « métier » sont présentés comme des
 // sous-rôles de la catégorie Administration (interface /admin partagée).
@@ -926,9 +927,12 @@ function AdminUtilisateursContent() {
       router.push('/auth/signin');
     } else if (session) {
       const userRole = (session.user as any)?.role;
-      const isAuthorized = userRole === 'admin' || userRole === 'superadmin';
-      if (!isAuthorized) {
+      if (!isCabinetStaffRole(userRole)) {
         router.push('/client');
+        return;
+      }
+      if (!canViewAdminDomain(userRole, 'utilisateurs')) {
+        router.replace(getStaffLandingPath(userRole));
       }
     }
   }, [session, status, router]);

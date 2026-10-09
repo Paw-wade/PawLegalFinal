@@ -1,5 +1,5 @@
 const webPush = require('web-push');
-const User = require('../models/User');
+const M = require('../tenantModels');
 
 let configured = false;
 
@@ -20,7 +20,7 @@ function ensureConfigured() {
 
 async function pruneSubscriptions(userId, endpointsToRemove) {
   if (!userId || !Array.isArray(endpointsToRemove) || endpointsToRemove.length === 0) return;
-  await User.updateOne(
+  await M.User.updateOne(
     { _id: userId },
     {
       $pull: {
@@ -36,7 +36,7 @@ async function sendPushToUser(userId, payload) {
   if (!userId) return { sent: 0, removed: 0, skipped: true };
   if (!ensureConfigured()) return { sent: 0, removed: 0, skipped: true };
 
-  const user = await User.findById(userId).select('pushSubscriptions');
+  const user = await M.User.findById(userId).select('pushSubscriptions');
   const subscriptions = Array.isArray(user?.pushSubscriptions) ? user.pushSubscriptions : [];
   if (subscriptions.length === 0) return { sent: 0, removed: 0, skipped: true };
 

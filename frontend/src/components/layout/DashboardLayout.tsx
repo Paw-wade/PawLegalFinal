@@ -9,6 +9,7 @@ import { AdminSidebar } from './AdminSidebar';
 import { PartenaireSidebar } from './PartenaireSidebar';
 import { NotificationBanner } from '@/components/NotificationBanner';
 import { Toast } from '@/components/Toast';
+import { isCabinetStaffRole, isFullAdminRole } from '@/lib/staffAccess';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -22,14 +23,13 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
   const lexiaFullscreen = pathname === '/lexia' || pathname === '/admin/lexia';
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
-  // Déterminer si l'utilisateur est admin ou partenaire
   const userRole = (session?.user as any)?.role || 'client';
-  const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+  const isStaff = isCabinetStaffRole(userRole);
+  const isAdmin = isFullAdminRole(userRole);
   const isPartenaire = userRole === 'partenaire';
-  
-  // Les admins ont maintenant un menu latéral fixe
-  const showClientSidebar = variant === 'client' && !isAdmin;
-  const showAdminSidebar = variant === 'admin' && isAdmin;
+
+  const showClientSidebar = variant === 'client' && !isStaff;
+  const showAdminSidebar = variant === 'admin' && isStaff;
   const showPartenaireSidebar = variant === 'partenaire' && isPartenaire;
 
   // Fermer la sidebar sur desktop (large screens) pour client, admin, partenaire
@@ -73,7 +73,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
         {session && (
           <>
             <NotificationBanner 
-              userRole={isAdmin ? 'admin' : isPartenaire ? 'partenaire' : 'client'} 
+              userRole={isStaff || isAdmin ? 'admin' : isPartenaire ? 'partenaire' : 'client'} 
               userId={(session.user as any)?._id || (session.user as any)?.id}
             />
           </>

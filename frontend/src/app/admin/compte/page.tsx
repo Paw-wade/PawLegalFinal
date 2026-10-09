@@ -8,6 +8,7 @@ import { ensurePushSubscription } from '@/lib/pushClient';
 import { mergeProfileFormValuesFromDom } from '@/lib/profilePhoto';
 import { DateInput as DateInputComponent } from '@/components/ui/DateInput';
 import { Toast } from '@/components/ui/Toast';
+import { isCabinetStaffRole } from '@/lib/staffAccess';
 
 function Button({ children, variant = 'default', className = '', disabled = false, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
@@ -185,8 +186,7 @@ export default function AdminComptePage() {
       router.push('/auth/signin');
     } else if (session) {
       const userRole = (session.user as any)?.role;
-      const isAuthorized = userRole === 'admin' || userRole === 'superadmin';
-      if (!isAuthorized) {
+      if (!isCabinetStaffRole(userRole)) {
         router.push('/client');
       }
     }
@@ -195,7 +195,7 @@ export default function AdminComptePage() {
   useEffect(() => {
     // Charger le profil automatiquement lorsque l'administrateur est authentifié
     // Le formulaire sera pré-rempli avec toutes les données existantes
-    if (status === 'authenticated' && session && ((session.user as any)?.role === 'admin' || (session.user as any)?.role === 'superadmin')) {
+    if (status === 'authenticated' && session && isCabinetStaffRole((session.user as any)?.role)) {
       loadProfile();
     }
   }, [status, session]);

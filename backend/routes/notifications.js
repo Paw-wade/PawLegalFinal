@@ -1,7 +1,7 @@
 const express = require('express');
-const Notification = require('../models/Notification');
 const { protect } = require('../middleware/auth');
 
+const M = require('../tenantModels');
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification
@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
       filter.lu = lu === 'true';
     }
     
-    const notifications = await Notification.find(filter)
+    const notifications = await M.Notification.find(filter)
       // Toujours afficher les notifications non lues en premier,
       // puis trier chaque groupe par date de création (plus récentes en premier)
       .sort({ lu: 1, createdAt: -1 })
@@ -45,7 +45,7 @@ router.get('/', async (req, res) => {
 // @access  Private
 router.get('/unread', async (req, res) => {
   try {
-    const count = await Notification.countDocuments({
+    const count = await M.Notification.countDocuments({
       user: req.user.id,
       lu: false
     });
@@ -69,7 +69,7 @@ router.get('/unread', async (req, res) => {
 // @access  Private
 router.put('/:id/read', async (req, res) => {
   try {
-    const notification = await Notification.findById(req.params.id);
+    const notification = await M.Notification.findById(req.params.id);
     
     if (!notification) {
       return res.status(404).json({
@@ -109,7 +109,7 @@ router.put('/:id/read', async (req, res) => {
 // @access  Private
 router.put('/read-all', async (req, res) => {
   try {
-    await Notification.updateMany(
+    await M.Notification.updateMany(
       { user: req.user.id, lu: false },
       { lu: true }
     );
@@ -133,7 +133,7 @@ router.put('/read-all', async (req, res) => {
 // @access  Private
 router.delete('/:id', async (req, res) => {
   try {
-    const notification = await Notification.findById(req.params.id);
+    const notification = await M.Notification.findById(req.params.id);
     
     if (!notification) {
       return res.status(404).json({

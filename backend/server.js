@@ -4,8 +4,11 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const morgan = require('morgan');
 const path = require('path');
-const { getFrontendOriginsList } = require('./utils/frontendOrigins');
+const { getFrontendOriginsList, isOriginAllowed } = require('./utils/frontendOrigins');
 const { getKnowledgeDir, getKnowledgeStats } = require('./services/lexiaInternal');
+const { isMultiTenantEnabled, connectMaster } = require('./lib/db/master');
+const { preloadDefaultModels } = require('./lib/models/registerTenantModels');
+const { tenantMiddleware } = require('./middleware/tenant');
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -23,7 +26,7 @@ console.log('✅ CORS - origines autorisées:', allowedOrigins.join(', ') || '(a
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isOriginAllowed(origin)) {
         return callback(null, true);
       }
       console.warn('🚫 CORS bloqué pour:', origin);
@@ -42,6 +45,8 @@ app.use(
       'Pragma',
       'pragma',
       'x-forum-visitor-id',
+      'x-tenant-slug',
+      'X-Tenant-Slug',
     ],
     exposedHeaders: ['Content-Disposition', 'Content-Type', 'Content-Length'],
     maxAge: 86400,
@@ -51,6 +56,8 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+app.use(tenantMiddleware);
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -68,9 +75,26 @@ const connectDB = async () => {
       return;
     }
 
+    if (isMultiTenantEnabled()) {
+      await connectMaster();
+      const mtFlag = (process.env.MULTI_TENANT || '').trim();
+      console.log(
+        `🏢 Mode multi-tenant activé${mtFlag ? ` (MULTI_TENANT=${mtFlag})` : ' (détecté via MASTER_MONGODB_URI)'}`
+      );
+      if (!mtFlag && process.env.NODE_ENV !== 'production') {
+        console.warn(
+          '⚠️  Ajoutez MULTI_TENANT=true dans .env pour éviter toute ambiguïté au déploiement.'
+        );
+      }
+    } else {
+      console.log('📦 Mode single-tenant (connexion legacy MONGODB_URI uniquement)');
+    }
+
     const conn = await mongoose.connect(mongoURI);
 
-    console.log(`✅ MongoDB connecté : ${conn.connection.host}`);
+    preloadDefaultModels();
+
+    console.log(`✅ MongoDB connecté : ${conn.connection.host}${isMultiTenantEnabled() ? ' (connexion legacy / migration)' : ''}`);
     isDatabaseConnected = true;
 
     try {
@@ -93,9 +117,34 @@ app.get('/', (req, res) => {
   res.json({
     success: true,
     message: 'API Ada Papers est en ligne',
-    version: '1.0.0'
+    version: '1.0.0',
+    multiTenant: isMultiTenantEnabled(),
+    tenant: req.tenant ? { slug: req.tenant.slug, orgId: req.tenant.orgId } : null,
   });
 });
+
+try {
+  app.use('/api/tenant', require('./routes/tenant'));
+  console.log('✅ Route /api/tenant enregistrée (config, health)');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/tenant:', e.message);
+}
+
+try {
+  app.use('/api/public/organization-signup', require('./routes/publicOrganizationSignup'));
+  console.log('✅ Route /api/public/organization-signup enregistrée');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/public/organization-signup:', e.message);
+}
+
+try {
+  app.use('/api/platform', require('./routes/platform'));
+  app.use('/api/platform/organizations', require('./routes/platformOrganizations'));
+  app.use('/api/platform/signup-requests', require('./routes/platformSignupRequests'));
+  console.log('✅ Routes /api/platform enregistrées (console Ada Papers)');
+} catch (e) {
+  console.error('❌ Impossible d\'enregistrer /api/platform:', e.message);
+}
 
 app.use('/api/auth', require('./routes/auth'));
 // Termine tout /api/auth non géré ci-dessus (NextAuth vit côté Next en dev avec proxy granulaire).
@@ -307,7 +356,22 @@ app.get("/api-status", (req, res) => {
   res.json({
     success: true,
     message: "API active",
-    database: isDatabaseConnected ? "connectée" : "indisponible"
+    database: isDatabaseConnected ? "connectée" : "indisponible",
+    multiTenant: isMultiTenantEnabled(),
+    tenant: req.tenant ? { slug: req.tenant.slug, orgId: req.tenant.orgId } : null,
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  const { getTenantConnectionsCount } = require('./lib/db/tenants');
+  res.json({
+    success: true,
+    database: isDatabaseConnected ? 'connectée' : 'indisponible',
+    multiTenant: isMultiTenantEnabled(),
+    tenant: req.tenant
+      ? { orgId: req.tenant.orgId, slug: req.tenant.slug, status: req.tenant.status }
+      : null,
+    tenantConnectionsPooled: isMultiTenantEnabled() ? getTenantConnectionsCount() : 0,
   });
 });
 
@@ -326,11 +390,47 @@ const startServer = async () => {
   try {
     await connectDB();
 
+    if (isMultiTenantEnabled()) {
+      const { loadTenantCorsOrigins, startTenantCorsRefreshLoop } = require('./lib/tenant/tenantCorsOrigins');
+      const corsSet = await loadTenantCorsOrigins(true);
+      console.log(`✅ CORS — ${corsSet.size} origine(s) (env + domaines cabinets actifs)`);
+      startTenantCorsRefreshLoop();
+    }
+
     const PORT = process.env.PORT || 3005;
 
     const server = app.listen(PORT, () => {
       console.log(`🚀 Serveur démarré sur le port ${PORT}`);
       console.log(`📡 API: /api`);
+      try {
+        const {
+          shouldUseCloudinaryForUploads,
+          isCloudinaryConfigured,
+          verifyCloudinaryConnection,
+        } = require('./lib/cloudinaryConfig');
+        const { cloudinary } = require('./lib/cloudinaryMulter');
+        const uploadEnv = (process.env.UPLOAD_STORAGE || 'cloudinary').trim();
+        if (shouldUseCloudinaryForUploads()) {
+          verifyCloudinaryConnection(cloudinary).then((ping) => {
+            if (ping.ok) {
+              console.log(
+                `📎 Uploads : cloudinary (cloud=${ping.cloud_name}, dossiers cabinets/{slug}/…, UPLOAD_STORAGE=${uploadEnv})`
+              );
+            } else {
+              console.warn(
+                `⚠️ Uploads : Cloudinary configuré mais ping échoué — repli disque possible. ${ping.error}`
+              );
+            }
+          });
+        } else {
+          const reason = isCloudinaryConfigured()
+            ? 'UPLOAD_STORAGE=disk'
+            : 'CLOUDINARY_* incomplet';
+          console.log(`📎 Uploads : disk (local uploads/) — ${reason}`);
+        }
+      } catch (e) {
+        console.warn('⚠️ Uploads : impossible de déterminer le mode de stockage', e.message);
+      }
       const lexiaKnowledgeDir = getKnowledgeDir();
       console.log(`🧠 Paw AI (interne) - dossier indexé: ${lexiaKnowledgeDir}`);
       getKnowledgeStats()
@@ -353,8 +453,13 @@ const startServer = async () => {
 
       if (isDatabaseConnected) {
         const { checkTarificationInstallmentReminders } = require('./utils/tarificationInstallmentNotifications');
+        const { runForEachActiveTenant } = require('./lib/tenant/runForEachActiveTenant');
         const runTarificationInstallmentReminders = () => {
-          void checkTarificationInstallmentReminders();
+          void runForEachActiveTenant(async () => {
+            await checkTarificationInstallmentReminders();
+          }).catch((err) => {
+            console.error('❌ Rappels tarification (multi-tenant):', err.message || err);
+          });
         };
         setTimeout(runTarificationInstallmentReminders, 60_000);
         setInterval(runTarificationInstallmentReminders, 24 * 60 * 60 * 1000);

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { notificationsAPI } from '@/lib/api';
 import { emitNotificationsUpdated } from '@/lib/notificationsEvents';
 import { Toast } from '@/components/Toast';
+import { canViewAdminDomain, getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 function Button({ children, variant = 'default', size = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
@@ -56,9 +57,12 @@ export default function AdminNotificationsPage() {
       router.push('/auth/signin');
     } else if (status === 'authenticated') {
       const userRole = (session?.user as any)?.role;
-      const isAuthorized = userRole === 'admin' || userRole === 'superadmin';
-      if (!isAuthorized) {
+      if (!isCabinetStaffRole(userRole)) {
         router.push('/client');
+        return;
+      }
+      if (!canViewAdminDomain(userRole, 'notifications')) {
+        router.replace(getStaffLandingPath(userRole));
         return;
       }
       // Ensure token is stored in localStorage

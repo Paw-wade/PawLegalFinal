@@ -3,10 +3,9 @@ const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require('docx');
 
-const DossierDocumentDraft = require('../models/DossierDocumentDraft');
-const Dossier = require('../models/Dossier');
 const { protect } = require('../middleware/auth');
 
+const M = require('../tenantModels');
 const router = express.Router();
 router.use(protect);
 
@@ -81,7 +80,7 @@ function parseDueDateField(value) {
 // @route GET /api/dossier-document-drafts/count
 router.get('/dossier-document-drafts/count', staffOnly, async (req, res) => {
   try {
-    const count = await DossierDocumentDraft.countDocuments();
+    const count = await M.DossierDocumentDraft.countDocuments();
     return res.json({ success: true, count });
   } catch (e) {
     console.error('dossier-document-drafts count:', e);
@@ -100,7 +99,7 @@ router.get('/dossier-document-drafts', staffOnly, async (req, res) => {
         { body: new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
       ];
     }
-    const drafts = await DossierDocumentDraft.find(filter)
+    const drafts = await M.DossierDocumentDraft.find(filter)
       .sort({ updatedAt: -1 })
       .populate(dossierPopulate)
       .populate('createdBy', 'firstName lastName email')
@@ -124,7 +123,7 @@ router.get('/dossier-document-drafts/:id/docx', staffOnly, async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: 'ID invalide' });
     }
-    const draft = await DossierDocumentDraft.findById(req.params.id).populate(dossierPopulate).lean();
+    const draft = await M.DossierDocumentDraft.findById(req.params.id).populate(dossierPopulate).lean();
     if (!draft) {
       return res.status(404).json({ success: false, message: 'Brouillon introuvable' });
     }
@@ -184,7 +183,7 @@ router.get('/dossier-document-drafts/:id', staffOnly, async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: 'ID invalide' });
     }
-    const draft = await DossierDocumentDraft.findById(req.params.id)
+    const draft = await M.DossierDocumentDraft.findById(req.params.id)
       .populate(dossierPopulate)
       .populate('createdBy', 'firstName lastName email')
       .lean();
@@ -216,19 +215,19 @@ router.post(
       if (!mongoose.Types.ObjectId.isValid(dossierId)) {
         return res.status(400).json({ success: false, message: 'dossierId invalide' });
       }
-      const dossier = await Dossier.findById(dossierId);
+      const dossier = await M.Dossier.findById(dossierId);
       if (!dossier) {
         return res.status(404).json({ success: false, message: 'Dossier introuvable' });
       }
       const dueParsed = parseDueDateField(dueDateRaw);
-      const draft = await DossierDocumentDraft.create({
+      const draft = await M.DossierDocumentDraft.create({
         dossier: dossierId,
         title,
         body: bodyHtml != null ? String(bodyHtml) : '',
         createdBy: req.user.id,
         ...(dueParsed !== undefined ? { dueDate: dueParsed } : {}),
       });
-      const populated = await DossierDocumentDraft.findById(draft._id)
+      const populated = await M.DossierDocumentDraft.findById(draft._id)
         .populate(dossierPopulate)
         .populate('createdBy', 'firstName lastName email')
         .lean();
@@ -257,7 +256,7 @@ router.patch(
       if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
         return res.status(400).json({ success: false, message: 'ID invalide' });
       }
-      const draft = await DossierDocumentDraft.findById(req.params.id);
+      const draft = await M.DossierDocumentDraft.findById(req.params.id);
       if (!draft) {
         return res.status(404).json({ success: false, message: 'Brouillon introuvable' });
       }
@@ -279,7 +278,7 @@ router.patch(
         }
       }
       await draft.save();
-      const populated = await DossierDocumentDraft.findById(draft._id)
+      const populated = await M.DossierDocumentDraft.findById(draft._id)
         .populate(dossierPopulate)
         .populate('createdBy', 'firstName lastName email')
         .lean();
@@ -300,7 +299,7 @@ router.delete('/dossier-document-drafts/:id', staffOnly, async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: 'ID invalide' });
     }
-    const r = await DossierDocumentDraft.findByIdAndDelete(req.params.id);
+    const r = await M.DossierDocumentDraft.findByIdAndDelete(req.params.id);
     if (!r) {
       return res.status(404).json({ success: false, message: 'Brouillon introuvable' });
     }

@@ -48,7 +48,7 @@ export default function AProposPage() {
           <div className="md:hidden space-y-8">
             {/* Mission */}
             <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-700">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary">
                 🎯 Notre mission
               </span>
               <h2 className="text-lg font-semibold text-foreground">Rendre vos démarches plus simples</h2>
@@ -63,7 +63,7 @@ export default function AProposPage() {
 
             {/* Vision */}
             <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-700">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary">
                 🌍 Notre vision
               </span>
               <h2 className="text-lg font-semibold text-foreground">Une plateforme claire et accessible</h2>
@@ -89,7 +89,7 @@ export default function AProposPage() {
 
             {/* Publics */}
             <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-700">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary">
                 👥 À qui nous nous adressons
               </span>
               <h2 className="text-lg font-semibold text-foreground">Les personnes que nous accompagnons</h2>
@@ -120,7 +120,7 @@ export default function AProposPage() {
 
             {/* Méthode de travail */}
             <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-700">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary">
                 📋 Notre manière de travailler
               </span>
               <h2 className="text-lg font-semibold text-foreground">
@@ -174,7 +174,7 @@ export default function AProposPage() {
 
             {/* Engagements */}
             <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-700">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary">
                 🤝 Nos engagements
               </span>
               <h2 className="text-lg font-semibold text-foreground">
@@ -207,7 +207,7 @@ export default function AProposPage() {
 
             {/* Équipe */}
             <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-3">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-700">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary">
                 👤 Notre équipe
               </span>
               <h2 className="text-lg font-semibold text-foreground">
@@ -238,7 +238,7 @@ export default function AProposPage() {
               <div className="flex flex-wrap gap-3">
                 <Link
                   href="/contact"
-                  className="px-4 py-2.5 rounded-md bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 transition-colors"
+                  className="px-4 py-2.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
                 >
                   Contactez-nous
                 </Link>
@@ -476,7 +476,7 @@ export default function AProposPage() {
                   <div className="flex flex-wrap gap-3">
                     <Link
                       href="/contact"
-                      className="px-4 py-2.5 rounded-md bg-orange-500 text-white text-xs sm:text-sm font-semibold hover:bg-orange-600 transition-colors"
+                      className="px-4 py-2.5 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors"
                     >
                       Contactez-nous
                     </Link>

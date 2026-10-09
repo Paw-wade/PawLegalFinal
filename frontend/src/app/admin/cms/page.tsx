@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { cmsAPI } from '@/lib/api';
+import { canViewAdminDomain, getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 type CmsEntry = {
   _id: string;
@@ -72,9 +73,12 @@ export default function AdminCmsPage() {
       return;
     }
     const role = (session?.user as any)?.role;
-    const isAuthorized = role === 'admin' || role === 'superadmin';
-    if (!isAuthorized) {
+    if (!isCabinetStaffRole(role)) {
       router.push('/client');
+      return;
+    }
+    if (!canViewAdminDomain(role, 'cms')) {
+      router.replace(getStaffLandingPath(role));
       return;
     }
     loadEntries();

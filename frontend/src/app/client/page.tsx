@@ -13,6 +13,7 @@ import { dossiersAPI, documentsAPI, appointmentsAPI, userAPI, messagesAPI, notif
 import { UserAvatarDisplay } from '@/components/UserAvatarDisplay';
 import { getStatutColor, getStatutLabel, getPrioriteColor } from '@/lib/dossierUtils';
 import { useCmsText } from '@/lib/contentClient';
+import { getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 const IS_DEV = process.env.NODE_ENV === 'development';
 
 function Button({ children, variant = 'default', className = '', ...props }: any) {
@@ -111,13 +112,11 @@ function ClientDashboardContent() {
 
       // Définir userRole une seule fois
       const userRole = (session.user as any)?.role;
-      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
       const isPartenaire = userRole === 'partenaire';
 
-      // Si admin, rediriger vers l'espace admin
-      if (isAdmin) {
-        if (IS_DEV) console.log('🚫 Admin tentant d\'accéder à la vue client - redirection vers /admin');
-        router.push('/admin');
+      if (isCabinetStaffRole(userRole)) {
+        if (IS_DEV) console.log('🚫 Personnel cabinet sur vue client — redirection espace équipe');
+        router.push(getStaffLandingPath(userRole));
         return;
       }
 

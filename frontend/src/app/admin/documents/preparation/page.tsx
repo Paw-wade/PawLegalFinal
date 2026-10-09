@@ -7,11 +7,10 @@ import Link from 'next/link';
 import { collaborativeDraftsAPI, dossierDocumentDraftsAPI, dossiersAPI } from '@/lib/api';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { ChevronDown, FolderOpen, Plus, Search } from 'lucide-react';
-
-const STAFF_ROLES = ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'] as const;
+import { canViewAdminDomain, isCabinetStaffRole } from '@/lib/staffAccess';
 
 function isStaffRole(role: string | undefined) {
-  return !!role && (STAFF_ROLES as readonly string[]).includes(role);
+  return isCabinetStaffRole(role) && canViewAdminDomain(role, 'documents');
 }
 
 export type UnifiedPreparationRow = {

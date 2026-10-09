@@ -1,10 +1,10 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const PDFDocument = require('pdfkit');
-const Log = require('../models/Log');
 const { protect, authorize } = require('../middleware/auth');
 const { createDocumentWithHeader } = require('../utils/documentHeader');
 
+const M = require('../tenantModels');
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification
@@ -65,7 +65,7 @@ router.get('/dlog/pdf', authorize('superadmin'), async (req, res) => {
     endDate.setHours(23, 59, 59, 999);
 
     // Récupérer tous les logs de la journée
-    const logs = await Log.find({
+    const logs = await M.Log.find({
       createdAt: {
         $gte: startDate,
         $lte: endDate
@@ -375,7 +375,7 @@ router.get('/', authorize('superadmin'), async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     // Récupérer les logs avec pagination
-    const logs = await Log.find(filter)
+    const logs = await M.Log.find(filter)
       .populate('user', 'firstName lastName email role')
       .populate('targetUser', 'firstName lastName email role')
       .sort({ createdAt: -1 })
@@ -383,7 +383,7 @@ router.get('/', authorize('superadmin'), async (req, res) => {
       .skip(skip);
 
     // Compter le total
-    const total = await Log.countDocuments(filter);
+    const total = await M.Log.countDocuments(filter);
 
     res.json({
       success: true,
@@ -422,7 +422,7 @@ router.get('/stats', authorize('superadmin'), async (req, res) => {
     }
 
     // Statistiques par action
-    const statsByAction = await Log.aggregate([
+    const statsByAction = await M.Log.aggregate([
       { $match: filter },
       {
         $group: {
@@ -434,7 +434,7 @@ router.get('/stats', authorize('superadmin'), async (req, res) => {
     ]);
 
     // Statistiques par jour
-    const statsByDay = await Log.aggregate([
+    const statsByDay = await M.Log.aggregate([
       { $match: filter },
       {
         $group: {
@@ -449,13 +449,13 @@ router.get('/stats', authorize('superadmin'), async (req, res) => {
     ]);
 
     // Nombre total de connexions
-    const loginCount = await Log.countDocuments({
+    const loginCount = await M.Log.countDocuments({
       ...filter,
       action: 'login'
     });
 
     // Nombre total d'actions
-    const totalActions = await Log.countDocuments(filter);
+    const totalActions = await M.Log.countDocuments(filter);
 
     res.json({
       success: true,

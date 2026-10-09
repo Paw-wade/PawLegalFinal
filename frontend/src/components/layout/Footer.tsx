@@ -8,7 +8,7 @@ export function Footer() {
       <div className="container mx-auto px-4">
         <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
           <div className="flex items-center gap-2">
-            <span className="text-xl font-bold text-orange-500">Ada Papers</span>
+            <span className="text-xl font-bold text-primary">Ada Papers</span>
             <span className="text-gray-400">|</span>
             <span className="text-gray-400">Service d'Accompagnement aux démarches administratives</span>
           </div>
@@ -17,6 +17,7 @@ export function Footer() {
             <Link href="/" className="text-gray-400 hover:text-primary transition-colors">Accueil</Link>
             <Link href="/nouvelle-demande" className="text-gray-400 hover:text-primary transition-colors">Nouvelle demande</Link>
             <Link href="/contact" className="text-gray-400 hover:text-primary transition-colors">Contact</Link>
+            <Link href="/saas" className="text-gray-400 hover:text-primary transition-colors">Espace organisation</Link>
             <Link href="/faq" className="text-gray-400 hover:text-primary transition-colors">FAQ</Link>
             <Link href="/cgu" className="text-gray-400 hover:text-primary transition-colors">CGU</Link>
             <Link href="/politique-confidentialite" className="text-gray-400 hover:text-primary transition-colors">Confidentialité</Link>

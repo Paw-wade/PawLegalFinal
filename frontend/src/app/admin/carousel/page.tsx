@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { cmsAPI, mediaAPI } from '@/lib/api';
+import { canViewAdminDomain, getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 type SlideType = 'image' | 'video';
 
@@ -315,7 +316,7 @@ export default function AdminCarouselPage() {
   };
 
   const role = (session?.user as any)?.role;
-  const isAuthorized = role === 'admin' || role === 'superadmin';
+  const isAuthorized = isCabinetStaffRole(role) && canViewAdminDomain(role, 'cms');
 
   if (status === 'loading') {
     return (

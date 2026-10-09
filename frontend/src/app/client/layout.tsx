@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { getStaffLandingPath, isCabinetStaffRole } from '@/lib/staffAccess';
 
 export default function ClientLayout({
   children,
@@ -19,16 +20,13 @@ export default function ClientLayout({
     
     if (status === 'authenticated' && session) {
       const userRole = (session.user as any)?.role;
-      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
       const isPartenaire = userRole === 'partenaire';
-      
-      // Si admin, rediriger vers /admin
-      if (isAdmin) {
-        router.push('/admin');
+
+      if (isCabinetStaffRole(userRole)) {
+        router.push(getStaffLandingPath(userRole));
         return;
       }
-      
-      // Si partenaire, rediriger vers /partenaire
+
       if (isPartenaire) {
         router.push('/partenaire');
         return;
@@ -39,10 +37,9 @@ export default function ClientLayout({
   // Si admin ou partenaire, ne rien afficher (redirection en cours)
   if (status === 'authenticated' && session) {
     const userRole = (session.user as any)?.role;
-    const isAdmin = userRole === 'admin' || userRole === 'superadmin';
     const isPartenaire = userRole === 'partenaire';
-    
-    if (isAdmin || isPartenaire) {
+
+    if (isCabinetStaffRole(userRole) || isPartenaire) {
       return (
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">

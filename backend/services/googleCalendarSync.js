@@ -357,7 +357,8 @@ async function syncAppointmentGoogleCalendar(rendezVous, getMotifLabel) {
   if (!rendezVous || rendezVous.statut === 'annule') return;
   if (!isWriteConfigured()) return;
 
-  const RendezVous = require('../models/RendezVous');
+  const { getModel } = require('../lib/tenant/asyncContext');
+  const RendezVous = getModel('RendezVous');
   const motifLabel =
     typeof getMotifLabel === 'function' ? getMotifLabel(rendezVous.motif) : String(rendezVous.motif || '');
   const body = buildEventBody(rendezVous, motifLabel);
@@ -437,7 +438,8 @@ async function removeGoogleCalendarEventIfAny(rendezVous) {
   if (!rendezVous?.googleCalendarEventId) return;
   if (!isWriteConfigured()) return;
 
-  const RendezVous = require('../models/RendezVous');
+  const { getModel } = require('../lib/tenant/asyncContext');
+  const RendezVous = getModel('RendezVous');
   let token;
   try {
     token = await getAccessToken();

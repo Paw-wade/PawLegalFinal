@@ -6,7 +6,7 @@ import { Footer } from '@/components/layout/Footer';
 function Button({ children, variant = 'default', className = '', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors';
   const variantClasses = {
-    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
+    default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md font-semibold',
     ghost: 'hover:bg-accent',
   };
   return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} {...props}>{children}</button>;
@@ -22,7 +22,7 @@ export default function MentionsLegalesPage() {
             <nav className="hidden md:flex items-center gap-6">
               <Link href="/" className="hover:text-primary">Accueil</Link>
               <Link href="/services" className="hover:text-primary">Services</Link>
-              <Link href="/calculateur" className="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600 transition-colors shadow-md">Calculateur</Link>
+              <Link href="/calculateur" className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-semibold hover:bg-primary/90 transition-colors shadow-md">Calculateur</Link>
               <Link href="/faq" className="hover:text-primary">FAQ</Link>
               <Link href="/contact" className="hover:text-primary">Contact</Link>
             </nav>

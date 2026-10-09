@@ -1,3 +1,5 @@
+import { canAccessDossiersAsStaff } from './staffAccess';
+
 export const DOSSIER_STAFF_ROLES = [
   'admin',
   'superadmin',
@@ -6,13 +8,13 @@ export const DOSSIER_STAFF_ROLES = [
   'secretaire',
   'juriste',
   'stagiaire',
+  'visiteur',
 ] as const;
 
 export type DossierStaffRole = (typeof DOSSIER_STAFF_ROLES)[number];
 
 export function isDossierStaffRole(role?: string | null): boolean {
-  if (!role) return false;
-  return (DOSSIER_STAFF_ROLES as readonly string[]).includes(role);
+  return canAccessDossiersAsStaff(role);
 }
 
 export function normalizeDossierId(value: unknown): string {

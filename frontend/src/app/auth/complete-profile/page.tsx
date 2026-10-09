@@ -13,7 +13,7 @@ import { getProfilePhotoAbsoluteUrl, mergeProfileFormValuesFromDom } from '@/lib
 function Button({ children, variant = 'default', className = '', disabled = false, type = 'button', ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50';
   const variantClasses = {
-    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
+    default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-md font-semibold',
     outline: 'border border-input bg-background hover:bg-accent',
   };
   return (
@@ -577,7 +577,7 @@ export default function CompleteProfilePage() {
               {/* Section Adresse */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                     <span className="text-xl">📍</span>
                   </div>
                   <h3 className="text-lg font-semibold text-foreground">Adresse</h3>

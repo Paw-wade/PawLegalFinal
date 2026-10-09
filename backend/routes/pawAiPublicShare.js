@@ -1,8 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
 const { protect, authorize } = require('../middleware/auth');
-const PawAiPublicShare = require('../models/PawAiPublicShare');
-
 const LEXIA_SHARE_ROLES = [
   'client',
   'admin',
@@ -41,6 +39,7 @@ function sanitizeIncomingMessages(raw) {
   return out.length ? out : null;
 }
 
+const M = require('../tenantModels');
 const router = express.Router();
 
 /**
@@ -68,7 +67,7 @@ router.post('/', protect, authorize(...LEXIA_SHARE_ROLES), async (req, res) => {
     const token = crypto.randomBytes(TOKEN_BYTES).toString('hex');
     const expiresAt = new Date(Date.now() + TTL_MS);
 
-    await PawAiPublicShare.create({
+    await M.PawAiPublicShare.create({
       token,
       title,
       scope,
@@ -99,7 +98,7 @@ router.get('/:token', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Lien introuvable.' });
     }
 
-    const doc = await PawAiPublicShare.findOne({ token }).lean();
+    const doc = await M.PawAiPublicShare.findOne({ token }).lean();
     if (!doc) {
       return res.status(404).json({ success: false, error: 'Lien introuvable ou expiré.' });
     }
