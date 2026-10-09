@@ -4418,7 +4418,9 @@ router.put(
           dossier.etapesSupplementaires = etapesSupplementaires.map((e, idx) => ({
             id: e.id || e.label || `step_${idx}`,
             label: e.label || '',
-            date: e.date ? new Date(e.date) : undefined,
+            dateDebut: e.dateDebut ? new Date(e.dateDebut) : undefined,
+            dateFin: e.dateFin ? new Date(e.dateFin) : (e.date ? new Date(e.date) : undefined),
+            statut: e.statut || '',
             ordre: typeof e.ordre === 'number' ? e.ordre : idx,
             addedAt: e.addedAt ? new Date(e.addedAt) : new Date(),
             addedBy: req.user.id
@@ -4651,7 +4653,9 @@ router.put(
         dossier.etapesSupplementaires = bodyEtapesSupplementaires.map((e, idx) => ({
           id: e.id || e.label || `step_${idx}`,
           label: e.label || '',
-          date: e.date ? new Date(e.date) : undefined,
+          dateDebut: e.dateDebut ? new Date(e.dateDebut) : undefined,
+          dateFin: e.dateFin ? new Date(e.dateFin) : (e.date ? new Date(e.date) : undefined),
+          statut: e.statut || '',
           ordre: typeof e.ordre === 'number' ? e.ordre : idx,
           addedAt: e.addedAt ? new Date(e.addedAt) : new Date(),
           addedBy: e.addedBy || req.user.id

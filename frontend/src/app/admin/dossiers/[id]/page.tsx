@@ -660,24 +660,43 @@ export default function AdminDossierDetailPage() {
                               </div>
                               <div className="flex flex-col min-w-0">
                                 <span className="text-xs text-gray-800 truncate">{step.label}</span>
-                                {step.date && (
+                                {step.dateDebut && (
                                   <span className="text-[10px] text-gray-500">
-                                    Echeance : {new Date(step.date).toLocaleDateString('fr-FR')}
+                                    Debut : {new Date(step.dateDebut).toLocaleDateString('fr-FR')}
+                                  </span>
+                                )}
+                                {step.dateFin && (
+                                  <span className="text-[10px] text-gray-500">
+                                    Echeance : {new Date(step.dateFin).toLocaleDateString('fr-FR')}
                                   </span>
                                 )}
                               </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              <input
-                                type="date"
-                                value={step.date ? new Date(step.date).toISOString().slice(0, 10) : ''}
-                                onChange={(e) =>
-                                  setLocalSteps((prev) =>
-                                    prev.map((s, i) => i === index ? { ...s, date: e.target.value } : s)
-                                  )
-                                }
-                                className="text-[10px] px-2 py-1 rounded border border-gray-300 bg-white"
-                              />
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[9px] text-gray-400 leading-none">Debut</label>
+                                <input
+                                  type="date"
+                                  value={step.dateDebut ? new Date(step.dateDebut).toISOString().slice(0, 10) : ''}
+                                  onChange={(e) =>
+                                    setLocalSteps((prev) =>
+                                      prev.map((s, i) => i === index ? { ...s, dateDebut: e.target.value || null } : s)
+                                    )
+                                  }
+                                  className="text-[10px] px-2 py-1 rounded border border-gray-300 bg-white"
+                                />
+                                <label className="text-[9px] text-gray-400 leading-none">Echeance</label>
+                                <input
+                                  type="date"
+                                  value={step.dateFin ? new Date(step.dateFin).toISOString().slice(0, 10) : ''}
+                                  onChange={(e) =>
+                                    setLocalSteps((prev) =>
+                                      prev.map((s, i) => i === index ? { ...s, dateFin: e.target.value || null } : s)
+                                    )
+                                  }
+                                  className="text-[10px] px-2 py-1 rounded border border-gray-300 bg-white"
+                                />
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => setLocalSteps((prev) => prev.filter((_, i) => i !== index))}
@@ -762,7 +781,12 @@ export default function AdminDossierDetailPage() {
                       etapesSupplementaires: localSteps.map((step) => ({
                         id: step.id,
                         label: step.label,
-                        date: step.date || null,
+                        dateDebut: step.dateDebut || null,
+                        dateFin: step.dateFin || null,
+                        statut: step.statut || '',
+                        ordre: step.ordre,
+                        addedAt: step.addedAt,
+                        addedBy: step.addedBy,
                       })),
                     });
                     setShowStepsModal(false);
@@ -1066,9 +1090,14 @@ export default function AdminDossierDetailPage() {
                               <span className={`font-medium leading-snug ${isCurrent ? 'text-blue-800' : 'text-gray-700'}`}>
                                 {step.label}
                               </span>
-                              {step.date && (
-                                <span className="mt-1 block text-[11px] text-gray-500">
-                                  ⏰ {new Date(step.date).toLocaleDateString('fr-FR')}
+                              {step.dateDebut && (
+                                <span className="mt-0.5 block text-[10px] text-gray-400">
+                                  Debut : {new Date(step.dateDebut).toLocaleDateString('fr-FR')}
+                                </span>
+                              )}
+                              {step.dateFin && (
+                                <span className="mt-0.5 block text-[10px] text-gray-500">
+                                  ⏰ {new Date(step.dateFin).toLocaleDateString('fr-FR')}
                                 </span>
                               )}
                             </div>
@@ -1097,9 +1126,9 @@ export default function AdminDossierDetailPage() {
                                 >
                                   {step.label}
                                 </span>
-                                {step.date && (
+                                {step.dateFin && (
                                   <span className="text-[9px] text-gray-400">
-                                    ⏰ {new Date(step.date).toLocaleDateString('fr-FR')}
+                                    ⏰ {new Date(step.dateFin).toLocaleDateString('fr-FR')}
                                   </span>
                                 )}
                               </div>

@@ -104,7 +104,7 @@ export function collectAdminDossierAgendaItems(
 
     const steps = Array.isArray(d.etapesSupplementaires) ? d.etapesSupplementaires : [];
     steps.forEach((e: any, idx: number) => {
-      const ed = parseToStartOfLocalDay(e?.date);
+      const ed = parseToStartOfLocalDay(e?.dateFin ?? e?.date);
       if (ed == null) return;
       const bucket = classify(ed);
       if (!bucket) return;

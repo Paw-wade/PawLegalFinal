@@ -255,7 +255,9 @@ const dossierSchema = new mongoose.Schema({
   etapesSupplementaires: [{
     id: { type: String, trim: true },
     label: { type: String, required: true, trim: true },
-    date: { type: Date },
+    dateDebut: { type: Date },
+    dateFin: { type: Date },
+    statut: { type: String, enum: ['', 'en_cours', 'termine'], default: '' },
     ordre: { type: Number, default: 0 },
     addedAt: { type: Date, default: Date.now },
     addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
