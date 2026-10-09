@@ -62,6 +62,19 @@ const organizationSchema = new mongoose.Schema(
         default: ['dossiers', 'messagerie', 'documents', 'rendez-vous'],
       },
     },
+    storage: {
+      provider: {
+        type: String,
+        enum: ['cloudflare', 'aws', 'none'],
+        default: 'none',
+      },
+      endpoint: { type: String, default: '' },
+      bucket: { type: String, default: '' },
+      accountId: { type: String, default: '' },
+      accessKeyId: { type: String, default: '' },
+      secretAccessKey: { type: String, default: '' },
+      publicUrl: { type: String, default: '' },
+    },
   },
   { timestamps: true }
 );

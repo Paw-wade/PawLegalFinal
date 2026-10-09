@@ -73,6 +73,7 @@ async function tenantMiddleware(req, res, next) {
       email: org.email,
       landingPage: org.landingPage,
       limits: org.limits,
+      storage: org.storage || null,
       public: toPublicOrg(org),
     };
     req.tenantDb = conn;

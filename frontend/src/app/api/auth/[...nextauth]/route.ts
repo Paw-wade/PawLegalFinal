@@ -1,7 +1,24 @@
 ﻿import NextAuth, { type Account, type NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
+import { type NextRequest } from 'next/server';
 import { authApiPath } from '@/lib/publicApiUrl';
+
+function extractTenantSlug(host: string): string {
+  const hostname = host.split(':')[0].toLowerCase();
+  const parts = hostname.split('.');
+  if (parts.length >= 2 && parts[parts.length - 1] === 'localhost') {
+    const sub = parts.slice(0, -1).join('.');
+    if (sub && sub !== 'www') {
+      return sub.startsWith('cabinet-') ? sub : `cabinet-${sub}`;
+    }
+  }
+  return process.env.NEXT_PUBLIC_DEFAULT_ORG_SLUG || '';
+}
+
+function tenantHeaders(slug: string): Record<string, string> {
+  return slug ? { 'X-Tenant-Slug': slug } : {};
+}
 
 /**
  * NEXTAUTH_URL must be ONE origin (ex. https://www.adapapers.fr).
@@ -54,7 +71,9 @@ function signInErr(message: string) {
   return `/auth/signin?error=google&message=${encodeURIComponent(message)}`;
 }
 
-// Configuration NextAuth
+function buildAuthOptions(tenantSlug: string): NextAuthOptions {
+const th = tenantHeaders(tenantSlug);
+
 const providers: NextAuthOptions['providers'] = [
   CredentialsProvider({
     name: 'Credentials',
@@ -73,6 +92,7 @@ const providers: NextAuthOptions['providers'] = [
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...th,
           },
           body: JSON.stringify({
             email: credentials.email,
@@ -117,6 +137,7 @@ const providers: NextAuthOptions['providers'] = [
 ];
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+
   const googleAuthParams = {
     prompt: 'select_account',
     access_type: 'online' as const,
@@ -140,8 +161,32 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   );
 }
 
+const devCookies: NextAuthOptions['cookies'] = process.env.NODE_ENV === 'development' ? {
+  sessionToken: {
+    name: 'next-auth.session-token',
+    options: { httpOnly: true, sameSite: 'lax', path: '/', domain: '.localhost', secure: false },
+  },
+  callbackUrl: {
+    name: 'next-auth.callback-url',
+    options: { sameSite: 'lax', path: '/', domain: '.localhost', secure: false },
+  },
+  csrfToken: {
+    name: 'next-auth.csrf-token',
+    options: { httpOnly: true, sameSite: 'lax', path: '/', domain: '.localhost', secure: false },
+  },
+  state: {
+    name: 'next-auth.state',
+    options: { httpOnly: true, sameSite: 'lax', path: '/', domain: '.localhost', maxAge: 900, secure: false },
+  },
+  nonce: {
+    name: 'next-auth.nonce',
+    options: { httpOnly: true, sameSite: 'lax', path: '/', domain: '.localhost', secure: false },
+  },
+} : undefined;
+
 const authOptions: NextAuthOptions = {
   providers,
+  cookies: devCookies,
   callbacks: {
     async signIn({ account, profile }) {
       if (account?.provider !== 'google' && account?.provider !== 'google-signup') {
@@ -182,6 +227,7 @@ const authOptions: NextAuthOptions = {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...th,
           },
           body: JSON.stringify(googlePayload),
         });
@@ -230,6 +276,7 @@ const authOptions: NextAuthOptions = {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              ...th,
             },
             body: JSON.stringify(googlePayload),
           });
@@ -323,7 +370,15 @@ const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET || 'your-secret-key-change-this-in-production',
 };
 
-const handler = NextAuth(authOptions);
+return authOptions;
+}
+
+async function handler(req: NextRequest, context: { params: { nextauth: string[] } }) {
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+  const tenantSlug = extractTenantSlug(host);
+  const options = buildAuthOptions(tenantSlug);
+  return NextAuth(options)(req as any, context);
+}
 
 export { handler as GET, handler as POST };
 
