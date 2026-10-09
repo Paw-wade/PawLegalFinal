@@ -149,7 +149,21 @@ function getPrimaryFrontendUrl() {
   return normalized[0] || 'http://localhost:3004';
 }
 
+function isOriginAllowed(origin) {
+  if (!origin) return true;
+  if (getFrontendOriginsList().includes(origin)) return true;
+  if (isLocalhostOrigin(origin)) return true;
+  try {
+    const { isTenantCorsOriginAllowed } = require('../lib/tenant/tenantCorsOrigins');
+    if (isTenantCorsOriginAllowed(origin)) return true;
+  } catch {
+    /* tenant CORS module optional at cold start */
+  }
+  return false;
+}
+
 module.exports = {
   getFrontendOriginsList,
   getPrimaryFrontendUrl,
+  isOriginAllowed,
 };
