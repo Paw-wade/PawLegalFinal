@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { questionnairesAPI, dossiersAPI } from '@/lib/api';
 import {
   ArrowLeft, Plus, Trash2, ChevronUp, ChevronDown, Copy, Check,
-  ExternalLink, Link2, Paperclip, FolderOpen, Eye, EyeOff, X
+  ExternalLink, Link2, Paperclip, FolderOpen, Eye, EyeOff, X, Mail
 } from 'lucide-react';
 
 type QuestionType = 'texte_court' | 'texte_long' | 'choix_unique' | 'choix_multiple' | 'date' | 'fichier' | 'section';
@@ -226,6 +226,10 @@ export default function QuestionnaireDetailPage() {
   const [creerCategorie, setCreerCategorie] = useState('autre');
   const [creerLoading, setCreerLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
+  const [envoyerModal, setEnvoyerModal] = useState(false);
+  const [envoyerEmail, setEnvoyerEmail] = useState('');
+  const [envoyerNom, setEnvoyerNom] = useState('');
+  const [envoyerLoading, setEnvoyerLoading] = useState(false);
 
   // Champs editables
   const [titre, setTitre] = useState('');
@@ -354,6 +358,22 @@ export default function QuestionnaireDetailPage() {
       setCopiedUrl(true);
       setTimeout(() => setCopiedUrl(false), 2000);
     });
+  }
+
+  async function handleEnvoyerEmail() {
+    if (!id || !envoyerEmail.trim()) return;
+    setEnvoyerLoading(true);
+    try {
+      await questionnairesAPI.envoyerEmail(id, { email: envoyerEmail.trim(), nom: envoyerNom.trim() || undefined });
+      showToast('Email envoye.', 'ok');
+      setEnvoyerModal(false);
+      setEnvoyerEmail('');
+      setEnvoyerNom('');
+    } catch (e: any) {
+      showToast(e?.response?.data?.message || 'Erreur lors de l\'envoi.', 'err');
+    } finally {
+      setEnvoyerLoading(false);
+    }
   }
 
   async function handleRattacherDossier(reponseId: string, dossierId: string | null) {
@@ -493,6 +513,55 @@ export default function QuestionnaireDetailPage() {
           toast.type === 'ok' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
         }`}>
           {toast.msg}
+        </div>
+      )}
+
+      {envoyerModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Envoyer le lien par email</h3>
+              <button type="button" onClick={() => { setEnvoyerModal(false); setEnvoyerEmail(''); setEnvoyerNom(''); }} className="text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Email du destinataire <span className="text-red-500">*</span></label>
+              <input
+                type="email"
+                autoFocus
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={envoyerEmail}
+                onChange={e => setEnvoyerEmail(e.target.value)}
+                placeholder="client@exemple.com"
+                onKeyDown={e => { if (e.key === 'Enter' && envoyerEmail.trim()) handleEnvoyerEmail(); }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Nom du destinataire (optionnel)</label>
+              <input
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={envoyerNom}
+                onChange={e => setEnvoyerNom(e.target.value)}
+                placeholder="Prenom Nom"
+              />
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={handleEnvoyerEmail}
+                disabled={envoyerLoading || !envoyerEmail.trim()}
+                className="flex-1 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors"
+              >
+                {envoyerLoading ? 'Envoi...' : 'Envoyer'}
+              </button>
+              <button
+                onClick={() => { setEnvoyerModal(false); setEnvoyerEmail(''); setEnvoyerNom(''); }}
+                className="flex-1 py-2 border border-input rounded-lg text-sm hover:bg-muted transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -713,7 +782,14 @@ export default function QuestionnaireDetailPage() {
                   className="flex-shrink-0 text-xs px-3 py-1 border border-input rounded-md hover:bg-muted transition-colors flex items-center gap-1"
                 >
                   {copiedUrl ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copiedUrl ? 'Copie !' : 'Copier le lien'}
+                  {copiedUrl ? 'Copie !' : 'Copier'}
+                </button>
+                <button
+                  onClick={() => setEnvoyerModal(true)}
+                  className="flex-shrink-0 text-xs px-3 py-1 border border-primary text-primary rounded-md hover:bg-primary/10 transition-colors flex items-center gap-1"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Envoyer par email
                 </button>
                 <a href={questionnaire.publicUrl} target="_blank" rel="noopener noreferrer"
                   className="flex-shrink-0 p-1 hover:text-primary transition-colors">

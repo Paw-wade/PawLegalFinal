@@ -1998,6 +1998,8 @@ export const questionnairesAPI = {
     api.post(`/questionnaires/reponses/${reponseId}/rattacher-fichier`, data),
   creerDossier: (reponseId: string, data: { prenom: string; nom: string; email: string; tel: string; titre: string; categorie: string }) =>
     api.post(`/questionnaires/reponses/${reponseId}/creer-dossier`, data),
+  envoyerEmail: (id: string, data: { email: string; nom?: string }) =>
+    api.post(`/questionnaires/${id}/envoyer-email`, data),
 };
 
 
