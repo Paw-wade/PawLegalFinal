@@ -77,12 +77,13 @@ router.get('/hero', async (req, res) => {
     }
     const videoExts = new Set(['.mp4', '.webm', '.ogg', '.mov', '.mkv', '.avi']);
     const files = fs.readdirSync(uploadDir).filter((f) => !f.startsWith('.'));
-    const rawHost = (req.get('host') || '').replace('127.0.0.1', 'localhost');
+    const backendBase = (process.env.BACKEND_URL || '').replace(/\/+$/, '')
+      || `${req.protocol}://${(req.get('host') || '').replace('127.0.0.1', 'localhost')}`;
     const media = files
       .map((filename) => {
         const ext = path.extname(filename).toLowerCase();
         const type = videoExts.has(ext) ? 'video' : 'image';
-        const url = `${req.protocol}://${rawHost}/uploads/hero-carousel/${filename}`;
+        const url = `${backendBase}/uploads/hero-carousel/${filename}`;
         const stat = fs.statSync(path.join(uploadDir, filename));
         return { filename, url, type, size: stat.size, createdAt: stat.birthtime };
       })
@@ -151,8 +152,9 @@ router.post('/hero', (req, res, next) => {
     const isVideo = req.file.mimetype.startsWith('video/');
     const isImage = req.file.mimetype.startsWith('image/');
 
-    const host = (req.get('host') || '').replace('127.0.0.1', 'localhost');
-    const publicUrl = `${req.protocol}://${host}/uploads/hero-carousel/${req.file.filename}`;
+    const backendBase = (process.env.BACKEND_URL || '').replace(/\/+$/, '')
+      || `${req.protocol}://${(req.get('host') || '').replace('127.0.0.1', 'localhost')}`;
+    const publicUrl = `${backendBase}/uploads/hero-carousel/${req.file.filename}`;
 
     res.status(201).json({
       success: true,

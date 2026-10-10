@@ -17,7 +17,12 @@ export default function ClientLayout({
 
   useEffect(() => {
     if (status === 'loading') return;
-    
+
+    if (status === 'unauthenticated') {
+      router.push('/login');
+      return;
+    }
+
     if (status === 'authenticated' && session) {
       const userRole = (session.user as any)?.role;
       const isPartenaire = userRole === 'partenaire';
@@ -33,6 +38,10 @@ export default function ClientLayout({
       }
     }
   }, [session, status, router, pathname]);
+
+  if (status === 'loading' || status === 'unauthenticated') {
+    return null;
+  }
 
   // Si admin ou partenaire, ne rien afficher (redirection en cours)
   if (status === 'authenticated' && session) {

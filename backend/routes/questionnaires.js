@@ -10,7 +10,7 @@ const Dossier = require('../models/Dossier');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
-const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotifications');
+const { sendTransactionalEmail, sendTransactionalEmailDetailed, escapeHtml } = require('../utils/emailNotifications');
 const { sendTemplatedTransactionalEmail } = require('../utils/emailTemplateMailer');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const { sendSMS, formatPhoneNumber } = require('../sendSMS');
@@ -480,6 +480,42 @@ router.delete('/:id', ...adminOnly, async (req, res) => {
     await Questionnaire.deleteOne({ _id: q._id });
     await QuestionnaireReponse.deleteMany({ questionnaire: q._id });
     return res.json({ success: true, message: 'Questionnaire supprime.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/questionnaires/:id/envoyer-email
+router.post('/:id/envoyer-email', ...adminOnly, async (req, res) => {
+  try {
+    const q = await Questionnaire.findById(req.params.id);
+    if (!q) return res.status(404).json({ success: false, message: 'Questionnaire introuvable.' });
+    if (q.statut !== 'actif') {
+      return res.status(400).json({ success: false, message: 'Le questionnaire doit etre actif pour envoyer le lien.' });
+    }
+
+    const rawEmail = String(req.body?.email || '').trim();
+    if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+      return res.status(400).json({ success: false, message: 'Adresse email invalide.' });
+    }
+    const toName = req.body?.nom ? String(req.body.nom).trim() : '';
+    const publicUrl = buildPublicUrl(req, q.token);
+
+    const ctaButton = `<p style="margin:24px 0;"><a href="${escapeHtml(publicUrl)}" style="display:inline-block;padding:12px 20px;background:#ea580c;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Remplir le formulaire</a></p>`;
+
+    const { ok, provider, error } = await sendTransactionalEmailDetailed({
+      to: rawEmail,
+      toName,
+      subject: `Formulaire a remplir : ${q.titre}`,
+      htmlContent: `<p>Notre equipe vous invite a remplir le formulaire suivant : <strong>${escapeHtml(q.titre)}</strong>.</p>${q.description ? `<p>${escapeHtml(q.description)}</p>` : ''}${ctaButton}<p style="font-size:12px;color:#6b7280;">Ou copiez ce lien dans votre navigateur :<br/>${escapeHtml(publicUrl)}</p>`,
+      textContent: `Notre equipe vous invite a remplir le formulaire : ${q.titre}.\n${q.description ? `\n${q.description}\n` : ''}\nLien : ${publicUrl}`,
+      req,
+    });
+
+    if (!ok) {
+      return res.status(500).json({ success: false, message: error || 'Envoi impossible.' });
+    }
+    return res.json({ success: true, provider });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
