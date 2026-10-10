@@ -146,6 +146,7 @@ try {
   console.error('❌ Impossible d\'enregistrer /api/cabinets:', e.message);
 }
 
+try { app.use('/api/user/dossiers/:id/lettre-mission', require('./routes/lettreMission')); console.log('Route lettre-mission enregistree'); } catch (e) { console.error('lettre-mission:', e.message); }
 try {
   app.use('/api/user/dossiers', require('./routes/dossiers'));
 } catch (e) {}
