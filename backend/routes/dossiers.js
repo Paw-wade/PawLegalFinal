@@ -15,7 +15,6 @@ const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const { sendSMS, sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
 
 const router = express.Router();
-router.use('/:id/lettre-mission', require('./lettreMission'));
 const MIN_REMINDER_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48h
 
 /** Montant fixe Ada Papers (number, chaîne, Decimal128, etc.) - même logique que le front. */
