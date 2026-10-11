@@ -2,83 +2,97 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { protect, authorizePermission } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Configuration du stockage Multer pour les médias du carrousel
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads/hero-carousel');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    const name = path
-      .basename(file.originalname, ext)
-      .replace(/[^a-zA-Z0-9]/g, '_');
-    cb(null, name + '-' + uniqueSuffix + ext);
-  },
-});
-
-// Autoriser images et vidéos courantes (formats étendus)
-const fileFilter = (req, file, cb) => {
-  const allowedImage = [
-    'image/jpeg',
-    'image/png',
-    'image/jpg',
-    'image/webp',
-    'image/gif',
-  ];
-  const allowedVideo = [
-    'video/mp4',
-    'video/webm',
-    'video/ogg',
-    'video/quicktime', // .mov (iPhone, Mac)
-    'video/x-matroska', // .mkv
-    'video/x-msvideo', // .avi
-  ];
-
-  if (allowedImage.includes(file.mimetype) || allowedVideo.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(
-      new Error(
-        'Type de fichier non autorisé. Images (JPG, PNG, WEBP, GIF) ou vidéos (MP4, WEBM, OGG, MOV, MKV, AVI) uniquement.'
-      ),
-      false
-    );
+// Cloudinary (optionnel - si CLOUDINARY_* configure, les medias carousel y sont stockes)
+let cloudinary = null;
+try {
+  const pkg = require('cloudinary');
+  if (
+    process.env.CLOUDINARY_CLOUD_NAME &&
+    process.env.CLOUDINARY_API_KEY &&
+    process.env.CLOUDINARY_API_SECRET
+  ) {
+    cloudinary = pkg.v2;
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
   }
-};
+} catch (_) {}
+
+const CLOUDINARY_FOLDER = 'pawlegal/hero-carousel';
+
+// Multer : tmp dir si Cloudinary, sinon uploads/hero-carousel local
+const diskDest = cloudinary
+  ? (req, file, cb) => {
+      const tmpDir = path.join(os.tmpdir(), 'hero-tmp');
+      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+      cb(null, tmpDir);
+    }
+  : (req, file, cb) => {
+      const uploadDir = path.join(__dirname, '../uploads/hero-carousel');
+      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+      cb(null, uploadDir);
+    };
 
 const upload = multer({
-  storage,
-  limits: {
-    fileSize: 300 * 1024 * 1024, // 300 MB max
+  storage: multer.diskStorage({
+    destination: diskDest,
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
+      cb(null, `${name}-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 300 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      'image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'image/gif',
+      'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime',
+      'video/x-matroska', 'video/x-msvideo',
+    ];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Type de fichier non autorise. Images (JPG, PNG, WEBP, GIF) ou videos (MP4, WEBM, OGG, MOV, MKV, AVI) uniquement.'), false);
   },
-  fileFilter,
 });
 
-// Toutes les routes média nécessitent un admin
+// Toutes les routes media necessitent un admin
 router.use(protect, authorizePermission('cms', 'consulter'));
 
-// @route   GET /api/media/hero
-// @desc    Lister les medias stockes pour le carrousel
-// @access  Private (admin, superadmin)
+// GET /api/media/hero
 router.get('/hero', async (req, res) => {
   try {
-    const uploadDir = path.join(__dirname, '../uploads/hero-carousel');
-    if (!fs.existsSync(uploadDir)) {
-      return res.json({ success: true, media: [] });
+    if (cloudinary) {
+      const [imgRes, vidRes] = await Promise.all([
+        cloudinary.api.resources({ type: 'upload', prefix: CLOUDINARY_FOLDER + '/', resource_type: 'image', max_results: 100 }),
+        cloudinary.api.resources({ type: 'upload', prefix: CLOUDINARY_FOLDER + '/', resource_type: 'video', max_results: 100 }),
+      ]);
+      const toItem = (r, type) => ({
+        filename: r.public_id,
+        url: r.secure_url,
+        type,
+        size: r.bytes,
+        createdAt: r.created_at,
+      });
+      const media = [
+        ...(imgRes.resources || []).map((r) => toItem(r, 'image')),
+        ...(vidRes.resources || []).map((r) => toItem(r, 'video')),
+      ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      return res.json({ success: true, media });
     }
+
+    // Fallback : filesystem local
+    const uploadDir = path.join(__dirname, '../uploads/hero-carousel');
+    if (!fs.existsSync(uploadDir)) return res.json({ success: true, media: [] });
     const videoExts = new Set(['.mp4', '.webm', '.ogg', '.mov', '.mkv', '.avi']);
-    const files = fs.readdirSync(uploadDir).filter((f) => !f.startsWith('.'));
     const backendBase = (process.env.BACKEND_URL || '').replace(/\/+$/, '')
       || `${req.protocol}://${(req.get('host') || '').replace('127.0.0.1', 'localhost')}`;
+    const files = fs.readdirSync(uploadDir).filter((f) => !f.startsWith('.'));
     const media = files
       .map((filename) => {
         const ext = path.extname(filename).toLowerCase();
@@ -95,13 +109,25 @@ router.get('/hero', async (req, res) => {
   }
 });
 
-// @route   DELETE /api/media/hero/:filename
-// @desc    Supprimer un media de la galerie
-// @access  Private (admin, superadmin)
+// DELETE /api/media/hero/:filename
+// filename peut etre un public_id Cloudinary (ex: pawlegal/hero-carousel/foo-123) encode en URL
 router.delete('/hero/:filename', authorizePermission('cms', 'modifier'), async (req, res) => {
   try {
-    const { filename } = req.params;
-    if (filename.includes('/') || filename.includes('..') || filename.includes('\\')) {
+    const filename = req.params.filename;
+    if (cloudinary) {
+      // public_id peut contenir des slashes (dossier Cloudinary)
+      let destroyed = false;
+      for (const resourceType of ['image', 'video']) {
+        try {
+          const r = await cloudinary.uploader.destroy(filename, { resource_type: resourceType });
+          if (r.result === 'ok') { destroyed = true; break; }
+        } catch (_) {}
+      }
+      return res.json({ success: true, message: destroyed ? 'Media supprime' : 'Media introuvable ou deja supprime' });
+    }
+
+    // Fallback : filesystem local
+    if (filename.includes('..') || filename.includes('\\')) {
       return res.status(400).json({ success: false, message: 'Nom de fichier invalide' });
     }
     const filePath = path.join(__dirname, '../uploads/hero-carousel', filename);
@@ -116,63 +142,62 @@ router.delete('/hero/:filename', authorizePermission('cms', 'modifier'), async (
   }
 });
 
-// @route   POST /api/media/hero
-// @desc    Telecharger un media (image ou video) pour le carrousel du hero
-// @access  Private (admin, superadmin)
+// POST /api/media/hero
 router.post('/hero', (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err) {
-      console.error('❌ Erreur upload média hero:', err);
-
+      console.error('Erreur upload media hero:', err);
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({
-          success: false,
-          message: 'Le fichier est trop volumineux. Taille maximale: 300 MB',
-        });
+        return res.status(400).json({ success: false, message: 'Le fichier est trop volumineux. Taille maximale : 300 MB' });
       }
-
-      return res.status(400).json({
-        success: false,
-        message:
-          err.message ||
-          'Erreur lors du téléversement du fichier. Vérifiez le type et la taille.',
-      });
+      return res.status(400).json({ success: false, message: err.message || 'Erreur lors du televersement du fichier.' });
     }
     next();
   });
 }, async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'Aucun fichier reçu. Le champ doit s’appeler "file".',
+      return res.status(400).json({ success: false, message: 'Aucun fichier recu. Le champ doit s\'appeler "file".' });
+    }
+
+    if (cloudinary) {
+      let result;
+      try {
+        result = await cloudinary.uploader.upload(req.file.path, {
+          resource_type: 'auto',
+          folder: CLOUDINARY_FOLDER,
+          overwrite: false,
+        });
+      } finally {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+      }
+      return res.status(201).json({
+        success: true,
+        message: 'Media televerse avec succes',
+        url: result.secure_url,
+        type: result.resource_type === 'video' ? 'video' : 'image',
+        mimetype: req.file.mimetype,
+        filename: result.public_id,
       });
     }
 
+    // Fallback : filesystem local
     const isVideo = req.file.mimetype.startsWith('video/');
-    const isImage = req.file.mimetype.startsWith('image/');
-
     const backendBase = (process.env.BACKEND_URL || '').replace(/\/+$/, '')
       || `${req.protocol}://${(req.get('host') || '').replace('127.0.0.1', 'localhost')}`;
     const publicUrl = `${backendBase}/uploads/hero-carousel/${req.file.filename}`;
-
     res.status(201).json({
       success: true,
-      message: 'Média téléversé avec succès',
+      message: 'Media televerse avec succes',
       url: publicUrl,
-      type: isVideo ? 'video' : isImage ? 'image' : 'unknown',
+      type: isVideo ? 'video' : 'image',
       mimetype: req.file.mimetype,
       filename: req.file.filename,
     });
   } catch (error) {
-    console.error('❌ Erreur lors du traitement du média hero:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur serveur lors du téléversement du média',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
-    });
+    console.error('Erreur traitement media hero:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur lors du televersement du media' });
   }
 });
 
 module.exports = router;
-
