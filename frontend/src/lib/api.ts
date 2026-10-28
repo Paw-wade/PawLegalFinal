@@ -1152,6 +1152,8 @@ export const dossiersAPI = {
     api.patch(`/dossier-guest-upload/suivi/${token}/fiche-requests/${reqId}/draft`, payload),
   addSuiviEtatCivilRequest: (token: string, pourPersonne?: string) =>
     api.post(`/dossier-guest-upload/suivi/${token}/etat-civil-request`, { pourPersonne }),
+  ajouterSuiviAssocie: (token: string, payload: { nom: string; ficheTypes: string[]; pieces: Array<{ libelle: string; nature: string }>; creerInvitation: boolean }) =>
+    api.post(`/dossier-guest-upload/suivi/${token}/ajouter-associe`, payload),
 
   // Liens d'invitation ciblés (déléguer le remplissage d'une fiche à une personne)
   createFicheInvite: (dossierId: string, ficheRequestIds: string[], personne?: string, allowUpload = true) =>

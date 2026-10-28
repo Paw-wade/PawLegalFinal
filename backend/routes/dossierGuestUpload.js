@@ -995,6 +995,73 @@ router.post('/suivi/:token/fiche-invites', async (req, res) => {
   }
 });
 
+// @route   POST /api/dossier-guest-upload/suivi/:token/ajouter-associe
+// @desc    Ajoute un associe/gerant avec ses fiches et pieces, et genere optionnellement un lien d'invitation
+router.post('/suivi/:token/ajouter-associe', async (req, res) => {
+  try {
+    const dossier = await findDossierBySuiviToken(req.params.token);
+    if (!dossier) return res.status(404).json({ success: false, message: 'Lien de suivi introuvable.' });
+    if (isDossierClosed(dossier)) return res.status(410).json({ success: false, message: 'Ce lien de suivi n\'est plus actif.' });
+
+    const nom = String((req.body && req.body.nom) || '').trim();
+    if (!nom) return res.status(400).json({ success: false, message: 'Nom requis.' });
+
+    const ALLOWED_FICHES = ['etat_civil', 'declaration_honneur', 'procuration'];
+    const ficheTypes = Array.isArray(req.body && req.body.ficheTypes)
+      ? req.body.ficheTypes.filter(t => ALLOWED_FICHES.includes(t))
+      : ['etat_civil'];
+    if (ficheTypes.length === 0) return res.status(400).json({ success: false, message: 'Aucune fiche valide selectionnee.' });
+
+    const piecesRaw = Array.isArray(req.body && req.body.pieces) ? req.body.pieces : [];
+    const creerInvitation = (req.body && req.body.creerInvitation) !== false;
+
+    const FicheRequest = require('../models/FicheRequest');
+    const PieceRequest = require('../models/PieceRequest');
+    const { getSchema } = require('../fiches/registry');
+
+    const createdFiches = [];
+    for (const typeFiche of ficheTypes) {
+      const schema = getSchema(typeFiche);
+      if (!schema) continue;
+      const fr = await FicheRequest.create({
+        dossier: dossier._id, typeFiche,
+        titre: `${schema.titre} - ${nom}`, pourPersonne: nom,
+      });
+      createdFiches.push(fr);
+    }
+
+    const natures = ['identite', 'casier', 'statuts', 'procuration', 'autre'];
+    const createdPieces = [];
+    for (const p of piecesRaw) {
+      const libelle = String((p && p.libelle) || '').trim();
+      if (!libelle) continue;
+      const nature = natures.includes(p && p.nature) ? p.nature : 'autre';
+      const pr = await PieceRequest.create({ dossier: dossier._id, libelle, nature, pourPersonne: nom });
+      createdPieces.push(pr);
+    }
+
+    let inviteToken = null;
+    let inviteUrl = null;
+    if (creerInvitation && createdFiches.length > 0) {
+      const FicheInvite = require('../models/FicheInvite');
+      inviteToken = crypto.randomBytes(24).toString('hex');
+      await FicheInvite.create({
+        token: inviteToken, dossier: dossier._id,
+        ficheRequests: createdFiches.map(f => f._id),
+        pieceRequests: createdPieces.map(p => p._id),
+        personne: nom, allowUpload: true, createdViaGuest: true,
+      });
+      const frontUrl = (getPrimaryFrontendUrl() || '').replace(/\/+$/, '');
+      inviteUrl = `${frontUrl}/invitation/${inviteToken}`;
+    }
+
+    return res.status(201).json({ success: true, ficheRequests: createdFiches, pieceRequests: createdPieces, inviteToken, inviteUrl });
+  } catch (err) {
+    console.error('[suivi] POST ajouter-associe:', err?.message || err);
+    return res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
 // @route   GET /api/dossier-guest-upload/suivi/:token/fiches/:ficheId/pdf
 // @desc    Télécharger le PDF d'une fiche remplie (via le lien de suivi)
 router.get('/suivi/:token/fiches/:ficheId/pdf', async (req, res) => {

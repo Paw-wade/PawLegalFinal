@@ -132,8 +132,15 @@ export default function SuiviDossierPage() {
   const [inviteUrls, setInviteUrls] = useState<Record<string, string>>({});
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [uploadingPieceId, setUploadingPieceId] = useState<string | null>(null);
-  const [addingPerson, setAddingPerson] = useState(false);
-  const [newPersonName, setNewPersonName] = useState('');
+  const [personModal, setPersonModal] = useState<{
+    open: boolean;
+    nom: string;
+    ficheTypes: string[];
+    pieces: Array<{ libelle: string; nature: string }>;
+    creerInvitation: boolean;
+    customLabel: string;
+  }>({ open: false, nom: '', ficheTypes: ['etat_civil'], pieces: [{ libelle: "Piece d'identite (carte nationale ou passeport)", nature: 'identite' }], creerInvitation: true, customLabel: '' });
+  const [associeResult, setAssocieResult] = useState<{ nom: string; inviteUrl: string } | null>(null);
   const [viewingPdf, setViewingPdf] = useState<{ url: string; titre: string } | null>(null);
   const [addingPiece, setAddingPiece] = useState(false);
   const [newPieceLibelle, setNewPieceLibelle] = useState('');
@@ -377,16 +384,27 @@ export default function SuiviDossierPage() {
     } finally { setInvitingId(null); }
   };
 
-  const handleAddPersonFiche = async () => {
-    const nom = newPersonName.trim();
-    if (!nom) return;
+  const INIT_PERSON_MODAL = { open: false, nom: '', ficheTypes: ['etat_civil' as string], pieces: [{ libelle: "Piece d'identite (carte nationale ou passeport)", nature: 'identite' }], creerInvitation: true, customLabel: '' };
+
+  const handleAddAssocie = async () => {
+    const nom = personModal.nom.trim();
+    if (!nom || personModal.ficheTypes.length === 0) return;
     setAddBusy(true); flash(null, null);
     try {
-      const res = await dossiersAPI.addSuiviEtatCivilRequest(token, nom);
-      if (res.data?.success) { flash('Fiche d’identification ajoutée.'); setNewPersonName(''); setAddingPerson(false); await load(); }
-      else flash(null, "L'ajout a échoué.");
+      const res = await dossiersAPI.ajouterSuiviAssocie(token, {
+        nom,
+        ficheTypes: personModal.ficheTypes,
+        pieces: personModal.pieces,
+        creerInvitation: personModal.creerInvitation,
+      });
+      if (res.data?.success) {
+        flash('Associe ajoute avec succes.');
+        setPersonModal(INIT_PERSON_MODAL);
+        if (res.data.inviteUrl) setAssocieResult({ nom, inviteUrl: res.data.inviteUrl });
+        await load();
+      } else flash(null, "L'ajout a echoue.");
     } catch (e: any) {
-      flash(null, e?.response?.data?.message || "L'ajout a échoué.");
+      flash(null, e?.response?.data?.message || "L'ajout a echoue.");
     } finally { setAddBusy(false); }
   };
 
@@ -907,26 +925,10 @@ export default function SuiviDossierPage() {
                     {/* Ajouter personne / piece */}
                     <div className="mt-6 flex flex-wrap gap-3">
                       {(data.ficheRequests && data.ficheRequests.length > 0) && (
-                        addingPerson ? (
-                          <div className="flex w-full flex-wrap items-center gap-2">
-                            <input type="text" autoFocus value={newPersonName}
-                              onChange={(e) => setNewPersonName(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') handleAddPersonFiche(); }}
-                              placeholder="Nom de l'associe / gerant"
-                              className="h-9 min-w-[200px] flex-1 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:outline-none" />
-                            <button type="button" onClick={handleAddPersonFiche} disabled={addBusy || !newPersonName.trim()}
-                              className="inline-flex h-9 items-center rounded-md bg-orange-500 px-3 text-xs font-medium text-white hover:bg-orange-600 disabled:opacity-60">
-                              {addBusy ? '...' : 'Ajouter'}
-                            </button>
-                            <button type="button" onClick={() => { setAddingPerson(false); setNewPersonName(''); }}
-                              className="text-xs text-gray-400 hover:text-gray-600">Annuler</button>
-                          </div>
-                        ) : (
-                          <button type="button" onClick={() => setAddingPerson(true)}
-                            className="text-xs font-medium text-orange-400 hover:underline">
-                            + Ajouter une fiche d'identification (autre associe / gerant)
-                          </button>
-                        )
+                        <button type="button" onClick={() => setPersonModal(m => ({ ...m, open: true }))}
+                          className="text-xs font-medium text-orange-400 hover:underline">
+                          + Ajouter un associe / gerant
+                        </button>
                       )}
                     </div>
                     {/* Documents PDF generes */}
@@ -1257,6 +1259,116 @@ export default function SuiviDossierPage() {
             className="flex-1 w-full border-0"
             title={viewingPdf.titre}
           />
+        </div>
+      )}
+
+      {/* Banner lien d'invitation associe */}
+      {associeResult && (
+        <div className="fixed bottom-6 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 rounded-2xl border border-orange-200 bg-white px-5 py-4 shadow-2xl">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-gray-900">Lien d'invitation pour {associeResult.nom}</span>
+            <button type="button" onClick={() => setAssocieResult(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+          </div>
+          <p className="mb-3 text-xs text-gray-500">Partagez ce lien avec l'associe pour qu'il remplisse ses fiches et fournisse ses pieces.</p>
+          <div className="flex items-center gap-2">
+            <input readOnly value={associeResult.inviteUrl}
+              className="h-8 flex-1 rounded-md border border-gray-200 bg-gray-50 px-2 text-xs text-gray-700" />
+            <button type="button"
+              onClick={() => { try { navigator.clipboard.writeText(associeResult!.inviteUrl); } catch {} flash('Lien copie !'); }}
+              className="inline-flex h-8 items-center rounded-md bg-orange-500 px-3 text-xs font-medium text-white hover:bg-orange-600">
+              Copier
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modale ajout associe/gerant */}
+      {personModal.open && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" onClick={(e) => { if (e.target === e.currentTarget) setPersonModal(m => ({ ...m, open: false })); }}>
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <h2 className="text-base font-semibold text-gray-900">Ajouter un associe / gerant</h2>
+              <button type="button" onClick={() => setPersonModal(m => ({ ...m, open: false }))} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="space-y-4 px-5 py-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Nom complet</label>
+                <input autoFocus value={personModal.nom}
+                  onChange={e => setPersonModal(m => ({ ...m, nom: e.target.value }))}
+                  placeholder="Prenom Nom"
+                  className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:outline-none" />
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-medium text-gray-500">Fiches a remplir</p>
+                {[
+                  { type: 'etat_civil', label: "Fiche d'etat civil" },
+                  { type: 'declaration_honneur', label: "Declaration sur l'honneur" },
+                  { type: 'procuration', label: 'Procuration speciale' },
+                ].map(({ type, label }) => (
+                  <label key={type} className="mb-1 flex cursor-pointer items-center gap-2">
+                    <input type="checkbox" className="accent-orange-500 h-4 w-4"
+                      checked={personModal.ficheTypes.includes(type)}
+                      onChange={e => setPersonModal(m => ({
+                        ...m, ficheTypes: e.target.checked ? [...m.ficheTypes, type] : m.ficheTypes.filter(t => t !== type),
+                      }))} />
+                    <span className="text-sm text-gray-700">{label}</span>
+                  </label>
+                ))}
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-medium text-gray-500">Documents a fournir</p>
+                {[
+                  { libelle: "Piece d'identite (carte nationale ou passeport)", nature: 'identite' },
+                  { libelle: 'Casier judiciaire B3 (moins de 3 mois)', nature: 'casier' },
+                  { libelle: 'Justificatif de domicile (moins de 3 mois)', nature: 'autre' },
+                  { libelle: 'Attestation de regularite fiscale', nature: 'autre' },
+                ].map((p, i) => {
+                  const checked = personModal.pieces.some(pp => pp.libelle === p.libelle);
+                  return (
+                    <label key={i} className="mb-1 flex cursor-pointer items-center gap-2">
+                      <input type="checkbox" className="accent-orange-500 h-4 w-4"
+                        checked={checked}
+                        onChange={e => setPersonModal(m => ({
+                          ...m, pieces: e.target.checked ? [...m.pieces, p] : m.pieces.filter(pp => pp.libelle !== p.libelle),
+                        }))} />
+                      <span className="text-sm text-gray-700">{p.libelle}</span>
+                    </label>
+                  );
+                })}
+                <div className="mt-2 flex gap-2">
+                  <input value={personModal.customLabel}
+                    onChange={e => setPersonModal(m => ({ ...m, customLabel: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && personModal.customLabel.trim()) {
+                        setPersonModal(m => ({ ...m, pieces: [...m.pieces, { libelle: m.customLabel.trim(), nature: 'autre' }], customLabel: '' }));
+                      }
+                    }}
+                    placeholder="Autre document..."
+                    className="h-8 flex-1 rounded-md border border-gray-200 px-2 text-xs text-gray-700 placeholder-gray-400 focus:border-orange-500 focus:outline-none" />
+                  <button type="button"
+                    disabled={!personModal.customLabel.trim()}
+                    onClick={() => setPersonModal(m => ({ ...m, pieces: [...m.pieces, { libelle: m.customLabel.trim(), nature: 'autre' }], customLabel: '' }))}
+                    className="inline-flex h-8 items-center rounded-md border border-orange-300 px-2 text-xs text-orange-500 hover:bg-orange-50 disabled:opacity-40">
+                    + Ajouter
+                  </button>
+                </div>
+              </div>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" className="accent-orange-500 h-4 w-4"
+                  checked={personModal.creerInvitation}
+                  onChange={e => setPersonModal(m => ({ ...m, creerInvitation: e.target.checked }))} />
+                <span className="text-sm text-gray-700">Generer un lien d'invitation pour cette personne</span>
+              </label>
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-5 py-4">
+              <button type="button" onClick={() => setPersonModal(m => ({ ...m, open: false }))} className="text-sm text-gray-500 hover:text-gray-700">Annuler</button>
+              <button type="button" onClick={handleAddAssocie}
+                disabled={addBusy || !personModal.nom.trim() || personModal.ficheTypes.length === 0}
+                className="inline-flex h-9 items-center rounded-lg bg-orange-500 px-4 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-60">
+                {addBusy ? 'Ajout en cours...' : "Ajouter l'associe"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
