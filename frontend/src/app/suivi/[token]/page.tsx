@@ -138,7 +138,7 @@ export default function SuiviDossierPage() {
   const [addingPiece, setAddingPiece] = useState(false);
   const [newPieceLibelle, setNewPieceLibelle] = useState('');
   const [addBusy, setAddBusy] = useState(false);
-  const [activeTab, setActiveTab] = useState<'a-faire' | 'documents' | 'recap' | 'messages'>('a-faire');
+  const [activeTab, setActiveTab] = useState<'fiches' | 'pieces' | 'documents' | 'recap' | 'messages'>('fiches');
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const load = useCallback(async () => {
@@ -752,7 +752,8 @@ export default function SuiviDossierPage() {
               <div className="-mb-px mt-4 flex gap-1 border-b border-gray-200">
                 {(
                   [
-                    { id: 'a-faire' as const, label: nbAFaire > 0 ? `A faire (${nbAFaire})` : 'A faire' },
+                    { id: 'fiches' as const, label: nbAFaire > 0 ? `Fiches (${nbAFaire})` : 'Fiches' },
+                    { id: 'pieces' as const, label: (() => { const n = (data.pieceRequests || []).filter(p => p.statut === 'a_fournir' || p.statut === 'a_redeposer').length; return n > 0 ? `Pieces (${n})` : 'Pieces'; })() },
                     { id: 'documents' as const, label: 'Documents' },
                     { id: 'recap' as const, label: 'Recapitulatif' },
                     { id: 'messages' as const, label: 'Messages' },
@@ -809,10 +810,10 @@ export default function SuiviDossierPage() {
               {/* Right: tab content */}
               <div className="min-w-0">
 
-                {/* A FAIRE TAB */}
-                {activeTab === 'a-faire' && (
+                {/* FICHES TAB */}
+                {activeTab === 'fiches' && (
                   <div>
-                    {allFiches.length === 0 && !(data.pieceRequests && data.pieceRequests.filter(p => p.statut !== 'annulee').length > 0) ? (
+                    {allFiches.length === 0 ? (
                       <p className="py-12 text-center text-sm text-gray-400">Aucune fiche demandee pour l'instant.</p>
                     ) : (
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -927,36 +928,7 @@ export default function SuiviDossierPage() {
                           </button>
                         )
                       )}
-                      {addingPiece ? (
-                        <div className="flex w-full flex-wrap items-center gap-2">
-                          <input type="text" autoFocus value={newPieceLibelle}
-                            onChange={(e) => setNewPieceLibelle(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleAddPieceSuivi(); }}
-                            placeholder="Intitule de la piece (ex. Statuts + RC + PV...)"
-                            className="h-9 min-w-[220px] flex-1 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:outline-none" />
-                          <button type="button" onClick={handleAddPieceSuivi} disabled={addBusy || !newPieceLibelle.trim()}
-                            className="inline-flex h-9 items-center rounded-md bg-orange-500 px-3 text-xs font-medium text-white hover:bg-orange-600 disabled:opacity-60">
-                            {addBusy ? '...' : 'Ajouter'}
-                          </button>
-                          <button type="button" onClick={() => { setAddingPiece(false); setNewPieceLibelle(''); }}
-                            className="text-xs text-gray-400 hover:text-gray-600">Annuler</button>
-                        </div>
-                      ) : (
-                        <button type="button" onClick={() => setAddingPiece(true)}
-                          className="text-xs font-medium text-orange-400 hover:underline">
-                          + Ajouter une piece (associe personne morale, procuration...)
-                        </button>
-                      )}
                     </div>
-                    {/* Pieces a joindre */}
-                    {data.pieceRequests && data.pieceRequests.filter(p => p.statut !== 'annulee').length > 0 && (
-                      <div className="mt-6">
-                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Pieces a joindre</h3>
-                        <ul className="space-y-2">
-                          {data.pieceRequests.filter(p => p.statut !== 'annulee').map(p => renderPieceItem(p))}
-                        </ul>
-                      </div>
-                    )}
                     {/* Documents PDF generes */}
                     {data.fiches && data.fiches.length > 0 && (
                       <div className="mt-6">
@@ -980,6 +952,42 @@ export default function SuiviDossierPage() {
                         </ul>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* PIECES TAB */}
+                {activeTab === 'pieces' && (
+                  <div>
+                    {(data.pieceRequests || []).filter(p => p.statut !== 'annulee').length === 0 ? (
+                      <p className="py-12 text-center text-sm text-gray-400">Aucune piece demandee pour l'instant.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {(data.pieceRequests || []).filter(p => p.statut !== 'annulee').map(p => renderPieceItem(p))}
+                      </ul>
+                    )}
+                    {/* Ajouter une piece */}
+                    <div className="mt-6">
+                      {addingPiece ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input type="text" autoFocus value={newPieceLibelle}
+                            onChange={(e) => setNewPieceLibelle(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleAddPieceSuivi(); }}
+                            placeholder="Intitule de la piece (ex. Statuts + RC + PV...)"
+                            className="h-9 min-w-[220px] flex-1 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:outline-none" />
+                          <button type="button" onClick={handleAddPieceSuivi} disabled={addBusy || !newPieceLibelle.trim()}
+                            className="inline-flex h-9 items-center rounded-md bg-orange-500 px-3 text-xs font-medium text-white hover:bg-orange-600 disabled:opacity-60">
+                            {addBusy ? '...' : 'Ajouter'}
+                          </button>
+                          <button type="button" onClick={() => { setAddingPiece(false); setNewPieceLibelle(''); }}
+                            className="text-xs text-gray-400 hover:text-gray-600">Annuler</button>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => setAddingPiece(true)}
+                          className="text-xs font-medium text-orange-400 hover:underline">
+                          + Ajouter une piece (associe personne morale, procuration...)
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
