@@ -605,7 +605,7 @@ export default function SuiviDossierPage() {
           )}
           {canFill && (
             <button type="button" onClick={() => { setFillingFicheReqId(fillingFicheReqId === r.id ? null : r.id); setFillingFicheType(r.typeFiche); flash(null, null); }}
-              className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90">
+              className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-gray-900 hover:bg-primary/90">
               {fillingFicheReqId === r.id ? 'Replier' : 'Remplir'}
             </button>
           )}
@@ -623,7 +623,7 @@ export default function SuiviDossierPage() {
         {inviteUrls[r.id] && (
           <div className="mt-1.5 flex items-center gap-2 rounded-md border border-teal-200 bg-teal-50 p-2">
             <input readOnly value={inviteUrls[r.id]} onFocus={(e) => e.currentTarget.select()} className="min-w-0 flex-1 rounded border border-teal-200 bg-white px-2 py-1 text-[11px]" />
-            <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrls[r.id])} className="flex-none rounded bg-teal-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-teal-700">Copier</button>
+            <button type="button" onClick={() => navigator.clipboard?.writeText(inviteUrls[r.id])} className="flex-none rounded bg-teal-600 px-2 py-1 text-[11px] font-medium text-gray-900 hover:bg-teal-700">Copier</button>
           </div>
         )}
         {canFill && fillingFicheReqId === r.id && (
@@ -665,7 +665,7 @@ export default function SuiviDossierPage() {
             </button>
           )}
           {p.statut !== 'fourni' && (
-            <label className={`inline-flex cursor-pointer items-center rounded-md bg-teal-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-teal-700 ${uploadingPieceId === p.id ? 'pointer-events-none opacity-60' : ''}`}>
+            <label className={`inline-flex cursor-pointer items-center rounded-md bg-teal-600 px-2.5 py-1 text-xs font-medium text-gray-900 hover:bg-teal-700 ${uploadingPieceId === p.id ? 'pointer-events-none opacity-60' : ''}`}>
               <input
                 ref={(el) => { fileInputs.current[`piece_${p.id}`] = el; }}
                 type="file"
@@ -687,13 +687,13 @@ export default function SuiviDossierPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0d1117] text-white">
+    <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900">
       <Header variant="home" />
 
       {/* Loading state */}
       {loading && (
         <div className="flex flex-1 items-center justify-center py-24">
-          <p className="text-white/50">Chargement du suivi...</p>
+          <p className="text-gray-500">Chargement du suivi...</p>
         </div>
       )}
 
@@ -710,16 +710,16 @@ export default function SuiviDossierPage() {
       {!loading && !error && data && (
         <>
           {/* Dossier header bar */}
-          <div className="border-b border-white/10 bg-[#161b22]">
+          <div className="border-b border-gray-200 bg-white">
             <div className="mx-auto max-w-6xl px-4 py-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="mb-1 flex items-center gap-2 text-xs text-white/40">
+                  <div className="mb-1 flex items-center gap-2 text-xs text-gray-400">
                     {data.dossier.numero && <span>N&#176; {data.dossier.numero}</span>}
                     {data.dossier.numero && <span>&#183;</span>}
                     <span>Depose le {formatDate(data.dossier.createdAt)}</span>
                   </div>
-                  <h1 className="text-lg font-bold leading-tight text-white">
+                  <h1 className="text-lg font-bold leading-tight text-gray-900">
                     {categorieLabel(data.dossier.categorie)} de{' '}
                     <span className="text-orange-400">{data.dossier.titre || 'votre societe'}</span>
                   </h1>
@@ -731,7 +731,7 @@ export default function SuiviDossierPage() {
                   {isConstitution && nbFichesTotal > 0 && (
                     <div className="relative flex h-14 w-14 items-center justify-center">
                       <svg className="absolute inset-0" width="56" height="56" viewBox="0 0 72 72">
-                        <circle cx="36" cy="36" r={circRadius} fill="none" stroke="#ffffff15" strokeWidth="6" />
+                        <circle cx="36" cy="36" r={circRadius} fill="none" stroke="#e5e7eb" strokeWidth="6" />
                         <circle
                           cx="36" cy="36" r={circRadius}
                           fill="none" stroke="#f97316" strokeWidth="6"
@@ -741,7 +741,7 @@ export default function SuiviDossierPage() {
                           transform="rotate(-90 36 36)"
                         />
                       </svg>
-                      <span className="relative text-xs font-bold text-white">
+                      <span className="relative text-xs font-bold text-gray-900">
                         {nbFichesRemplies}/{nbFichesTotal}
                       </span>
                     </div>
@@ -749,7 +749,7 @@ export default function SuiviDossierPage() {
                 </div>
               </div>
               {/* Tabs */}
-              <div className="-mb-px mt-4 flex gap-1 border-b border-white/10">
+              <div className="-mb-px mt-4 flex gap-1 border-b border-gray-200">
                 {(
                   [
                     { id: 'a-faire' as const, label: nbAFaire > 0 ? `A faire (${nbAFaire})` : 'A faire' },
@@ -765,7 +765,7 @@ export default function SuiviDossierPage() {
                     className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                       activeTab === tab.id
                         ? 'border-orange-500 text-orange-400'
-                        : 'border-transparent text-white/50 hover:text-white/80'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
                     }`}
                   >
                     {tab.label}
@@ -782,8 +782,8 @@ export default function SuiviDossierPage() {
               {/* Left stepper - constitution only, desktop */}
               {isConstitution && (
                 <aside className="hidden lg:block">
-                  <div className="sticky top-6 rounded-xl border border-white/10 bg-[#161b22] p-4">
-                    <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-white/40">Avancement</p>
+                  <div className="sticky top-6 rounded-xl border border-gray-200 bg-white p-4">
+                    <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Avancement</p>
                     <ol className="space-y-4">
                       {CONSTITUTION_STEPS.map(step => (
                         <li key={step.id} className="flex items-start gap-3">
@@ -792,11 +792,11 @@ export default function SuiviDossierPage() {
                               ? 'bg-green-500 text-white'
                               : step.id === currentStep
                               ? 'bg-orange-500 text-white'
-                              : 'border border-white/20 text-white/30'
+                              : 'border border-gray-300 text-gray-400'
                           }`}>
                             {step.id < currentStep ? '✓' : step.id}
                           </span>
-                          <span className={`text-sm leading-snug ${step.id <= currentStep ? 'text-white' : 'text-white/30'}`}>
+                          <span className={`text-sm leading-snug ${step.id <= currentStep ? 'text-gray-900' : 'text-gray-400'}`}>
                             {step.label}
                           </span>
                         </li>
@@ -813,7 +813,7 @@ export default function SuiviDossierPage() {
                 {activeTab === 'a-faire' && (
                   <div>
                     {allFiches.length === 0 && !(data.pieceRequests && data.pieceRequests.filter(p => p.statut !== 'annulee').length > 0) ? (
-                      <p className="py-12 text-center text-sm text-white/40">Aucune fiche demandee pour l'instant.</p>
+                      <p className="py-12 text-center text-sm text-gray-400">Aucune fiche demandee pour l'instant.</p>
                     ) : (
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {allFiches.map((r, i) => {
@@ -823,7 +823,7 @@ export default function SuiviDossierPage() {
                             <div key={r.id} className={`flex flex-col rounded-xl border p-4 transition-all ${
                               isHighlighted
                                 ? 'border-orange-500/60 bg-orange-500/10'
-                                : 'border-white/10 bg-[#161b22]'
+                                : 'border-gray-200 bg-white'
                             }`}>
                               <div className="mb-3 flex items-center justify-between">
                                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -835,20 +835,20 @@ export default function SuiviDossierPage() {
                                 }`}>
                                   {r.statut === 'remplie' ? 'Remplie' : r.statut === 'refuse' ? 'Refusee' : 'A remplir'}
                                 </span>
-                                <span className="text-[11px] text-white/30">{ficheTimeEst(r.typeFiche)}</span>
+                                <span className="text-[11px] text-gray-400">{ficheTimeEst(r.typeFiche)}</span>
                               </div>
-                              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white/60">
+                              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500">
                                 {r.pourPersonne ? personInitials(r.pourPersonne) : 'STE'}
                               </div>
-                              <p className="text-sm font-semibold text-white">{r.titre || r.typeFiche}</p>
-                              <p className="mb-3 mt-0.5 flex-1 text-xs text-white/40">{ficheSubtitleText(r)}</p>
+                              <p className="text-sm font-semibold text-gray-900">{r.titre || r.typeFiche}</p>
+                              <p className="mb-3 mt-0.5 flex-1 text-xs text-gray-400">{ficheSubtitleText(r)}</p>
                               {inviteUrls[r.id] && (
-                                <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
+                                <div className="mb-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
                                   <input readOnly value={inviteUrls[r.id]} onFocus={(e) => e.currentTarget.select()}
-                                    className="min-w-0 flex-1 rounded border border-white/10 bg-transparent px-2 py-0.5 text-[11px] text-white/70" />
+                                    className="min-w-0 flex-1 rounded border border-gray-200 bg-transparent px-2 py-0.5 text-[11px] text-gray-600" />
                                   <button type="button"
                                     onClick={() => navigator.clipboard?.writeText(inviteUrls[r.id])}
-                                    className="flex-none rounded bg-white/10 px-2 py-1 text-[11px] font-medium text-white/80 hover:bg-white/20">
+                                    className="flex-none rounded bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-200">
                                     Copier
                                   </button>
                                 </div>
@@ -857,7 +857,7 @@ export default function SuiviDossierPage() {
                                 {r.statut === 'remplie' && r.ficheId && (
                                   <button type="button" title="Voir le PDF"
                                     onClick={() => handleViewFiche(r.ficheId as string, r.titre)}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/70 hover:bg-white/10">
+                                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100">
                                     <Eye size={13} /> Voir
                                   </button>
                                 )}
@@ -867,7 +867,7 @@ export default function SuiviDossierPage() {
                                     className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors ${
                                       isHighlighted
                                         ? 'bg-orange-500 text-white hover:bg-orange-600'
-                                        : 'bg-white/10 text-white hover:bg-white/20'
+                                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
                                     }`}>
                                     {fillingFicheReqId === r.id ? 'Replier' : 'Remplir'}
                                   </button>
@@ -875,7 +875,7 @@ export default function SuiviDossierPage() {
                                 {r.typeFiche === 'etat_civil' && canFillCard && !inviteUrls[r.id] && (
                                   <button type="button" onClick={() => inviterSuivi(r.id, r.pourPersonne || r.titre)}
                                     disabled={invitingId === r.id}
-                                    className="rounded-lg border border-white/10 px-2 py-1.5 text-[11px] font-medium text-white/60 hover:bg-white/10 disabled:opacity-40">
+                                    className="rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-100 disabled:opacity-40">
                                     {invitingId === r.id ? '...' : 'Inviter'}
                                   </button>
                                 )}
@@ -883,9 +883,9 @@ export default function SuiviDossierPage() {
                               {r.validationStatus === 'refuse' && r.validationMotif && (
                                 <p className="mt-2 text-[11px] text-red-400">Motif : {r.validationMotif}. Merci de refaire la fiche.</p>
                               )}
-                              {r.message && <p className="mt-1 text-[11px] text-white/40">{r.message}</p>}
+                              {r.message && <p className="mt-1 text-[11px] text-gray-400">{r.message}</p>}
                               {canFillCard && fillingFicheReqId === r.id && (
-                                <div className="mt-3 rounded-lg border border-white/10 bg-[#0d1117] p-3">
+                                <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
                                   <FicheForm
                                     type={fillingFicheType}
                                     submitting={submittingFiche}
@@ -912,13 +912,13 @@ export default function SuiviDossierPage() {
                               onChange={(e) => setNewPersonName(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter') handleAddPersonFiche(); }}
                               placeholder="Nom de l'associe / gerant"
-                              className="h-9 min-w-[200px] flex-1 rounded-md border border-white/20 bg-[#161b22] px-3 text-sm text-white placeholder-white/30 focus:border-orange-500 focus:outline-none" />
+                              className="h-9 min-w-[200px] flex-1 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:outline-none" />
                             <button type="button" onClick={handleAddPersonFiche} disabled={addBusy || !newPersonName.trim()}
                               className="inline-flex h-9 items-center rounded-md bg-orange-500 px-3 text-xs font-medium text-white hover:bg-orange-600 disabled:opacity-60">
                               {addBusy ? '...' : 'Ajouter'}
                             </button>
                             <button type="button" onClick={() => { setAddingPerson(false); setNewPersonName(''); }}
-                              className="text-xs text-white/40 hover:text-white/70">Annuler</button>
+                              className="text-xs text-gray-400 hover:text-gray-600">Annuler</button>
                           </div>
                         ) : (
                           <button type="button" onClick={() => setAddingPerson(true)}
@@ -933,13 +933,13 @@ export default function SuiviDossierPage() {
                             onChange={(e) => setNewPieceLibelle(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') handleAddPieceSuivi(); }}
                             placeholder="Intitule de la piece (ex. Statuts + RC + PV...)"
-                            className="h-9 min-w-[220px] flex-1 rounded-md border border-white/20 bg-[#161b22] px-3 text-sm text-white placeholder-white/30 focus:border-orange-500 focus:outline-none" />
+                            className="h-9 min-w-[220px] flex-1 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:outline-none" />
                           <button type="button" onClick={handleAddPieceSuivi} disabled={addBusy || !newPieceLibelle.trim()}
                             className="inline-flex h-9 items-center rounded-md bg-orange-500 px-3 text-xs font-medium text-white hover:bg-orange-600 disabled:opacity-60">
                             {addBusy ? '...' : 'Ajouter'}
                           </button>
                           <button type="button" onClick={() => { setAddingPiece(false); setNewPieceLibelle(''); }}
-                            className="text-xs text-white/40 hover:text-white/70">Annuler</button>
+                            className="text-xs text-gray-400 hover:text-gray-600">Annuler</button>
                         </div>
                       ) : (
                         <button type="button" onClick={() => setAddingPiece(true)}
@@ -951,7 +951,7 @@ export default function SuiviDossierPage() {
                     {/* Pieces a joindre */}
                     {data.pieceRequests && data.pieceRequests.filter(p => p.statut !== 'annulee').length > 0 && (
                       <div className="mt-6">
-                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/40">Pieces a joindre</h3>
+                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Pieces a joindre</h3>
                         <ul className="space-y-2">
                           {data.pieceRequests.filter(p => p.statut !== 'annulee').map(p => renderPieceItem(p))}
                         </ul>
@@ -960,18 +960,18 @@ export default function SuiviDossierPage() {
                     {/* Documents PDF generes */}
                     {data.fiches && data.fiches.length > 0 && (
                       <div className="mt-6">
-                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/40">Documents generes</h3>
+                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Documents generes</h3>
                         <ul className="space-y-2">
                           {data.fiches.map(f => (
-                            <li key={f.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#161b22] px-3 py-2 text-sm">
-                              <span className="min-w-0 truncate text-white/80">&#128196; {f.titre}</span>
+                            <li key={f.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm">
+                              <span className="min-w-0 truncate text-gray-700">&#128196; {f.titre}</span>
                               <div className="flex flex-none items-center gap-1">
                                 <button type="button" title="Visualiser" onClick={() => handleViewFiche(f.id, f.titre)}
-                                  className="rounded border border-white/10 p-1.5 text-white/50 hover:bg-white/10">
+                                  className="rounded border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-100">
                                   <Eye size={14} />
                                 </button>
                                 <button type="button" title="Telecharger" onClick={() => handleDownloadFiche(f.id, f.titre)}
-                                  className="rounded border border-white/10 p-1.5 text-white/50 hover:bg-white/10">
+                                  className="rounded border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-100">
                                   <Download size={14} />
                                 </button>
                               </div>
@@ -987,20 +987,20 @@ export default function SuiviDossierPage() {
                 {activeTab === 'documents' && (
                   <div className="space-y-6">
                     <div>
-                      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/40">Documents demandes</h3>
+                      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Documents demandes</h3>
                       {data.documentRequests.length === 0 ? (
-                        <p className="text-sm text-white/40">Aucun document demande pour l'instant.</p>
+                        <p className="text-sm text-gray-400">Aucun document demande pour l'instant.</p>
                       ) : (
                         <ul className="space-y-3">
                           {data.documentRequests.map(r => (
-                            <li key={r.id} className="rounded-xl border border-white/10 bg-[#161b22] p-4">
+                            <li key={r.id} className="rounded-xl border border-gray-200 bg-white p-4">
                               <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-medium text-white">{r.libelle}</p>
+                                <p className="text-sm font-medium text-gray-900">{r.libelle}</p>
                                 {r.isUrgent && (
                                   <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[11px] font-semibold text-red-400">Urgent</span>
                                 )}
                               </div>
-                              {r.description && <p className="mt-0.5 text-xs text-white/40">{r.description}</p>}
+                              {r.description && <p className="mt-0.5 text-xs text-gray-400">{r.description}</p>}
                               {r.message && <p className="mt-1 rounded bg-blue-500/10 px-2 py-1 text-xs text-blue-400">&#128172; {r.message}</p>}
                               <div className="mt-3 flex items-center gap-2">
                                 <input
@@ -1009,41 +1009,41 @@ export default function SuiviDossierPage() {
                                   accept={ACCEPTED_FILES}
                                   disabled={uploadingId === r.id}
                                   onChange={(e) => handleUpload(e.target.files?.[0], r.id, r.id)}
-                                  className="block w-full text-xs text-white/50 file:mr-3 file:rounded-md file:border-0 file:bg-orange-500 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-orange-600"
+                                  className="block w-full text-xs text-gray-500 file:mr-3 file:rounded-md file:border-0 file:bg-orange-500 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-orange-600"
                                 />
-                                {uploadingId === r.id && <span className="text-xs text-white/40">Envoi...</span>}
+                                {uploadingId === r.id && <span className="text-xs text-gray-400">Envoi...</span>}
                               </div>
                             </li>
                           ))}
                         </ul>
                       )}
-                      <div className="mt-4 rounded-xl border border-white/10 bg-[#161b22] p-4">
-                        <p className="mb-2 text-xs text-white/40">Vous pouvez aussi ajouter un autre document :</p>
+                      <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+                        <p className="mb-2 text-xs text-gray-400">Vous pouvez aussi ajouter un autre document :</p>
                         <input
                           ref={(el) => { fileInputs.current['__free'] = el; }}
                           type="file"
                           accept={ACCEPTED_FILES}
                           disabled={uploadingId === '__free'}
                           onChange={(e) => handleUpload(e.target.files?.[0], null, '__free')}
-                          className="block w-full text-xs text-white/50 file:mr-3 file:rounded-md file:border file:border-white/20 file:bg-white/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white/80 hover:file:bg-white/20"
+                          className="block w-full text-xs text-gray-500 file:mr-3 file:rounded-md file:border file:border-gray-300 file:bg-gray-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-200"
                         />
-                        {uploadingId === '__free' && <span className="text-xs text-white/40">Envoi...</span>}
-                        <p className="mt-1 text-[11px] text-white/30">Formats acceptes : PDF, images, Word, Excel - 10 Mo maximum par fichier.</p>
+                        {uploadingId === '__free' && <span className="text-xs text-gray-400">Envoi...</span>}
+                        <p className="mt-1 text-[11px] text-gray-400">Formats acceptes : PDF, images, Word, Excel - 10 Mo maximum par fichier.</p>
                       </div>
                     </div>
                     {data.mesDocuments.length > 0 && (
                       <div>
-                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/40">Vos documents transmis</h3>
+                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Vos documents transmis</h3>
                         <ul className="space-y-2">
                           {data.mesDocuments.map(d => {
                             const b = validationBadge(d.validationStatus);
                             return (
-                              <li key={d.id} className="rounded-xl border border-white/10 bg-[#161b22] p-3">
+                              <li key={d.id} className="rounded-xl border border-gray-200 bg-white p-3">
                                 <div className="flex items-center justify-between gap-3">
-                                  <span className="min-w-0 truncate text-sm text-white/80">&#128206; {d.nom}</span>
+                                  <span className="min-w-0 truncate text-sm text-gray-700">&#128206; {d.nom}</span>
                                   <div className="flex flex-none items-center gap-2">
                                     <button type="button" title="Telecharger" onClick={() => handleDownload(d.id, d.nom)}
-                                      className="rounded border border-white/10 p-1.5 text-white/50 hover:bg-white/10">
+                                      className="rounded border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-100">
                                       <Download size={14} />
                                     </button>
                                     {d.validationStatus !== 'valide' && (
@@ -1057,7 +1057,7 @@ export default function SuiviDossierPage() {
                                 </div>
                                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
                                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>
-                                  <span className="text-[11px] text-white/30">{formatDate(d.createdAt)}{d.taille ? ` - ${humanSize(d.taille)}` : ''}</span>
+                                  <span className="text-[11px] text-gray-400">{formatDate(d.createdAt)}{d.taille ? ` - ${humanSize(d.taille)}` : ''}</span>
                                 </div>
                                 {d.validationStatus === 'refuse' && d.validationMotif && (
                                   <p className="mt-1 text-xs text-red-400">Motif : {d.validationMotif}. Merci de deposer un nouveau document.</p>
@@ -1070,15 +1070,15 @@ export default function SuiviDossierPage() {
                     )}
                     {data.documents.length > 0 && (
                       <div>
-                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/40">Documents partages par notre equipe</h3>
+                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Documents partages par notre equipe</h3>
                         <ul className="space-y-2">
                           {data.documents.map(d => (
-                            <li key={d.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#161b22] px-3 py-2 text-sm">
-                              <span className="min-w-0 truncate text-white/80">&#128196; {d.nom}</span>
+                            <li key={d.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm">
+                              <span className="min-w-0 truncate text-gray-700">&#128196; {d.nom}</span>
                               <div className="flex flex-none items-center gap-2">
-                                <span className="text-xs text-white/30">{formatDate(d.createdAt)}</span>
+                                <span className="text-xs text-gray-400">{formatDate(d.createdAt)}</span>
                                 <button type="button" title="Telecharger" onClick={() => handleDownload(d.id, d.nom)}
-                                  className="rounded border border-white/10 p-1.5 text-white/50 hover:bg-white/10">
+                                  className="rounded border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-100">
                                   <Download size={14} />
                                 </button>
                               </div>
@@ -1092,24 +1092,24 @@ export default function SuiviDossierPage() {
 
                 {/* RECAP TAB */}
                 {activeTab === 'recap' && (
-                  <div className="rounded-xl border border-white/10 bg-[#161b22] p-5">
+                  <div className="rounded-xl border border-gray-200 bg-white p-5">
                     <div className="mb-4 flex items-center justify-between">
-                      <h2 className="text-sm font-bold uppercase tracking-wide text-white/60">Recapitulatif du dossier</h2>
+                      <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">Recapitulatif du dossier</h2>
                       <button type="button" onClick={handleDownloadRecap} disabled={downloadingRecap}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-medium text-white/70 hover:bg-white/10 disabled:opacity-50">
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50">
                         <Download size={13} />
                         {downloadingRecap ? 'Generation...' : 'Accuse de reception (PDF)'}
                       </button>
                     </div>
-                    {renderRecapInner() || <p className="text-sm text-white/40">Aucun element de recapitulatif disponible.</p>}
+                    {renderRecapInner() || <p className="text-sm text-gray-400">Aucun element de recapitulatif disponible.</p>}
                   </div>
                 )}
 
                 {/* MESSAGES TAB */}
                 {activeTab === 'messages' && (
                   <div className="space-y-4">
-                    <div className="rounded-xl border border-white/10 bg-[#161b22] p-5">
-                      <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-white/60">Contacter notre equipe</h2>
+                    <div className="rounded-xl border border-gray-200 bg-white p-5">
+                      <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-gray-500">Contacter notre equipe</h2>
                       {data.cabinet && (data.cabinet.telephone || data.cabinet.email) && (
                         <div className="mb-4 flex flex-wrap gap-4 text-sm">
                           {data.cabinet.telephone && (
@@ -1131,15 +1131,15 @@ export default function SuiviDossierPage() {
                         onChange={(e) => setContactText(e.target.value)}
                         rows={4}
                         placeholder="Votre message ou votre question au sujet de ce dossier..."
-                        className="w-full rounded-lg border border-white/20 bg-[#0d1117] p-3 text-sm text-white placeholder-white/30 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                        className="w-full rounded-lg border border-gray-300 bg-gray-50 p-3 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
                       />
                       <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)}
                           placeholder="Votre e-mail (facultatif)"
-                          className="rounded-lg border border-white/20 bg-[#0d1117] px-3 py-2 text-sm text-white placeholder-white/30 focus:border-orange-500 focus:outline-none" />
+                          className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:outline-none" />
                         <input type="tel" value={contactTel} onChange={(e) => setContactTel(e.target.value)}
                           placeholder="Votre telephone (facultatif)"
-                          className="rounded-lg border border-white/20 bg-[#0d1117] px-3 py-2 text-sm text-white placeholder-white/30 focus:border-orange-500 focus:outline-none" />
+                          className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:outline-none" />
                       </div>
                       <button type="button" onClick={handleSendContact} disabled={sendingContact}
                         className="mt-4 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60">
@@ -1151,8 +1151,8 @@ export default function SuiviDossierPage() {
                       <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-5 text-center">
                         {data.compte.existe ? (
                           <>
-                            <p className="text-sm font-medium text-white">Vous avez deja un compte Ada Papers.</p>
-                            <p className="mb-3 text-xs text-white/50">Connectez-vous pour retrouver votre dossier dans votre espace personnel.</p>
+                            <p className="text-sm font-medium text-gray-900">Vous avez deja un compte Ada Papers.</p>
+                            <p className="mb-3 text-xs text-gray-500">Connectez-vous pour retrouver votre dossier dans votre espace personnel.</p>
                             <a href={`/auth/signin${data.compte.email ? `?email=${encodeURIComponent(data.compte.email)}` : ''}`}
                               className="inline-flex items-center justify-center rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-600">
                               Se connecter
@@ -1160,8 +1160,8 @@ export default function SuiviDossierPage() {
                           </>
                         ) : (
                           <>
-                            <p className="text-sm font-medium text-white">Suivez votre dossier en permanence.</p>
-                            <p className="mb-3 text-xs text-white/50">Creez votre compte avec la meme adresse e-mail : votre dossier y sera rattache automatiquement.</p>
+                            <p className="text-sm font-medium text-gray-900">Suivez votre dossier en permanence.</p>
+                            <p className="mb-3 text-xs text-gray-500">Creez votre compte avec la meme adresse e-mail : votre dossier y sera rattache automatiquement.</p>
                             <a href={`/auth/signup${data.compte.email ? `?email=${encodeURIComponent(data.compte.email)}` : ''}`}
                               className="inline-flex items-center justify-center rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-600">
                               Creer mon compte
@@ -1178,10 +1178,10 @@ export default function SuiviDossierPage() {
           </div>
 
           {/* Contact footer bar */}
-          <div className="border-t border-white/10 bg-[#161b22]">
+          <div className="border-t border-gray-200 bg-white">
             <div className="mx-auto max-w-6xl px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-4 text-xs text-white/50">
+                <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
                   {data.cabinet?.telephone && (
                     <a href={`tel:${data.cabinet.telephone.replace(/\s/g, '')}`} className="hover:text-orange-400">
                       &#128222; {data.cabinet.telephone}
@@ -1200,7 +1200,7 @@ export default function SuiviDossierPage() {
                   </button>
                   <button type="button"
                     onClick={() => { try { navigator.clipboard?.writeText(window.location.href).then(() => flash('Lien copie !', null)); } catch (_) {} }}
-                    className="rounded-lg border border-white/20 px-4 py-1.5 text-xs font-medium text-white/60 hover:bg-white/10">
+                    className="rounded-lg border border-gray-300 px-4 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-100">
                     Copier le lien de suivi
                   </button>
                 </div>
@@ -1211,12 +1211,12 @@ export default function SuiviDossierPage() {
       )}
 
       {/* Footer Ada Papers */}
-      <div className="border-t border-white/5 bg-[#0d1117] px-4 py-6">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 text-xs text-white/20">
+      <div className="border-t border-gray-100 bg-gray-50 px-4 py-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 text-xs text-gray-300">
           <span>&#169; {new Date().getFullYear()} Ada Papers. Tous droits reserves.</span>
           <div className="flex gap-4">
-            <a href="/mentions-legales" className="hover:text-white/40">Mentions legales</a>
-            <a href="/contact" className="hover:text-white/40">Contact</a>
+            <a href="/mentions-legales" className="hover:text-gray-400">Mentions legales</a>
+            <a href="/contact" className="hover:text-gray-400">Contact</a>
           </div>
         </div>
       </div>
