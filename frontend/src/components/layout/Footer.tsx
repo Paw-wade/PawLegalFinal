@@ -7,10 +7,11 @@ export function Footer() {
     <footer className="bg-black text-white py-4 mt-auto">
       <div className="container mx-auto px-4">
         <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-bold text-orange-500">Ada Papers</span>
-            <span className="text-gray-400">|</span>
-            <span className="text-gray-400">Service d'Accompagnement aux démarches administratives</span>
+          <div className="flex items-center gap-3">
+            <div className="bg-white rounded-lg relative overflow-hidden shrink-0" style={{ width: 100, height: 47 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-h.png" alt="Ada Papers" style={{ position: 'absolute', width: 208, maxWidth: 'none', height: 'auto', left: -54, top: -35 }} />
+            </div>
           </div>
           
           <div className="flex items-center gap-4 flex-wrap">

@@ -218,11 +218,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className="flex items-center min-w-0">
             <Link
               href="/"
-              className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base lg:text-lg tracking-tight"
+              className="relative overflow-hidden hover:opacity-85 transition-opacity shrink-0"
+              style={{ width: 110, height: 52 }}
             >
-              Ada Papers
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-h.png" alt="Ada Papers" style={{ position: 'absolute', width: 229, maxWidth: 'none', height: 'auto', left: -60, top: -39 }} />
             </Link>
-            <span className="hidden md:inline ml-2 text-[10px] text-gray-500">Espace client</span>
           </div>
           {onClose && (
             <button

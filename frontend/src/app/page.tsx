@@ -502,7 +502,7 @@ export default function HomePage() {
 
       {/* Barre de menu mobile sous le header (disparaît au scroll) */}
       {showMobileTopBar && (
-        <div className="md:hidden sticky top-[56px] z-40 bg-white/95 border-b border-gray-200">
+        <div className="md:hidden sticky top-0 z-40 bg-white/95 border-b border-gray-200">
           <div className="w-full max-w-[100vw] mx-auto px-2">
             <div className="w-full flex items-center justify-center overflow-x-auto no-scrollbar py-2">
               <div className="flex items-center gap-1 min-w-max">
@@ -564,8 +564,13 @@ export default function HomePage() {
           <div className="relative rounded-3xl border border-transparent bg-ds-elevated px-6 pt-5 pb-12 shadow-xl dark:border-ds-border sm:px-10 lg:px-14 lg:pb-20">
             {/* Nav integree dans la carte hero */}
             <nav className="flex items-center justify-between mb-10 lg:mb-12">
-              <Link href="/" className="font-bold text-ds-primary text-xl tracking-tight hover:opacity-80 transition-opacity">
-                Ada Papers
+              <Link
+                href="/"
+                className="relative overflow-hidden hover:opacity-80 transition-opacity shrink-0"
+                style={{ width: 130, height: 61 }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo-h.png" alt="Ada Papers" style={{ position: 'absolute', width: 271, maxWidth: 'none', height: 'auto', left: -70, top: -46 }} />
               </Link>
               <div className="hidden md:flex items-center gap-0.5">
                 {[

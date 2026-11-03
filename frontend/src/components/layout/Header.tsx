@@ -344,18 +344,14 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               </button>
             )}
             {variant === 'home' && (
-              <>
-                <Link
-                  href="/"
-                  className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-base sm:text-xl max-w-[55vw] sm:max-w-none truncate"
-                >
-                  Ada Papers
-                </Link>
-                <div className="hidden md:block h-4 w-px bg-gray-300 flex-shrink-0" />
-                <p className="hidden md:inline text-[9px] text-gray-600 font-normal leading-tight whitespace-nowrap">
-                  {subtitleHome}
-                </p>
-              </>
+              <Link
+                href="/"
+                className="relative overflow-hidden hover:opacity-85 transition-opacity shrink-0"
+                style={{ width: 100, height: 47 }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo-h.png" alt="Ada Papers" style={{ position: 'absolute', width: 208, maxWidth: 'none', height: 'auto', left: -54, top: -35 }} />
+              </Link>
             )}
           </div>
 

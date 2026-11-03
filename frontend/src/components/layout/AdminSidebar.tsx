@@ -229,9 +229,8 @@ export function AdminSidebar({ isOpen = true, onClose, collapsed = false, onTogg
             title="Ada Papers"
             className="h-16 shrink-0 flex items-center justify-center"
           >
-            <span className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-extrabold text-white bg-white/20">
-              A
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-icon.png" alt="Ada Papers" className="w-9 h-9 rounded-xl object-cover" />
           </Link>
 
           {/* Raccourcis */}
