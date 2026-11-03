@@ -6,6 +6,22 @@ const Task = require('../models/Task');
 const User = require('../models/User');
 const Dossier = require('../models/Dossier');
 const Notification = require('../models/Notification');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const taskFileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads/tasks');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const uploadTaskFile = multer({ storage: taskFileStorage, limits: { fileSize: 20 * 1024 * 1024 } });
 
 // Un membre du staff assigné au dossier (membre d'équipe, chef d'équipe ou
 // legacy assignedTo) a accès aux tâches rattachées à ce dossier.
@@ -609,7 +625,9 @@ router.put(
         dossier,
         notes,
         effectue,
-        commentaireEffectue
+        commentaireEffectue,
+        kanbanGroup,
+        archived
       } = req.body;
 
       // Normaliser assignedTo en tableau si fourni (optionnel)
@@ -670,6 +688,11 @@ router.put(
       if (dateFin !== undefined) task.dateFin = dateFin || null;
       if (dossier !== undefined) task.dossier = dossier || null;
       if (notes !== undefined) task.notes = notes;
+      if (kanbanGroup !== undefined) task.kanbanGroup = kanbanGroup || null;
+      if (archived !== undefined) {
+        task.archived = archived;
+        task.archivedAt = archived ? new Date() : null;
+      }
 
       // Gérer le statut effectué (n'importe quel utilisateur connecté peut marquer une tâche comme effectuée)
       const wasEffectue = task.effectue;
@@ -1170,6 +1193,75 @@ router.delete('/:id/notes/:noteId', protect, async (req, res) => {
     res.json({ success: true, commentaires: taskPopulated.commentaires });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// POST /api/tasks/:id/fichiers - upload a file attachment
+router.post('/:id/fichiers', protect, uploadTaskFile.single('fichier'), async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ success: false, message: 'Tache non trouvee' });
+    if (!req.file) return res.status(400).json({ success: false, message: 'Aucun fichier fourni' });
+
+    task.piecesJointes.push({
+      nom: Buffer.from(req.file.originalname, 'latin1').toString('utf8'),
+      url: `/uploads/tasks/${req.file.filename}`,
+      mimetype: req.file.mimetype,
+      taille: req.file.size,
+      uploadedBy: req.user.id,
+    });
+    await task.save();
+    const added = task.piecesJointes[task.piecesJointes.length - 1];
+    return res.json({ success: true, pieceJointe: added });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /api/tasks/:id/fichiers/:fichierId
+router.delete('/:id/fichiers/:fichierId', protect, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ success: false, message: 'Tache non trouvee' });
+    const idx = task.piecesJointes.findIndex(f => String(f._id) === req.params.fichierId);
+    if (idx === -1) return res.status(404).json({ success: false, message: 'Fichier non trouve' });
+    const filePath = path.join(__dirname, '..', task.piecesJointes[idx].url);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    task.piecesJointes.splice(idx, 1);
+    await task.save();
+    return res.json({ success: true, message: 'Fichier supprime' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// POST /api/tasks/:id/liens - add a link
+router.post('/:id/liens', protect, async (req, res) => {
+  try {
+    const { url, label } = req.body;
+    if (!url) return res.status(400).json({ success: false, message: 'URL requise' });
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ success: false, message: 'Tache non trouvee' });
+    task.liens.push({ url, label: label || url, addedBy: req.user.id });
+    await task.save();
+    return res.json({ success: true, lien: task.liens[task.liens.length - 1] });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// DELETE /api/tasks/:id/liens/:lienId
+router.delete('/:id/liens/:lienId', protect, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ success: false, message: 'Tache non trouvee' });
+    const idx = task.liens.findIndex(l => String(l._id) === req.params.lienId);
+    if (idx === -1) return res.status(404).json({ success: false, message: 'Lien non trouve' });
+    task.liens.splice(idx, 1);
+    await task.save();
+    return res.json({ success: true, message: 'Lien supprime' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 

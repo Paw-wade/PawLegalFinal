@@ -105,6 +105,24 @@ const taskSchema = new mongoose.Schema({
   archivedAt: {
     type: Date
   },
+  piecesJointes: [
+    {
+      nom: { type: String, required: true },
+      url: { type: String, required: true },
+      mimetype: { type: String },
+      taille: { type: Number },
+      uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      uploadedAt: { type: Date, default: Date.now },
+    }
+  ],
+  liens: [
+    {
+      url: { type: String, required: true },
+      label: { type: String },
+      addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      addedAt: { type: Date, default: Date.now },
+    }
+  ],
   // Sous-taches
   sousTaches: [
     {

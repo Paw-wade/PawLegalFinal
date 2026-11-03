@@ -1033,6 +1033,7 @@ export const tasksAPI = {
     effectue?: boolean;
     commentaireEffectue?: string;
     kanbanGroup?: string | null;
+    archived?: boolean;
   }) => {
     return api.put(`/tasks/${id}`, data);
   },
@@ -1064,6 +1065,21 @@ export const tasksAPI = {
     api.patch(`/tasks/${taskId}/sous-taches/${stId}`, data),
   deleteSousTache: (taskId: string, stId: string) =>
     api.delete(`/tasks/${taskId}/sous-taches/${stId}`),
+
+  // Pieces jointes
+  uploadTaskFichier: (taskId: string, file: File) => {
+    const fd = new FormData();
+    fd.append('fichier', file);
+    return api.post(`/tasks/${taskId}/fichiers`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  deleteTaskFichier: (taskId: string, fichierId: string) =>
+    api.delete(`/tasks/${taskId}/fichiers/${fichierId}`),
+
+  // Liens
+  addTaskLien: (taskId: string, data: { url: string; label?: string }) =>
+    api.post(`/tasks/${taskId}/liens`, data),
+  deleteTaskLien: (taskId: string, lienId: string) =>
+    api.delete(`/tasks/${taskId}/liens/${lienId}`),
 };
 
 export const lettreMissionAPI = {

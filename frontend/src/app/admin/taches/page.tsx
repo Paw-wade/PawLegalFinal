@@ -316,6 +316,13 @@ function AdminTachesPageContent() {
   const [newSousTacheTitle, setNewSousTacheTitle] = useState('');
   const [sousTacheLoading, setSousTacheLoading] = useState(false);
 
+  // Fichiers et liens
+  const [editPiecesJointes, setEditPiecesJointes] = useState<any[]>([]);
+  const [editLiens, setEditLiens] = useState<any[]>([]);
+  const [newLienUrl, setNewLienUrl] = useState('');
+  const [newLienLabel, setNewLienLabel] = useState('');
+  const [uploadingFichier, setUploadingFichier] = useState(false);
+
   // Commentaires
   const [commentaires, setCommentaires] = useState<any[]>([]);
   const [newCommentText, setNewCommentText] = useState('');
@@ -327,6 +334,8 @@ function AdminTachesPageContent() {
 
   // Expansion inline des sous-taches sur les cartes kanban
   const [expandedSousTaches, setExpandedSousTaches] = useState<Set<string>>(new Set());
+  const [cardMenuId, setCardMenuId] = useState<string|null>(null);
+  const [cardMenuPos, setCardMenuPos] = useState<{x:number;y:number}>({x:0,y:0});
 
   // Task Intake
   const [intakeTitle, setIntakeTitle] = useState('');
@@ -386,6 +395,13 @@ function AdminTachesPageContent() {
     setActiveCommentTab('commentaire');
     setMobilePanelTab('champs');
   };
+
+  useEffect(() => {
+    if (!cardMenuId) return;
+    const handler = (e: MouseEvent) => { setCardMenuId(null); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [cardMenuId]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -513,6 +529,10 @@ function AdminTachesPageContent() {
     });
     setSousTaches(Array.isArray(task.sousTaches) ? task.sousTaches : []);
     setNewSousTacheTitle('');
+    setEditPiecesJointes(Array.isArray(task.piecesJointes) ? task.piecesJointes : []);
+    setEditLiens(Array.isArray(task.liens) ? task.liens : []);
+    setNewLienUrl('');
+    setNewLienLabel('');
     setCommentaires(Array.isArray(task.commentaires) ? task.commentaires : []);
     setNewCommentText('');
     setCommentLoading(false);
@@ -685,9 +705,55 @@ function AdminTachesPageContent() {
     try { localStorage.setItem('kanbanGroupLabels', JSON.stringify(rest)); } catch {}
   };
 
+  const handleCardMenuDuplicate = async (task: any) => {
+    setCardMenuId(null);
+    try {
+      await tasksAPI.createTask({
+        titre: `${task.titre || 'Tache'} (copie)`,
+        description: task.description,
+        statut: task.statut || 'a_faire',
+        priorite: task.priorite || 'normale',
+        assignedTo: (task.assignedTo || []).map((a: any) => a?._id || a?.id || a).filter(Boolean),
+        dateEcheance: task.dateEcheance,
+        dossier: task.dossier?._id || task.dossier?.id || (typeof task.dossier === 'string' ? task.dossier : undefined),
+        notes: task.notes,
+      });
+      await loadTasks();
+    } catch {}
+  };
+
+  const handleCardMenuArchive = async (task: any) => {
+    setCardMenuId(null);
+    try {
+      await tasksAPI.updateTask(task._id || task.id, { archived: true });
+      await loadTasks();
+    } catch {}
+  };
+
+  const handleCardMenuAddToMaJournee = async (task: any) => {
+    setCardMenuId(null);
+    try {
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      await tasksAPI.updateTask(task._id || task.id, { dateEcheance: today.toISOString() });
+      await loadTasks();
+    } catch {}
+  };
+
+  const handleCardMenuMove = async (task: any, statut: string) => {
+    setCardMenuId(null);
+    try {
+      await tasksAPI.updateTask(task._id || task.id, { statut, kanbanGroup: null });
+      await loadTasks();
+    } catch {}
+  };
+
   const handleUpdateStatus = async (taskId: string, newStatus: string) => {
     try {
-      const response = await tasksAPI.updateTask(taskId, { statut: newStatus });
+      const task = tasks.find((t: any) => (t._id || t.id) === taskId);
+      const upd: any = { statut: newStatus };
+      if (task?.kanbanGroup) upd.kanbanGroup = null;
+      const response = await tasksAPI.updateTask(taskId, upd);
       if (response.data.success) await loadTasks();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Erreur lors de la mise a jour du statut');
@@ -954,7 +1020,7 @@ function AdminTachesPageContent() {
 
         {/* ---- Vue Kanban ---- */}
         {viewMode === 'kanban' && (
-          <div className="overflow-x-auto pb-4 -mx-1 px-1">
+          <div className="overflow-x-auto pb-4 -mx-1 px-1 min-h-[calc(100dvh-280px)]">
             {isLoading ? (
               <div className="text-center py-20">
                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500 mx-auto mb-3" />
@@ -1172,6 +1238,22 @@ function AdminTachesPageContent() {
                                   >
                                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                                       <path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                      setCardMenuPos({ x: rect.left, y: rect.top });
+                                      setCardMenuId(cardMenuId === taskId ? null : taskId);
+                                    }}
+                                    className="w-6 h-6 rounded flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors"
+                                    title="Plus d'options"
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                                      <circle cx="6" cy="2" r="1" fill="currentColor"/>
+                                      <circle cx="6" cy="6" r="1" fill="currentColor"/>
+                                      <circle cx="6" cy="10" r="1" fill="currentColor"/>
                                     </svg>
                                   </button>
                                 </div>
@@ -1986,6 +2068,7 @@ function AdminTachesPageContent() {
             const newStatut = (task.statut === 'termine') ? 'a_faire' : 'termine';
             try {
               await tasksAPI.updateTask(taskId, { statut: newStatut });
+              if (newStatut === 'termine') setMaJourneeCompleteExpanded(true);
               await loadTasks();
             } catch {}
           };
@@ -2018,7 +2101,10 @@ function AdminTachesPageContent() {
                   )}
                   {maJourneeTasks.map((task: any) => {
                     const taskId = task._id || task.id;
-                    const isOverdue = new Date(task.dateEcheance) < new Date(now.setHours(0,0,0,0));
+                    const dueDate = task.dateEcheance ? new Date(task.dateEcheance) : null;
+                    const todayMidnight = new Date(); todayMidnight.setHours(0,0,0,0);
+                    const isOverdue = dueDate ? dueDate < todayMidnight : false;
+                    const dueFmt = dueDate ? dueDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : null;
                     return (
                       <div key={taskId} className="flex items-center gap-3 py-2 px-1 rounded-lg hover:bg-gray-50 group">
                         <button
@@ -2028,9 +2114,19 @@ function AdminTachesPageContent() {
                         />
                         <div className="flex-1 min-w-0">
                           <span className="text-sm text-gray-800 truncate block">{task.titre}</span>
-                          {isOverdue && (
-                            <span className="text-[11px] text-red-500 font-medium">En retard</span>
-                          )}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {dueFmt && (
+                              <span className={`text-[11px] font-medium flex items-center gap-1 ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>
+                                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><rect x="1" y="2" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M4 1v2M8 1v2M1 5h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                                {isOverdue ? `En retard - ${dueFmt}` : dueFmt}
+                              </span>
+                            )}
+                            {task.priorite && task.priorite !== 'normale' && (
+                              <span className={`text-[11px] font-medium ${task.priorite === 'urgente' ? 'text-red-600' : task.priorite === 'haute' ? 'text-orange-500' : 'text-gray-400'}`}>
+                                {task.priorite === 'urgente' ? 'Urgente' : task.priorite === 'haute' ? 'Haute' : task.priorite === 'basse' ? 'Basse' : ''}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {task.dossier && (
                           <span className="shrink-0 text-[11px] text-gray-400 truncate max-w-[100px]">
@@ -2455,6 +2551,167 @@ function AdminTachesPageContent() {
                     </div>
                   )}
 
+                  {/* Fichiers joints */}
+                  {editingTask && (
+                    <div className="px-4 sm:px-6 py-3 border-t border-gray-50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true" className="text-gray-400 shrink-0">
+                          <path d="M8 1.5H3.5A1.5 1.5 0 002 3v8a1.5 1.5 0 001.5 1.5h7A1.5 1.5 0 0012 11V5.5L8 1.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 1.5V5.5H12" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                        </svg>
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Fichiers</span>
+                        {editPiecesJointes.length > 0 && (
+                          <span className="text-xs text-gray-400">{editPiecesJointes.length}</span>
+                        )}
+                      </div>
+
+                      {editPiecesJointes.length > 0 && (
+                        <div className="mb-3 space-y-1">
+                          {editPiecesJointes.map((f: any) => (
+                            <div key={f._id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-gray-100 bg-gray-50/60 group">
+                              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true" className="text-gray-400 shrink-0">
+                                <path d="M8 1.5H3.5A1.5 1.5 0 002 3v8a1.5 1.5 0 001.5 1.5h7A1.5 1.5 0 0012 11V5.5L8 1.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                              </svg>
+                              <a
+                                href={f.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 text-xs text-blue-600 hover:underline truncate"
+                              >
+                                {f.nom}
+                              </a>
+                              {f.taille && (
+                                <span className="text-[10px] text-gray-400 shrink-0">
+                                  {f.taille < 1024 * 1024 ? `${Math.round(f.taille / 1024)} Ko` : `${(f.taille / (1024 * 1024)).toFixed(1)} Mo`}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await tasksAPI.deleteTaskFichier(editingTask._id || editingTask.id, f._id);
+                                    setEditPiecesJointes(prev => prev.filter((p: any) => p._id !== f._id));
+                                    await loadTasks();
+                                  } catch {}
+                                }}
+                                className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-gray-300 hover:text-red-400 transition-all text-base leading-none shrink-0"
+                                title="Supprimer"
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <label className={`flex items-center gap-2 h-7 px-3 rounded border border-dashed border-gray-200 bg-transparent text-sm text-gray-400 cursor-pointer hover:border-orange-300 hover:text-orange-400 transition-colors ${uploadingFichier ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                        {uploadingFichier ? 'Envoi...' : 'Joindre un fichier'}
+                        <input
+                          type="file"
+                          className="hidden"
+                          disabled={uploadingFichier}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file || !editingTask) return;
+                            setUploadingFichier(true);
+                            try {
+                              const res = await tasksAPI.uploadTaskFichier(editingTask._id || editingTask.id, file);
+                              if (res.data?.piecesJointes) setEditPiecesJointes(res.data.piecesJointes);
+                              await loadTasks();
+                            } catch {} finally {
+                              setUploadingFichier(false);
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Liens */}
+                  {editingTask && (
+                    <div className="px-4 sm:px-6 py-3 border-t border-gray-50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true" className="text-gray-400 shrink-0">
+                          <path d="M5.5 8.5a3.5 3.5 0 005 0l2-2a3.5 3.5 0 00-5-5L6.25 2.75" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M8.5 5.5a3.5 3.5 0 00-5 0l-2 2a3.5 3.5 0 005 5L7.75 11.25" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                        </svg>
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Liens</span>
+                        {editLiens.length > 0 && <span className="text-xs text-gray-400">{editLiens.length}</span>}
+                      </div>
+
+                      {editLiens.length > 0 && (
+                        <div className="mb-3 space-y-1">
+                          {editLiens.map((l: any) => (
+                            <div key={l._id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-gray-100 bg-gray-50/60 group">
+                              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true" className="text-blue-400 shrink-0">
+                                <path d="M5.5 8.5a3.5 3.5 0 005 0l2-2a3.5 3.5 0 00-5-5L6.25 2.75" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                              </svg>
+                              <a
+                                href={l.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 text-xs text-blue-600 hover:underline truncate"
+                              >
+                                {l.label || l.url}
+                              </a>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await tasksAPI.deleteTaskLien(editingTask._id || editingTask.id, l._id);
+                                    setEditLiens(prev => prev.filter((p: any) => p._id !== l._id));
+                                    await loadTasks();
+                                  } catch {}
+                                }}
+                                className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-gray-300 hover:text-red-400 transition-all text-base leading-none shrink-0"
+                                title="Supprimer"
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex flex-col gap-1.5">
+                        <input
+                          type="url"
+                          value={newLienUrl}
+                          onChange={(e) => setNewLienUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="h-7 rounded border border-dashed border-gray-200 bg-transparent px-2.5 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-orange-300 focus:border-orange-300"
+                        />
+                        {newLienUrl.trim() && (
+                          <>
+                            <input
+                              type="text"
+                              value={newLienLabel}
+                              onChange={(e) => setNewLienLabel(e.target.value)}
+                              placeholder="Libelle (optionnel)"
+                              className="h-7 rounded border border-dashed border-gray-200 bg-transparent px-2.5 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-orange-300 focus:border-orange-300"
+                            />
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!newLienUrl.trim() || !editingTask) return;
+                                try {
+                                  const res = await tasksAPI.addTaskLien(editingTask._id || editingTask.id, { url: newLienUrl.trim(), label: newLienLabel.trim() || undefined });
+                                  if (res.data?.liens) setEditLiens(res.data.liens);
+                                  setNewLienUrl('');
+                                  setNewLienLabel('');
+                                  await loadTasks();
+                                } catch {}
+                              }}
+                              className="h-7 px-3 rounded bg-orange-500 text-white text-xs font-medium hover:bg-orange-600 transition-colors self-start"
+                            >
+                              Ajouter
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {!editingTask && <div className="flex-1" />}
                 </div>
 
@@ -2603,6 +2860,95 @@ function AdminTachesPageContent() {
             </form>
           </div>
         </div>,
+        document.body
+      )}
+
+      {/* Menu contextuel carte kanban */}
+      {isMounted && cardMenuId && createPortal(
+        (() => {
+          const menuTask = tasks.find((t: any) => (t._id || t.id) === cardMenuId);
+          if (!menuTask) return null;
+          const isDone = menuTask.statut === 'termine';
+          const moveTargets = [
+            { key: 'a_faire', label: 'A faire' },
+            { key: 'en_cours', label: 'En cours' },
+            { key: 'en_attente', label: 'En attente' },
+            { key: 'termine', label: 'Termine' },
+          ].filter(t => t.key !== menuTask.statut);
+          return (
+            <div
+              style={(() => {
+                const menuH = 350;
+                const menuW = 210;
+                const spaceBelow = window.innerHeight - (cardMenuPos.y + 28);
+                const top = spaceBelow >= menuH ? cardMenuPos.y + 28 : Math.max(cardMenuPos.y - menuH, 10);
+                const left = Math.min(cardMenuPos.x, window.innerWidth - menuW);
+                return { position: 'fixed' as const, left, top, zIndex: 9999 };
+              })()}
+              className="bg-white rounded-xl border border-gray-200 shadow-lg py-1 w-52"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={(e) => { e.stopPropagation(); setCardMenuId(null); handleEditTask(menuTask); }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+                Renommer
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleCardMenuAddToMaJournee(menuTask); }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Ajouter a Ma journee
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleCardMenuMove(menuTask, isDone ? 'a_faire' : 'termine'); }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                {isDone ? 'Rouvrir' : 'Marquer comme termine'}
+              </button>
+              <div className="my-1 border-t border-gray-100"/>
+              <div className="px-3 py-1.5">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Deplacer vers</p>
+                {moveTargets.map(t => (
+                  <button
+                    key={t.key}
+                    onClick={(e) => { e.stopPropagation(); handleCardMenuMove(menuTask, t.key); }}
+                    className="w-full text-left px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-50 rounded-md flex items-center gap-2"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300 flex-shrink-0"/>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="my-1 border-t border-gray-100"/>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleCardMenuDuplicate(menuTask); }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 10V2h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Dupliquer
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleCardMenuArchive(menuTask); }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><rect x="1" y="4" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M1 4l1.5-2h9L13 4M5.5 7.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                Archiver
+              </button>
+              <div className="my-1 border-t border-gray-100"/>
+              <button
+                onClick={(e) => { e.stopPropagation(); setCardMenuId(null); setShowDeleteConfirm(menuTask._id || menuTask.id); }}
+                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 4h10M5 4V2.5h4V4M5.5 6.5v4M8.5 6.5v4M3 4l.7 7.5a1 1 0 001 .9h4.6a1 1 0 001-.9L11 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Supprimer
+              </button>
+            </div>
+          );
+        })(),
         document.body
       )}
 
