@@ -14,53 +14,42 @@ import { Toast } from '@/components/ui/Toast';
 
 function Button({ children, variant = 'default', className = '', disabled = false, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
-  const variantClasses = {
-    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
-    outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-    ghost: 'hover:bg-accent hover:text-accent-foreground',
+  const variantClasses: Record<string, string> = {
+    default: 'bg-orange-500 text-white hover:bg-orange-600',
+    outline: 'border border-gray-200 bg-white hover:bg-gray-50 text-gray-700',
+    ghost: 'hover:bg-gray-100 text-gray-700',
+    danger: 'border border-red-300 text-red-600 bg-white hover:bg-red-50',
   };
-  return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} disabled={disabled} {...props}>{children}</button>;
+  return (
+    <button
+      className={`${baseClasses} ${variantClasses[variant] || variantClasses.default} ${className}`}
+      disabled={disabled}
+      {...props}
+    >
+      {children}
+    </button>
+  );
 }
 
 function Input({ className = '', type, value, onChange, id, name, autoComplete, ...props }: any) {
   const resolvedName = name || id;
   const normalizedField = String(resolvedName || '').toLowerCase();
   const inferredAutoCompleteByField =
-    normalizedField === 'firstname'
-      ? 'given-name'
-      : normalizedField === 'lastname'
-        ? 'family-name'
-        : normalizedField === 'email'
-          ? 'email'
-          : normalizedField === 'phone'
-            ? 'tel'
-            : normalizedField === 'adresspostale' || normalizedField === 'adressepostale'
-              ? 'street-address'
-              : normalizedField === 'ville'
-                ? 'address-level2'
-                : normalizedField === 'codepostal'
-                  ? 'postal-code'
-                  : normalizedField === 'pays'
-                    ? 'country-name'
-                    : normalizedField === 'datenaissance'
-                      ? 'bday'
-                      : (normalizedField === 'datedelivrance' || normalizedField === 'dateexpiration')
-                        ? 'off'
-                        : undefined;
+    normalizedField === 'firstname' ? 'given-name'
+    : normalizedField === 'lastname' ? 'family-name'
+    : normalizedField === 'email' ? 'email'
+    : normalizedField === 'phone' ? 'tel'
+    : (normalizedField === 'adresspostale' || normalizedField === 'adressepostale') ? 'street-address'
+    : normalizedField === 'ville' ? 'address-level2'
+    : normalizedField === 'codepostal' ? 'postal-code'
+    : normalizedField === 'pays' ? 'country-name'
+    : normalizedField === 'datenaissance' ? 'bday'
+    : (normalizedField === 'datedelivrance' || normalizedField === 'dateexpiration') ? 'off'
+    : undefined;
   const resolvedAutoComplete =
-    autoComplete ||
-    inferredAutoCompleteByField ||
-    (type === 'email'
-      ? 'email'
-      : type === 'tel'
-        ? 'tel'
-        : type === 'password'
-          ? 'current-password'
-          : type === 'date'
-            ? 'off'
-            : 'on');
+    autoComplete || inferredAutoCompleteByField ||
+    (type === 'email' ? 'email' : type === 'tel' ? 'tel' : type === 'password' ? 'current-password' : type === 'date' ? 'off' : 'on');
 
-  // Pour les champs de date, utiliser le composant DateInput qui garantit le format jour/mois/année
   if (type === 'date') {
     return (
       <DateInputComponent
@@ -70,10 +59,7 @@ function Input({ className = '', type, value, onChange, id, name, autoComplete, 
         value={value || ''}
         onChange={(newValue) => {
           if (onChange) {
-            const syntheticEvent = {
-              target: { value: newValue },
-              currentTarget: { value: newValue }
-            } as React.ChangeEvent<HTMLInputElement>;
+            const syntheticEvent = { target: { value: newValue }, currentTarget: { value: newValue } } as React.ChangeEvent<HTMLInputElement>;
             onChange(syntheticEvent);
           }
         }}
@@ -82,7 +68,7 @@ function Input({ className = '', type, value, onChange, id, name, autoComplete, 
       />
     );
   }
-  
+
   return (
     <input
       id={id}
@@ -103,6 +89,38 @@ function Label({ className = '', children, ...props }: any) {
   );
 }
 
+function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-50 flex items-center gap-2">
+        <div className="w-1 h-4 bg-orange-500 rounded-full" aria-hidden="true" />
+        <h3 className="text-sm font-medium text-gray-700">{title}</h3>
+      </div>
+      <div className="px-5 divide-y divide-gray-50">{children}</div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="flex justify-between items-start py-3 gap-4">
+      <span className="text-sm text-gray-500 flex-shrink-0">{label}</span>
+      <span className="text-sm text-gray-900 font-medium text-right">
+        {value || <span className="text-gray-400 font-normal italic">Non renseigne</span>}
+      </span>
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <div className="w-1 h-6 bg-orange-500 rounded-full" aria-hidden="true" />
+      <h3 className="text-base font-medium text-gray-800">{children}</h3>
+    </div>
+  );
+}
+
 export default function ComptePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -115,9 +133,7 @@ export default function ComptePage() {
   const [isEnablingPush, setIsEnablingPush] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
-  // Données du profil - Tous les champs seront automatiquement pré-remplis avec les données de la base
-  // lors du chargement du profil via loadProfile()
+
   const [profileData, setProfileData] = useState({
     firstName: '',
     lastName: '',
@@ -137,16 +153,12 @@ export default function ComptePage() {
     pays: '',
   });
 
-  // Données pour le changement de mot de passe
-  // IMPORTANT : Le mot de passe n'est JAMAIS pré-rempli pour des raisons de sécurité
-  // L'utilisateur doit toujours saisir son mot de passe actuel pour le changer
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
 
-  // Préférences SMS
   const [smsPreferences, setSmsPreferences] = useState({
     enabled: true,
     types: {
@@ -162,8 +174,8 @@ export default function ComptePage() {
       task_assigned: true,
       task_reminder: true,
       account_security: true,
-      otp: true, // Toujours activé pour sécurité
-    }
+      otp: true,
+    },
   });
 
   useEffect(() => {
@@ -172,7 +184,6 @@ export default function ComptePage() {
     } else if (session && !(session.user as any).profilComplete) {
       router.push('/auth/complete-profile');
     } else if (session) {
-      // Si admin, rediriger vers /admin
       if ((session.user as any)?.role === 'admin' || (session.user as any)?.role === 'superadmin') {
         router.push('/admin');
       }
@@ -180,9 +191,6 @@ export default function ComptePage() {
   }, [session, status, router]);
 
   useEffect(() => {
-    // Charger le profil automatiquement lorsque l'utilisateur est authentifié
-    // Le formulaire sera pré-rempli avec toutes les données existantes
-    // Les préférences SMS sont chargées directement dans loadProfile() pour éviter un double appel API
     if (status === 'authenticated' && session) {
       loadProfile();
     }
@@ -192,38 +200,18 @@ export default function ComptePage() {
     setIsLoading(true);
     setError(null);
     try {
-      console.log('🔄 Chargement du profil utilisateur...');
       const response = await userAPI.getProfile();
-      
       if (response.data.success) {
         const user = response.data.user || response.data.data;
-        console.log('✅ Profil chargé:', { 
-          firstName: user.firstName, 
-          lastName: user.lastName, 
-          email: user.email,
-          hasPhone: !!user.phone,
-          hasDateNaissance: !!user.dateNaissance,
-          hasDateDelivrance: !!user.dateDelivrance,
-          hasDateExpiration: !!user.dateExpiration
-        });
-        
-        // Fonction helper pour formater les dates de manière sécurisée
         const formatDate = (dateValue: any): string => {
           if (!dateValue) return '';
           try {
-            // Gérer les chaînes de caractères et les objets Date
             const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
             if (isNaN(date.getTime())) return '';
             return date.toISOString().split('T')[0];
-          } catch {
-            return '';
-          }
+          } catch { return ''; }
         };
-
-        // Pré-remplir TOUS les champs avec les données existantes
-        // Si une valeur existe en base, elle est utilisée, sinon chaîne vide
-        // Les champs ne doivent JAMAIS être undefined ou null
-        const preFilledData = {
+        setProfileData({
           firstName: String(user.firstName || '').trim(),
           lastName: String(user.lastName || '').trim(),
           email: String(user.email || '').trim(),
@@ -240,13 +228,8 @@ export default function ComptePage() {
           ville: String(user.ville || '').trim(),
           codePostal: String(user.codePostal || '').trim(),
           pays: String(user.pays || 'France').trim(),
-        };
-        
-        console.log('📝 Données pré-remplies:', preFilledData);
-        setProfileData(preFilledData);
+        });
         setIsEditingProfile(false);
-        
-        // Charger aussi les préférences SMS depuis les mêmes données
         if (user.smsPreferences) {
           setSmsPreferences({
             enabled: user.smsPreferences.enabled !== false,
@@ -263,18 +246,15 @@ export default function ComptePage() {
               task_assigned: user.smsPreferences.types?.task_assigned !== false,
               task_reminder: user.smsPreferences.types?.task_reminder !== false,
               account_security: user.smsPreferences.types?.account_security !== false,
-              otp: true, // Toujours activé pour sécurité
-            }
+              otp: true,
+            },
           });
-          console.log('✅ Préférences SMS chargées depuis le profil');
         }
       } else {
-        console.error('❌ Erreur: réponse non réussie', response.data);
         setError('Impossible de charger le profil');
       }
-    } catch (error: any) {
-      console.error('❌ Erreur lors du chargement du profil:', error);
-      setError(error.response?.data?.message || 'Erreur lors du chargement du profil');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur lors du chargement du profil');
     } finally {
       setIsLoading(false);
     }
@@ -301,16 +281,12 @@ export default function ComptePage() {
               task_assigned: user.smsPreferences.types?.task_assigned !== false,
               task_reminder: user.smsPreferences.types?.task_reminder !== false,
               account_security: user.smsPreferences.types?.account_security !== false,
-              otp: true, // Toujours activé pour sécurité
-            }
+              otp: true,
+            },
           });
-          console.log('✅ Préférences SMS chargées:', user.smsPreferences);
         }
       }
-    } catch (error: any) {
-      console.error('❌ Erreur lors du chargement des préférences SMS:', error);
-      // Ne pas afficher d'erreur, utiliser les valeurs par défaut
-    }
+    } catch {}
   };
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
@@ -350,17 +326,16 @@ export default function ComptePage() {
       response = await doUpdate();
       const data = response?.data;
       if (data && data.success) {
-        setSuccess('Profil mis à jour avec succès');
+        setSuccess('Profil mis a jour avec succes');
         setTimeout(() => setSuccess(null), 3000);
         await loadProfile();
       } else {
-        setError((data && data.message) || 'Erreur lors de la mise à jour du profil');
+        setError((data && data.message) || 'Erreur lors de la mise a jour du profil');
       }
-    } catch (error: any) {
-      const status = error.response?.status;
-      const data = error.response?.data;
-
-      if (status === 401) {
+    } catch (err: any) {
+      const st = err.response?.status;
+      const data = err.response?.data;
+      if (st === 401) {
         try {
           const { getSession } = await import('next-auth/react');
           const newSession = await getSession();
@@ -370,27 +345,22 @@ export default function ComptePage() {
             response = await doUpdate();
             const resData = response?.data;
             if (resData && resData.success) {
-              setSuccess('Profil mis à jour avec succès');
+              setSuccess('Profil mis a jour avec succes');
               setTimeout(() => setSuccess(null), 3000);
               await loadProfile();
             } else {
-              setError((resData && resData.message) || 'Erreur lors de la mise à jour du profil');
+              setError((resData && resData.message) || 'Erreur lors de la mise a jour du profil');
             }
             return;
           }
-        } catch (retryErr) {
-          console.error('Retry après 401 échoué:', retryErr);
-        }
-        setError('Session expirée. Veuillez vous reconnecter, puis réessayer.');
+        } catch {}
+        setError('Session expiree. Veuillez vous reconnecter, puis reessayer.');
       } else {
-        const message = data?.message || error.message || 'Erreur lors de la mise à jour du profil';
+        const message = data?.message || err.message || 'Erreur lors de la mise a jour du profil';
         const details = data?.errors;
-        const fullMessage = Array.isArray(details) && details.length > 0
-          ? `${message} (${details.join(', ')})`
-          : message;
+        const fullMessage = Array.isArray(details) && details.length > 0 ? `${message} (${details.join(', ')})` : message;
         setError(fullMessage);
       }
-      console.error('Erreur lors de la mise à jour du profil:', error);
     } finally {
       setIsSaving(false);
     }
@@ -401,35 +371,28 @@ export default function ComptePage() {
     setIsSaving(true);
     setError(null);
     setSuccess(null);
-
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       setError('Les mots de passe ne correspondent pas');
       setIsSaving(false);
       return;
     }
-
     if (passwordData.newPassword.length < 8) {
-      setError('Le nouveau mot de passe doit contenir au moins 8 caractères');
+      setError('Le nouveau mot de passe doit contenir au moins 8 caracteres');
       setIsSaving(false);
       return;
     }
-
     try {
       const response = await userAPI.changePassword({
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
       });
       if (response.data.success) {
-        setSuccess('Mot de passe modifié avec succès');
-        setPasswordData({
-          currentPassword: '',
-          newPassword: '',
-          confirmPassword: '',
-        });
+        setSuccess('Mot de passe modifie avec succes');
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
         setTimeout(() => setSuccess(null), 3000);
       }
-    } catch (error: any) {
-      setError(error.response?.data?.message || 'Erreur lors du changement de mot de passe');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur lors du changement de mot de passe');
     } finally {
       setIsSaving(false);
     }
@@ -443,13 +406,13 @@ export default function ComptePage() {
       const response = await pushAPI.sendTest();
       const sent = Number(response?.data?.result?.sent || 0);
       if (sent > 0) {
-        setSuccess(`Push test envoyé (${sent} appareil${sent > 1 ? 's' : ''}).`);
+        setSuccess(`Push test envoye (${sent} appareil${sent > 1 ? 's' : ''}).`);
       } else {
-        setSuccess('Test envoyé, mais aucun appareil abonné actif n’a été trouvé.');
+        setSuccess('Test envoye, mais aucun appareil abonne actif trouve.');
       }
       setTimeout(() => setSuccess(null), 3500);
-    } catch (error: any) {
-      setError(error?.response?.data?.message || 'Impossible d’envoyer le push test.');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Impossible d\'envoyer le push test.');
     } finally {
       setIsSendingPushTest(false);
     }
@@ -462,18 +425,18 @@ export default function ComptePage() {
     try {
       const result = await ensurePushSubscription({ requestPermission: true });
       if (result.ok) {
-        setSuccess('Notifications push activées sur cet appareil.');
+        setSuccess('Notifications push activees sur cet appareil.');
       } else if (result.reason === 'permission_required') {
         setError('Veuillez autoriser les notifications dans votre navigateur.');
       } else if (result.reason === 'denied') {
-        setError('Notifications refusées dans le navigateur (paramètres à modifier).');
+        setError('Notifications refusees dans le navigateur (parametres a modifier).');
       } else if (result.reason === 'server_not_configured') {
-        setError('Serveur push non configuré (clés VAPID manquantes).');
+        setError('Serveur push non configure (cles VAPID manquantes).');
       } else {
         setError('Ce navigateur ne supporte pas les notifications push.');
       }
-    } catch (error: any) {
-      setError(error?.response?.data?.message || 'Impossible d’activer les notifications push.');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Impossible d\'activer les notifications push.');
     } finally {
       setIsEnablingPush(false);
     }
@@ -481,346 +444,351 @@ export default function ComptePage() {
 
   if (status === 'loading' || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Chargement...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Chargement...</p>
         </div>
       </div>
     );
   }
 
-  if (!session) {
-    return null;
-  }
+  if (!session) return null;
 
-  const userRole = (session.user as any)?.role ?? 'client';
-  const isClient = userRole === 'client';
+  const firstInitial = (profileData.firstName || '').charAt(0).toUpperCase();
+  const lastInitial = (profileData.lastName || '').charAt(0).toUpperCase();
+  const initials = (firstInitial + lastInitial) || (session?.user?.name?.charAt(0)?.toUpperCase() ?? 'C');
+  const fullName = [profileData.firstName, profileData.lastName].filter(Boolean).join(' ') || session?.user?.name || '';
+
+  const displayDate = (iso: string): string => {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  };
+
+  const sexeLabel: Record<string, string> = { M: 'Masculin', F: 'Feminin', Autre: 'Autre' };
+  const typeTitreLabel: Record<string, string> = {
+    visiteur: 'Visiteur',
+    etudiant: 'Etudiant',
+    salarie: 'Salarie',
+    travailleur_temporaire: 'Travailleur temporaire',
+    scientifique: 'Scientifique',
+    artiste: 'Artiste',
+    commercant: 'Commercant',
+    autre: 'Autre',
+  };
+
+  const titreExpirationLabel = profileData.dateExpiration
+    ? `Expire le ${displayDate(profileData.dateExpiration)}`
+    : null;
+
+  const tabs = [
+    { key: 'profil', label: 'Profil' },
+    { key: 'password', label: 'Securite' },
+    { key: 'sms', label: 'Notifications SMS' },
+  ] as const;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20 overflow-x-hidden max-w-[100vw]">
+    <div className="min-h-screen bg-gray-50/40">
       <Toast message={success || ''} visible={!!success} />
-      <main className="w-full px-3 sm:px-4 py-5 sm:py-8">
-        {/* En-tête amélioré */}
-        <div className="mb-6 sm:mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center shadow-lg">
-              <span className="text-white font-bold text-2xl">
-                {session?.user?.name?.charAt(0)?.toUpperCase() || 'U'}
-              </span>
+      <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+
+        {/* Profile header */}
+        <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-col sm:flex-row gap-4 sm:items-center">
+          <div
+            className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center text-white text-xl font-medium flex-shrink-0 select-none"
+            aria-hidden="true"
+          >
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-medium text-gray-900">{fullName || 'Mon profil'}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Espace client</p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {profileData.typeTitre && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                  {typeTitreLabel[profileData.typeTitre] || profileData.typeTitre}
+                  {titreExpirationLabel ? ` - ${titreExpirationLabel}` : ''}
+                </span>
+              )}
+              {profileData.nationalite && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                  {profileData.nationalite}
+                </span>
+              )}
             </div>
-            <div className="min-w-0">
-              <h1 className="text-2xl sm:text-4xl font-bold mb-1 sm:mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                Mon compte
-              </h1>
-              <p className="text-muted-foreground text-sm sm:text-lg">Gérez vos informations personnelles et vos paramètres de sécurité</p>
-            </div>
+          </div>
+          <div className="hidden sm:flex flex-col items-end gap-1 text-xs text-gray-500">
+            {profileData.email && (
+              <span>Email: <span className="text-gray-800 font-medium">{profileData.email}</span></span>
+            )}
+            {profileData.phone && (
+              <span>Tel: <span className="text-gray-800 font-medium">{profileData.phone}</span></span>
+            )}
+            {profileData.numeroEtranger && (
+              <span>N etranger: <span className="text-gray-800 font-medium">{profileData.numeroEtranger}</span></span>
+            )}
           </div>
         </div>
 
-        {/* Onglets améliorés */}
-        <div className="mb-6 sm:mb-8 bg-white rounded-xl shadow-md p-2 flex gap-2 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('profil')}
-            className={`px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
-              activeTab === 'profil'
-                ? 'bg-primary text-white shadow-md'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <span className="text-sm sm:text-base">👤</span>
-              <span>Informations personnelles</span>
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('password')}
-            className={`px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
-              activeTab === 'password'
-                ? 'bg-primary text-white shadow-md'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <span className="text-sm sm:text-base">🔒</span>
-              <span>Mot de passe</span>
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('sms')}
-            className={`px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap ${
-              activeTab === 'sms'
-                ? 'bg-primary text-white shadow-md'
-                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <span className="text-sm sm:text-base">📱</span>
-              <span>Notifications SMS</span>
-            </span>
-          </button>
+        {/* Tab navigation */}
+        <div className="flex gap-0 border-b border-gray-200 overflow-x-auto bg-white rounded-t-xl">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-5 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === tab.key
+                  ? 'border-orange-500 text-orange-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Messages d'erreur et de succès améliorés */}
+        {/* Messages */}
         {error && (
           <div
             ref={errorRef}
-            className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm animate-in slide-in-from-top-2"
+            className="p-3.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2"
           >
-            <div className="flex items-center gap-2">
-              <span className="text-xl">⚠️</span>
-              <p className="text-sm font-medium text-red-800">{error}</p>
-            </div>
+            <span className="flex-shrink-0 mt-0.5">&#x26A0;</span>
+            <span>{error}</span>
           </div>
         )}
-
         {success && (
-          <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 rounded-lg shadow-sm animate-in slide-in-from-top-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">✅</span>
-              <p className="text-sm font-medium text-green-800">{success}</p>
+          <div className="p-3.5 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+            {success}
+          </div>
+        )}
+
+        {/* ---- Tab: Profil - vue ---- */}
+        {activeTab === 'profil' && !isEditingProfile && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                onClick={() => setIsEditingProfile(true)}
+                className="px-4 py-2 text-sm"
+              >
+                Modifier le profil
+              </Button>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <InfoCard title="Informations personnelles">
+                <InfoRow label="Prenom" value={profileData.firstName} />
+                <InfoRow label="Nom" value={profileData.lastName} />
+                <InfoRow label="Email" value={profileData.email} />
+                <InfoRow label="Telephone" value={profileData.phone} />
+                <InfoRow label="Date de naissance" value={displayDate(profileData.dateNaissance)} />
+                <InfoRow label="Lieu de naissance" value={profileData.lieuNaissance} />
+                <InfoRow label="Sexe" value={sexeLabel[profileData.sexe] || profileData.sexe} />
+              </InfoCard>
+              <InfoCard title="Situation administrative">
+                <InfoRow label="Nationalite" value={profileData.nationalite} />
+                <InfoRow label="Numero d'etranger" value={profileData.numeroEtranger} />
+                <InfoRow label="Type de titre" value={typeTitreLabel[profileData.typeTitre] || profileData.typeTitre} />
+                <InfoRow label="Date de delivrance" value={displayDate(profileData.dateDelivrance)} />
+                <InfoRow label="Date d'expiration" value={displayDate(profileData.dateExpiration)} />
+              </InfoCard>
+              <InfoCard title="Adresse">
+                <InfoRow label="Adresse" value={profileData.adressePostale} />
+                <InfoRow label="Ville" value={profileData.ville} />
+                <InfoRow label="Code postal" value={profileData.codePostal} />
+                <InfoRow label="Pays" value={profileData.pays} />
+              </InfoCard>
             </div>
           </div>
         )}
 
-        {/* Contenu des onglets */}
-        {activeTab === 'profil' && (
-          <div className="bg-white rounded-xl shadow-lg border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
-              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2 sm:gap-3">
-                <span className="text-2xl sm:text-3xl">👤</span>
-                <span>Informations personnelles</span>
-              </h2>
-              <p className="text-sm text-muted-foreground mt-2">Mettez à jour vos informations de profil</p>
+        {/* ---- Tab: Profil - edition ---- */}
+        {activeTab === 'profil' && isEditingProfile && (
+          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-50">
+              <h2 className="text-base font-medium text-gray-800">Modifier le profil</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Mettez a jour vos informations personnelles</p>
             </div>
-            <form onSubmit={handleProfileSubmit} className="p-4 sm:p-8 space-y-7 sm:space-y-8" autoComplete="on">
-              <fieldset
-                aria-disabled={!isEditingProfile}
-                className={!isEditingProfile ? 'opacity-100 pointer-events-none' : ''}
-              >
-              {/* Informations de base */}
+            <form onSubmit={handleProfileSubmit} className="p-6 space-y-8" autoComplete="on">
               <div className="space-y-4">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <span className="text-xl">📋</span>
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Informations de base</h3>
+                <SectionTitle>Informations de base</SectionTitle>
+                <div className="grid md:grid-cols-2 gap-5">
+                  <FloatingField label="Prenom" value={profileData.firstName}
+                    onChange={(v) => setProfileData({ ...profileData, firstName: v })} />
+                  <FloatingField label="Nom" value={profileData.lastName}
+                    onChange={(v) => setProfileData({ ...profileData, lastName: v })} />
                 </div>
-                <div className="grid md:grid-cols-2 gap-6">
-                  <FloatingField label="Prénom" value={profileData.firstName} onChange={(v) => setProfileData({ ...profileData, firstName: v })} />
-                  <FloatingField label="Nom" value={profileData.lastName} onChange={(v) => setProfileData({ ...profileData, lastName: v })} />
-                </div>
-                <div className="grid md:grid-cols-2 gap-6">
-                  <FloatingField label="Email" type="email" value={profileData.email} onChange={(v) => setProfileData({ ...profileData, email: v })} />
-                  <FloatingField label="Téléphone" type="tel" value={profileData.phone} onChange={(v) => setProfileData({ ...profileData, phone: v })} />
+                <div className="grid md:grid-cols-2 gap-5">
+                  <FloatingField label="Email" type="email" value={profileData.email}
+                    onChange={(v) => setProfileData({ ...profileData, email: v })} />
+                  <FloatingField label="Telephone" type="tel" value={profileData.phone}
+                    onChange={(v) => setProfileData({ ...profileData, phone: v })} />
                 </div>
               </div>
 
-              {/* Séparateur */}
-              <div className="border-t border-border"></div>
+              <div className="border-t border-gray-50" />
 
-              {/* Informations personnelles */}
               <div className="space-y-4">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <span className="text-xl">🆔</span>
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Informations personnelles</h3>
+                <SectionTitle>Informations personnelles</SectionTitle>
+                <div className="grid md:grid-cols-2 gap-5">
+                  <FloatingField label="Date de naissance" type="date" value={profileData.dateNaissance}
+                    onChange={(v) => setProfileData({ ...profileData, dateNaissance: v })} />
+                  <FloatingField label="Lieu de naissance" value={profileData.lieuNaissance}
+                    onChange={(v) => setProfileData({ ...profileData, lieuNaissance: v })} placeholder="Ville, Pays" />
                 </div>
-                <div className="grid md:grid-cols-2 gap-6">
-                  <FloatingField label="Date de naissance" type="date" value={profileData.dateNaissance} onChange={(v) => setProfileData({ ...profileData, dateNaissance: v })} />
-                  <FloatingField label="Lieu de naissance" value={profileData.lieuNaissance} onChange={(v) => setProfileData({ ...profileData, lieuNaissance: v })} placeholder="Ville, Pays" />
-                </div>
-                <div className="grid md:grid-cols-2 gap-6">
-                  <FloatingField label="Nationalité" value={profileData.nationalite} onChange={(v) => setProfileData({ ...profileData, nationalite: v })} placeholder="Ex: Française, Algérienne..." />
-                  <FloatingField label="Sexe" type="select" value={profileData.sexe} onChange={(v) => setProfileData({ ...profileData, sexe: v })}
-                    options={[{ value: 'M', label: 'Masculin' }, { value: 'F', label: 'Féminin' }, { value: 'Autre', label: 'Autre' }]} />
+                <div className="grid md:grid-cols-2 gap-5">
+                  <FloatingField label="Nationalite" value={profileData.nationalite}
+                    onChange={(v) => setProfileData({ ...profileData, nationalite: v })} placeholder="Ex: Senegalaise" />
+                  <FloatingField label="Sexe" type="select" value={profileData.sexe}
+                    onChange={(v) => setProfileData({ ...profileData, sexe: v })}
+                    options={[{ value: 'M', label: 'Masculin' }, { value: 'F', label: 'Feminin' }, { value: 'Autre', label: 'Autre' }]} />
                 </div>
               </div>
 
-              {/* Séparateur */}
-              <div className="border-t border-border"></div>
+              <div className="border-t border-gray-50" />
 
-              {/* Informations de séjour - obligatoire pour les comptes client uniquement */}
               <div className="space-y-4">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                    <span className="text-xl">🛂</span>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground">Informations de séjour</h3>
-                  </div>
+                <SectionTitle>Situation administrative</SectionTitle>
+                <FloatingField label="Numero d'etranger" value={profileData.numeroEtranger}
+                  onChange={(v) => setProfileData({ ...profileData, numeroEtranger: v })} placeholder="Ex: 12AB34567" />
+                <div className="grid md:grid-cols-2 gap-5">
+                  <FloatingField label="Type de titre" value={profileData.typeTitre}
+                    onChange={(v) => setProfileData({ ...profileData, typeTitre: v })} placeholder="Ex: Carte de sejour, Visa..." />
                 </div>
-                <FloatingField label="Numéro d'étranger" value={profileData.numeroEtranger} onChange={(v) => setProfileData({ ...profileData, numeroEtranger: v })} placeholder="Ex: 12AB34567" />
-                <div className="grid md:grid-cols-2 gap-6">
-                  <FloatingField label="Type de titre" value={profileData.typeTitre} onChange={(v) => setProfileData({ ...profileData, typeTitre: v })} placeholder="Ex: Carte de séjour, Visa, etc." />
-                </div>
-                <div className="grid md:grid-cols-2 gap-6">
-                  <FloatingField label="Date de délivrance" type="date" value={profileData.dateDelivrance} onChange={(v) => setProfileData({ ...profileData, dateDelivrance: v })} />
-                  <FloatingField label="Date d'expiration" type="date" value={profileData.dateExpiration} onChange={(v) => setProfileData({ ...profileData, dateExpiration: v })} />
+                <div className="grid md:grid-cols-2 gap-5">
+                  <FloatingField label="Date de delivrance" type="date" value={profileData.dateDelivrance}
+                    onChange={(v) => setProfileData({ ...profileData, dateDelivrance: v })} />
+                  <FloatingField label="Date d'expiration" type="date" value={profileData.dateExpiration}
+                    onChange={(v) => setProfileData({ ...profileData, dateExpiration: v })} />
                 </div>
               </div>
 
-              {/* Séparateur */}
-              <div className="border-t border-border"></div>
+              <div className="border-t border-gray-50" />
 
-              {/* Adresse */}
               <div className="space-y-4">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <span className="text-xl">📍</span>
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Adresse</h3>
-                </div>
-                <FloatingField label="Adresse postale" value={profileData.adressePostale} onChange={(v) => setProfileData({ ...profileData, adressePostale: v })} placeholder="Numéro et nom de rue" />
-                <div className="grid md:grid-cols-3 gap-6">
-                  <FloatingField label="Ville" value={profileData.ville} onChange={(v) => setProfileData({ ...profileData, ville: v })} />
-                  <FloatingField label="Code postal" value={profileData.codePostal} onChange={(v) => setProfileData({ ...profileData, codePostal: v })} placeholder="75001" />
-                  <FloatingField label="Pays" value={profileData.pays} onChange={(v) => setProfileData({ ...profileData, pays: v })} placeholder="France" />
+                <SectionTitle>Adresse</SectionTitle>
+                <FloatingField label="Adresse postale" value={profileData.adressePostale}
+                  onChange={(v) => setProfileData({ ...profileData, adressePostale: v })} placeholder="Numero et nom de rue" />
+                <div className="grid md:grid-cols-3 gap-5">
+                  <FloatingField label="Ville" value={profileData.ville}
+                    onChange={(v) => setProfileData({ ...profileData, ville: v })} />
+                  <FloatingField label="Code postal" value={profileData.codePostal}
+                    onChange={(v) => setProfileData({ ...profileData, codePostal: v })} placeholder="75001" />
+                  <FloatingField label="Pays" value={profileData.pays}
+                    onChange={(v) => setProfileData({ ...profileData, pays: v })} placeholder="France" />
                 </div>
               </div>
-              </fieldset>
 
-              {/* Boutons d'action améliorés */}
-              <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-border">
-                {!isEditingProfile ? (
-                  <>
-                    <Button
-                      type="button"
-                      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                        e.preventDefault();
-                        setIsEditingProfile(true);
-                      }}
-                      className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span>✏️</span>
-                        <span>Modifier</span>
-                      </span>
-                    </Button>
-                    <Link href="/client" className="w-full sm:w-auto">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full h-12 px-6 border-2 hover:bg-accent transition-colors"
-                      >
-                        Retour
-                      </Button>
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      type="submit"
-                      disabled={isSaving}
-                      className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
-                    >
-                      {isSaving ? (
-                        <span className="flex items-center gap-2">
-                          <span className="animate-spin">⏳</span>
-                          <span>Enregistrement...</span>
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <span>💾</span>
-                          <span>Enregistrer les modifications</span>
-                        </span>
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full sm:w-auto h-12 px-6 border-2 hover:bg-accent transition-colors"
-                      onClick={async () => {
-                        await loadProfile();
-                        setIsEditingProfile(false);
-                      }}
-                    >
-                      Annuler
-                    </Button>
-                  </>
-                )}
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-6 border-t border-gray-100">
+                <Button
+                  type="submit"
+                  disabled={isSaving}
+                  className="w-full sm:flex-1 h-11 text-base"
+                >
+                  {isSaving ? 'Enregistrement...' : 'Enregistrer les modifications'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto h-11 px-6"
+                  onClick={async () => {
+                    await loadProfile();
+                    setIsEditingProfile(false);
+                  }}
+                >
+                  Annuler
+                </Button>
               </div>
             </form>
           </div>
         )}
 
+        {/* ---- Tab: Securite ---- */}
         {activeTab === 'password' && (
-          <div className="bg-white rounded-xl shadow-lg border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
-              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2 sm:gap-3">
-                <span className="text-2xl sm:text-3xl">🔒</span>
-                <span>Changer le mot de passe</span>
-              </h2>
-              <p className="text-sm text-muted-foreground mt-2">Mettez à jour votre mot de passe pour sécuriser votre compte</p>
-            </div>
-            <div className="p-4 sm:p-8 space-y-8 sm:space-y-10">
-              <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl" autoComplete="on">
-                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
-                  <p className="text-sm text-blue-800">
-                    <strong>Conseil de sécurité :</strong> Utilisez un mot de passe fort contenant au moins 8 caractères, avec des majuscules, minuscules, chiffres et symboles.
-                  </p>
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+              <div className="px-6 py-5 border-b border-gray-50">
+                <h2 className="text-base font-medium text-gray-800">Changer le mot de passe</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Mettez a jour votre mot de passe pour securiser votre compte</p>
+              </div>
+              <form onSubmit={handlePasswordSubmit} className="p-6 space-y-5 max-w-lg" autoComplete="on">
+                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
+                  Conseil de securite : utilisez au moins 8 caracteres avec majuscules, chiffres et symboles.
                 </div>
-                
                 <FloatingField label="Mot de passe actuel" required type="password" autoComplete="current-password"
-                  value={passwordData.currentPassword} onChange={(v) => setPasswordData({ ...passwordData, currentPassword: v })} />
-
-                <div className="space-y-1">
-                  <FloatingField label="Nouveau mot de passe" required type="password" autoComplete="new-password"
-                    value={passwordData.newPassword} onChange={(v) => setPasswordData({ ...passwordData, newPassword: v })} />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Le mot de passe doit contenir au moins 8 caractères
-                  </p>
-                </div>
-
-                <div className="space-y-1">
+                  value={passwordData.currentPassword}
+                  onChange={(v) => setPasswordData({ ...passwordData, currentPassword: v })} />
+                <FloatingField label="Nouveau mot de passe" required type="password" autoComplete="new-password"
+                  value={passwordData.newPassword}
+                  onChange={(v) => setPasswordData({ ...passwordData, newPassword: v })} />
+                <div>
                   <FloatingField label="Confirmer le nouveau mot de passe" required type="password" autoComplete="new-password"
-                    value={passwordData.confirmPassword} onChange={(v) => setPasswordData({ ...passwordData, confirmPassword: v })} />
+                    value={passwordData.confirmPassword}
+                    onChange={(v) => setPasswordData({ ...passwordData, confirmPassword: v })} />
                   {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
-                    <p className="text-xs text-red-600 mt-1">⚠️ Les mots de passe ne correspondent pas</p>
+                    <p className="text-xs text-red-600 mt-1">Les mots de passe ne correspondent pas</p>
                   )}
                   {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword === passwordData.confirmPassword && (
-                    <p className="text-xs text-green-600 mt-1">✅ Les mots de passe correspondent</p>
+                    <p className="text-xs text-green-600 mt-1">Les mots de passe correspondent</p>
                   )}
                 </div>
-                
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-border">
-                  <Button 
-                    type="submit" 
-                    disabled={isSaving || (passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword)} 
-                    className="w-full sm:flex-1 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                <div className="flex justify-end pt-2">
+                  <Button
+                    type="submit"
+                    disabled={isSaving || !!(passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword)}
+                    className="px-5 py-2.5"
                   >
-                    {isSaving ? (
-                      <span className="flex items-center gap-2">
-                        <span className="animate-spin">⏳</span>
-                        <span>Modification...</span>
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2">
-                        <span>🔐</span>
-                        <span>Modifier le mot de passe</span>
-                      </span>
-                    )}
+                    {isSaving ? 'Modification...' : 'Modifier le mot de passe'}
                   </Button>
                 </div>
               </form>
+            </div>
 
-              {/* Désactivation du compte */}
-              <div className="border-t border-border pt-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6 max-w-2xl">
-                <div>
-                  <h3 className="text-base font-semibold text-red-600 flex items-center gap-2">
-                    <span>🛑</span>
-                    <span>Désactiver mon compte</span>
-                  </h3>
-                </div>
+            {/* Push notifications */}
+            <div className="bg-white rounded-xl border border-gray-100 p-6">
+              <SectionTitle>Notifications push</SectionTitle>
+              <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full sm:w-auto border-red-500 text-red-600 hover:bg-red-50"
+                  disabled={isEnablingPush}
+                  onClick={handleEnablePush}
+                  className="px-4 py-2 text-sm"
+                >
+                  {isEnablingPush ? 'Activation...' : 'Activer les notifications push'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSendingPushTest}
+                  onClick={handlePushTest}
+                  className="px-4 py-2 text-sm"
+                >
+                  {isSendingPushTest ? 'Envoi...' : 'Tester le push'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Desactivation du compte */}
+            <div className="bg-white rounded-xl border border-gray-100 p-6">
+              <SectionTitle>Zone dangereuse</SectionTitle>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-red-600">Desactiver mon compte</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Vous ne pourrez plus vous connecter sans passer par l'equipe Ada Papers.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="danger"
                   disabled={isSaving}
+                  className="px-4 py-2 text-sm"
                   onClick={async () => {
                     const confirmed = window.confirm(
-                      "Êtes-vous sûr de vouloir désactiver votre compte ? Vous ne pourrez plus vous connecter sans passer par l'équipe Ada Papers."
+                      "Etes-vous sur de vouloir desactiver votre compte ? Vous ne pourrez plus vous connecter sans passer par l'equipe Ada Papers."
                     );
                     if (!confirmed) return;
                     try {
@@ -828,161 +796,110 @@ export default function ComptePage() {
                       setError(null);
                       const response = await userAPI.deactivateMyAccount();
                       if (response.data?.success) {
-                        alert('Votre compte a été désactivé. Vous allez être déconnecté.');
+                        alert('Votre compte a ete desactive. Vous allez etre deconnecte.');
                         await signOut({ callbackUrl: '/' });
                       } else {
-                        setError(response.data?.message || 'Impossible de désactiver le compte');
+                        setError(response.data?.message || 'Impossible de desactiver le compte');
                       }
                     } catch (e: any) {
-                      setError(e?.response?.data?.message || 'Erreur lors de la désactivation du compte');
+                      setError(e?.response?.data?.message || 'Erreur lors de la desactivation du compte');
                     } finally {
                       setIsSaving(false);
                     }
                   }}
                 >
-                  Désactiver mon compte
+                  Desactiver mon compte
                 </Button>
               </div>
             </div>
           </div>
         )}
 
+        {/* ---- Tab: Notifications SMS ---- */}
         {activeTab === 'sms' && (
-          <div className="bg-white rounded-xl shadow-lg border border-border overflow-hidden">
-            <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-4 sm:px-8 py-5 sm:py-6 border-b border-border">
-              <h2 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2 sm:gap-3">
-                <span className="text-2xl sm:text-3xl">📱</span>
-                <span>Préférences SMS</span>
-              </h2>
-              <p className="text-sm text-muted-foreground mt-2">Gérez les notifications SMS que vous souhaitez recevoir</p>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setIsSaving(true);
+              setError(null);
+              setSuccess(null);
+              try {
+                await smsPreferencesAPI.updatePreferences(smsPreferences);
+                setSuccess('Preferences SMS mises a jour avec succes');
+                setTimeout(() => setSuccess(null), 3000);
+              } catch (err: any) {
+                setError(err.response?.data?.message || 'Erreur lors de la mise a jour');
+              } finally {
+                setIsSaving(false);
+              }
+            }}
+          >
+            <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
+              <SectionTitle>Preferences SMS</SectionTitle>
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
+                Les SMS OTP (codes de verification) sont toujours actives pour des raisons de securite.
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Activer les notifications SMS</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Activer ou desactiver toutes les notifications SMS</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={smsPreferences.enabled}
+                    onChange={(e) => setSmsPreferences({ ...smsPreferences, enabled: e.target.checked })}
+                    className="sr-only peer" />
+                  <div className="w-10 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500" />
+                </label>
+              </div>
+
+              <div className="divide-y divide-gray-50">
+                {[
+                  { key: 'appointment_confirmed', label: 'Confirmation de rendez-vous' },
+                  { key: 'appointment_cancelled', label: 'Annulation de rendez-vous' },
+                  { key: 'appointment_updated', label: 'Modification de rendez-vous' },
+                  { key: 'appointment_reminder', label: 'Rappel de rendez-vous' },
+                  { key: 'dossier_created', label: 'Creation de dossier' },
+                  { key: 'dossier_updated', label: 'Mise a jour de dossier' },
+                  { key: 'dossier_status_changed', label: 'Changement de statut de dossier' },
+                  { key: 'document_uploaded', label: 'Document ajoute' },
+                  { key: 'message_received', label: 'Nouveau message' },
+                  { key: 'task_assigned', label: 'Tache assignee' },
+                  { key: 'task_reminder', label: 'Rappel de tache' },
+                  { key: 'account_security', label: 'Securite du compte' },
+                  { key: 'otp', label: 'Codes OTP (toujours actives)', disabled: true },
+                ].map((type) => (
+                  <div key={type.key} className="flex items-center justify-between py-3 gap-4">
+                    <span className={`text-sm ${type.disabled ? 'text-gray-400' : 'text-gray-700'}`}>{type.label}</span>
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={smsPreferences.types[type.key as keyof typeof smsPreferences.types] || false}
+                        onChange={(e) =>
+                          setSmsPreferences({
+                            ...smsPreferences,
+                            types: { ...smsPreferences.types, [type.key]: e.target.checked },
+                          })
+                        }
+                        disabled={type.disabled || !smsPreferences.enabled}
+                        className="sr-only peer"
+                      />
+                      <div className={`w-10 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500 ${(type.disabled || !smsPreferences.enabled) ? 'opacity-40 cursor-not-allowed' : ''}`} />
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <Button type="submit" disabled={isSaving} className="px-5 py-2.5">
+                  {isSaving ? 'Enregistrement...' : 'Enregistrer les preferences'}
+                </Button>
+              </div>
             </div>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setIsSaving(true);
-                setError(null);
-                setSuccess(null);
-                try {
-                  await smsPreferencesAPI.updatePreferences(smsPreferences);
-                  setSuccess('Préférences SMS mises à jour avec succès');
-                  setTimeout(() => setSuccess(null), 3000);
-                } catch (error: any) {
-                  setError(error.response?.data?.message || 'Erreur lors de la mise à jour');
-                } finally {
-                  setIsSaving(false);
-                }
-              }}
-              className="p-4 sm:p-8 space-y-6"
-            >
-              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
-                <p className="text-sm text-blue-800">
-                  <strong>Note :</strong> Les SMS OTP (codes de vérification) sont toujours activés pour des raisons de sécurité et ne peuvent pas être désactivés.
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <Label className="text-base font-semibold mb-1">Activer les notifications SMS</Label>
-                    <p className="text-sm text-muted-foreground">Activez ou désactivez toutes les notifications SMS</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={smsPreferences.enabled}
-                      onChange={(e) => setSmsPreferences({ ...smsPreferences, enabled: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                  </label>
-                </div>
-
-                <div className="border-t border-border pt-6">
-                  <h3 className="text-lg font-semibold mb-4">Types de notifications</h3>
-                  <div className="space-y-3">
-                    {[
-                      { key: 'appointment_confirmed', label: 'Confirmation de rendez-vous', icon: '📅' },
-                      { key: 'appointment_cancelled', label: 'Annulation de rendez-vous', icon: '❌' },
-                      { key: 'appointment_updated', label: 'Modification de rendez-vous', icon: '✏️' },
-                      { key: 'appointment_reminder', label: 'Rappel de rendez-vous', icon: '⏰' },
-                      { key: 'dossier_created', label: 'Création de dossier', icon: '📁' },
-                      { key: 'dossier_updated', label: 'Mise à jour de dossier', icon: '🔄' },
-                      { key: 'dossier_status_changed', label: 'Changement de statut de dossier', icon: '📊' },
-                      { key: 'document_uploaded', label: 'Document ajouté', icon: '📄' },
-                      { key: 'message_received', label: 'Nouveau message', icon: '💬' },
-                      { key: 'task_assigned', label: 'Tâche assignée', icon: '✅' },
-                      { key: 'task_reminder', label: 'Rappel de tâche', icon: '⏳' },
-                      { key: 'account_security', label: 'Sécurité du compte', icon: '🔒' },
-                      { key: 'otp', label: 'Codes OTP (toujours activé)', icon: '🔐', disabled: true },
-                    ].map((type) => (
-                      <div
-                        key={type.key}
-                        className={`flex items-center justify-between p-4 rounded-lg border ${
-                          smsPreferences.types[type.key as keyof typeof smsPreferences.types]
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-gray-50 border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{type.icon}</span>
-                          <div>
-                            <Label className="text-sm font-semibold mb-0">{type.label}</Label>
-                          </div>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={smsPreferences.types[type.key as keyof typeof smsPreferences.types] || false}
-                            onChange={(e) =>
-                              setSmsPreferences({
-                                ...smsPreferences,
-                                types: {
-                                  ...smsPreferences.types,
-                                  [type.key]: e.target.checked,
-                                },
-                              })
-                            }
-                            disabled={type.disabled || !smsPreferences.enabled}
-                            className="sr-only peer"
-                          />
-                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary ${type.disabled || !smsPreferences.enabled ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-4">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isEnablingPush}
-                    onClick={handleEnablePush}
-                    className="px-6 py-3 border-2"
-                  >
-                    {isEnablingPush ? 'Activation...' : 'Activer les notifications push'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isSendingPushTest}
-                    onClick={handlePushTest}
-                    className="px-6 py-3 border-2"
-                  >
-                    {isSendingPushTest ? 'Envoi du push...' : 'Envoyer push test'}
-                  </Button>
-                  <Button type="submit" disabled={isSaving} className="px-8 py-3">
-                    {isSaving ? 'Enregistrement...' : 'Enregistrer les préférences'}
-                  </Button>
-                </div>
-              </div>
-            </form>
-          </div>
+          </form>
         )}
+
       </main>
     </div>
   );
 }
-

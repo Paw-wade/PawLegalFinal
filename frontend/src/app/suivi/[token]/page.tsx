@@ -59,7 +59,7 @@ interface SuiviData {
     titre: string;
     pourPersonne?: string;
     message?: string;
-    statut: 'a_remplir' | 'remplie' | 'annulee';
+    statut: 'a_remplir' | 'en_cours' | 'remplie' | 'refuse' | 'annulee';
     validationStatus?: string;
     validationMotif?: string;
     ficheId: string | null;
@@ -683,7 +683,7 @@ export default function SuiviDossierPage() {
             </button>
           )}
           {p.statut !== 'fourni' && (
-            <label className={`inline-flex cursor-pointer items-center rounded-md bg-teal-600 px-2.5 py-1 text-xs font-medium text-gray-900 hover:bg-teal-700 ${uploadingPieceId === p.id ? 'pointer-events-none opacity-60' : ''}`}>
+            <label className={`inline-flex cursor-pointer items-center rounded-md bg-orange-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-orange-600 ${uploadingPieceId === p.id ? 'pointer-events-none opacity-60' : ''}`}>
               <input
                 ref={(el) => { fileInputs.current[`piece_${p.id}`] = el; }}
                 type="file"
@@ -800,8 +800,8 @@ export default function SuiviDossierPage() {
 
               {/* Left stepper - constitution only, desktop */}
               {isConstitution && (
-                <aside className="hidden lg:block">
-                  <div className="sticky top-6 rounded-xl border border-gray-200 bg-white p-4">
+                <aside className="hidden lg:block lg:sticky lg:top-[76px] lg:self-start">
+                  <div className="rounded-xl border border-gray-200 bg-white p-4">
                     <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Avancement</p>
                     <ol className="space-y-4">
                       {CONSTITUTION_STEPS.map(step => (
@@ -856,8 +856,10 @@ export default function SuiviDossierPage() {
                                 </span>
                                 <span className="text-[11px] text-gray-400">{ficheTimeEst(r.typeFiche)}</span>
                               </div>
-                              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500">
-                                {r.pourPersonne ? personInitials(r.pourPersonne) : 'STE'}
+                              <div className="mb-2">
+                                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
+                                  {r.pourPersonne || 'La societe'}
+                                </span>
                               </div>
                               <p className="text-sm font-semibold text-gray-900">{r.titre || r.typeFiche}</p>
                               <p className="mb-3 mt-0.5 flex-1 text-xs text-gray-400">{ficheSubtitleText(r)}</p>
@@ -962,11 +964,42 @@ export default function SuiviDossierPage() {
                   <div>
                     {(data.pieceRequests || []).filter(p => p.statut !== 'annulee').length === 0 ? (
                       <p className="py-12 text-center text-sm text-gray-400">Aucune piece demandee pour l'instant.</p>
-                    ) : (
-                      <ul className="space-y-2">
-                        {(data.pieceRequests || []).filter(p => p.statut !== 'annulee').map(p => renderPieceItem(p))}
-                      </ul>
-                    )}
+                    ) : (() => {
+                      const activePieces = (data.pieceRequests || []).filter(p => p.statut !== 'annulee');
+                      const general = activePieces.filter(p => !p.pourPersonne);
+                      const personMap = new Map<string, typeof activePieces>();
+                      activePieces.filter(p => p.pourPersonne).forEach(p => {
+                        const key = p.pourPersonne!;
+                        if (!personMap.has(key)) personMap.set(key, []);
+                        personMap.get(key)!.push(p);
+                      });
+                      const hasAssociates = personMap.size > 0;
+                      return (
+                        <div className="space-y-6">
+                          {general.length > 0 && (
+                            <div>
+                              {hasAssociates && (
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">General</p>
+                              )}
+                              <ul className="space-y-0 rounded-xl border border-gray-200 bg-white px-4">
+                                {general.map(p => renderPieceItem(p))}
+                              </ul>
+                            </div>
+                          )}
+                          {Array.from(personMap.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([person, pieces]) => (
+                            <div key={person}>
+                              <div className="mb-2 flex items-center gap-2">
+                                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600">{person}</span>
+                                <span className="text-xs text-gray-400">associe</span>
+                              </div>
+                              <ul className="space-y-0 rounded-xl border border-gray-200 bg-white px-4">
+                                {pieces.map(p => renderPieceItem(p))}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     {/* Ajouter une piece */}
                     <div className="mt-6">
                       {addingPiece ? (

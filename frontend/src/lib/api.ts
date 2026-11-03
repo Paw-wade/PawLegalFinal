@@ -975,6 +975,10 @@ export const appointmentsAPI = {
   // Admin - Supprimer un rendez-vous
   deleteAppointment: (id: string) =>
     api.delete(`/appointments/${id}`),
+
+  // Admin - Statut integration Google Calendar
+  getGoogleCalendarStatus: () =>
+    api.get('/appointments/google-calendar/status'),
 };
 
 export const tasksAPI = {
@@ -1032,9 +1036,14 @@ export const tasksAPI = {
     return api.put(`/tasks/${id}`, data);
   },
   
-  // Ajouter une note/commentaire à une tâche
+  // Ajouter une note/commentaire a une tache
   addNoteToTask: (id: string, data: { contenu: string }) => {
     return api.post(`/tasks/${id}/notes`, data);
+  },
+
+  // Supprimer un commentaire d'une tache
+  deleteNoteFromTask: (id: string, noteId: string) => {
+    return api.delete(`/tasks/${id}/notes/${noteId}`);
   },
   
   // Supprimer une tâche (Admin)
@@ -1046,6 +1055,14 @@ export const tasksAPI = {
   checkOverdueTasks: () => {
     return api.post('/tasks/check-overdue');
   },
+
+  // Sous-taches
+  addSousTache: (taskId: string, data: { titre: string }) =>
+    api.post(`/tasks/${taskId}/sous-taches`, data),
+  updateSousTache: (taskId: string, stId: string, data: { complete?: boolean; titre?: string }) =>
+    api.patch(`/tasks/${taskId}/sous-taches/${stId}`, data),
+  deleteSousTache: (taskId: string, stId: string) =>
+    api.delete(`/tasks/${taskId}/sous-taches/${stId}`),
 };
 
 export const lettreMissionAPI = {

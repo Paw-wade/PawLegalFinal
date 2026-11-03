@@ -571,6 +571,7 @@ export default function HomePage() {
                 {[
                   { href: '/a-propos', label: 'A propos' },
                   { href: '/faq', label: 'FAQ' },
+                  { href: '/forum', label: 'Forum' },
                   { href: '/calculateur', label: 'Calculateur' },
                   { href: '/contact', label: 'Contact' },
                 ].map(({ href, label }) => (

@@ -11,53 +11,42 @@ import { Toast } from '@/components/ui/Toast';
 
 function Button({ children, variant = 'default', className = '', disabled = false, ...props }: any) {
   const baseClasses = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
-  const variantClasses = {
-    default: 'bg-orange-500 text-white hover:bg-orange-600 shadow-md font-semibold',
-    outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-    ghost: 'hover:bg-accent hover:text-accent-foreground',
+  const variantClasses: Record<string, string> = {
+    default: 'bg-orange-500 text-white hover:bg-orange-600',
+    outline: 'border border-gray-200 bg-white hover:bg-gray-50 text-gray-700',
+    ghost: 'hover:bg-gray-100 text-gray-700',
+    danger: 'border border-red-300 text-red-600 bg-white hover:bg-red-50',
   };
-  return <button className={`${baseClasses} ${variantClasses[variant]} ${className}`} disabled={disabled} {...props}>{children}</button>;
+  return (
+    <button
+      className={`${baseClasses} ${variantClasses[variant] || variantClasses.default} ${className}`}
+      disabled={disabled}
+      {...props}
+    >
+      {children}
+    </button>
+  );
 }
 
 function Input({ className = '', type, value, onChange, id, name, autoComplete, ...props }: any) {
   const resolvedName = name || id;
   const normalizedField = String(resolvedName || '').toLowerCase();
   const inferredAutoCompleteByField =
-    normalizedField === 'firstname'
-      ? 'given-name'
-      : normalizedField === 'lastname'
-        ? 'family-name'
-        : normalizedField === 'email'
-          ? 'email'
-          : normalizedField === 'phone'
-            ? 'tel'
-            : normalizedField === 'adresspostale' || normalizedField === 'adressepostale'
-              ? 'street-address'
-              : normalizedField === 'ville'
-                ? 'address-level2'
-                : normalizedField === 'codepostal'
-                  ? 'postal-code'
-                  : normalizedField === 'pays'
-                    ? 'country-name'
-                    : normalizedField === 'datenaissance'
-                      ? 'bday'
-                      : (normalizedField === 'datedelivrance' || normalizedField === 'dateexpiration')
-                        ? 'off'
-                        : undefined;
+    normalizedField === 'firstname' ? 'given-name'
+    : normalizedField === 'lastname' ? 'family-name'
+    : normalizedField === 'email' ? 'email'
+    : normalizedField === 'phone' ? 'tel'
+    : (normalizedField === 'adresspostale' || normalizedField === 'adressepostale') ? 'street-address'
+    : normalizedField === 'ville' ? 'address-level2'
+    : normalizedField === 'codepostal' ? 'postal-code'
+    : normalizedField === 'pays' ? 'country-name'
+    : normalizedField === 'datenaissance' ? 'bday'
+    : (normalizedField === 'datedelivrance' || normalizedField === 'dateexpiration') ? 'off'
+    : undefined;
   const resolvedAutoComplete =
-    autoComplete ||
-    inferredAutoCompleteByField ||
-    (type === 'email'
-      ? 'email'
-      : type === 'tel'
-        ? 'tel'
-        : type === 'password'
-          ? 'current-password'
-          : type === 'date'
-            ? 'off'
-            : 'on');
+    autoComplete || inferredAutoCompleteByField ||
+    (type === 'email' ? 'email' : type === 'tel' ? 'tel' : type === 'password' ? 'current-password' : type === 'date' ? 'off' : 'on');
 
-  // Pour les champs de date, utiliser le composant DateInput qui garantit le format jour/mois/année
   if (type === 'date') {
     return (
       <DateInputComponent
@@ -67,26 +56,23 @@ function Input({ className = '', type, value, onChange, id, name, autoComplete, 
         value={value || ''}
         onChange={(newValue) => {
           if (onChange) {
-            const syntheticEvent = {
-              target: { value: newValue },
-              currentTarget: { value: newValue }
-            } as React.ChangeEvent<HTMLInputElement>;
+            const syntheticEvent = { target: { value: newValue }, currentTarget: { value: newValue } } as React.ChangeEvent<HTMLInputElement>;
             onChange(syntheticEvent);
           }
         }}
-        className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+        className={`flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
         {...props}
       />
     );
   }
-  
+
   return (
     <input
       id={id}
       name={resolvedName}
       autoComplete={resolvedAutoComplete}
       type={type}
-      className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     />
   );
@@ -94,7 +80,7 @@ function Input({ className = '', type, value, onChange, id, name, autoComplete, 
 
 function Label({ className = '', children, ...props }: any) {
   return (
-    <label className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 ${className}`} {...props}>
+    <label className={`text-sm font-medium text-gray-700 ${className}`} {...props}>
       {children}
     </label>
   );
@@ -107,9 +93,41 @@ function Textarea({ className = '', id, name, autoComplete, ...props }: any) {
       id={id}
       name={resolvedName}
       autoComplete={autoComplete || 'street-address'}
-      className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`flex min-h-[80px] w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     />
+  );
+}
+
+function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-50 flex items-center gap-2">
+        <div className="w-1 h-4 bg-orange-500 rounded-full" aria-hidden="true" />
+        <h3 className="text-sm font-medium text-gray-700">{title}</h3>
+      </div>
+      <div className="px-5 divide-y divide-gray-50">{children}</div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="flex justify-between items-start py-3 gap-4">
+      <span className="text-sm text-gray-500 flex-shrink-0">{label}</span>
+      <span className="text-sm text-gray-900 font-medium text-right">
+        {value || <span className="text-gray-400 font-normal italic">Non renseigne</span>}
+      </span>
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <div className="w-1 h-6 bg-orange-500 rounded-full" aria-hidden="true" />
+      <h3 className="text-base font-medium text-gray-800">{children}</h3>
+    </div>
   );
 }
 
@@ -127,10 +145,7 @@ export default function AdminComptePage() {
   >('checking');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
-  // Données du profil - Tous les champs seront automatiquement pré-remplis avec les données de la base
-  // lors du chargement du profil via loadProfile()
-  // L'administrateur peut modifier tous les champs de son propre profil
+
   const [profileData, setProfileData] = useState({
     firstName: '',
     lastName: '',
@@ -151,16 +166,12 @@ export default function AdminComptePage() {
     pays: '',
   });
 
-  // Données pour le changement de mot de passe
-  // IMPORTANT : Le mot de passe n'est JAMAIS pré-rempli pour des raisons de sécurité
-  // L'administrateur doit toujours saisir son mot de passe actuel pour le changer
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
 
-  // Préférences SMS
   const [smsPreferences, setSmsPreferences] = useState({
     enabled: true,
     types: {
@@ -176,8 +187,8 @@ export default function AdminComptePage() {
       task_assigned: true,
       task_reminder: true,
       account_security: true,
-      otp: true, // Toujours activé pour sécurité
-    }
+      otp: true,
+    },
   });
 
   useEffect(() => {
@@ -193,8 +204,6 @@ export default function AdminComptePage() {
   }, [session, status, router]);
 
   useEffect(() => {
-    // Charger le profil automatiquement lorsque l'administrateur est authentifié
-    // Le formulaire sera pré-rempli avec toutes les données existantes
     if (status === 'authenticated' && session && ((session.user as any)?.role === 'admin' || (session.user as any)?.role === 'superadmin')) {
       loadProfile();
     }
@@ -207,28 +216,14 @@ export default function AdminComptePage() {
         setPushStatus('unsupported');
         return;
       }
-
       const permission = Notification.permission;
-      if (permission === 'denied') {
-        setPushStatus('denied');
-        return;
-      }
-      if (permission === 'default') {
-        setPushStatus('default');
-        return;
-      }
-
+      if (permission === 'denied') { setPushStatus('denied'); return; }
+      if (permission === 'default') { setPushStatus('default'); return; }
       try {
         const registration = await navigator.serviceWorker.getRegistration('/sw.js');
         const subscription = await registration?.pushManager.getSubscription();
-        if (subscription) {
-          setPushStatus('enabled');
-          return;
-        }
-      } catch {
-        // On continue pour vérifier la config serveur même si la souscription n'est pas lisible.
-      }
-
+        if (subscription) { setPushStatus('enabled'); return; }
+      } catch {}
       try {
         await pushAPI.getPublicKey();
         setPushStatus('default');
@@ -236,50 +231,25 @@ export default function AdminComptePage() {
         setPushStatus('server_not_configured');
       }
     };
-
-    if (status === 'authenticated') {
-      checkPushStatus();
-    }
+    if (status === 'authenticated') checkPushStatus();
   }, [status]);
 
   const loadProfile = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      console.log('🔄 Chargement du profil administrateur...');
       const response = await userAPI.getProfile();
-      
       if (response.data.success) {
         const user = response.data.user || response.data.data;
-        console.log('✅ Profil chargé:', { 
-          firstName: user.firstName, 
-          lastName: user.lastName, 
-          email: user.email,
-          role: user.role,
-          hasPhone: !!user.phone,
-          hasDateNaissance: !!user.dateNaissance,
-          hasDateDelivrance: !!user.dateDelivrance,
-          hasDateExpiration: !!user.dateExpiration
-        });
-        
-        // Fonction helper pour formater les dates de manière sécurisée
         const formatDate = (dateValue: any): string => {
           if (!dateValue) return '';
           try {
-            // Gérer les chaînes de caractères et les objets Date
             const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
             if (isNaN(date.getTime())) return '';
             return date.toISOString().split('T')[0];
-          } catch {
-            return '';
-          }
+          } catch { return ''; }
         };
-
-        // Pré-remplir TOUS les champs avec les données existantes
-        // Si une valeur existe en base, elle est utilisée, sinon chaîne vide
-        // Les champs ne doivent JAMAIS être undefined ou null
-        // L'administrateur peut modifier tous les champs de son propre profil
-        const preFilledData = {
+        setProfileData({
           firstName: String(user.firstName || '').trim(),
           lastName: String(user.lastName || '').trim(),
           email: String(user.email || '').trim(),
@@ -297,13 +267,8 @@ export default function AdminComptePage() {
           ville: String(user.ville || '').trim(),
           codePostal: String(user.codePostal || '').trim(),
           pays: String(user.pays || 'France').trim(),
-        };
-        
-        console.log('📝 Données pré-remplies:', preFilledData);
-        setProfileData(preFilledData);
+        });
         setIsEditingProfile(false);
-        
-        // Charger les préférences SMS
         if (user.smsPreferences) {
           setSmsPreferences({
             enabled: user.smsPreferences.enabled !== false,
@@ -320,17 +285,15 @@ export default function AdminComptePage() {
               task_assigned: user.smsPreferences.types?.task_assigned !== false,
               task_reminder: user.smsPreferences.types?.task_reminder !== false,
               account_security: user.smsPreferences.types?.account_security !== false,
-              otp: true, // Toujours activé
-            }
+              otp: true,
+            },
           });
         }
       } else {
-        console.error('❌ Erreur: réponse non réussie', response.data);
         setError('Impossible de charger le profil');
       }
-    } catch (error: any) {
-      console.error('❌ Erreur lors du chargement du profil:', error);
-      setError(error.response?.data?.message || 'Erreur lors du chargement du profil');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur lors du chargement du profil');
     } finally {
       setIsLoading(false);
     }
@@ -341,13 +304,11 @@ export default function AdminComptePage() {
     setIsSaving(true);
     setError(null);
     setSuccess(null);
-
     try {
       const merged = mergeProfileFormValuesFromDom(profileData as Record<string, string>, {
         includeSejour: true,
         includeAccountFields: true,
       }) as typeof profileData;
-
       const payload = {
         firstName: merged.firstName ?? '',
         lastName: merged.lastName ?? '',
@@ -370,18 +331,17 @@ export default function AdminComptePage() {
       const response = await userAPI.updateProfile(payload);
       const data = response?.data;
       if (data && data.success) {
-        setSuccess('Profil mis à jour avec succès');
+        setSuccess('Profil mis a jour avec succes');
         setTimeout(() => setSuccess(null), 3000);
         await loadProfile();
       } else {
-        setError((data && data.message) || 'Erreur lors de la mise à jour du profil');
+        setError((data && data.message) || 'Erreur lors de la mise a jour du profil');
       }
-    } catch (error: any) {
-      console.error('Erreur lors de la mise à jour du profil:', error);
-      const status = error.response?.status;
-      const message = error.response?.data?.message || error.message || 'Erreur lors de la mise à jour du profil';
-      if (status === 401) {
-        setError('Session expirée. Veuillez vous reconnecter, puis réessayer.');
+    } catch (err: any) {
+      const st = err.response?.status;
+      const message = err.response?.data?.message || err.message || 'Erreur lors de la mise a jour du profil';
+      if (st === 401) {
+        setError('Session expiree. Veuillez vous reconnecter, puis reessayer.');
       } else {
         setError(message);
       }
@@ -395,35 +355,28 @@ export default function AdminComptePage() {
     setIsSaving(true);
     setError(null);
     setSuccess(null);
-
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       setError('Les mots de passe ne correspondent pas');
       setIsSaving(false);
       return;
     }
-
     if (passwordData.newPassword.length < 8) {
-      setError('Le nouveau mot de passe doit contenir au moins 8 caractères');
+      setError('Le nouveau mot de passe doit contenir au moins 8 caracteres');
       setIsSaving(false);
       return;
     }
-
     try {
       const response = await userAPI.changePassword({
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
       });
       if (response.data.success) {
-        setSuccess('Mot de passe modifié avec succès');
-        setPasswordData({
-          currentPassword: '',
-          newPassword: '',
-          confirmPassword: '',
-        });
+        setSuccess('Mot de passe modifie avec succes');
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
         setTimeout(() => setSuccess(null), 3000);
       }
-    } catch (error: any) {
-      setError(error.response?.data?.message || 'Erreur lors du changement de mot de passe');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Erreur lors du changement de mot de passe');
     } finally {
       setIsSaving(false);
     }
@@ -437,13 +390,13 @@ export default function AdminComptePage() {
       const response = await pushAPI.sendTest();
       const sent = Number(response?.data?.result?.sent || 0);
       if (sent > 0) {
-        setSuccess(`Push test envoyé (${sent} appareil${sent > 1 ? 's' : ''}).`);
+        setSuccess(`Push test envoye (${sent} appareil${sent > 1 ? 's' : ''}).`);
       } else {
-        setSuccess('Test envoyé, mais aucun appareil abonné actif n’a été trouvé.');
+        setSuccess('Test envoye, mais aucun appareil abonne actif trouve.');
       }
       setTimeout(() => setSuccess(null), 3500);
-    } catch (error: any) {
-      setError(error?.response?.data?.message || 'Impossible d’envoyer le push test.');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Impossible d\'envoyer le push test.');
     } finally {
       setIsSendingPushTest(false);
       if (typeof window !== 'undefined' && Notification.permission === 'granted') {
@@ -460,53 +413,46 @@ export default function AdminComptePage() {
       const result = await ensurePushSubscription({ requestPermission: true });
       if (result.ok) {
         setPushStatus('enabled');
-        setSuccess('Notifications push activées sur cet appareil.');
+        setSuccess('Notifications push activees sur cet appareil.');
       } else if (result.reason === 'permission_required') {
         setPushStatus('default');
         setError('Veuillez autoriser les notifications dans votre navigateur.');
       } else if (result.reason === 'denied') {
         setPushStatus('denied');
-        setError('Notifications refusées dans le navigateur (paramètres à modifier).');
+        setError('Notifications refusees dans le navigateur (parametres a modifier).');
       } else if (result.reason === 'server_not_configured') {
         setPushStatus('server_not_configured');
-        setError('Serveur push non configuré (clés VAPID manquantes).');
+        setError('Serveur push non configure (cles VAPID manquantes).');
       } else {
         setPushStatus('unsupported');
         setError('Ce navigateur ne supporte pas les notifications push.');
       }
-    } catch (error: any) {
-      setError(error?.response?.data?.message || 'Impossible d’activer les notifications push.');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Impossible d\'activer les notifications push.');
     } finally {
       setIsEnablingPush(false);
     }
   };
 
   const pushStatusLabel =
-    pushStatus === 'enabled'
-      ? 'Activé'
-      : pushStatus === 'denied'
-        ? 'Refusé'
-        : pushStatus === 'default'
-          ? 'À autoriser'
-          : pushStatus === 'unsupported'
-            ? 'Non supporté'
-            : pushStatus === 'server_not_configured'
-              ? 'Serveur non configuré'
-              : 'Vérification...';
+    pushStatus === 'enabled' ? 'Actif'
+    : pushStatus === 'denied' ? 'Refuse'
+    : pushStatus === 'default' ? 'A autoriser'
+    : pushStatus === 'unsupported' ? 'Non supporte'
+    : pushStatus === 'server_not_configured' ? 'Serveur non configure'
+    : 'Verification...';
 
   const pushStatusClasses =
-    pushStatus === 'enabled'
-      ? 'bg-green-100 text-green-800 border-green-200'
-      : pushStatus === 'denied' || pushStatus === 'server_not_configured'
-        ? 'bg-red-100 text-red-800 border-red-200'
-        : 'bg-amber-100 text-amber-800 border-amber-200';
+    pushStatus === 'enabled' ? 'bg-green-50 text-green-700 border-green-200'
+    : (pushStatus === 'denied' || pushStatus === 'server_not_configured') ? 'bg-red-50 text-red-700 border-red-200'
+    : 'bg-amber-50 text-amber-700 border-amber-200';
 
   if (status === 'loading' || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Chargement...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Chargement...</p>
         </div>
       </div>
     );
@@ -516,714 +462,448 @@ export default function AdminComptePage() {
     return null;
   }
 
+  const firstInitial = (profileData.firstName || '').charAt(0).toUpperCase();
+  const lastInitial = (profileData.lastName || '').charAt(0).toUpperCase();
+  const initials = (firstInitial + lastInitial) || (session?.user?.name?.charAt(0)?.toUpperCase() ?? 'A');
+  const fullName = [profileData.firstName, profileData.lastName].filter(Boolean).join(' ') || session?.user?.name || '';
+  const userRole = (session.user as any)?.role ?? 'admin';
+  const roleLabel = userRole === 'superadmin' ? 'Super administrateur' : 'Administrateur';
+
+  const displayDate = (iso: string): string => {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  };
+
+  const sexeLabel: Record<string, string> = { M: 'Masculin', F: 'Feminin', Autre: 'Autre' };
+  const typeTitreLabel: Record<string, string> = {
+    visiteur: 'Visiteur',
+    etudiant: 'Etudiant',
+    salarie: 'Salarie',
+    travailleur_temporaire: 'Travailleur temporaire',
+    scientifique: 'Scientifique',
+    artiste: 'Artiste',
+    commercant: 'Commercant',
+    autre: 'Autre',
+  };
+
+  const tabs = [
+    { key: 'profil', label: 'Profil' },
+    { key: 'password', label: 'Securite' },
+    { key: 'sms', label: 'Notifications SMS' },
+  ] as const;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/10 to-background overflow-x-hidden max-w-[100vw]">
+    <div className="min-h-screen bg-gray-50/40">
       <Toast message={success || ''} visible={!!success} />
-      <main className="w-full px-3 sm:px-4 py-5 sm:py-8">
-        {/* En-tête amélioré */}
-        <div className="mb-6 sm:mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-primary to-primary/70 rounded-2xl flex items-center justify-center shadow-lg">
-              <span className="text-3xl">👤</span>
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-2xl sm:text-4xl font-bold mb-1 sm:mb-2 bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
-                Mon Compte
-              </h1>
-              <p className="text-muted-foreground text-sm sm:text-lg">Gérez vos informations personnelles et votre sécurité</p>
+      <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+
+        {/* Profile header */}
+        <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-col sm:flex-row gap-4 sm:items-center">
+          <div
+            className="w-16 h-16 rounded-full bg-orange-500 flex items-center justify-center text-white text-xl font-medium flex-shrink-0 select-none"
+            aria-hidden="true"
+          >
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-medium text-gray-900">{fullName || 'Mon profil'}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">{roleLabel}</p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                {roleLabel}
+              </span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                Actif
+              </span>
             </div>
           </div>
-          <div className="mt-3">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${pushStatusClasses}`}>
-                Push: {pushStatusLabel}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isEnablingPush}
-                onClick={handleEnablePush}
-                className="w-full sm:w-auto px-4 py-2 border-2 text-xs sm:text-sm"
-              >
-                {isEnablingPush ? 'Activation...' : 'Activer les notifications push'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isSendingPushTest}
-                onClick={handlePushTest}
-                className="w-full sm:w-auto px-4 py-2 border-2 text-xs sm:text-sm"
-              >
-                {isSendingPushTest ? 'Envoi du push...' : 'Envoyer push test'}
-              </Button>
-            </div>
+          <div className="hidden sm:flex flex-col items-end gap-1 text-xs text-gray-500">
+            {profileData.email && (
+              <span>Email: <span className="text-gray-800 font-medium">{profileData.email}</span></span>
+            )}
+            {profileData.phone && (
+              <span>Tel: <span className="text-gray-800 font-medium">{profileData.phone}</span></span>
+            )}
           </div>
         </div>
 
-        {/* Onglets améliorés */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden mb-6">
-          <div className="flex gap-1 border-b bg-gray-50/50 p-2 overflow-x-auto">
+        {/* Tab navigation */}
+        <div className="flex gap-0 border-b border-gray-200 overflow-x-auto bg-white rounded-t-xl">
+          {tabs.map((tab) => (
             <button
-              onClick={() => setActiveTab('profil')}
-              className={`min-w-max flex-1 px-3 sm:px-6 py-2.5 sm:py-3 font-semibold text-xs sm:text-sm transition-all duration-200 rounded-lg whitespace-nowrap ${
-                activeTab === 'profil'
-                  ? 'bg-white text-primary shadow-md border border-primary/20'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-5 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === tab.key
+                  ? 'border-orange-500 text-orange-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300'
               }`}
             >
-              <span className="flex items-center justify-center gap-2">
-                <span className="text-sm sm:text-lg">👤</span>
-                <span>Informations personnelles</span>
-              </span>
+              {tab.label}
             </button>
-            <button
-              onClick={() => setActiveTab('password')}
-              className={`min-w-max flex-1 px-3 sm:px-6 py-2.5 sm:py-3 font-semibold text-xs sm:text-sm transition-all duration-200 rounded-lg whitespace-nowrap ${
-                activeTab === 'password'
-                  ? 'bg-white text-primary shadow-md border border-primary/20'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
-              }`}
-            >
-              <span className="flex items-center justify-center gap-2">
-                <span className="text-sm sm:text-lg">🔒</span>
-                <span>Mot de passe</span>
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab('sms')}
-              className={`min-w-max flex-1 px-3 sm:px-6 py-2.5 sm:py-3 font-semibold text-xs sm:text-sm transition-all duration-200 rounded-lg whitespace-nowrap ${
-                activeTab === 'sms'
-                  ? 'bg-white text-primary shadow-md border border-primary/20'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
-              }`}
-            >
-              <span className="flex items-center justify-center gap-2">
-                <span className="text-sm sm:text-lg">📱</span>
-                <span>Notifications SMS</span>
-              </span>
-            </button>
+          ))}
+        </div>
+
+        {/* Messages */}
+        {error && (
+          <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
+            <span className="flex-shrink-0 mt-0.5">&#x26A0;</span>
+            <span>{error}</span>
           </div>
+        )}
+        {success && (
+          <div className="p-3.5 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+            {success}
+          </div>
+        )}
 
-          <div className="p-4 sm:p-8">
-
-          {error && (
-            <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-red-100/50 border-2 border-red-300 rounded-xl shadow-sm">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">⚠️</span>
-                <p className="text-sm font-medium text-red-800">{error}</p>
-              </div>
-            </div>
-          )}
-
-          {success && (
-            <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-green-100/50 border-2 border-green-300 rounded-xl shadow-sm">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">✅</span>
-                <p className="text-sm font-medium text-green-800">{success}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Formulaire de profil */}
-          {activeTab === 'profil' && (
-            <form onSubmit={handleProfileSubmit} className="space-y-8" autoComplete="on">
-              <fieldset
-                aria-disabled={!isEditingProfile}
-                className={!isEditingProfile ? 'opacity-100 pointer-events-none' : ''}
+        {/* ---- Tab: Profil - vue ---- */}
+        {activeTab === 'profil' && !isEditingProfile && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                onClick={() => setIsEditingProfile(true)}
+                className="px-4 py-2 text-sm"
               >
-              <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
-                {/* Informations de base */}
-                <div className="space-y-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-1 h-8 bg-blue-500 rounded-full"></div>
-                    <h3 className="text-xl font-bold text-foreground">Informations de base</h3>
-                  </div>
-                  <div className="bg-gradient-to-br from-blue-50/50 to-white rounded-xl p-4 sm:p-6 border border-blue-100 space-y-5">
-                  
-                    <div>
-                      <Label htmlFor="firstName" className="flex items-center gap-2 mb-2">
-                        <span>👤</span>
-                        <span>Prénom</span>
-                      </Label>
-                      <Input
-                        id="firstName"
-                        value={profileData.firstName}
-                        onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                      />
-                    </div>
+                Modifier le profil
+              </Button>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <InfoCard title="Informations de base">
+                <InfoRow label="Prenom" value={profileData.firstName} />
+                <InfoRow label="Nom" value={profileData.lastName} />
+                <InfoRow label="Email" value={profileData.email} />
+                <InfoRow label="Telephone" value={profileData.phone} />
+                <InfoRow label="Date de naissance" value={displayDate(profileData.dateNaissance)} />
+                <InfoRow label="Lieu de naissance" value={profileData.lieuNaissance} />
+                <InfoRow label="Nationalite" value={profileData.nationalite} />
+                <InfoRow label="Sexe" value={sexeLabel[profileData.sexe] || profileData.sexe} />
+              </InfoCard>
+              <InfoCard title="Informations administratives">
+                <InfoRow label="Numero d'etranger" value={profileData.numeroEtranger} />
+                <InfoRow label="Numero de titre" value={profileData.numeroTitre} />
+                <InfoRow label="Type de titre" value={typeTitreLabel[profileData.typeTitre] || profileData.typeTitre} />
+                <InfoRow label="Date de delivrance" value={displayDate(profileData.dateDelivrance)} />
+                <InfoRow label="Date d'expiration" value={displayDate(profileData.dateExpiration)} />
+              </InfoCard>
+              <InfoCard title="Adresse">
+                <InfoRow label="Adresse" value={profileData.adressePostale} />
+                <InfoRow label="Ville" value={profileData.ville} />
+                <InfoRow label="Code postal" value={profileData.codePostal} />
+                <InfoRow label="Pays" value={profileData.pays} />
+              </InfoCard>
+            </div>
+          </div>
+        )}
 
-                    <div>
-                      <Label htmlFor="lastName" className="flex items-center gap-2 mb-2">
-                        <span>📝</span>
-                        <span>Nom</span>
-                      </Label>
-                      <Input
-                        id="lastName"
-                        value={profileData.lastName}
-                        onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="email" className="flex items-center gap-2 mb-2">
-                        <span>📧</span>
-                        <span>Email</span>
-                      </Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={profileData.email}
-                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="phone" className="flex items-center gap-2 mb-2">
-                        <span>📞</span>
-                        <span>Téléphone</span>
-                      </Label>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        value={profileData.phone}
-                        onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                        placeholder="+33 6 12 34 56 78"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="dateNaissance" className="flex items-center gap-2 mb-2">
-                        <span>🎂</span>
-                        <span>Date de naissance</span>
-                      </Label>
-                      <Input
-                        id="dateNaissance"
-                        type="date"
-                        value={profileData.dateNaissance}
-                        onChange={(e) => setProfileData({ ...profileData, dateNaissance: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="lieuNaissance" className="flex items-center gap-2 mb-2">
-                        <span>📍</span>
-                        <span>Lieu de naissance</span>
-                      </Label>
-                      <Input
-                        id="lieuNaissance"
-                        value={profileData.lieuNaissance}
-                        onChange={(e) => setProfileData({ ...profileData, lieuNaissance: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                        placeholder="Ville, Pays"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="nationalite" className="flex items-center gap-2 mb-2">
-                        <span>🌍</span>
-                        <span>Nationalité</span>
-                      </Label>
-                      <Input
-                        id="nationalite"
-                        value={profileData.nationalite}
-                        onChange={(e) => setProfileData({ ...profileData, nationalite: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                        placeholder="Ex: Française"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="sexe" className="flex items-center gap-2 mb-2">
-                        <span>⚧️</span>
-                        <span>Sexe</span>
-                      </Label>
-                      <select
-                        id="sexe"
-                        value={profileData.sexe}
-                        onChange={(e) => setProfileData({ ...profileData, sexe: e.target.value })}
-                        className="flex h-11 w-full rounded-md border-2 border-input bg-background px-3 py-2 text-sm focus:border-primary transition-colors"
-                      >
-                        <option value="">Sélectionner</option>
-                        <option value="M">Masculin</option>
-                        <option value="F">Féminin</option>
-                        <option value="Autre">Autre</option>
-                      </select>
-                    </div>
-                  </div>
+        {/* ---- Tab: Profil - edition ---- */}
+        {activeTab === 'profil' && isEditingProfile && (
+          <form onSubmit={handleProfileSubmit} className="bg-white rounded-xl border border-gray-100 p-6 space-y-8" autoComplete="on">
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Colonne gauche */}
+              <div className="space-y-5">
+                <SectionTitle>Informations de base</SectionTitle>
+                <div>
+                  <Label htmlFor="firstName" className="block mb-1.5">Prenom</Label>
+                  <Input id="firstName" value={profileData.firstName}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, firstName: e.target.value })} />
                 </div>
-
-                {/* Informations administratives */}
-                <div className="space-y-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-1 h-8 bg-purple-500 rounded-full"></div>
-                    <h3 className="text-xl font-bold text-foreground">Informations administratives</h3>
-                  </div>
-                  <div className="bg-gradient-to-br from-purple-50/50 to-white rounded-xl p-4 sm:p-6 border border-purple-100 space-y-5">
-
-                    <div>
-                      <Label htmlFor="numeroEtranger" className="flex items-center gap-2 mb-2">
-                        <span>🆔</span>
-                        <span>Numéro d'étranger</span>
-                      </Label>
-                      <Input
-                        id="numeroEtranger"
-                        value={profileData.numeroEtranger}
-                        readOnly
-                        className="h-11 border-2 bg-gray-50 text-gray-700 cursor-not-allowed"
-                        placeholder="Ex: 1234567890123"
-                      />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Ce numéro est figé pour garantir la traçabilité des dossiers. Utilisez un autre identifiant si besoin.
-                      </p>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="numeroTitre" className="flex items-center gap-2 mb-2">
-                        <span>📄</span>
-                        <span>Numéro de titre de séjour</span>
-                      </Label>
-                      <Input
-                        id="numeroTitre"
-                        value={profileData.numeroTitre}
-                        onChange={(e) => setProfileData({ ...profileData, numeroTitre: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                        placeholder="Ex: 12AB34567"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="typeTitre" className="flex items-center gap-2 mb-2">
-                        <span>📋</span>
-                        <span>Type de titre</span>
-                      </Label>
-                      <select
-                        id="typeTitre"
-                        value={profileData.typeTitre}
-                        onChange={(e) => setProfileData({ ...profileData, typeTitre: e.target.value })}
-                        className="flex h-11 w-full rounded-md border-2 border-input bg-background px-3 py-2 text-sm focus:border-primary transition-colors"
-                      >
-                        <option value="">Sélectionner</option>
-                        <option value="visiteur">Visiteur</option>
-                        <option value="etudiant">Étudiant</option>
-                        <option value="salarie">Salarié</option>
-                        <option value="travailleur_temporaire">Travailleur temporaire</option>
-                        <option value="scientifique">Scientifique</option>
-                        <option value="artiste">Artiste</option>
-                        <option value="commercant">Commerçant</option>
-                        <option value="autre">Autre</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="dateDelivrance" className="flex items-center gap-2 mb-2">
-                        <span>📅</span>
-                        <span>Date de délivrance</span>
-                      </Label>
-                      <Input
-                        id="dateDelivrance"
-                        type="date"
-                        value={profileData.dateDelivrance}
-                        onChange={(e) => setProfileData({ ...profileData, dateDelivrance: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="dateExpiration" className="flex items-center gap-2 mb-2">
-                        <span>⏰</span>
-                        <span>Date d'expiration</span>
-                      </Label>
-                      <Input
-                        id="dateExpiration"
-                        type="date"
-                        value={profileData.dateExpiration}
-                        onChange={(e) => setProfileData({ ...profileData, dateExpiration: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 mb-4 mt-6">
-                    <div className="w-1 h-8 bg-green-500 rounded-full"></div>
-                    <h3 className="text-xl font-bold text-foreground">Adresse</h3>
-                  </div>
-                  <div className="bg-gradient-to-br from-green-50/50 to-white rounded-xl p-4 sm:p-6 border border-green-100 space-y-5">
-
-                    <div>
-                      <Label htmlFor="adressePostale" className="flex items-center gap-2 mb-2">
-                        <span>🏠</span>
-                        <span>Adresse postale</span>
-                      </Label>
-                      <Textarea
-                        id="adressePostale"
-                        value={profileData.adressePostale}
-                        onChange={(e) => setProfileData({ ...profileData, adressePostale: e.target.value })}
-                        className="border-2 focus:border-primary transition-colors min-h-[100px]"
-                        placeholder="Numéro et nom de rue"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="codePostal" className="flex items-center gap-2 mb-2">
-                          <span>📮</span>
-                          <span>Code postal</span>
-                        </Label>
-                        <Input
-                          id="codePostal"
-                          value={profileData.codePostal}
-                          onChange={(e) => setProfileData({ ...profileData, codePostal: e.target.value })}
-                          className="h-11 border-2 focus:border-primary transition-colors"
-                          placeholder="75001"
-                        />
-                      </div>
-
-                      <div>
-                        <Label htmlFor="ville" className="flex items-center gap-2 mb-2">
-                          <span>🏙️</span>
-                          <span>Ville</span>
-                        </Label>
-                        <Input
-                          id="ville"
-                          value={profileData.ville}
-                          onChange={(e) => setProfileData({ ...profileData, ville: e.target.value })}
-                          className="h-11 border-2 focus:border-primary transition-colors"
-                          placeholder="Paris"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="pays" className="flex items-center gap-2 mb-2">
-                        <span>🌎</span>
-                        <span>Pays</span>
-                      </Label>
-                      <Input
-                        id="pays"
-                        value={profileData.pays}
-                        onChange={(e) => setProfileData({ ...profileData, pays: e.target.value })}
-                        className="h-11 border-2 focus:border-primary transition-colors"
-                        placeholder="France"
-                      />
-                    </div>
-                  </div>
+                <div>
+                  <Label htmlFor="lastName" className="block mb-1.5">Nom</Label>
+                  <Input id="lastName" value={profileData.lastName}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, lastName: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="email" className="block mb-1.5">Email</Label>
+                  <Input id="email" type="email" value={profileData.email}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, email: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="phone" className="block mb-1.5">Telephone</Label>
+                  <Input id="phone" type="tel" value={profileData.phone} placeholder="+33 6 12 34 56 78"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, phone: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="dateNaissance" className="block mb-1.5">Date de naissance</Label>
+                  <Input id="dateNaissance" type="date" value={profileData.dateNaissance}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, dateNaissance: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="lieuNaissance" className="block mb-1.5">Lieu de naissance</Label>
+                  <Input id="lieuNaissance" value={profileData.lieuNaissance} placeholder="Ville, Pays"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, lieuNaissance: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="nationalite" className="block mb-1.5">Nationalite</Label>
+                  <Input id="nationalite" value={profileData.nationalite} placeholder="Ex: Francaise"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, nationalite: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="sexe" className="block mb-1.5">Sexe</Label>
+                  <select
+                    id="sexe"
+                    value={profileData.sexe}
+                    onChange={(e) => setProfileData({ ...profileData, sexe: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400"
+                  >
+                    <option value="">Selectionner</option>
+                    <option value="M">Masculin</option>
+                    <option value="F">Feminin</option>
+                    <option value="Autre">Autre</option>
+                  </select>
                 </div>
               </div>
-              </fieldset>
 
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-6 border-t border-gray-200 mt-8">
-                {!isEditingProfile ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => router.push('/admin')}
-                      className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
-                    >
-                      Retour
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                        e.preventDefault();
-                        setIsEditingProfile(true);
-                      }}
-                      className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span>✏️</span>
-                        <span>Modifier</span>
-                      </span>
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={async () => {
-                        await loadProfile();
-                        setIsEditingProfile(false);
-                      }}
-                      disabled={isSaving}
-                      className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
-                    >
-                      Annuler
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={isSaving}
-                      className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
-                    >
-                      {isSaving ? (
-                        <span className="flex items-center gap-2">
-                          <span className="animate-spin">⏳</span>
-                          <span>Enregistrement...</span>
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <span>💾</span>
-                          <span>Enregistrer les modifications</span>
-                        </span>
-                      )}
-                    </Button>
-                  </>
-                )}
+              {/* Colonne droite */}
+              <div className="space-y-5">
+                <SectionTitle>Informations administratives</SectionTitle>
+                <div>
+                  <Label htmlFor="numeroEtranger" className="block mb-1.5">Numero d'etranger</Label>
+                  <Input id="numeroEtranger" value={profileData.numeroEtranger} readOnly
+                    className="bg-gray-50 text-gray-600 cursor-not-allowed" placeholder="Ex: 1234567890123" />
+                  <p className="mt-1 text-xs text-gray-400">Ce numero est fige pour garantir la tracabilite des dossiers.</p>
+                </div>
+                <div>
+                  <Label htmlFor="numeroTitre" className="block mb-1.5">Numero de titre de sejour</Label>
+                  <Input id="numeroTitre" value={profileData.numeroTitre} placeholder="Ex: 12AB34567"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, numeroTitre: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="typeTitre" className="block mb-1.5">Type de titre</Label>
+                  <select
+                    id="typeTitre"
+                    value={profileData.typeTitre}
+                    onChange={(e) => setProfileData({ ...profileData, typeTitre: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400"
+                  >
+                    <option value="">Selectionner</option>
+                    <option value="visiteur">Visiteur</option>
+                    <option value="etudiant">Etudiant</option>
+                    <option value="salarie">Salarie</option>
+                    <option value="travailleur_temporaire">Travailleur temporaire</option>
+                    <option value="scientifique">Scientifique</option>
+                    <option value="artiste">Artiste</option>
+                    <option value="commercant">Commercant</option>
+                    <option value="autre">Autre</option>
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="dateDelivrance" className="block mb-1.5">Date de delivrance</Label>
+                  <Input id="dateDelivrance" type="date" value={profileData.dateDelivrance}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, dateDelivrance: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="dateExpiration" className="block mb-1.5">Date d'expiration</Label>
+                  <Input id="dateExpiration" type="date" value={profileData.dateExpiration}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, dateExpiration: e.target.value })} />
+                </div>
+
+                <div className="pt-2">
+                  <SectionTitle>Adresse</SectionTitle>
+                </div>
+                <div>
+                  <Label htmlFor="adressePostale" className="block mb-1.5">Adresse postale</Label>
+                  <Textarea id="adressePostale" value={profileData.adressePostale} placeholder="Numero et nom de rue"
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setProfileData({ ...profileData, adressePostale: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="codePostal" className="block mb-1.5">Code postal</Label>
+                    <Input id="codePostal" value={profileData.codePostal} placeholder="75001"
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, codePostal: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label htmlFor="ville" className="block mb-1.5">Ville</Label>
+                    <Input id="ville" value={profileData.ville} placeholder="Paris"
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, ville: e.target.value })} />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="pays" className="block mb-1.5">Pays</Label>
+                  <Input id="pays" value={profileData.pays} placeholder="France"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileData({ ...profileData, pays: e.target.value })} />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-gray-100">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSaving}
+                onClick={async () => { await loadProfile(); setIsEditingProfile(false); }}
+                className="px-5 py-2.5"
+              >
+                Annuler
+              </Button>
+              <Button type="submit" disabled={isSaving} className="px-5 py-2.5">
+                {isSaving ? 'Enregistrement...' : 'Enregistrer'}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* ---- Tab: Securite ---- */}
+        {activeTab === 'password' && (
+          <div className="space-y-4">
+            <form onSubmit={handlePasswordSubmit} autoComplete="on">
+              <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
+                <SectionTitle>Changer le mot de passe</SectionTitle>
+                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
+                  Le mot de passe doit contenir au moins 8 caracteres.
+                </div>
+                <div className="max-w-md space-y-4">
+                  <div>
+                    <Label htmlFor="currentPassword" className="block mb-1.5">Mot de passe actuel</Label>
+                    <Input id="currentPassword" type="password" autoComplete="current-password"
+                      value={passwordData.currentPassword} required
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordData({ ...passwordData, currentPassword: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label htmlFor="newPassword" className="block mb-1.5">Nouveau mot de passe</Label>
+                    <Input id="newPassword" type="password" autoComplete="new-password"
+                      value={passwordData.newPassword} required minLength={8}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordData({ ...passwordData, newPassword: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label htmlFor="confirmPassword" className="block mb-1.5">Confirmer le nouveau mot de passe</Label>
+                    <Input id="confirmPassword" type="password" autoComplete="new-password"
+                      value={passwordData.confirmPassword} required minLength={8}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })} />
+                    {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
+                      <p className="mt-1 text-xs text-red-600">Les mots de passe ne correspondent pas</p>
+                    )}
+                    {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword === passwordData.confirmPassword && (
+                      <p className="mt-1 text-xs text-green-600">Les mots de passe correspondent</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button type="submit" disabled={isSaving} className="px-5 py-2.5">
+                    {isSaving ? 'Modification...' : 'Modifier le mot de passe'}
+                  </Button>
+                </div>
               </div>
             </form>
-          )}
 
-          {/* Formulaire de changement de mot de passe */}
-          {activeTab === 'password' && (
-            <form onSubmit={handlePasswordSubmit} className="space-y-6 max-w-2xl" autoComplete="on">
-              <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-4 sm:p-6 border border-orange-100 space-y-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-1 h-8 bg-orange-500 rounded-full"></div>
-                  <h3 className="text-xl font-bold text-foreground">Sécurité du compte</h3>
-                </div>
-
-                <div>
-                  <Label htmlFor="currentPassword" className="flex items-center gap-2 mb-2">
-                    <span>🔑</span>
-                    <span>Mot de passe actuel *</span>
-                  </Label>
-                  <Input
-                    id="currentPassword"
-                    type="password"
-                    autoComplete="current-password"
-                    value={passwordData.currentPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                    required
-                    className="h-11 border-2 focus:border-primary transition-colors"
-                    placeholder="Entrez votre mot de passe actuel"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="newPassword" className="flex items-center gap-2 mb-2">
-                    <span>🆕</span>
-                    <span>Nouveau mot de passe *</span>
-                  </Label>
-                  <Input
-                    id="newPassword"
-                    type="password"
-                    autoComplete="new-password"
-                    value={passwordData.newPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                    required
-                    minLength={8}
-                    className="h-11 border-2 focus:border-primary transition-colors"
-                    placeholder="Au moins 8 caractères"
-                  />
-                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-xs text-blue-800 flex items-center gap-2">
-                      <span>ℹ️</span>
-                      <span>Le mot de passe doit contenir au moins 8 caractères</span>
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="confirmPassword" className="flex items-center gap-2 mb-2">
-                    <span>✅</span>
-                    <span>Confirmer le nouveau mot de passe *</span>
-                  </Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    autoComplete="new-password"
-                    value={passwordData.confirmPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                    required
-                    minLength={8}
-                    className="h-11 border-2 focus:border-primary transition-colors"
-                    placeholder="Confirmez votre nouveau mot de passe"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-4 border-t border-gray-200">
+            {/* Push notifications */}
+            <div className="bg-white rounded-xl border border-gray-100 p-6">
+              <SectionTitle>Notifications push</SectionTitle>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${pushStatusClasses}`}>
+                  Push: {pushStatusLabel}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isEnablingPush}
+                  onClick={handleEnablePush}
+                  className="px-4 py-2 text-sm"
+                >
+                  {isEnablingPush ? 'Activation...' : 'Activer les notifications push'}
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
                   disabled={isSendingPushTest}
                   onClick={handlePushTest}
-                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
+                  className="px-4 py-2 text-sm"
                 >
-                  {isSendingPushTest ? 'Envoi du push...' : 'Envoyer push test'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push('/admin')}
-                  disabled={isSaving}
-                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
-                >
-                  Annuler
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={isSaving}
-                  className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
-                >
-                  {isSaving ? (
-                    <span className="flex items-center gap-2">
-                      <span className="animate-spin">⏳</span>
-                      <span>Modification...</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <span>🔒</span>
-                      <span>Modifier le mot de passe</span>
-                    </span>
-                  )}
+                  {isSendingPushTest ? 'Envoi...' : 'Tester le push'}
                 </Button>
               </div>
-            </form>
-          )}
-
-          {activeTab === 'sms' && (
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setIsSaving(true);
-                setError(null);
-                setSuccess(null);
-                try {
-                  await smsPreferencesAPI.updatePreferences(smsPreferences);
-                  setSuccess('Préférences SMS mises à jour avec succès');
-                  setTimeout(() => setSuccess(null), 3000);
-                } catch (error: any) {
-                  setError(error.response?.data?.message || 'Erreur lors de la mise à jour');
-                } finally {
-                  setIsSaving(false);
-                }
-              }}
-              className="space-y-6 max-w-4xl"
-            >
-              <div className="bg-gradient-to-br from-orange-50/50 to-white rounded-xl p-4 sm:p-6 border border-orange-100 space-y-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-1 h-8 bg-orange-500 rounded-full"></div>
-                  <h3 className="text-xl font-bold text-foreground">Préférences SMS</h3>
-                </div>
-
-                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg mb-6">
-                  <p className="text-sm text-blue-800">
-                    <strong>Note :</strong> Les SMS OTP (codes de vérification) sont toujours activés pour des raisons de sécurité et ne peuvent pas être désactivés.
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <Label className="text-base font-semibold mb-1">Activer les notifications SMS</Label>
-                    <p className="text-sm text-muted-foreground">Activez ou désactivez toutes les notifications SMS</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={smsPreferences.enabled}
-                      onChange={(e) => setSmsPreferences({ ...smsPreferences, enabled: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                  </label>
-                </div>
-
-                <div className="border-t border-border pt-6">
-                  <h3 className="text-lg font-semibold mb-4">Types de notifications</h3>
-                  <div className="space-y-3">
-                    {[
-                      { key: 'appointment_confirmed', label: 'Confirmation de rendez-vous', icon: '📅' },
-                      { key: 'appointment_cancelled', label: 'Annulation de rendez-vous', icon: '❌' },
-                      { key: 'appointment_updated', label: 'Modification de rendez-vous', icon: '✏️' },
-                      { key: 'appointment_reminder', label: 'Rappel de rendez-vous', icon: '⏰' },
-                      { key: 'dossier_created', label: 'Création de dossier', icon: '📁' },
-                      { key: 'dossier_updated', label: 'Mise à jour de dossier', icon: '🔄' },
-                      { key: 'dossier_status_changed', label: 'Changement de statut de dossier', icon: '📊' },
-                      { key: 'document_uploaded', label: 'Document ajouté', icon: '📄' },
-                      { key: 'message_received', label: 'Nouveau message', icon: '💬' },
-                      { key: 'task_assigned', label: 'Tâche assignée', icon: '✅' },
-                      { key: 'task_reminder', label: 'Rappel de tâche', icon: '⏳' },
-                      { key: 'account_security', label: 'Sécurité du compte', icon: '🔒' },
-                      { key: 'otp', label: 'Codes OTP (toujours activé)', icon: '🔐', disabled: true },
-                    ].map((type) => (
-                      <div
-                        key={type.key}
-                        className={`flex items-center justify-between p-4 rounded-lg border ${
-                          smsPreferences.types[type.key as keyof typeof smsPreferences.types]
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-gray-50 border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{type.icon}</span>
-                          <div>
-                            <Label className="text-sm font-semibold mb-0">{type.label}</Label>
-                          </div>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={smsPreferences.types[type.key as keyof typeof smsPreferences.types] || false}
-                            onChange={(e) =>
-                              setSmsPreferences({
-                                ...smsPreferences,
-                                types: {
-                                  ...smsPreferences.types,
-                                  [type.key]: e.target.checked,
-                                },
-                              })
-                            }
-                            disabled={type.disabled || !smsPreferences.enabled}
-                            className="sr-only peer"
-                          />
-                          <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary ${type.disabled || !smsPreferences.enabled ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-4 border-t border-gray-200">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push('/admin')}
-                  disabled={isSaving}
-                  className="w-full sm:w-auto px-6 py-2.5 font-semibold border-2 hover:bg-gray-50"
-                >
-                  Annuler
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isSaving}
-                  className="w-full sm:w-auto px-6 py-2.5 font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all"
-                >
-                  {isSaving ? (
-                    <span className="flex items-center gap-2">
-                      <span className="animate-spin">⏳</span>
-                      <span>Enregistrement...</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <span>📱</span>
-                      <span>Enregistrer les préférences</span>
-                    </span>
-                  )}
-                </Button>
-              </div>
-            </form>
-          )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* ---- Tab: Notifications SMS ---- */}
+        {activeTab === 'sms' && (
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setIsSaving(true);
+              setError(null);
+              setSuccess(null);
+              try {
+                await smsPreferencesAPI.updatePreferences(smsPreferences);
+                setSuccess('Preferences SMS mises a jour avec succes');
+                setTimeout(() => setSuccess(null), 3000);
+              } catch (err: any) {
+                setError(err.response?.data?.message || 'Erreur lors de la mise a jour');
+              } finally {
+                setIsSaving(false);
+              }
+            }}
+          >
+            <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
+              <SectionTitle>Preferences SMS</SectionTitle>
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
+                Les SMS OTP (codes de verification) sont toujours actives pour des raisons de securite.
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Activer les notifications SMS</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Activer ou desactiver toutes les notifications SMS</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={smsPreferences.enabled}
+                    onChange={(e) => setSmsPreferences({ ...smsPreferences, enabled: e.target.checked })}
+                    className="sr-only peer" />
+                  <div className="w-10 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500" />
+                </label>
+              </div>
+
+              <div className="divide-y divide-gray-50">
+                {[
+                  { key: 'appointment_confirmed', label: 'Confirmation de rendez-vous' },
+                  { key: 'appointment_cancelled', label: 'Annulation de rendez-vous' },
+                  { key: 'appointment_updated', label: 'Modification de rendez-vous' },
+                  { key: 'appointment_reminder', label: 'Rappel de rendez-vous' },
+                  { key: 'dossier_created', label: 'Creation de dossier' },
+                  { key: 'dossier_updated', label: 'Mise a jour de dossier' },
+                  { key: 'dossier_status_changed', label: 'Changement de statut de dossier' },
+                  { key: 'document_uploaded', label: 'Document ajoute' },
+                  { key: 'message_received', label: 'Nouveau message' },
+                  { key: 'task_assigned', label: 'Tache assignee' },
+                  { key: 'task_reminder', label: 'Rappel de tache' },
+                  { key: 'account_security', label: 'Securite du compte' },
+                  { key: 'otp', label: 'Codes OTP (toujours actives)', disabled: true },
+                ].map((type) => (
+                  <div key={type.key} className="flex items-center justify-between py-3 gap-4">
+                    <span className={`text-sm ${type.disabled ? 'text-gray-400' : 'text-gray-700'}`}>{type.label}</span>
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={smsPreferences.types[type.key as keyof typeof smsPreferences.types] || false}
+                        onChange={(e) =>
+                          setSmsPreferences({
+                            ...smsPreferences,
+                            types: { ...smsPreferences.types, [type.key]: e.target.checked },
+                          })
+                        }
+                        disabled={type.disabled || !smsPreferences.enabled}
+                        className="sr-only peer"
+                      />
+                      <div className={`w-10 h-5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500 ${(type.disabled || !smsPreferences.enabled) ? 'opacity-40 cursor-not-allowed' : ''}`} />
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <Button type="submit" disabled={isSaving} className="px-5 py-2.5">
+                  {isSaving ? 'Enregistrement...' : 'Enregistrer les preferences'}
+                </Button>
+              </div>
+            </div>
+          </form>
+        )}
+
       </main>
     </div>
   );
 }
-

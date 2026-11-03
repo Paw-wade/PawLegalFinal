@@ -27,11 +27,15 @@ import {
   User,
   BookUser,
   ClipboardList,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 interface AdminSidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 interface MenuItem {
@@ -74,7 +78,7 @@ const adminMenuItems: MenuItem[] = [
   { href: '/admin/compte', label: 'Mon compte', icon: User },
 ];
 
-export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
+export function AdminSidebar({ isOpen = true, onClose, collapsed = false, onToggleCollapse }: AdminSidebarProps) {
   const { data: session } = useSession();
   const pathname = usePathname();
   const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
@@ -175,30 +179,36 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
         />
       )}
 
-      {/* Sidebar - même design que partenaire */}
+      {/* Sidebar admin */}
       <aside
         className={`
-          w-64 bg-white border-r border-gray-200 flex flex-col
+          bg-white border-r border-gray-200 flex flex-col
           fixed top-0 left-0 bottom-0 z-[70] lg:bottom-auto lg:h-screen lg:min-h-screen
-          transform transition-transform duration-300 ease-in-out
+          transform transition-all duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
+          ${collapsed ? 'w-16' : 'w-64'}
         `}
       >
-        {/* Bande logo alignée avec le header (même hauteur h-16) */}
-        <div className="h-16 shrink-0 flex items-center justify-between px-4 border-b border-gray-200">
-          <div className="flex items-center min-w-0">
-            <Link
-              href="/"
-              className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg tracking-tight"
-            >
-              Ada Papers
-            </Link>
-            <span className="hidden md:inline ml-2 text-[10px] text-gray-500">
-              {userRole === 'superadmin' ? 'Super administration' : "Panneau d'administration"}
-            </span>
-          </div>
-          {onClose && (
+        {/* Bande logo */}
+        <div className={`h-16 shrink-0 flex items-center border-b border-gray-200 relative ${collapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
+          {!collapsed && (
+            <div className="flex items-center min-w-0">
+              <Link
+                href="/"
+                className="font-bold text-orange-500 hover:text-orange-600 transition-colors text-lg tracking-tight"
+              >
+                Ada Papers
+              </Link>
+              <span className="hidden md:inline ml-2 text-[10px] text-gray-500">
+                {userRole === 'superadmin' ? 'Super administration' : "Panneau d'administration"}
+              </span>
+            </div>
+          )}
+          {collapsed && (
+            <Link href="/" className="font-bold text-orange-500 text-base" title="Ada Papers">A</Link>
+          )}
+          {onClose && !collapsed && (
             <button
               onClick={onClose}
               className="lg:hidden px-3 py-2 ml-2 min-h-[36px] flex items-center justify-center rounded-full border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
@@ -207,39 +217,59 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
               Fermer
             </button>
           )}
+          {/* Bouton toggle collapse - desktop uniquement */}
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              aria-label={collapsed ? 'Agrandir le menu' : 'Reduire le menu'}
+              className={`hidden lg:flex absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white border border-gray-200 items-center justify-center text-gray-400 hover:text-orange-500 hover:border-orange-300 transition-colors shadow-sm z-10`}
+            >
+              {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+            </button>
+          )}
         </div>
 
-        {/* Navigation - scroll ; déconnexion fixée en bas sur mobile */}
-        <nav className="p-4 space-y-2 flex-1 min-h-0 overflow-y-auto">
+        {/* Navigation */}
+        <nav className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden ${collapsed ? 'p-2 space-y-1' : 'p-4 space-y-1'}`}>
           {filteredMenuItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
+            const forumBadge = item.href === '/forum' && forumUnreadCount > 0;
+            const prepBadge = item.href === '/admin/documents/preparation' && prepDraftCount > 0;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                title={collapsed ? item.label : undefined}
                 onClick={() => {
                   if (typeof window !== 'undefined' && window.innerWidth < 1024 && onClose) onClose();
                 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  active ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
-                }`}
+                className={`flex items-center rounded-lg transition-colors ${
+                  collapsed
+                    ? 'justify-center p-2.5 relative'
+                    : 'gap-3 px-4 py-2.5'
+                } ${active ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'}`}
               >
-                <Icon className="w-5 h-5" />
-                <span className="flex items-center gap-1">
-                  {item.label}
-                  {item.href === '/forum' && forumUnreadCount > 0 && (
-                    <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
-                      {forumUnreadCount > 99 ? '99+' : forumUnreadCount}
-                    </span>
-                  )}
-                  {item.href === '/admin/documents/preparation' && prepDraftCount > 0 && (
-                    <span className="ml-1 text-[11px] font-semibold bg-slate-100 text-slate-800 px-2 py-0.5 rounded-full">
-                      {prepDraftCount > 99 ? '99+' : prepDraftCount}
-                    </span>
-                  )}
-                </span>
-                {item.badge && (
+                <Icon className="w-5 h-5 shrink-0" />
+                {!collapsed && (
+                  <span className="flex items-center gap-1 truncate text-sm">
+                    {item.label}
+                    {forumBadge && (
+                      <span className="ml-1 text-[11px] font-semibold bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
+                        {forumUnreadCount > 99 ? '99+' : forumUnreadCount}
+                      </span>
+                    )}
+                    {prepBadge && (
+                      <span className="ml-1 text-[11px] font-semibold bg-slate-100 text-slate-800 px-2 py-0.5 rounded-full">
+                        {prepDraftCount > 99 ? '99+' : prepDraftCount}
+                      </span>
+                    )}
+                  </span>
+                )}
+                {collapsed && (forumBadge || prepBadge) && (
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-orange-500" />
+                )}
+                {!collapsed && item.badge && (
                   <span className="ml-auto px-2 py-0.5 text-xs rounded-full bg-orange-100 text-orange-800 font-semibold">
                     {item.badge}
                   </span>
@@ -248,7 +278,8 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
             );
           })}
         </nav>
-        {/* Bouton de déconnexion - bandeau bas du tiroir mobile */}
+
+        {/* Deconnexion */}
         <div className="shrink-0 border-t border-gray-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_12px_rgba(0,0,0,0.06)] lg:shadow-none">
           <button
             type="button"
@@ -257,17 +288,20 @@ export function AdminSidebar({ isOpen = true, onClose }: AdminSidebarProps) {
                 localStorage.removeItem('token');
                 sessionStorage.removeItem('token');
                 try {
-                  // Déconnexion NextAuth (sinon la session peut rester active)
                   await signOut({ redirect: false });
-                } catch {
-                  // ignore - redirection forcée juste après
-                }
+                } catch {}
                 window.location.href = '/';
               }
             }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors min-h-[44px]"
+            className={`w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors min-h-[44px] ${collapsed ? 'justify-center' : 'justify-center'}`}
+            title={collapsed ? 'Deconnexion' : undefined}
           >
-            <span>Déconnexion</span>
+            {!collapsed && <span>Deconnexion</span>}
+            {collapsed && (
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            )}
           </button>
         </div>
       </aside>

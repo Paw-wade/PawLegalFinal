@@ -40,7 +40,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr">
-      <body className="antialiased overflow-x-hidden min-w-0 max-w-[100vw]">
+      <body className="antialiased overflow-x-clip min-w-0 max-w-[100vw]">
         <SessionProvider>
           <PushNotificationsBootstrap />
           <GuidePopup />

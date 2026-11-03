@@ -1566,4 +1566,73 @@ Vous pouvez effectuer une nouvelle demande de rendez-vous à votre convenance.`,
   }
 );
 
+// @route   GET /api/appointments/google-calendar/status
+// @desc    Verifie la configuration Google Calendar et retourne le statut
+// @access  Admin
+router.get('/google-calendar/status', protect, authorize('admin', 'superadmin'), async (req, res) => {
+  const {
+    isWriteConfigured,
+    describeCalendarAuthHelp,
+    verifyGoogleCalendarTargetReady,
+  } = require('../services/googleCalendarSync');
+
+  const configured = isWriteConfigured();
+  const calId = process.env.GOOGLE_CALENDAR_ID || null;
+
+  if (!configured) {
+    return res.json({
+      success: true,
+      data: {
+        configured: false,
+        calendarId: calId,
+        message: describeCalendarAuthHelp(),
+        authMethod: null,
+      },
+    });
+  }
+
+  try {
+    const result = await verifyGoogleCalendarTargetReady();
+    const usingSA = !!((() => {
+      const { JWT } = require('google-auth-library');
+      const fs = require('fs');
+      const path = require('path');
+      const inline = process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON;
+      if (inline && String(inline).trim()) {
+        try { const o = JSON.parse(String(inline).trim()); if (o && o.client_email) return o; } catch (_) {}
+      }
+      for (const raw of [process.env.GOOGLE_CALENDAR_SERVICE_ACCOUNT_PATH, process.env.GOOGLE_APPLICATION_CREDENTIALS].filter(Boolean)) {
+        const s = String(raw || '').trim().replace(/^["']|["']$/g, '');
+        const fp = path.isAbsolute(s) ? s : path.resolve(process.cwd(), s);
+        if (fs.existsSync(fp)) {
+          try { const o = JSON.parse(fs.readFileSync(fp, 'utf8')); if (o && o.client_email) return o; } catch (_) {}
+        }
+      }
+      return null;
+    })());
+
+    res.json({
+      success: true,
+      data: {
+        configured: true,
+        calendarId: calId,
+        calendarReady: result.ok,
+        message: result.ok ? 'Calendrier accessible' : result.message,
+        authMethod: usingSA ? 'service_account' : 'oauth',
+      },
+    });
+  } catch (e) {
+    res.json({
+      success: true,
+      data: {
+        configured: true,
+        calendarId: calId,
+        calendarReady: false,
+        message: e.message || String(e),
+        authMethod: null,
+      },
+    });
+  }
+});
+
 module.exports = router;

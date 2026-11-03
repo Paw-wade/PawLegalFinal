@@ -57,6 +57,11 @@ const taskSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  kanbanGroup: {
+    type: String,
+    trim: true,
+    default: null
+  },
   // Historique des commentaires/notes internes liés à la tâche
   commentaires: [
     {
@@ -100,6 +105,15 @@ const taskSchema = new mongoose.Schema({
   archivedAt: {
     type: Date
   },
+  // Sous-taches
+  sousTaches: [
+    {
+      titre: { type: String, required: true, trim: true },
+      complete: { type: Boolean, default: false },
+      completedAt: { type: Date, default: null },
+      createdAt: { type: Date, default: Date.now },
+    },
+  ],
   // Rappels configures
   rappels: [
     {

@@ -21,7 +21,19 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
   const pathname = usePathname();
   const lexiaFullscreen = pathname === '/lexia' || pathname === '/admin/lexia';
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try { return localStorage.getItem('adminSidebarCollapsed') === 'true'; } catch { return false; }
+  });
+
+  const handleToggleCollapse = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('adminSidebarCollapsed', String(next)); } catch {}
+      return next;
+    });
+  };
+
   // Déterminer si l'utilisateur est admin ou partenaire
   const userRole = (session?.user as any)?.role || 'client';
   const isAdmin = userRole === 'admin' || userRole === 'superadmin';
@@ -50,7 +62,12 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
 
       {/* Sidebar admin - drawer sur mobile, fixe sur desktop */}
       {showAdminSidebar && (
-        <AdminSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <AdminSidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={handleToggleCollapse}
+        />
       )}
 
       {/* Sidebar partenaire - drawer sur mobile, fixe sur desktop */}
@@ -60,7 +77,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
 
       {/* Contenu principal */}
       <div
-        className={`flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden transition-all duration-300 ${(showClientSidebar || showAdminSidebar || showPartenaireSidebar) ? 'ml-0 lg:ml-64' : ''}`}
+        className={`flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden transition-all duration-300 ${showAdminSidebar ? (sidebarCollapsed ? 'ml-0 lg:ml-16' : 'ml-0 lg:ml-64') : (showClientSidebar || showPartenaireSidebar) ? 'ml-0 lg:ml-64' : ''}`}
       >
         {/* Header simplifié (sans navigation) */}
         <Header 

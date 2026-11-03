@@ -1096,4 +1096,81 @@ router.put('/:id/archive', protect, authorizePermission('taches', 'modifier'), a
   }
 });
 
+// ─── Sous-taches ─────────────────────────────────────────────────────────────
+
+// POST /:id/sous-taches — ajouter une sous-tache
+router.post('/:id/sous-taches', protect, authorizePermissionOrAssignment('taches', 'modifier'), async (req, res) => {
+  try {
+    const { titre } = req.body;
+    if (!titre || !titre.trim()) {
+      return res.status(400).json({ success: false, message: 'Le titre est requis' });
+    }
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ success: false, message: 'Tache non trouvee' });
+
+    task.sousTaches.push({ titre: titre.trim() });
+    await task.save();
+    const st = task.sousTaches[task.sousTaches.length - 1];
+    res.json({ success: true, sousTache: st, sousTaches: task.sousTaches });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PATCH /:id/sous-taches/:stId — modifier une sous-tache (titre ou complete)
+router.patch('/:id/sous-taches/:stId', protect, authorizePermissionOrAssignment('taches', 'modifier'), async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ success: false, message: 'Tache non trouvee' });
+
+    const st = task.sousTaches.id(req.params.stId);
+    if (!st) return res.status(404).json({ success: false, message: 'Sous-tache non trouvee' });
+
+    if (typeof req.body.complete === 'boolean') {
+      st.complete = req.body.complete;
+      st.completedAt = req.body.complete ? new Date() : null;
+    }
+    if (req.body.titre && req.body.titre.trim()) {
+      st.titre = req.body.titre.trim();
+    }
+    await task.save();
+    res.json({ success: true, sousTache: st, sousTaches: task.sousTaches });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /:id/sous-taches/:stId — supprimer une sous-tache
+router.delete('/:id/sous-taches/:stId', protect, authorizePermissionOrAssignment('taches', 'modifier'), async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ success: false, message: 'Tache non trouvee' });
+
+    task.sousTaches = task.sousTaches.filter(st => String(st._id) !== req.params.stId);
+    await task.save();
+    res.json({ success: true, sousTaches: task.sousTaches });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /api/tasks/:id/notes/:noteId
+router.delete('/:id/notes/:noteId', protect, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ success: false, message: 'Tache non trouvee' });
+    const note = task.commentaires.id(req.params.noteId);
+    if (!note) return res.status(404).json({ success: false, message: 'Commentaire non trouve' });
+    const isAuthor = note.utilisateur && note.utilisateur.toString() === req.user.id;
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin';
+    if (!isAuthor && !isAdmin) return res.status(403).json({ success: false, message: 'Permission insuffisante' });
+    task.commentaires = task.commentaires.filter(c => String(c._id) !== req.params.noteId);
+    await task.save();
+    const taskPopulated = await Task.findById(task._id).populate('commentaires.utilisateur', 'firstName lastName email role');
+    res.json({ success: true, commentaires: taskPopulated.commentaires });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;
