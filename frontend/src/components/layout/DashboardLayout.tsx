@@ -77,7 +77,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
 
       {/* Contenu principal */}
       <div
-        className={`flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden transition-all duration-300 ${showAdminSidebar ? (sidebarCollapsed ? 'ml-0 lg:ml-16' : 'ml-0 lg:ml-64') : (showClientSidebar || showPartenaireSidebar) ? 'ml-0 lg:ml-64' : ''}`}
+        className={`flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden transition-all duration-300 ${showAdminSidebar ? (sidebarCollapsed ? 'ml-0 lg:ml-14' : 'ml-0 lg:ml-[276px]') : (showClientSidebar || showPartenaireSidebar) ? 'ml-0 lg:ml-64' : ''}`}
       >
         {/* Header simplifié (sans navigation) */}
         <Header 
