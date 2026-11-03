@@ -86,6 +86,109 @@ nextjs-portal[data-cursor-element-id] {
   transform: translate(0, 0) !important;
 }
 
+/* ============================================================
+   PILL LUMINEUX - Systeme de boutons global (Maquette 02)
+   Animation shimmer + spring scale sur TOUS les boutons
+   L'!important override les classes Tailwind utilitaires
+   ============================================================ */
+
+@keyframes btn-shimmer {
+  from { background-position: -100% 0; }
+  to   { background-position: 200% 0; }
+}
+
+@layer base {
+  /* --- Forme pill + position/overflow pour pseudo-element --- */
+  button:not([data-no-pill]) {
+    border-radius: 9999px !important;
+    overflow: hidden;
+    position: relative;
+    transition:
+      transform 180ms cubic-bezier(.34, 1.56, .64, 1),
+      box-shadow 200ms ease,
+      background-color 180ms ease,
+      border-color 180ms ease,
+      color 180ms ease !important;
+  }
+
+  /* --- Shimmer pseudo-element sur tous les boutons --- */
+  button:not([data-no-pill])::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      110deg,
+      transparent 20%,
+      rgba(255, 255, 255, 0.32) 50%,
+      transparent 80%
+    );
+    background-size: 200% 100%;
+    background-position: -100% 0;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* --- Shimmer declenche au hover --- */
+  button:not([data-no-pill]):not(:disabled):hover::after {
+    opacity: 1;
+    animation: btn-shimmer 520ms ease forwards;
+  }
+
+  /* --- Scale spring subtil au hover --- */
+  button:not([data-no-pill]):not(:disabled):hover {
+    transform: scale(1.03) translateY(-1px);
+  }
+
+  /* --- Glow colore sur boutons primaires orange --- */
+  button[class*="bg-orange"]:not(:disabled):hover,
+  button[class*="bg-primary"]:not(:disabled):hover {
+    box-shadow: 0 6px 20px rgba(249, 115, 22, 0.38), 0 2px 6px rgba(249, 115, 22, 0.18);
+  }
+
+  /* --- Glow rouge sur boutons danger --- */
+  button[class*="bg-red"]:not(:disabled):hover {
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.35);
+  }
+
+  /* --- Glow vert sur boutons success --- */
+  button[class*="bg-green"]:not(:disabled):hover {
+    box-shadow: 0 6px 20px rgba(22, 163, 74, 0.32);
+  }
+
+  /* --- Presse (active) --- */
+  button:not([data-no-pill]):not(:disabled):active {
+    transform: scale(0.96) translateY(0) !important;
+    box-shadow: none !important;
+    transition-duration: 60ms !important;
+  }
+
+  /* --- Disabled : pas d'effet --- */
+  button:disabled {
+    transform: none !important;
+    box-shadow: none !important;
+    overflow: hidden;
+    border-radius: 9999px !important;
+  }
+  button:disabled::after { display: none; }
+
+  /* --- Killswitch accessibilite --- */
+  @media (prefers-reduced-motion: reduce) {
+    button:not([data-no-pill]) {
+      transition: background-color 100ms ease, border-color 100ms ease, color 100ms ease !important;
+    }
+    button:not([data-no-pill])::after { display: none; }
+    button:not([data-no-pill]):hover { transform: none !important; }
+  }
+
+  /* --- Focus ring reste visible (outline externe, pas clipped par overflow) --- */
+  button:not([data-no-pill]):focus-visible {
+    outline: 2.5px solid #f97316;
+    outline-offset: 2px;
+  }
+}
+
 /* Animations personnalisées */
 @keyframes gradient {
   0%, 100% {
