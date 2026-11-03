@@ -1032,6 +1032,7 @@ export const tasksAPI = {
     notes?: string;
     effectue?: boolean;
     commentaireEffectue?: string;
+    kanbanGroup?: string | null;
   }) => {
     return api.put(`/tasks/${id}`, data);
   },
