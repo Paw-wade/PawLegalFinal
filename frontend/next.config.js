@@ -91,6 +91,8 @@ const nextConfig = {
     if (process.env.NODE_ENV === 'development') {
       const target = process.env.NEXT_PROXY_API_TARGET || 'http://127.0.0.1:3005';
       list.push(...devApiRewriteRules(target));
+      const t = target.replace(/\/+$/, '');
+      list.push({ source: '/uploads/:path*', destination: `${t}/uploads/:path*` });
     }
     return list;
   },

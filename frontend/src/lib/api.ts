@@ -1070,7 +1070,7 @@ export const tasksAPI = {
   uploadTaskFichier: (taskId: string, file: File) => {
     const fd = new FormData();
     fd.append('fichier', file);
-    return api.post(`/tasks/${taskId}/fichiers`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return api.post(`/tasks/${taskId}/fichiers`, fd);
   },
   deleteTaskFichier: (taskId: string, fichierId: string) =>
     api.delete(`/tasks/${taskId}/fichiers/${fichierId}`),

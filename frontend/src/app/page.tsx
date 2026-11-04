@@ -598,7 +598,7 @@ export default function HomePage() {
             <div className="grid items-center gap-12 lg:grid-cols-[1.12fr_0.88fr] lg:gap-6">
               <div className="relative min-w-0">
                 {/* Titre */}
-                <h1 className="mb-8 text-4xl font-bold leading-[1.15] tracking-tight text-ds-strong sm:text-5xl lg:text-[56px]">
+                <h1 className="mb-8 text-3xl font-bold leading-[1.15] tracking-tight text-ds-strong sm:text-4xl lg:text-[42px]">
                   {heroTitle.replace(heroTitleHighlight, '').trim() || heroTitle}{' '}
                   <span className="relative inline-block">
                     {heroTitleHighlight}
@@ -808,7 +808,7 @@ export default function HomePage() {
               isVisible['services-section-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               <Eyebrow>Solutions</Eyebrow>
-              <h2 className="mb-3 max-w-[22ch] text-3xl font-bold leading-tight tracking-tight text-ds-strong sm:text-4xl lg:text-[40px] lg:leading-[46px]">
+              <h2 className="mb-3 max-w-[22ch] text-2xl font-bold leading-tight tracking-tight text-ds-strong sm:text-3xl lg:text-[30px] lg:leading-[38px]">
                 Des solutions administratives structurées pour vos démarches
               </h2>
               <p className="max-w-[60ch] text-lg leading-7 text-ds-subtle">
@@ -911,7 +911,7 @@ export default function HomePage() {
                   return (
                     <div className="space-y-6">
                       <div>
-                        <h3 className="mb-2 text-2xl font-bold text-ds-strong">{current.title}</h3>
+                        <h3 className="mb-2 text-xl font-bold text-ds-strong">{current.title}</h3>
                         <p className="text-base leading-6 text-ds-body">{current.description}</p>
                       </div>
                       {(current.duree || current.prix) && (
@@ -986,7 +986,7 @@ export default function HomePage() {
               isVisible['plateforme-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               <Eyebrow>La plateforme</Eyebrow>
-              <h2 className="mb-3 max-w-[22ch] text-3xl font-bold leading-tight tracking-tight text-ds-strong sm:text-4xl lg:text-[40px] lg:leading-[46px]">
+              <h2 className="mb-3 max-w-[22ch] text-2xl font-bold leading-tight tracking-tight text-ds-strong sm:text-3xl lg:text-[30px] lg:leading-[38px]">
                 À quoi sert la plateforme
               </h2>
               <p className="max-w-[60ch] text-lg leading-7 text-ds-subtle">
@@ -1065,7 +1065,7 @@ export default function HomePage() {
               isVisible['limites-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               <Eyebrow>Périmètre</Eyebrow>
-              <h2 className="mb-3 max-w-[22ch] text-3xl font-bold leading-tight tracking-tight text-ds-strong sm:text-4xl lg:text-[40px] lg:leading-[46px]">
+              <h2 className="mb-3 max-w-[22ch] text-2xl font-bold leading-tight tracking-tight text-ds-strong sm:text-3xl lg:text-[30px] lg:leading-[38px]">
                 Ce que nous ne faisons pas
               </h2>
               <p className="max-w-[60ch] text-lg leading-7 text-ds-subtle">
@@ -1114,7 +1114,7 @@ export default function HomePage() {
                   const item = LIMITES[hoveredLimiteIndex ?? 0] ?? LIMITES[0];
                   return (
                     <>
-                      <h3 className="mb-2 text-2xl font-bold text-ds-strong">{item.title}</h3>
+                      <h3 className="mb-2 text-xl font-bold text-ds-strong">{item.title}</h3>
                       <p className="text-base leading-6 text-ds-body">{item.details}</p>
                     </>
                   );
@@ -1148,7 +1148,7 @@ export default function HomePage() {
               isVisible['entreprise-solutions'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               <Eyebrow>Creation d'entreprise</Eyebrow>
-              <h2 className="mb-3 max-w-[22ch] text-3xl font-bold leading-tight tracking-tight text-ds-strong sm:text-4xl lg:text-[40px] lg:leading-[46px]">
+              <h2 className="mb-3 max-w-[22ch] text-2xl font-bold leading-tight tracking-tight text-ds-strong sm:text-3xl lg:text-[30px] lg:leading-[38px]">
                 Choisissez votre structure juridique
               </h2>
               <p className="max-w-[60ch] text-lg leading-7 text-ds-subtle">
@@ -1185,7 +1185,7 @@ export default function HomePage() {
                   return (
                     <div className="space-y-6">
                       <div>
-                        <h3 className="mb-2 text-2xl font-bold text-ds-strong">{current.title}</h3>
+                        <h3 className="mb-2 text-xl font-bold text-ds-strong">{current.title}</h3>
                         <p className="text-base leading-6 text-ds-body">{current.description}</p>
                       </div>
 
@@ -1257,7 +1257,7 @@ export default function HomePage() {
               isVisible['entreprise-limites'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               <Eyebrow>Perimetre</Eyebrow>
-              <h2 className="mb-3 max-w-[22ch] text-3xl font-bold leading-tight tracking-tight text-ds-strong sm:text-4xl lg:text-[40px] lg:leading-[46px]">
+              <h2 className="mb-3 max-w-[22ch] text-2xl font-bold leading-tight tracking-tight text-ds-strong sm:text-3xl lg:text-[30px] lg:leading-[38px]">
                 Ce que nous ne faisons pas
               </h2>
               <p className="max-w-[60ch] text-lg leading-7 text-ds-subtle">
@@ -1305,7 +1305,7 @@ export default function HomePage() {
                   const item = LIMITES_ENTREPRISE[hoveredEntrepriseLimiteIndex ?? 0] ?? LIMITES_ENTREPRISE[0];
                   return (
                     <>
-                      <h3 className="mb-2 text-2xl font-bold text-ds-strong">{item.title}</h3>
+                      <h3 className="mb-2 text-xl font-bold text-ds-strong">{item.title}</h3>
                       <p className="text-base leading-6 text-ds-body">{item.details}</p>
                     </>
                   );
@@ -1339,7 +1339,7 @@ export default function HomePage() {
               isVisible['temoignages-title'] ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
               <Eyebrow>Témoignages</Eyebrow>
-              <h2 className="mb-3 max-w-[22ch] text-3xl font-bold leading-tight tracking-tight text-ds-strong sm:text-4xl lg:text-[40px] lg:leading-[46px]">
+              <h2 className="mb-3 max-w-[22ch] text-2xl font-bold leading-tight tracking-tight text-ds-strong sm:text-3xl lg:text-[30px] lg:leading-[38px]">
                 Ils nous ont fait confiance
               </h2>
               <p className="max-w-[60ch] text-lg leading-7 text-ds-subtle">
@@ -1430,7 +1430,7 @@ export default function HomePage() {
         <div className="container mx-auto px-4">
           <div className="mx-auto grid max-w-6xl items-center gap-8 rounded-3xl border border-transparent bg-ds-primary-tint px-6 py-12 dark:border-ds-border sm:px-12 sm:py-16 md:grid-cols-[1fr_auto]">
             <div>
-              <h2 className="mb-3 max-w-[18ch] text-3xl font-bold leading-tight tracking-tight text-ds-strong sm:text-4xl lg:text-[40px] lg:leading-[46px]">
+              <h2 className="mb-3 max-w-[18ch] text-2xl font-bold leading-tight tracking-tight text-ds-strong sm:text-3xl lg:text-[30px] lg:leading-[38px]">
                 Prêt à démarrer votre dossier ?
               </h2>
               <p className="max-w-[44ch] text-lg leading-7 text-ds-body">

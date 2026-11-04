@@ -4,7 +4,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { collaborativeDraftsAPI, dossierDocumentDraftsAPI, forumAPI } from '@/lib/api';
+import { collaborativeDraftsAPI, dossierDocumentDraftsAPI, forumAPI, appointmentsAPI, messagesAPI } from '@/lib/api';
 import {
   LayoutDashboard,
   Users,
@@ -43,7 +43,7 @@ interface MenuItem {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  badgeKey?: 'forum' | 'prep';
+  badgeKey?: 'forum' | 'prep' | 'rdv' | 'messages';
 }
 
 interface MenuGroup {
@@ -59,7 +59,7 @@ const menuGroups: MenuGroup[] = [
       { href: '/admin/dossiers', label: 'Dossiers', icon: FolderOpen },
       { href: '/admin/dossiers/tarification', label: 'Dossiers tarification', icon: FolderOpen },
       { href: '/admin/taches', label: 'Tâches', icon: CheckSquare },
-      { href: '/admin/rendez-vous', label: 'Rendez-vous', icon: Calendar },
+      { href: '/admin/rendez-vous', label: 'Rendez-vous', icon: Calendar, badgeKey: 'rdv' },
       { href: '/admin/calendrier', label: 'Calendrier equipe', icon: CalendarRange },
       { href: '/admin/creneaux', label: 'Créneaux', icon: Clock },
     ],
@@ -67,7 +67,7 @@ const menuGroups: MenuGroup[] = [
   {
     label: 'Communication',
     items: [
-      { href: '/admin/messages', label: 'Messages', icon: MessageSquare },
+      { href: '/admin/messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
       { href: '/admin/questionnaires', label: 'Questionnaires', icon: ClipboardList },
       { href: '/admin/notifications', label: 'Notifications', icon: Bell },
       { href: '/admin/sms', label: 'SMS', icon: Smartphone },
@@ -113,6 +113,9 @@ export function AdminSidebar({ isOpen = true, onClose, collapsed = false, onTogg
   const pathname = usePathname();
   const [forumUnreadCount, setForumUnreadCount] = useState<number>(0);
   const [prepDraftCount, setPrepDraftCount] = useState<number>(0);
+  const [rdvPendingCount, setRdvPendingCount] = useState<number>(0);
+  const [messagesUnreadCount, setMessagesUnreadCount] = useState<number>(0);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const userRole = (session?.user as any)?.role || 'client';
   const userName = (session?.user as any)?.prenom || (session?.user as any)?.name || 'Admin';
@@ -174,10 +177,52 @@ export function AdminSidebar({ isOpen = true, onClose, collapsed = false, onTogg
     }
   }, []);
 
+  const loadRdvPendingCount = useCallback(async () => {
+    const role = (session?.user as any)?.role as string | undefined;
+    const staff = ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'];
+    if (!role || !staff.includes(role)) { setRdvPendingCount(0); return; }
+    try {
+      const res = await appointmentsAPI.getAllAppointments({ statut: 'en_attente' });
+      const list = res.data?.data || res.data?.appointments || [];
+      setRdvPendingCount(Array.isArray(list) ? list.length : 0);
+    } catch {
+      setRdvPendingCount(0);
+    }
+  }, [session]);
+
+  const loadMessagesUnreadCount = useCallback(async () => {
+    const role = (session?.user as any)?.role as string | undefined;
+    const staff = ['admin', 'superadmin', 'assistant', 'comptable', 'secretaire', 'juriste', 'stagiaire'];
+    if (!role || !staff.includes(role)) { setMessagesUnreadCount(0); return; }
+    try {
+      const res = await messagesAPI.getUnreadCount();
+      const count = res.data?.count ?? res.data?.unreadCount ?? 0;
+      setMessagesUnreadCount(typeof count === 'number' ? count : 0);
+    } catch {
+      setMessagesUnreadCount(0);
+    }
+  }, [session]);
+
+  const toggleGroup = (label: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  };
+
+  const getGroupBadge = (groupLabel: string): number => {
+    switch (groupLabel) {
+      case 'Gestion': return rdvPendingCount;
+      case 'Communication': return messagesUnreadCount;
+      case 'Contenu': return prepDraftCount;
+      case 'Outils': return forumUnreadCount;
+      default: return 0;
+    }
+  };
+
   useEffect(() => {
     loadForumCount();
     loadPrepDraftCount();
-  }, [loadForumCount, loadPrepDraftCount, pathname]);
+    loadRdvPendingCount();
+    loadMessagesUnreadCount();
+  }, [loadForumCount, loadPrepDraftCount, loadRdvPendingCount, loadMessagesUnreadCount, pathname]);
 
   useEffect(() => {
     const onForumUnreadUpdated = () => loadForumCount();
@@ -302,50 +347,74 @@ export function AdminSidebar({ isOpen = true, onClose, collapsed = false, onTogg
 
             {/* Navigation groupée */}
             <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-2 [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-              {menuGroups.map((group, gi) => (
-                <div key={group.label}>
-                  {gi > 0 && <div className="h-px bg-gray-100 my-1.5 mx-1" />}
-                  <p className="text-[9.5px] font-bold tracking-[.12em] text-gray-400 uppercase px-3 pt-2 pb-1">
-                    {group.label}
-                  </p>
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    const active = isActive(item.href);
-                    const showForumBadge = item.badgeKey === 'forum' && forumUnreadCount > 0;
-                    const showPrepBadge = item.badgeKey === 'prep' && prepDraftCount > 0;
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={handleNavClick}
-                        className={`flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[12.5px] font-medium transition-colors relative ${
-                          active
-                            ? 'bg-orange-50 text-orange-700'
-                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                        }`}
-                      >
-                        {active && (
-                          <span className="absolute left-0 top-[7px] bottom-[7px] w-[3px] bg-orange-500 rounded-r-full" />
+              {menuGroups.map((group, gi) => {
+                const isCollapsed = !!collapsedGroups[group.label];
+                const groupBadge = getGroupBadge(group.label);
+                return (
+                  <div key={group.label}>
+                    {gi > 0 && <div className="h-px bg-gray-100 my-1.5 mx-1" />}
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.label)}
+                      className="w-full flex items-center justify-between px-3 pt-2 pb-1 group"
+                    >
+                      <span className="text-[9.5px] font-bold tracking-[.12em] text-gray-400 uppercase">
+                        {group.label}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        {isCollapsed && groupBadge > 0 && (
+                          <span className="text-[9px] font-bold bg-orange-500 text-white rounded-full px-1.5 py-0.5 leading-tight">
+                            {groupBadge > 99 ? '99+' : groupBadge}
+                          </span>
                         )}
-                        <Icon
-                          className={`w-4 h-4 shrink-0 ${active ? 'text-orange-500' : 'text-gray-400'}`}
+                        <ChevronRight
+                          className={`w-3 h-3 text-gray-300 group-hover:text-gray-500 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}
                         />
-                        <span className="truncate">{item.label}</span>
-                        {showForumBadge && (
-                          <span className="ml-auto text-[10px] font-bold bg-orange-500 text-white rounded-full px-1.5 py-0.5 leading-tight shrink-0">
-                            {forumUnreadCount > 99 ? '99+' : forumUnreadCount}
-                          </span>
-                        )}
-                        {showPrepBadge && (
-                          <span className="ml-auto text-[10px] font-bold bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5 leading-tight shrink-0">
-                            {prepDraftCount > 99 ? '99+' : prepDraftCount}
-                          </span>
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
-              ))}
+                      </span>
+                    </button>
+                    {!isCollapsed && group.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = isActive(item.href);
+                      const badgeCount =
+                        item.badgeKey === 'forum' ? forumUnreadCount :
+                        item.badgeKey === 'prep' ? prepDraftCount :
+                        item.badgeKey === 'rdv' ? rdvPendingCount :
+                        item.badgeKey === 'messages' ? messagesUnreadCount : 0;
+                      const showBadge = badgeCount > 0;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={handleNavClick}
+                          className={`flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[12.5px] font-medium transition-colors relative ${
+                            active
+                              ? 'bg-orange-50 text-orange-700'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          }`}
+                        >
+                          {active && (
+                            <span className="absolute left-0 top-[7px] bottom-[7px] w-[3px] bg-orange-500 rounded-r-full" />
+                          )}
+                          <Icon
+                            className={`w-4 h-4 shrink-0 ${active ? 'text-orange-500' : 'text-gray-400'}`}
+                          />
+                          <span className="truncate">{item.label}</span>
+                          {showBadge && (
+                            <span className={`ml-auto text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-tight shrink-0 ${
+                              item.badgeKey === 'rdv' ? 'bg-orange-500 text-white' :
+                              item.badgeKey === 'messages' ? 'bg-blue-500 text-white' :
+                              item.badgeKey === 'forum' ? 'bg-orange-500 text-white' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>
+                              {badgeCount > 99 ? '99+' : badgeCount}
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </nav>
 
             {/* Déconnexion */}

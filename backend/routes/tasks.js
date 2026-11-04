@@ -1212,7 +1212,7 @@ router.post('/:id/fichiers', protect, uploadTaskFile.single('fichier'), async (r
     });
     await task.save();
     const added = task.piecesJointes[task.piecesJointes.length - 1];
-    return res.json({ success: true, pieceJointe: added });
+    return res.json({ success: true, pieceJointe: added, piecesJointes: task.piecesJointes });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
   }
@@ -1244,7 +1244,7 @@ router.post('/:id/liens', protect, async (req, res) => {
     if (!task) return res.status(404).json({ success: false, message: 'Tache non trouvee' });
     task.liens.push({ url, label: label || url, addedBy: req.user.id });
     await task.save();
-    return res.json({ success: true, lien: task.liens[task.liens.length - 1] });
+    return res.json({ success: true, lien: task.liens[task.liens.length - 1], liens: task.liens });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Erreur serveur' });
   }

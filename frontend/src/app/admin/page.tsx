@@ -784,57 +784,8 @@ export default function AdminDashboardPage() {
           <h1 className="text-2xl font-bold text-foreground mb-1">
             {dashboardTitle}
           </h1>
-          <p className="text-sm text-gray-700">{dashboardSubtitle}</p>
         </div>
 
-        {unreadAppointmentNotifications.length > 0 && (
-          <div className="mb-6 rounded-xl border border-red-300 bg-gradient-to-r from-red-50 via-orange-50 to-red-50 p-4 sm:p-5 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-red-700 mb-1">
-                  Alerte rendez-vous
-                </p>
-                <p className="text-sm sm:text-base font-semibold text-red-900">
-                  {unreadAppointmentNotifications.length} nouveau{unreadAppointmentNotifications.length > 1 ? 'x' : ''} rendez-vous à traiter
-                </p>
-                <div className="mt-2 space-y-1 text-sm text-red-900">
-                  {unreadAppointmentNotifications.slice(0, 3).map((notif: any) => {
-                    const meta = notif?.metadata || {};
-                    const clientName = `${meta?.prenom || ''} ${meta?.nom || ''}`.trim()
-                      || `${meta?.firstName || ''} ${meta?.lastName || ''}`.trim()
-                      || (meta?.email ? String(meta.email) : 'Client');
-                    const dateLabel = meta?.date ? new Date(meta.date).toLocaleDateString('fr-FR') : '';
-                    const timeLabel = meta?.heure ? ` à ${meta.heure}` : '';
-                    return (
-                      <p key={notif._id || notif.id} className="truncate">
-                        • {clientName}{dateLabel ? ` - ${dateLabel}${timeLabel}` : ''}
-                      </p>
-                    );
-                  })}
-                  {unreadAppointmentNotifications.length > 3 && (
-                    <p className="text-xs text-red-700">
-                      + {unreadAppointmentNotifications.length - 3} autre(s) rendez-vous en attente
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Link href="/admin/rendez-vous">
-                  <Button className="h-9 px-3 bg-red-600 hover:bg-red-700 text-white">
-                    Ouvrir le planning
-                  </Button>
-                </Link>
-                <Button
-                  variant="outline"
-                  className="h-9 px-3 border-red-300 text-red-700 hover:bg-red-100"
-                  onClick={markAllUnreadAppointmentsAsRead}
-                >
-                  Marquer comme vues
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Vue d'ensemble */}
         <div className="mb-6">

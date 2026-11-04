@@ -44,6 +44,7 @@
     @apply border-border;
   }
   html {
+    font-size: 15px;
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
   }

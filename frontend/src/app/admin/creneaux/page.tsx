@@ -480,7 +480,7 @@ export default function AdminCreneauxPage() {
       <main className="w-full px-4 py-8">
         <div className="mb-8 flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+            <h1 className="text-2xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
               Gestion des Créneaux
             </h1>
             <p className="text-muted-foreground text-lg">Fermez ou rouvrez des créneaux de rendez-vous</p>
