@@ -780,7 +780,7 @@ function AdminTachesPageContent() {
 
   const handleMarkAsDone = async (taskId: string, done: boolean) => {
     try {
-      const response = await tasksAPI.updateTask(taskId, { effectue: done });
+      const response = await tasksAPI.updateTask(taskId, { effectue: done, statut: done ? 'termine' : 'a_faire' });
       if (response.data.success) await loadTasks();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Erreur lors de la mise a jour');

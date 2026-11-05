@@ -1082,6 +1082,10 @@ export const tasksAPI = {
     api.delete(`/tasks/${taskId}/liens/${lienId}`),
 };
 
+export const assistantAPI = {
+  getContext: () => api.get('/assistant/context'),
+};
+
 export const lettreMissionAPI = {
   get: (dossierId: string) => api.get(`/user/dossiers/${dossierId}/lettre-mission`),
   saveBrouillon: (dossierId: string, data: { titre?: string; contenuHtml: string }) =>

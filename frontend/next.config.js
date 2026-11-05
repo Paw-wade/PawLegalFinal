@@ -65,6 +65,7 @@ function devApiRewriteRules(backendOrigin) {
     'dahira',
     'admin',
     'questionnaires',
+    'assistant',
   ];
 
   const rules = [];

@@ -182,6 +182,10 @@ app.use('/api/user', require('./routes/user'));
 try {
   app.use('/api/tasks', require('./routes/tasks'));
 } catch (e) {}
+try {
+  app.use('/api/assistant', require('./routes/assistant'));
+  console.log('Route /api/assistant enregistree');
+} catch (e) { console.error('assistant:', e.message); }
 
 try {
   app.use('/api/messages', require('./routes/messages'));

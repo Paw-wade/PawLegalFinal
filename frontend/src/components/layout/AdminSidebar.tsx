@@ -30,6 +30,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Bot,
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -56,6 +57,7 @@ const menuGroups: MenuGroup[] = [
     label: 'Gestion',
     items: [
       { href: '/admin', label: 'Tableau de bord', icon: LayoutDashboard },
+      { href: '/admin/assistant', label: 'Assistant', icon: Bot },
       { href: '/admin/dossiers', label: 'Dossiers', icon: FolderOpen },
       { href: '/admin/dossiers/tarification', label: 'Dossiers tarification', icon: FolderOpen },
       { href: '/admin/taches', label: 'Tâches', icon: CheckSquare },
@@ -100,6 +102,7 @@ const menuGroups: MenuGroup[] = [
 
 const railShortcuts = [
   { href: '/admin', icon: LayoutDashboard, title: 'Tableau de bord' },
+  { href: '/admin/assistant', icon: Bot, title: 'Assistant' },
   { href: '/admin/dossiers', icon: FolderOpen, title: 'Dossiers' },
   { href: '/admin/taches', icon: CheckSquare, title: 'Tâches' },
   { href: '/admin/rendez-vous', icon: Calendar, title: 'Rendez-vous' },
