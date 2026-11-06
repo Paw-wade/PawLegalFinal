@@ -9,8 +9,28 @@
   "icons": [
     {
       "src": "/ada-papers-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/ada-papers-logo.png",
       "sizes": "512x512",
       "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ma journee",
+      "short_name": "Journee",
+      "description": "Taches du jour et en retard",
+      "url": "/today",
+      "icons": [
+        {
+          "src": "/ada-papers-logo.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }

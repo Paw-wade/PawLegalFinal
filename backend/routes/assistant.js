@@ -36,7 +36,7 @@ async function buildCabinetContext(userId) {
       .select('date type statut user clientNom')
       .sort({ date: 1 })
       .lean(),
-    RendezVous.find({ statut: 'en_attente' })
+    RendezVous.find({ statut: 'en_attente', date: { $gte: startOfDay } })
       .populate('user', 'firstName lastName')
       .select('date type statut user clientNom')
       .sort({ date: 1 })
