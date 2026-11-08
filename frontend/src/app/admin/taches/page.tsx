@@ -1231,6 +1231,20 @@ function AdminTachesPageContent() {
                                     {prioLabel[task.priorite] || 'Normale'}
                                   </span>
 
+                                  {Array.isArray(task.commentaires) && task.commentaires.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleEditTask(task); setMobilePanelTab('commentaires'); }}
+                                      className="flex items-center gap-1 text-xs text-orange-500 bg-orange-50 hover:bg-orange-100 rounded-full px-1.5 py-0.5 font-semibold transition-colors"
+                                      title="Voir les commentaires"
+                                    >
+                                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                                        <path d="M2 9.5V2.5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5l-3 3Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" fill="currentColor" fillOpacity=".15"/>
+                                      </svg>
+                                      {task.commentaires.length}
+                                    </button>
+                                  )}
+
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleEditTask(task); }}
                                     className="ml-auto w-6 h-6 rounded flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors"

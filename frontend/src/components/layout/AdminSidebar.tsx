@@ -92,7 +92,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { href: '/admin/lexia', label: 'Paw AI', icon: Scale },
       { href: '/forum', label: 'Forum', icon: MessageSquare, badgeKey: 'forum' },
-      { href: '/admin/recours', label: 'Documentation', icon: FolderOpen },
+      { href: '/admin/recours', label: 'Ressources', icon: FolderOpen },
       { href: '/admin/utilisateurs', label: 'Utilisateurs', icon: Users },
       { href: '/admin/corbeille', label: 'Corbeille', icon: Trash2 },
       { href: '/admin/compte', label: 'Mon compte', icon: User },

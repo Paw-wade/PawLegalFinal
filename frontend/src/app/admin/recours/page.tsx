@@ -8,7 +8,6 @@ import { recoursAPI } from '@/lib/recoursAPI';
 import { documentsAPI, documentDownloadShareAPI, dossiersAPI } from '@/lib/api';
 import { getPublicApiBaseUrl } from '@/lib/publicApiUrl';
 import { Copy } from 'lucide-react';
-import { InlineDocumentRename } from '@/components/InlineDocumentRename';
 import { Toast } from '@/components/Toast';
 
 type RecoursType = {
@@ -64,10 +63,66 @@ const isWordLikeFile = (mimeType?: string, fileName?: string) => {
 };
 
 const ALL_TYPES_ID = '__all__';
+const LINKS_ID = '__links__';
+const isLinkTemplate = (tpl: RecoursTemplate) => tpl.mimeType === 'text/uri-list';
 
 function getTemplateTypeId(tpl: RecoursTemplate): string {
   const raw = tpl.type?._id || (tpl.type as unknown as string) || '';
   return String(raw);
+}
+
+function FileTypeIcon({ mimeType, fileName, isLink }: { mimeType?: string; fileName?: string; isLink?: boolean }) {
+  if (isLink) {
+    return (
+      <div className="w-14 h-14 rounded-xl bg-blue-50 border border-blue-100 flex flex-col items-center justify-center gap-0.5 shrink-0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+        <span className="text-[9px] font-bold text-blue-600 tracking-wide">LIEN</span>
+      </div>
+    );
+  }
+  const mime = (mimeType || '').toLowerCase();
+  const name = (fileName || '').toLowerCase();
+  if (mime.includes('pdf') || name.endsWith('.pdf')) {
+    return (
+      <div className="w-14 h-14 rounded-xl bg-red-50 border border-red-100 flex flex-col items-center justify-center shrink-0">
+        <span className="text-lg font-black text-red-600 leading-none tracking-tight">PDF</span>
+      </div>
+    );
+  }
+  if (mime.includes('word') || mime.includes('wordprocessingml') || name.match(/\.docx?$/)) {
+    return (
+      <div className="w-14 h-14 rounded-xl bg-blue-50 border border-blue-100 flex flex-col items-center justify-center shrink-0">
+        <span className="text-base font-black text-blue-700 leading-none tracking-tight">DOC</span>
+      </div>
+    );
+  }
+  if (mime.includes('spreadsheet') || mime.includes('excel') || name.match(/\.xlsx?$/)) {
+    return (
+      <div className="w-14 h-14 rounded-xl bg-green-50 border border-green-100 flex flex-col items-center justify-center shrink-0">
+        <span className="text-base font-black text-green-700 leading-none tracking-tight">XLS</span>
+      </div>
+    );
+  }
+  if (mime.includes('presentation') || mime.includes('powerpoint') || name.match(/\.pptx?$/)) {
+    return (
+      <div className="w-14 h-14 rounded-xl bg-orange-50 border border-orange-100 flex flex-col items-center justify-center shrink-0">
+        <span className="text-base font-black text-orange-600 leading-none tracking-tight">PPT</span>
+      </div>
+    );
+  }
+  const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) || 'FIL';
+  return (
+    <div className="w-14 h-14 rounded-xl bg-gray-50 border border-gray-200 flex flex-col items-center justify-center gap-0.5 shrink-0">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-400">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <span className="text-[9px] font-bold text-gray-500">{ext}</span>
+    </div>
+  );
 }
 
 function DocCountBadge({ count, active }: { count: number; active?: boolean }) {
@@ -124,6 +179,13 @@ export default function RecoursDirectoryPage() {
   const [sendToDossierBusy, setSendToDossierBusy] = useState(false);
   const [sendToDossierError, setSendToDossierError] = useState<string | null>(null);
   const [lastSentDossierLink, setLastSentDossierLink] = useState<string | null>(null);
+  const [uploadMode, setUploadMode] = useState<'file' | 'link'>('file');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [renamingTemplateId, setRenamingTemplateId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [linkTitle, setLinkTitle] = useState('');
+  const [addingLink, setAddingLink] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -235,9 +297,13 @@ export default function RecoursDirectoryPage() {
   const totalDocumentCount = allTemplates.length;
   const emptyThemeCount = types.filter((t) => (typeCounts[t._id] || 0) === 0).length;
 
+  const linkCount = useMemo(() => allTemplates.filter(isLinkTemplate).length, [allTemplates]);
+
   const filteredTemplates = useMemo(() => {
     let list = allTemplates;
-    if (selectedTypeId !== ALL_TYPES_ID) {
+    if (selectedTypeId === LINKS_ID) {
+      list = list.filter(isLinkTemplate);
+    } else if (selectedTypeId !== ALL_TYPES_ID) {
       list = list.filter((tpl) => getTemplateTypeId(tpl) === selectedTypeId);
     }
     const q = searchQuery.trim().toLowerCase();
@@ -449,6 +515,39 @@ export default function RecoursDirectoryPage() {
     }
   };
 
+  const handleAddLink = async () => {
+    const url = linkUrl.trim();
+    const title = linkTitle.trim() || url;
+    if (!url) { setLinkError('URL requise.'); return; }
+    if (!uploadTargetTypeId) { setLinkError('Veuillez choisir un theme.'); return; }
+    setAddingLink(true);
+    setLinkError(null);
+    try {
+      const res = await recoursAPI.createTemplate({
+        typeId: uploadTargetTypeId,
+        title,
+        description: templateDescription,
+        fileUrl: url,
+        fileName: title,
+        mimeType: 'text/uri-list',
+        size: 0,
+      });
+      if (!res.data?.success) throw new Error(res.data?.message || 'Erreur');
+      await refreshTemplates();
+      setSelectedTypeId(uploadTargetTypeId);
+      setShowUploadForm(false);
+      setLinkUrl('');
+      setLinkTitle('');
+      setTemplateDescription('');
+      setUploadMode('file');
+      setToast({ message: 'Lien utile ajoute.', type: 'success' });
+    } catch (e: any) {
+      setLinkError(e.response?.data?.message || e.message || 'Erreur lors de l\'ajout du lien');
+    } finally {
+      setAddingLink(false);
+    }
+  };
+
   const buildTypeCode = (label: string) => {
     const normalized = label
       .normalize('NFD')
@@ -543,92 +642,139 @@ export default function RecoursDirectoryPage() {
     }
   };
 
-  const renderTemplateCard = (tpl: RecoursTemplate, showThemeChip = false) => (
-    <div
-      key={tpl._id}
-      className="px-3 py-2 min-w-0 border-b border-gray-100 last:border-0"
-    >
-      <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-2">
-        {/* Nom + chip : pleine largeur sur mobile, flex-1 sur desktop */}
-        <div className="flex items-start gap-1.5 flex-1 min-w-0">
-          <div className="flex-1 min-w-0">
-            <InlineDocumentRename
-              value={tpl.title || tpl.fileName || 'Sans titre'}
-              className="text-sm text-gray-800 whitespace-normal md:truncate"
-              onSave={(nextName) => handleRenameTemplate(tpl._id, nextName)}
-            />
-          </div>
-          {showThemeChip && tpl.type?.label ? (
-            <span className="mt-0.5 inline-flex shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 border border-slate-200">
-              {tpl.type.label}
-            </span>
-          ) : null}
+  const renderTemplateCard = (tpl: RecoursTemplate, showThemeChip = false) => {
+    const isLink = isLinkTemplate(tpl);
+    const isDeleting = deletingTemplateId === tpl._id;
+    const isMoving = movingTemplateId === tpl._id;
+    return (
+      <div
+        key={tpl._id}
+        className="group relative flex flex-col items-center bg-white border border-gray-200 rounded-xl p-3 hover:border-primary/40 hover:shadow-md transition-all min-h-[9rem]"
+      >
+        <div className="mb-2 mt-0.5">
+          <FileTypeIcon mimeType={tpl.mimeType} fileName={tpl.fileName} isLink={isLink} />
         </div>
-        {/* Boutons : taille tactile sur mobile, compacts sur desktop */}
-        <div className="flex items-center gap-2 md:gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setPreviewTemplate(tpl);
-              setPreviewTargetTypeId(tpl.type?._id || selectedTypeId || '');
-            }}
-            className="inline-flex h-9 w-9 md:h-7 md:w-7 items-center justify-center rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
-            title="Ouvrir"
-            aria-label="Ouvrir"
-          >
-            👁️
-          </button>
-          <button
-            type="button"
-            onClick={() => void openSendToDossierModal(tpl)}
-            className="inline-flex h-9 w-9 md:h-7 md:w-7 items-center justify-center rounded-md border border-blue-300 text-sm text-blue-700 hover:bg-blue-50"
-            title="Envoyer vers un dossier"
-            aria-label="Envoyer vers un dossier"
-          >
-            📁
-          </button>
-          <button
-            type="button"
-            onClick={() => openShareModal(tpl)}
-            className="inline-flex h-9 w-9 md:h-7 md:w-7 items-center justify-center rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
-            title="Lien public"
-            aria-label="Lien public"
-          >
-            🔗
-          </button>
-          <a
-            href={buildSecureFileUrl(tpl.fileUrl)}
-            download
-            className="inline-flex h-9 w-9 md:h-7 md:w-7 items-center justify-center rounded-md border border-gray-300 text-sm text-gray-700 hover:bg-gray-100"
-            title="Telecharger"
-            aria-label="Telecharger"
-          >
-            ⬇️
-          </a>
-          <button
-            type="button"
-            onClick={() => handleDeleteTemplate(tpl._id, tpl.title)}
-            disabled={deletingTemplateId === tpl._id || movingTemplateId === tpl._id}
-            className="inline-flex h-9 w-9 md:h-7 md:w-7 items-center justify-center rounded-md bg-red-600 text-sm text-white hover:bg-red-700 disabled:opacity-60"
-            title={deletingTemplateId === tpl._id ? 'Suppression...' : 'Supprimer'}
-            aria-label={deletingTemplateId === tpl._id ? 'Suppression en cours' : 'Supprimer'}
-          >
-            {deletingTemplateId === tpl._id ? (
-              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
-              '🗑️'
-            )}
-          </button>
+        <div className="w-full text-center min-h-[3rem] flex items-start justify-center px-1">
+          {renamingTemplateId === tpl._id ? (
+            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="text"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { void handleRenameTemplate(tpl._id, renameValue); setRenamingTemplateId(null); }
+                  if (e.key === 'Escape') setRenamingTemplateId(null);
+                }}
+                autoFocus
+                className="w-full text-xs border rounded-md px-1.5 py-1 text-center bg-white"
+              />
+              <div className="flex gap-1 mt-1">
+                <button type="button" onClick={() => { void handleRenameTemplate(tpl._id, renameValue); setRenamingTemplateId(null); }} className="flex-1 text-[10px] bg-green-600 text-white rounded px-1 py-0.5 font-medium">OK</button>
+                <button type="button" onClick={() => setRenamingTemplateId(null)} className="flex-1 text-[10px] border border-gray-300 rounded px-1 py-0.5">Annuler</button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[11px] font-semibold text-gray-800 line-clamp-3 text-center leading-snug break-words w-full">
+              {tpl.title || tpl.fileName || 'Sans titre'}
+            </p>
+          )}
+        </div>
+        {isLink && (
+          <p className="text-[10px] text-blue-400 truncate w-full text-center mt-0.5">{tpl.fileUrl}</p>
+        )}
+        {showThemeChip && tpl.type?.label && (
+          <span className="mt-1 inline-flex shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
+            {tpl.type.label}
+          </span>
+        )}
+        <div className="absolute inset-0 rounded-xl bg-white/95 opacity-0 group-hover:opacity-100 flex flex-col items-stretch justify-center gap-1.5 p-2.5 transition-opacity pointer-events-none group-hover:pointer-events-auto">
+          {isLink ? (
+            <>
+              <a
+                href={tpl.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 h-8 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
+              >
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M5.5 8.5L8.5 5.5M6 3H3a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-3M9 1h4m0 0v4m0-4L6 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Ouvrir
+              </a>
+              <button
+                type="button"
+                onClick={() => { try { navigator.clipboard.writeText(tpl.fileUrl); } catch {} setToast({ message: 'URL copiee.', type: 'success' }); }}
+                className="flex items-center justify-center gap-1.5 h-8 rounded-lg border border-gray-300 text-gray-700 text-xs font-medium hover:bg-gray-100"
+              >
+                <Copy width={11} height={11} strokeWidth={2} />
+                Copier l'URL
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setPreviewTemplate(tpl); setPreviewTargetTypeId(tpl.type?._id || selectedTypeId || ''); }}
+                  className="flex-1 flex items-center justify-center h-8 rounded-lg border border-gray-300 text-gray-700 text-xs hover:bg-gray-100"
+                  title="Ouvrir"
+                >
+                  👁️
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openSendToDossierModal(tpl)}
+                  className="flex-1 flex items-center justify-center h-8 rounded-lg border border-blue-300 text-blue-700 text-xs hover:bg-blue-50"
+                  title="Ajouter au dossier"
+                >
+                  📁
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openShareModal(tpl)}
+                  className="flex-1 flex items-center justify-center h-8 rounded-lg border border-gray-300 text-gray-700 text-xs hover:bg-gray-100"
+                  title="Lien public"
+                >
+                  🔗
+                </button>
+                <a
+                  href={buildSecureFileUrl(tpl.fileUrl)}
+                  download
+                  className="flex-1 flex items-center justify-center h-8 rounded-lg border border-gray-300 text-gray-700 text-xs hover:bg-gray-100"
+                  title="Telecharger"
+                >
+                  ⬇️
+                </a>
+              </div>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setRenamingTemplateId(tpl._id); setRenameValue(tpl.title || tpl.fileName || ''); }}
+                  className="flex-1 flex items-center justify-center h-8 rounded-lg border border-gray-300 text-gray-700 text-xs hover:bg-gray-100"
+                  title="Renommer"
+                >
+                  ✏️
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteTemplate(tpl._id, tpl.title)}
+                  disabled={isDeleting || isMoving}
+                  className="flex-1 flex items-center justify-center h-8 rounded-lg bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-60"
+                  title="Supprimer"
+                >
+                  {isDeleting ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : '🗑️'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderTemplateList = () => {
     if (isLoading) {
       return (
-        <div className="py-10 text-center text-sm text-muted-foreground">
-          Chargement des modèles de recours...
+        <div className="py-16 text-center text-sm text-muted-foreground">
+          Chargement...
         </div>
       );
     }
@@ -636,12 +782,12 @@ export default function RecoursDirectoryPage() {
     if (filteredTemplates.length === 0) {
       const emptyLabel =
         searchQuery.trim().length > 0
-          ? 'Aucun document ne correspond à votre recherche.'
+          ? 'Aucun document ne correspond a votre recherche.'
           : selectedTypeId === ALL_TYPES_ID
             ? 'Aucun document dans la documentation pour le moment.'
-            : 'Aucun document pour ce thème.';
+            : 'Aucun document pour ce theme.';
       return (
-        <div className="py-10 text-center text-sm text-muted-foreground border rounded-lg bg-gray-50">
+        <div className="py-16 text-center text-sm text-muted-foreground border rounded-xl bg-gray-50">
           {emptyLabel}
         </div>
       );
@@ -649,35 +795,59 @@ export default function RecoursDirectoryPage() {
 
     if (selectedTypeId === ALL_TYPES_ID && !searchQuery.trim()) {
       return (
-        <div className="space-y-5">
-          {types.map((type) => {
-            const sectionTemplates = filteredTemplates.filter(
-              (tpl) => getTemplateTypeId(tpl) === type._id
-            );
-            if (sectionTemplates.length === 0) return null;
-            return (
-              <section key={type._id} className="space-y-2">
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Dossiers</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {types.map((type) => {
+              const count = typeCounts[type._id] || 0;
+              return (
                 <button
+                  key={type._id}
                   type="button"
                   onClick={() => handleSelectType(type._id)}
-                  className="flex w-full items-center justify-between gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-left hover:bg-gray-100 transition-colors"
+                  className="group flex flex-col items-center bg-white border border-gray-200 rounded-xl p-3 hover:border-primary/40 hover:shadow-md transition-all text-center min-h-[8rem]"
                 >
-                  <span className="text-sm font-semibold text-foreground">{type.label}</span>
-                  <DocCountBadge count={sectionTemplates.length} />
+                  <div className="mb-2 mt-0.5">
+                    <div className="w-14 h-14 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" fill="#bfdbfe" stroke="#93c5fd" strokeWidth="1.5" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <span className="text-xs font-medium text-gray-800 line-clamp-2 leading-tight">{type.label}</span>
+                  <span className={`mt-1.5 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold leading-none ${count > 0 ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-400'}`}>
+                    {count} fichier{count !== 1 ? 's' : ''}
+                  </span>
                 </button>
-                <div className="pl-0 sm:pl-2 border border-gray-100 rounded-lg overflow-hidden bg-white">
-                  {sectionTemplates.map((tpl) => renderTemplateCard(tpl))}
+              );
+            })}
+            {/* Carte virtuelle Liens utiles */}
+            <button
+              type="button"
+              onClick={() => handleSelectType(LINKS_ID)}
+              className="group flex flex-col items-center bg-white border border-gray-200 rounded-xl p-3 hover:border-blue-400 hover:shadow-md transition-all text-center min-h-[8rem]"
+            >
+              <div className="mb-2 mt-0.5">
+                <div className="w-14 h-14 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                 </div>
-              </section>
-            );
-          })}
+              </div>
+              <span className="text-xs font-medium text-gray-800 leading-tight">Liens utiles</span>
+              <span className={`mt-1.5 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold leading-none ${linkCount > 0 ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}>
+                {linkCount} lien{linkCount !== 1 ? 's' : ''}
+              </span>
+            </button>
+          </div>
         </div>
       );
     }
 
     const showThemeChip = selectedTypeId === ALL_TYPES_ID || Boolean(searchQuery.trim());
     return (
-      <div className="border border-gray-100 rounded-lg overflow-hidden bg-white">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {filteredTemplates.map((tpl) => renderTemplateCard(tpl, showThemeChip))}
       </div>
     );
@@ -700,7 +870,7 @@ export default function RecoursDirectoryPage() {
         <div className="bg-white rounded-xl shadow-md border border-gray-200 p-4 sm:p-6">
           <div className="flex items-start justify-between gap-3 mb-4 sm:mb-6">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-foreground">Répertoire des documents importants</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground">Ressources et liens</h1>
               {!isLoading && (
                 <p className="mt-1 text-sm text-muted-foreground">
                   {totalDocumentCount} document{totalDocumentCount !== 1 ? 's' : ''} · {types.length} thème
@@ -726,146 +896,72 @@ export default function RecoursDirectoryPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-4">
-            {/* Colonne gauche : types (desktop seulement) */}
-            <div className="hidden md:block md:col-span-1">
-              <div className="border rounded-lg p-3 bg-gray-50">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Thèmes
-                </p>
-                <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-                  <div
-                    className={`w-full px-2 py-1.5 rounded-md text-sm transition-colors ${
-                      selectedTypeId === ALL_TYPES_ID
-                        ? 'bg-primary/10 border border-primary/20'
-                        : 'bg-white border border-gray-200'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleSelectType(ALL_TYPES_ID)}
-                      className="flex w-full items-center justify-between gap-2 text-left min-w-0"
-                    >
-                      <span className="font-medium">Tous les documents</span>
-                      <DocCountBadge count={totalDocumentCount} active={selectedTypeId === ALL_TYPES_ID} />
-                    </button>
-                  </div>
-                  {types.map((type, index) => (
-                    <div
-                      key={type._id}
-                      className={`group w-full px-2 py-1.5 rounded-md text-sm transition-colors ${
-                        selectedTypeId === type._id
-                          ? 'bg-primary/10 border border-primary/20'
-                          : 'bg-white border border-gray-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectType(type._id)}
-                          className="flex-1 text-left min-w-0"
-                        >
-                          <div className="flex items-center justify-between gap-2 min-w-0 flex-1">
-                            <span className="font-medium whitespace-normal break-words">{type.label}</span>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <DocCountBadge
-                                count={typeCounts[type._id] || 0}
-                                active={selectedTypeId === type._id}
-                              />
-                              {type.restrictedToSuperadmin && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold">
-                                  Superadmin
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleReorderType(type._id, 'up')}
-                          disabled={index === 0}
-                          className="h-6 w-6 rounded border border-gray-300 text-[11px] hover:bg-gray-100 disabled:opacity-40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-                          title="Monter"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleReorderType(type._id, 'down')}
-                          disabled={index === types.length - 1}
-                          className="h-6 w-6 rounded border border-gray-300 text-[11px] hover:bg-gray-100 disabled:opacity-40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-                          title="Descendre"
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteType(type)}
-                          className="h-6 w-6 rounded border border-red-300 text-[11px] text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-                          title="Supprimer le thème"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {types.length === 0 && !isLoading && (
-                    <p className="text-xs text-muted-foreground">
-                      Aucun type de recours défini pour le moment.
-                    </p>
-                  )}
-                </div>
+          {/* Barre de navigation + actions */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            {selectedTypeId !== ALL_TYPES_ID && !searchQuery.trim() ? (
+              <div className="flex items-center gap-2 text-sm min-w-0">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowTypeForm((prev) => !prev);
-                    setTypeError(null);
-                  }}
-                  className="mt-3 w-full px-3 py-2 rounded-md text-xs font-semibold border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSelectType(ALL_TYPES_ID)}
+                  className="text-primary hover:underline flex items-center gap-1 shrink-0"
                 >
-                  {showTypeForm ? 'Annuler le nouveau thème' : '+ Ajouter un thème'}
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 11L4 7l5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Dossiers
                 </button>
-
-                {showTypeForm && (
-                  <div className="mt-2 space-y-2 border border-gray-200 rounded-md bg-white p-2.5">
-                    {typeError && <p className="text-xs text-red-600">{typeError}</p>}
-                    <input
-                      type="text"
-                      value={typeLabel}
-                      onChange={(e) => setTypeLabel(e.target.value)}
-                      placeholder="Nom du thème (ex: Jurisprudence)"
-                      className="w-full border rounded-md px-2.5 py-1.5 text-xs"
-                    />
-                    <textarea
-                      value={typeDescription}
-                      onChange={(e) => setTypeDescription(e.target.value)}
-                      placeholder="Description (optionnelle)"
-                      className="w-full border rounded-md px-2.5 py-1.5 text-xs min-h-[58px]"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCreateType}
-                      disabled={creatingType || !typeLabel.trim()}
-                      className="w-full px-3 py-1.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-60"
-                    >
-                      {creatingType ? 'Ajout...' : 'Créer le thème'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Bouton pour afficher le formulaire de création (admin/superadmin) */}
-                <button
-                  type="button"
-                  onClick={() => setShowUploadForm(true)}
-                  className="mt-3 w-full px-3 py-2 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
-                >
-                  + Ajouter un modèle
-                </button>
+                <span className="text-gray-400">/</span>
+                <span className="font-semibold text-gray-800 truncate">
+                  {selectedTypeId === LINKS_ID ? 'Liens utiles' : (types.find((t) => t._id === selectedTypeId)?.label || 'Dossier')}
+                </span>
               </div>
+            ) : (
+              <div />
+            )}
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => { setShowTypeForm((prev) => !prev); setTypeError(null); }}
+                className="px-3 py-1.5 rounded-md text-xs font-semibold border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                {showTypeForm ? 'Annuler' : '+ Dossier'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowUploadForm(true)}
+                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+              >
+                + Ajouter un modèle
+              </button>
             </div>
+          </div>
 
-            {/* Colonne droite : modèles */}
-            <div className="md:col-span-3">
+          {showTypeForm && (
+            <div className="mb-4 border border-gray-200 rounded-lg bg-white p-3 space-y-2">
+              {typeError && <p className="text-xs text-red-600">{typeError}</p>}
+              <input
+                type="text"
+                value={typeLabel}
+                onChange={(e) => setTypeLabel(e.target.value)}
+                placeholder="Nom du dossier (ex: Jurisprudence)"
+                className="w-full border rounded-md px-2.5 py-1.5 text-xs"
+              />
+              <textarea
+                value={typeDescription}
+                onChange={(e) => setTypeDescription(e.target.value)}
+                placeholder="Description (optionnelle)"
+                className="w-full border rounded-md px-2.5 py-1.5 text-xs min-h-[52px]"
+              />
+              <button
+                type="button"
+                onClick={handleCreateType}
+                disabled={creatingType || !typeLabel.trim()}
+                className="px-4 py-1.5 rounded-md text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-60"
+              >
+                {creatingType ? 'Ajout...' : 'Créer le dossier'}
+              </button>
+            </div>
+          )}
+
+          <div>
               {/* Mobile : themes en chips horizontaux */}
               <div className="md:hidden mb-3 flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                 <button
@@ -917,10 +1013,97 @@ export default function RecoursDirectoryPage() {
               {/* Formulaire d'upload de modèle de recours */}
               {showUploadForm && (
                 <div className="mb-4 border rounded-lg p-4 bg-white shadow-sm">
-                  <h2 className="text-sm font-semibold mb-2">Nouveau modèle de recours</h2>
-                  {uploadError && (
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <h2 className="text-sm font-semibold">Ajouter au repertoire</h2>
+                    <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setUploadMode('file')}
+                        className={`px-3 py-1.5 font-medium transition-colors ${uploadMode === 'file' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        Fichier
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUploadMode('link')}
+                        className={`px-3 py-1.5 font-medium transition-colors ${uploadMode === 'link' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        Lien utile
+                      </button>
+                    </div>
+                  </div>
+
+                  {uploadMode === 'link' && (
+                    <div className="space-y-3">
+                      {linkError && <p className="text-xs text-red-600">{linkError}</p>}
+                      {selectedTypeId === ALL_TYPES_ID && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-700 mb-1">Theme *</p>
+                          <select
+                            value={uploadTypeId}
+                            onChange={(e) => setUploadTypeId(e.target.value)}
+                            className="block w-full text-xs border rounded-md px-2 py-1.5 bg-white"
+                          >
+                            <option value="">Choisir un theme...</option>
+                            {types.map((type) => (
+                              <option key={type._id} value={type._id}>{type.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-xs font-medium text-gray-700 mb-1">URL *</p>
+                        <input
+                          type="url"
+                          value={linkUrl}
+                          onChange={(e) => setLinkUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="block w-full text-xs border rounded-md px-2 py-1.5"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-700 mb-1">Titre</p>
+                        <input
+                          type="text"
+                          value={linkTitle}
+                          onChange={(e) => setLinkTitle(e.target.value)}
+                          placeholder="Nom du lien (optionnel)"
+                          className="block w-full text-xs border rounded-md px-2 py-1.5"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-700 mb-1">Description</p>
+                        <textarea
+                          value={templateDescription}
+                          onChange={(e) => setTemplateDescription(e.target.value)}
+                          placeholder="Note interne (optionnelle)"
+                          className="block w-full text-xs border rounded-md px-2 py-1.5 min-h-[52px]"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setShowUploadForm(false); setLinkUrl(''); setLinkTitle(''); setLinkError(null); setUploadMode('file'); }}
+                          className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          type="button"
+                          disabled={addingLink || !linkUrl.trim() || !uploadTargetTypeId}
+                          onClick={handleAddLink}
+                          className="px-3 py-1.5 text-xs rounded-md bg-primary text-white hover:bg-primary/90 disabled:opacity-60"
+                        >
+                          {addingLink ? 'Ajout...' : 'Ajouter le lien'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {uploadMode === 'file' && uploadError && (
                     <p className="mb-2 text-xs text-red-600">{uploadError}</p>
                   )}
+                  {uploadMode === 'file' && (<>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                     {selectedTypeId === ALL_TYPES_ID && (
                       <div className="sm:col-span-2">
@@ -1064,12 +1247,13 @@ export default function RecoursDirectoryPage() {
                       {uploading ? 'Enregistrement...' : 'Enregistrer le modèle'}
                     </button>
                   </div>
+                  </>
+                  )}
                 </div>
               )}
 
               {renderTemplateList()}
             </div>
-          </div>
         </div>
       </main>
       {toast && (
