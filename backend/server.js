@@ -296,6 +296,10 @@ try {
   app.use('/api', require('./routes/recours'));
 } catch (e) {}
 
+try {
+  app.use('/api/webhook/whatsapp', require('./routes/whatsapp'));
+  console.log('✅ Route /api/webhook/whatsapp enregistrée');
+} catch (e) { console.error('whatsapp webhook:', e.message); }
 
 /* =========================
    ERREURS
