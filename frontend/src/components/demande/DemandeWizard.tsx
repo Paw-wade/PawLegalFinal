@@ -115,7 +115,13 @@ const clientCategories = {
       { value: 'constitution_societe_senegal', label: 'Entreprise / société au Sénégal' },
       { value: 'constitution_societe_france', label: 'Entreprise / société en France' },
     ]
-  }
+  },
+  visa_france_senegal: {
+    label: 'Visa France (Sénégal)',
+    isSpecial: true,
+    redirectTo: '/visas/france-senegal',
+    options: [] as { value: string; label: string }[],
+  },
 };
 
 // Indicatifs téléphoniques (diaspora : France, Sénégal et principaux pays).
@@ -689,7 +695,7 @@ export default function DemandeWizard({
               Type de demande
             </p>
             <div
-              className="mb-4 grid grid-cols-3 gap-1 rounded-lg border border-gray-100 bg-gray-50/80 p-1"
+              className="mb-4 grid grid-cols-2 gap-1 rounded-lg border border-gray-100 bg-gray-50/80 p-1"
               role="tablist"
               aria-label="Rubriques de demande"
             >
@@ -702,10 +708,17 @@ export default function DemandeWizard({
                   onClick={() => handleCategorySelect(key)}
                   className={`min-w-0 rounded-md px-1.5 py-2 text-center text-[10px] font-semibold leading-tight break-words transition-colors sm:px-2 sm:text-[11px] ${
                     selectedCategory === key
-                      ? 'bg-white text-primary shadow-sm ring-1 ring-gray-200'
+                      ? (key === 'visa_france_senegal'
+                          ? 'bg-white text-orange-600 shadow-sm ring-1 ring-orange-200'
+                          : 'bg-white text-primary shadow-sm ring-1 ring-gray-200')
                       : 'text-muted-foreground hover:text-foreground'
-                  }`}
+                  } ${key === 'visa_france_senegal' ? 'relative' : ''}`}
                 >
+                  {key === 'visa_france_senegal' && (
+                    <span className="absolute -top-1.5 -right-1 rounded-full bg-orange-500 px-1 py-0 text-[8px] font-bold text-white leading-tight">
+                      Nouveau
+                    </span>
+                  )}
                   {category.label}
                 </button>
               ))}
@@ -736,6 +749,59 @@ export default function DemandeWizard({
           </aside>
 
           <section className="p-4 sm:p-5">
+            {selectedCategory === 'visa_france_senegal' ? (
+              <div className="flex flex-col gap-5">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+                    Offre payante
+                  </span>
+                  <h2 className="mt-3 text-xl font-bold text-foreground">
+                    Visa France depuis le Sénégal
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                    Ada Papers vous accompagne de A a Z dans votre demande de visa pour la France : constitution du dossier, checklist des pieces, preparation de la fiche France-Visas et suivi du rendez-vous VFS Global Dakar.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {[
+                    { nom: 'Essentiel', prix: '40 000', couleur: 'border-gray-200 bg-gray-50', badge: 'text-gray-600 bg-gray-100', desc: 'Checklist + verification du dossier' },
+                    { nom: 'Standard', prix: '75 000', couleur: 'border-orange-200 bg-orange-50', badge: 'text-orange-700 bg-orange-100', desc: 'Essentiel + suivi VFS 14 jours' },
+                    { nom: 'Complet', prix: '120 000', couleur: 'border-primary/30 bg-primary/5', badge: 'text-primary bg-primary/10', desc: 'Standard + fiche France-Visas PDF' },
+                  ].map((f) => (
+                    <div key={f.nom} className={`rounded-xl border p-3 ${f.couleur}`}>
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${f.badge}`}>{f.nom}</span>
+                      <p className="mt-2 text-lg font-bold text-foreground">{f.prix} <span className="text-xs font-normal text-muted-foreground">FCFA</span></p>
+                      <p className="mt-1 text-xs text-muted-foreground">{f.desc}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4">
+                  <p className="text-xs font-semibold text-orange-800 mb-2">Inclus dans toutes les formules</p>
+                  <ul className="space-y-1 text-xs text-orange-900">
+                    {['Diagnostic du motif de visa', 'Checklist officielle des pieces', 'Messagerie securisee avec le cabinet', '2 tours de correction des pieces'].map((item) => (
+                      <li key={item} className="flex items-start gap-1.5">
+                        <span className="mt-0.5 shrink-0 text-orange-500">&#10003;</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="text-xs text-muted-foreground border-t border-gray-100 pt-3">
+                  Les honoraires Ada Papers sont separes des droits de visa et des frais VFS Global, qui restent a votre charge. Ada Papers assure un accompagnement administratif et n&apos;est pas un cabinet d&apos;avocats.
+                </div>
+
+                <a
+                  href="/visas/france-senegal"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-md hover:bg-orange-600 transition-colors"
+                >
+                  Decouvrir l&apos;offre et demarrer
+                  <span aria-hidden>&#8594;</span>
+                </a>
+              </div>
+            ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
               {selectedOption ? (
                 <>
@@ -975,6 +1041,7 @@ export default function DemandeWizard({
                 </p>
               )}
             </form>
+            )}
           </section>
         </div>
       </div>
