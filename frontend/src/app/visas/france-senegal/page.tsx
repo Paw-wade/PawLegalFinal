@@ -1,6 +1,7 @@
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import Link from 'next/link';
+import CorrespondanceVisa from './CorrespondanceVisa';
 
 const formules = [
   {
@@ -243,6 +244,8 @@ export default function VisaFranceSenegalPage() {
           </div>
         </div>
       </section>
+
+      <CorrespondanceVisa />
 
       {/* Comment ca marche */}
       <section id="comment-ca-marche" className="py-16 bg-secondary/20">
