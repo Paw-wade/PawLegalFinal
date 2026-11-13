@@ -382,7 +382,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               Forum
             </Link>
             <Link
-              href="/guide-nouvel-arrivant"
+              href="/guides/nouvel-arrivant"
               className="px-3 py-1.5 rounded-md text-xs font-medium text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors border border-emerald-200"
             >
               Guide arrivant
@@ -567,7 +567,7 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 Forum
               </Link>
               <Link
-                href="/guide-nouvel-arrivant"
+                href="/guides/nouvel-arrivant"
                 onClick={() => setMobileNavOpen(false)}
                 className="px-4 py-3.5 rounded-xl text-base font-medium text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 transition-colors min-h-[48px] flex items-center border border-emerald-200"
               >
