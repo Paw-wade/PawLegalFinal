@@ -542,6 +542,12 @@ export default function HomePage() {
                 >
                   Nouvelle demande
                 </Link>
+                <Link
+                  href="/guide-nouvel-arrivant"
+                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 whitespace-nowrap border border-emerald-200"
+                >
+                  Guide arrivant
+                </Link>
               </div>
             </div>
           </div>
@@ -588,6 +594,12 @@ export default function HomePage() {
                     {label}
                   </Link>
                 ))}
+                <Link
+                  href="/guide-nouvel-arrivant"
+                  className="px-3 py-1.5 rounded-md text-sm font-medium text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors border border-emerald-200"
+                >
+                  Guide arrivant
+                </Link>
               </div>
               <Link href={session ? (role === 'admin' || role === 'superadmin' ? '/admin' : '/client') : '/auth/signin'}>
                 <button className="rounded-full bg-ds-primary px-5 py-2 text-sm font-semibold text-white hover:bg-ds-primary-hover transition-colors shadow-sm">

@@ -382,6 +382,12 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               Forum
             </Link>
             <Link
+              href="/guide-nouvel-arrivant"
+              className="px-3 py-1.5 rounded-md text-xs font-medium text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors border border-emerald-200"
+            >
+              Guide arrivant
+            </Link>
+            <Link
               href="/contact"
               className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
             >
@@ -559,6 +565,13 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
               >
                 Forum
+              </Link>
+              <Link
+                href="/guide-nouvel-arrivant"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3.5 rounded-xl text-base font-medium text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 transition-colors min-h-[48px] flex items-center border border-emerald-200"
+              >
+                Guide nouvel arrivant
               </Link>
               <Link
                 href="/contact"
