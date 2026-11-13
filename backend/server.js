@@ -285,6 +285,13 @@ try {
 }
 
 try {
+  app.use('/api/automations', require('./routes/automations'));
+  console.log('Route /api/automations enregistree');
+} catch (e) {
+  console.error('Impossible d\'enregistrer /api/automations:', e.message);
+}
+
+try {
   app.use('/api', require('./routes/collaborativeDrafts'));
 } catch (e) {}
 
