@@ -226,6 +226,7 @@ const CATEGORIES: { key: string; label: string }[] = [
   { key: 'telephonie', label: 'Téléphonie' },
   { key: 'transport', label: 'Transport' },
   { key: 'culture', label: 'Culture' },
+  { key: 'emploi', label: 'Emploi' },
 ];
 
 const CAT_COLORS: Record<string, { badge: string; border: string; dot: string }> = {
@@ -234,6 +235,7 @@ const CAT_COLORS: Record<string, { badge: string; border: string; dot: string }>
   telephonie:   { badge: 'bg-blue-50 text-blue-700 border-blue-200', border: 'border-l-blue-400', dot: 'bg-blue-400' },
   transport:    { badge: 'bg-orange-50 text-orange-700 border-orange-200', border: 'border-l-orange-400', dot: 'bg-orange-400' },
   culture:      { badge: 'bg-pink-50 text-pink-700 border-pink-200', border: 'border-l-pink-400', dot: 'bg-pink-400' },
+  emploi:       { badge: 'bg-teal-50 text-teal-700 border-teal-200', border: 'border-l-teal-400', dot: 'bg-teal-400' },
 };
 
 
