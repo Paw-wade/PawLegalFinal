@@ -331,6 +331,18 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
         <div className="flex items-center justify-between gap-2">
           {/* Logo ; bouton menu (mobile) : sidebar dashboard ou menu nav selon la page */}
           <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
+            {/* Bouton hamburger pour la homepage sur mobile */}
+            {variant === 'home' && (
+              <button
+                onClick={() => setMobileNavOpen(true)}
+                className="md:hidden p-2 -ml-1 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0 flex items-center justify-center"
+                aria-label="Ouvrir le menu"
+              >
+                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
             {/* Bouton hamburger spécifique pour le menu latéral des dashboards (client/admin/partenaire) */}
             {onMenuClick && (variant === 'client' || variant === 'admin' || variant === 'partenaire') && (
               <button
@@ -347,10 +359,10 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
               <Link
                 href="/"
                 className="relative overflow-hidden hover:opacity-85 transition-opacity shrink-0"
-                style={{ width: 100, height: 47 }}
+                style={{ width: 140, height: 65 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo-h.png" alt="Ada Papers" style={{ position: 'absolute', width: 208, maxWidth: 'none', height: 'auto', left: -54, top: -35 }} />
+                <img src="/logo-h.png" alt="Ada Papers" style={{ position: 'absolute', width: 292, maxWidth: 'none', height: 'auto', left: -76, top: -49 }} />
               </Link>
             )}
           </div>
@@ -527,85 +539,129 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
         </div>
       </div>
 
-      {/* Menu de navigation mobile (page d'accueil, calculateur, etc.) - plein écran lisible */}
+      {/* Drawer de navigation mobile (page d'accueil) - glisse depuis la gauche */}
       {variant === 'home' && mobileNavOpen && (
         <>
-          {/* Overlay mobile : commence sous le header pour laisser le header cliquable */}
+          {/* Overlay */}
           <div
-            className="fixed inset-0 top-14 bg-black/50 z-40 md:hidden"
+            className="fixed inset-0 bg-black/50 z-[90] md:hidden"
             onClick={() => setMobileNavOpen(false)}
             aria-hidden="true"
           />
-          <div className="fixed top-14 left-0 right-0 bottom-0 z-50 md:hidden bg-white border-b border-gray-200 shadow-lg overflow-y-auto safe-bottom">
-            <nav className="p-4 flex flex-col gap-0.5">
+          {/* Drawer latéral gauche */}
+          <div className="fixed top-0 left-0 bottom-0 z-[100] w-72 max-w-[85vw] md:hidden bg-white shadow-2xl flex flex-col overflow-hidden">
+            {/* En-tête du drawer */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
+              <Link
+                href="/"
+                onClick={() => setMobileNavOpen(false)}
+                className="relative overflow-hidden hover:opacity-85 transition-opacity shrink-0"
+                style={{ width: 120, height: 56 }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo-h.png" alt="Ada Papers" style={{ position: 'absolute', width: 251, maxWidth: 'none', height: 'auto', left: -65, top: -42 }} />
+              </Link>
+              <button
+                onClick={() => setMobileNavOpen(false)}
+                className="p-2 hover:bg-gray-100 rounded-md transition-colors flex items-center justify-center"
+                aria-label="Fermer le menu"
+              >
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* Liens de navigation */}
+            <nav className="flex-1 overflow-y-auto p-3 flex flex-col gap-0.5">
               <Link
                 href="/services"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+                className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[44px] flex items-center"
               >
                 Services
               </Link>
               <Link
                 href="/a-propos"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+                className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[44px] flex items-center"
               >
-                À propos
+                A propos
               </Link>
               <Link
                 href="/faq"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+                className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[44px] flex items-center"
               >
                 FAQ
               </Link>
               <Link
                 href="/forum"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+                className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[44px] flex items-center"
               >
                 Forum
               </Link>
               <Link
-                href="/guides/nouvel-arrivant"
-                onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3.5 rounded-xl text-base font-medium text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 transition-colors min-h-[48px] flex items-center border border-emerald-200"
-              >
-                Guide nouvel arrivant
-              </Link>
-              <Link
                 href="/contact"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+                className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[44px] flex items-center"
               >
                 Contact
+              </Link>
+              <div className="my-1 border-t border-gray-100" />
+              <Link
+                href="/guides/nouvel-arrivant"
+                onClick={() => setMobileNavOpen(false)}
+                className="px-4 py-3 rounded-xl text-sm font-medium text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100 transition-colors min-h-[44px] flex items-center gap-2 border border-emerald-200"
+              >
+                <span>Guide nouvel arrivant</span>
               </Link>
               <Link
                 href="/calculateur"
                 onClick={() => setMobileNavOpen(false)}
-                className="px-4 py-3.5 rounded-xl text-base font-medium bg-orange-500 text-white hover:bg-orange-600 active:bg-orange-700 transition-colors min-h-[48px] flex items-center"
+                className="px-4 py-3 rounded-xl text-sm font-semibold bg-orange-500 text-white hover:bg-orange-600 active:bg-orange-700 transition-colors min-h-[44px] flex items-center"
               >
                 Calculateur
               </Link>
               {isAuthenticated && (
                 <>
+                  <div className="my-1 border-t border-gray-100" />
                   <button
                     type="button"
                     onClick={(e) => { handleDashboardClick(e); setMobileNavOpen(false); }}
-                    className="w-full text-left px-4 py-3.5 rounded-xl text-base font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center"
+                    className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[44px] flex items-center"
                   >
-                    Dashboard
+                    Mon espace
                   </button>
                   <button
                     type="button"
                     onClick={() => { setMobileNavOpen(false); handleSignOut(); }}
-                    className="w-full text-left px-4 py-3.5 rounded-xl text-base font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 active:bg-red-100 transition-colors min-h-[48px] flex items-center"
+                    className="w-full text-left px-4 py-3 rounded-xl text-sm font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 active:bg-red-100 transition-colors min-h-[44px] flex items-center"
                   >
-                    Déconnexion
+                    Deconnexion
                   </button>
                 </>
               )}
             </nav>
+            {/* Pied du drawer : CTA si non connecte */}
+            {!isAuthenticated && (
+              <div className="p-4 border-t border-gray-200 flex flex-col gap-2">
+                <Link
+                  href="/auth/signin"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="w-full text-center px-4 py-2.5 rounded-xl text-sm font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors"
+                >
+                  Connexion
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="w-full text-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
+                >
+                  Creer un compte
+                </Link>
+              </div>
+            )}
           </div>
         </>
       )}
