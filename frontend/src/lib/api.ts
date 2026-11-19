@@ -983,8 +983,13 @@ export const appointmentsAPI = {
 
 export const tasksAPI = {
   // Récupérer toutes les tâches (Admin)
-  getAllTasks: (params?: { statut?: string; assignedTo?: string; createdBy?: string; dossier?: string; priorite?: string }) => {
+  getAllTasks: (params?: { statut?: string; assignedTo?: string; createdBy?: string; dossier?: string; priorite?: string; includeArchived?: string }) => {
     return api.get('/tasks', { params });
+  },
+
+  // Mettre a jour l'ordre kanban de plusieurs taches
+  reorderTasks: (orders: { id: string; kanbanOrder: number }[]) => {
+    return api.post('/tasks/reorder', { orders });
   },
   
   // Récupérer les tâches assignées à l'utilisateur connecté
@@ -2022,6 +2027,17 @@ export const guidesAdminAPI = {
 export const parrainageAPI = {
   submitBnp: (data: { nom: string; prenom: string; email: string }) =>
     api.post('/parrainage/bnp', data),
+};
+
+export const whatsappAdminAPI = {
+  listConversations: (params?: { page?: number; limit?: number; unread?: boolean }) =>
+    api.get('/whatsapp-admin/conversations', { params }),
+  getConversation: (id: string) => api.get(`/whatsapp-admin/conversations/${id}`),
+  markRead: (id: string) => api.put(`/whatsapp-admin/conversations/${id}/read`),
+  send: (phone: string, text: string) => api.post('/whatsapp-admin/send', { phone, text }),
+  link: (id: string, data: { clientId?: string | null; dossierId?: string | null }) =>
+    api.put(`/whatsapp-admin/conversations/${id}/link`, data),
+  remove: (id: string) => api.delete(`/whatsapp-admin/conversations/${id}`),
 };
 
 export const questionnairesAPI = {

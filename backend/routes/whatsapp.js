@@ -21,10 +21,9 @@ router.get('/', (req, res) => {
 
 // ─────────────────────────────────────────────
 // POST /api/webhook/whatsapp
-// Réception des messages entrants
+// Réception des messages entrants (texte + médias)
 // ─────────────────────────────────────────────
 router.post('/', async (req, res) => {
-  // Accusé de réception immédiat (Meta exige < 20s)
   res.sendStatus(200);
 
   try {
@@ -37,12 +36,9 @@ router.post('/', async (req, res) => {
         if (!value || !value.messages) continue;
 
         for (const msg of value.messages) {
-          if (msg.type !== 'text') continue;
+          const from = msg.from;
+          const msgType = msg.type || 'unknown';
 
-          const from = msg.from; // numéro WhatsApp de l'expéditeur
-          const text = msg.text?.body || '';
-
-          // Charge ou crée la conversation
           let conv = await WhatsappConversation.findOne({ phone: from });
           if (!conv || conv.isExpired()) {
             if (conv) {
@@ -53,8 +49,60 @@ router.post('/', async (req, res) => {
             }
           }
           conv.lastActivity = new Date();
+          conv.unreadAdmin = (conv.unreadAdmin || 0) + 1;
 
-          const reply = await handleIncomingMessage(conv, text);
+          // Extraire le nom du contact si disponible dans les contacts
+          if (value.contacts && value.contacts.length > 0) {
+            const contact = value.contacts.find((c) => c.wa_id === from);
+            if (contact && contact.profile && contact.profile.name) {
+              conv.contactName = contact.profile.name;
+            }
+          }
+
+          // Construire l'entree de message entrant
+          const msgEntry = {
+            direction: 'inbound',
+            type: msgType,
+            timestamp: msg.timestamp ? new Date(Number(msg.timestamp) * 1000) : new Date(),
+          };
+
+          if (msgType === 'text') {
+            msgEntry.content = msg.text?.body || '';
+          } else if (msgType === 'image') {
+            msgEntry.content = msg.image?.caption || '';
+            msgEntry.mediaId = msg.image?.id || '';
+            msgEntry.mimeType = msg.image?.mime_type || '';
+          } else if (msgType === 'document') {
+            msgEntry.content = msg.document?.caption || '';
+            msgEntry.mediaId = msg.document?.id || '';
+            msgEntry.filename = msg.document?.filename || '';
+            msgEntry.mimeType = msg.document?.mime_type || '';
+          } else if (msgType === 'audio') {
+            msgEntry.mediaId = msg.audio?.id || '';
+            msgEntry.mimeType = msg.audio?.mime_type || '';
+          } else if (msgType === 'video') {
+            msgEntry.content = msg.video?.caption || '';
+            msgEntry.mediaId = msg.video?.id || '';
+            msgEntry.mimeType = msg.video?.mime_type || '';
+          } else if (msgType === 'sticker') {
+            msgEntry.mediaId = msg.sticker?.id || '';
+          } else if (msgType === 'location') {
+            const loc = msg.location || {};
+            msgEntry.content = `Localisation: ${loc.latitude}, ${loc.longitude}${loc.name ? ` (${loc.name})` : ''}`;
+          }
+
+          conv.messages.push(msgEntry);
+
+          const incomingText = msgType === 'text' ? (msg.text?.body || '') : null;
+          const reply = await handleIncomingMessage(conv, incomingText, msgType);
+
+          // Persister avant d'envoyer la réponse
+          await conv.save();
+
+          // Ajouter le message sortant dans l'historique et envoyer
+          conv.messages.push({ direction: 'outbound', type: 'text', content: reply, timestamp: new Date() });
+          await conv.save();
+
           await sendMessage(from, reply);
         }
       }

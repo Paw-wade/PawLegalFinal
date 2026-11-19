@@ -3,9 +3,9 @@ const axios = require('axios');
 const BASE_URL = 'https://graph.facebook.com/v19.0';
 
 /**
- * Envoie un message texte WhatsApp via la Cloud API Meta.
+ * Envoie un message texte WhatsApp via la Cloud API Meta et le persiste dans la conversation.
  */
-async function sendMessage(to, text) {
+async function sendMessage(to, text, conv) {
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const token = process.env.WHATSAPP_TOKEN;
   if (!phoneId || !token) {
@@ -22,6 +22,23 @@ async function sendMessage(to, text) {
     },
     { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
   );
+
+  if (conv) {
+    conv.messages.push({ direction: 'outbound', type: 'text', content: text, timestamp: new Date() });
+    await conv.save();
+  }
+}
+
+/**
+ * Envoie un message proactif depuis l'admin sans passer par la machine a etats.
+ */
+async function sendProactiveMessage(phone, text) {
+  const WhatsappConversation = require('../models/WhatsappConversation');
+  let conv = await WhatsappConversation.findOne({ phone });
+  if (!conv) {
+    conv = new WhatsappConversation({ phone, state: 'menu', lastActivity: new Date() });
+  }
+  await sendMessage(phone, text, conv);
 }
 
 // ─────────────────────────────────────────────
@@ -138,13 +155,25 @@ const MOTIFS_LABELS = {
 // ─────────────────────────────────────────────
 
 /**
- * Traite un message entrant et met à jour l'état de la conversation.
+ * Traite un message entrant et met a jour l'etat de la conversation.
  * Retourne le texte de réponse à envoyer.
  */
-async function handleIncomingMessage(conv, incomingText) {
+async function handleIncomingMessage(conv, incomingText, messageType) {
+  // Pour les types médias, accusé de réception simple
+  if (messageType && messageType !== 'text') {
+    const typeLabels = {
+      image: 'photo',
+      document: 'document',
+      audio: 'message vocal',
+      video: 'vidéo',
+      sticker: 'sticker',
+    };
+    const label = typeLabels[messageType] || 'fichier';
+    return `Merci, nous avons bien reçu votre ${label}. Un conseiller le consultera prochainement.\n\nTapez *menu* pour revenir au menu principal.`;
+  }
+
   const text = (incomingText || '').trim().toLowerCase();
 
-  // Commande de reset globale
   if (text === 'menu' || text === '0') {
     conv.state = 'menu';
     conv.rdv = {};
@@ -153,7 +182,6 @@ async function handleIncomingMessage(conv, incomingText) {
   }
 
   switch (conv.state) {
-    // ── Menu principal ──────────────────────────────
     case 'menu': {
       if (text === '1') {
         conv.state = 'faq_menu';
@@ -174,17 +202,12 @@ async function handleIncomingMessage(conv, incomingText) {
       return `Je n'ai pas compris votre réponse. Veuillez taper *1*, *2* ou *3*.\n\n${MENU_PRINCIPAL}`;
     }
 
-    // ── FAQ ──────────────────────────────────────────
     case 'faq_menu': {
       const rep = FAQ_REPONSES[text];
-      if (rep) {
-        // On reste en faq_menu pour permettre une autre question
-        return rep;
-      }
+      if (rep) return rep;
       return `Veuillez taper un numéro entre *1* et *5*, ou *0* pour revenir au menu.\n\n${FAQ_MENU}`;
     }
 
-    // ── RDV : collecte prénom ────────────────────────
     case 'rdv_name': {
       if (!incomingText || incomingText.trim().length < 2) {
         return `Veuillez indiquer votre prénom (au moins 2 caractères).`;
@@ -203,12 +226,9 @@ async function handleIncomingMessage(conv, incomingText) {
 6️⃣  Autre`;
     }
 
-    // ── RDV : motif ──────────────────────────────────
     case 'rdv_motif': {
       const motif = MOTIFS_RDV[text];
-      if (!motif) {
-        return `Veuillez choisir un numéro entre *1* et *6*.`;
-      }
+      if (!motif) return `Veuillez choisir un numéro entre *1* et *6*.`;
       conv.rdv.motif = motif;
       conv.state = 'rdv_tel';
       conv.markModified('rdv');
@@ -216,12 +236,9 @@ async function handleIncomingMessage(conv, incomingText) {
       return `Votre numéro de téléphone pour la confirmation (ex: 06 12 34 56 78) ?`;
     }
 
-    // ── RDV : téléphone ──────────────────────────────
     case 'rdv_tel': {
       const tel = incomingText ? incomingText.trim().replace(/\s/g, '') : '';
-      if (tel.length < 8) {
-        return `Veuillez indiquer un numéro de téléphone valide.`;
-      }
+      if (tel.length < 8) return `Veuillez indiquer un numéro de téléphone valide.`;
       conv.rdv.telephone = tel;
       conv.state = 'rdv_note';
       conv.markModified('rdv');
@@ -229,7 +246,6 @@ async function handleIncomingMessage(conv, incomingText) {
       return `Avez-vous des précisions à ajouter pour le conseiller ? (Tapez votre message ou *non*)`;
     }
 
-    // ── RDV : note ───────────────────────────────────
     case 'rdv_note': {
       conv.rdv.note = text === 'non' ? '' : (incomingText || '').trim();
       conv.state = 'rdv_confirm';
@@ -244,7 +260,6 @@ ${conv.rdv.note ? `💬 Note : ${conv.rdv.note}\n` : ''}
 Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
     }
 
-    // ── RDV : confirmation ───────────────────────────
     case 'rdv_confirm': {
       if (text === 'non') {
         conv.state = 'menu';
@@ -267,7 +282,6 @@ Tapez *menu* à tout moment pour revenir au menu principal.`;
       return `Veuillez répondre *oui* pour confirmer ou *non* pour annuler.`;
     }
 
-    // ── Contact conseiller ───────────────────────────
     case 'contact_name': {
       const nom = (incomingText || '').trim();
       if (nom.length < 2) return `Veuillez indiquer votre prénom et nom.`;
@@ -291,7 +305,6 @@ Tapez *menu* à tout moment pour revenir au menu principal.`;
 async function enregistrerDemandeRDV(conv) {
   try {
     const RendezVous = require('../models/RendezVous');
-    // Date provisoire : J+3 ouvrés, heure "À définir"
     const dateProvisoire = new Date();
     dateProvisoire.setDate(dateProvisoire.getDate() + 3);
 
@@ -326,4 +339,4 @@ async function enregistrerContactWA(phone, nom) {
   }
 }
 
-module.exports = { sendMessage, handleIncomingMessage };
+module.exports = { sendMessage, handleIncomingMessage, sendProactiveMessage };

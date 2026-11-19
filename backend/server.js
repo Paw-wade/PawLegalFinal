@@ -137,6 +137,11 @@ try {
 } catch (e) { console.error('whatsapp webhook:', e.message); }
 
 try {
+  app.use('/api/whatsapp-admin', require('./routes/whatsapp-admin'));
+  console.log('✅ Route /api/whatsapp-admin enregistrée');
+} catch (e) { console.error('whatsapp-admin:', e.message); }
+
+try {
   app.use('/api/otp', require('./routes/otp'));
 } catch (e) {}
 
