@@ -132,6 +132,11 @@ try {
 app.use('/api/contact', require('./routes/contact'));
 
 try {
+  app.use('/api/webhook/whatsapp', require('./routes/whatsapp'));
+  console.log('✅ Route /api/webhook/whatsapp enregistrée');
+} catch (e) { console.error('whatsapp webhook:', e.message); }
+
+try {
   app.use('/api/otp', require('./routes/otp'));
 } catch (e) {}
 
@@ -302,11 +307,6 @@ try {
 try {
   app.use('/api', require('./routes/recours'));
 } catch (e) {}
-
-try {
-  app.use('/api/webhook/whatsapp', require('./routes/whatsapp'));
-  console.log('✅ Route /api/webhook/whatsapp enregistrée');
-} catch (e) { console.error('whatsapp webhook:', e.message); }
 
 /* =========================
    ERREURS
