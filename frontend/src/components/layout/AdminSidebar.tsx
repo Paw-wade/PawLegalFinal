@@ -28,6 +28,7 @@ import {
   BookUser,
   ClipboardList,
   ChevronLeft,
+  MessageCircle,
   ChevronRight,
   LogOut,
   Bot,
@@ -70,6 +71,7 @@ const menuGroups: MenuGroup[] = [
     label: 'Communication',
     items: [
       { href: '/admin/messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
+      { href: '/admin/whatsapp', label: 'WhatsApp', icon: MessageCircle },
       { href: '/admin/questionnaires', label: 'Questionnaires', icon: ClipboardList },
       { href: '/admin/notifications', label: 'Notifications', icon: Bell },
       { href: '/admin/sms', label: 'SMS', icon: Smartphone },

@@ -1,8 +1,24 @@
 const mongoose = require('mongoose');
 
+const messageSchema = new mongoose.Schema({
+  direction: { type: String, enum: ['inbound', 'outbound'], required: true },
+  type: {
+    type: String,
+    enum: ['text', 'image', 'document', 'audio', 'video', 'sticker', 'location', 'unknown'],
+    default: 'text',
+  },
+  content: { type: String, default: '' },
+  mediaUrl: { type: String, default: '' },
+  mediaId: { type: String, default: '' },
+  filename: { type: String, default: '' },
+  mimeType: { type: String, default: '' },
+  timestamp: { type: Date, default: Date.now },
+}, { _id: false });
+
 const whatsappConversationSchema = new mongoose.Schema(
   {
     phone: { type: String, required: true, unique: true, trim: true },
+    contactName: { type: String, default: '' },
     state: {
       type: String,
       enum: [
@@ -17,7 +33,6 @@ const whatsappConversationSchema = new mongoose.Schema(
       ],
       default: 'menu',
     },
-    // Données collectées pour le RDV en cours
     rdv: {
       nom: String,
       prenom: String,
@@ -25,12 +40,15 @@ const whatsappConversationSchema = new mongoose.Schema(
       motif: String,
       note: String,
     },
+    messages: { type: [messageSchema], default: [] },
+    unreadAdmin: { type: Number, default: 0 },
+    clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    dossierId: { type: mongoose.Schema.Types.ObjectId, ref: 'Dossier', default: null },
     lastActivity: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );
 
-// Réinitialise la conversation après 24h d'inactivité
 whatsappConversationSchema.methods.isExpired = function () {
   const hoursSince = (Date.now() - this.lastActivity) / (1000 * 60 * 60);
   return hoursSince > 24;
