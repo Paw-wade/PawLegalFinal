@@ -1261,7 +1261,7 @@ export default function AdminWhatsAppPage() {
                       key={msg._id || i}
                       className={`flex group ${isNote ? 'justify-center' : isOut ? 'justify-end' : 'justify-start'}`}
                     >
-                      <div className="relative">
+                      <div className={`relative ${isNote ? 'max-w-[85%]' : 'max-w-[75%]'}`}>
                         {/* Boutons action au survol */}
                         {!isNote && (
                           <div className={`absolute ${isOut ? 'left-0 -translate-x-full pr-1' : 'right-0 translate-x-full pl-1'} top-1 hidden group-hover:flex gap-0.5 z-10`}>
@@ -1287,9 +1287,9 @@ export default function AdminWhatsAppPage() {
                         )}
 
                         <div
-                          className={`max-w-[70%] rounded-lg px-3 py-2 text-sm shadow-sm ${
+                          className={`rounded-lg px-3 py-2 text-sm shadow-sm ${
                             isNote
-                              ? 'border border-dashed border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 italic text-xs max-w-none'
+                              ? 'border border-dashed border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 italic text-xs'
                               : isOut
                               ? 'bg-[#dcf8c6] dark:bg-[#005c4b] text-foreground rounded-br-none'
                               : 'bg-white dark:bg-[#1f2937] text-foreground rounded-bl-none'
