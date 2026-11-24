@@ -1584,6 +1584,54 @@ export default function AdminWhatsAppPage() {
               </div>
             )}
 
+            {/* ── Banniere rappel ── */}
+            {selectedConv.reminderAt && (() => {
+              const overdue = new Date(selectedConv.reminderAt) < new Date();
+              const dateStr = new Date(selectedConv.reminderAt).toLocaleString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+              return (
+                <div style={{
+                  position: 'sticky', top: 0, zIndex: 20,
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  padding: '0.45rem 0.85rem',
+                  background: overdue ? '#fef2f2' : '#fefce8',
+                  borderBottom: `2px solid ${overdue ? '#dc2626' : '#f59e0b'}`,
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+                }}>
+                  <Bell style={{ width: '0.875rem', height: '0.875rem', color: overdue ? '#dc2626' : '#d97706', flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: overdue ? '#dc2626' : '#92400e' }}>
+                      {overdue ? 'Rappel echu : ' : 'Rappel : '}
+                    </span>
+                    <span style={{ fontSize: '0.78rem', color: overdue ? '#dc2626' : '#d97706' }}>{dateStr}</span>
+                    {selectedConv.reminderNote && (
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280', marginLeft: '0.4rem' }}>
+                        {selectedConv.reminderNote}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const d = new Date(selectedConv.reminderAt);
+                      setReminderDate(d.toISOString().slice(0, 16));
+                      setReminderNoteText(selectedConv.reminderNote || '');
+                      setShowReminderModal(true);
+                    }}
+                    title="Modifier le rappel"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', color: overdue ? '#dc2626' : '#d97706', display: 'flex', borderRadius: '0.25rem' }}
+                  >
+                    <Pencil style={{ width: '0.75rem', height: '0.75rem' }} />
+                  </button>
+                  <button
+                    onClick={() => handleDismissReminder(selectedConv._id)}
+                    title="Supprimer le rappel"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', color: overdue ? '#dc2626' : '#d97706', display: 'flex', borderRadius: '0.25rem' }}
+                  >
+                    <X style={{ width: '0.75rem', height: '0.75rem' }} />
+                  </button>
+                </div>
+              );
+            })()}
+
             {/* Messages epingles */}
             {(() => {
               const pinned = (selectedConv.messages || []).filter((m: any) => m.pinned);
