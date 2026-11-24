@@ -418,9 +418,9 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       await conv.save();
       const creneaux = await obtenirCreneauxDisponibles();
       if (creneaux.length === 0) {
-        conv.state = 'rdv_tel';
+        conv.state = 'rdv_note';
         await conv.save();
-        return `Aucun creneau n'est disponible en ligne pour le moment.\n\nVotre numero de telephone pour qu'un conseiller vous recontacte (ex: 06 12 34 56 78) ?`;
+        return `Aucun creneau n'est disponible en ligne pour le moment. Un conseiller vous recontactera directement.\n\nAvez-vous des precisions a ajouter ? (Tapez votre message ou *non*)`;
       }
       conv.state = 'rdv_creneau';
       await conv.save();
@@ -438,9 +438,9 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       if (isNaN(idx) || idx < 1 || idx > 5) {
         const creneaux = await obtenirCreneauxDisponibles();
         if (creneaux.length === 0) {
-          conv.state = 'rdv_tel';
+          conv.state = 'rdv_note';
           await conv.save();
-          return `Aucun creneau n'est disponible. Votre numero de telephone ?`;
+          return `Aucun creneau n'est disponible. Avez-vous des precisions a ajouter pour le conseiller ? (Tapez votre message ou *non*)`;
         }
         return `Ecrivez un numero entre *1* et *${creneaux.length}*, ou *0* pour annuler.\n\n${formatMenuCreneaux(creneaux)}`;
       }
@@ -452,20 +452,10 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       conv.rdv.date = formatDateFr(choisi.date);
       conv.rdv.heure = choisi.heure;
       conv.rdv.creneauId = choisi._id;
-      conv.state = 'rdv_tel';
-      conv.markModified('rdv');
-      await conv.save();
-      return `Creneau retenu : *${conv.rdv.date} a ${conv.rdv.heure}* ✅\n\nVotre numero de telephone pour la confirmation (ex: 06 12 34 56 78) ?`;
-    }
-
-    case 'rdv_tel': {
-      const tel = incomingText ? incomingText.trim().replace(/\s/g, '') : '';
-      if (tel.length < 8) return `Veuillez indiquer un numéro de téléphone valide.`;
-      conv.rdv.telephone = tel;
       conv.state = 'rdv_note';
       conv.markModified('rdv');
       await conv.save();
-      return `Avez-vous des précisions à ajouter pour le conseiller ? (Tapez votre message ou *non*)`;
+      return `Creneau retenu : *${conv.rdv.date} a ${conv.rdv.heure}* ✅\n\nAvez-vous des precisions a ajouter pour le conseiller ? (Tapez votre message ou *non*)`;
     }
 
     case 'rdv_note': {
@@ -478,8 +468,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       return `Voici le recapitulatif de votre demande :\n
 👤 Prenom : *${conv.rdv.prenom}*
 📋 Motif : *${motifLabel}*
-${creneauLine}
-📱 Téléphone : *${conv.rdv.telephone}*
+${creneauLine}📱 WhatsApp : *${conv.phone}*
 ${conv.rdv.note ? `💬 Note : ${conv.rdv.note}\n` : ''}
 Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
     }
@@ -593,7 +582,7 @@ async function enregistrerDemandeRDV(conv) {
       nom: conv.rdv.prenom,
       prenom: conv.rdv.prenom,
       email: `whatsapp_${conv.phone.replace(/\D/g, '')}@adapapers.placeholder`,
-      telephone: conv.rdv.telephone || conv.phone,
+      telephone: conv.phone,
       date: dateRdv,
       heure: heureRdv,
       motif: conv.rdv.motif || 'autre',
