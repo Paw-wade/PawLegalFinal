@@ -75,6 +75,7 @@ export default function QuestionnairePage() {
   function validate(): boolean {
     const errs: Record<string, string> = {};
     if (!qData) return false;
+    if (!expediteur.nom.trim()) errs['__nom'] = 'Le nom est obligatoire.';
     for (const q of qData.questions) {
       if (!q.requis || q.type === 'section') continue;
       if (q.type === 'fichier') {
@@ -211,18 +212,29 @@ export default function QuestionnairePage() {
         <form onSubmit={handleSubmit} className="space-y-3">
 
           {/* Coordonnees */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <SectionDot label="Vos coordonnees (optionnel)" />
+          <div className={`bg-white border rounded-xl p-5 ${errors['__nom'] ? 'border-red-300' : 'border-gray-200'}`}>
+            <SectionDot label="Vos coordonnees" />
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-600">Nom</label>
+                  <label className="text-xs font-medium text-gray-600">
+                    Nom <span className="text-primary">*</span>
+                  </label>
                   <input
-                    className={inputClass}
+                    className={`${inputClass} ${errors['__nom'] ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}`}
                     placeholder="Jean Dupont"
                     value={expediteur.nom}
-                    onChange={e => setExpediteur(p => ({ ...p, nom: e.target.value }))}
+                    onChange={e => {
+                      setExpediteur(p => ({ ...p, nom: e.target.value }));
+                      setErrors(p => { const n = { ...p }; delete n['__nom']; return n; });
+                    }}
                   />
+                  {errors['__nom'] && (
+                    <p className="text-xs text-red-500 flex items-center gap-1.5">
+                      <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                      {errors['__nom']}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-600">Email</label>

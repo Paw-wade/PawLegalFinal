@@ -13,6 +13,7 @@ const { sendTransactionalEmail, escapeHtml } = require('../utils/emailNotificati
 const { sendTemplatedTransactionalEmail } = require('../utils/emailTemplateMailer');
 const { getPrimaryFrontendUrl } = require('../utils/frontendOrigins');
 const { sendSMS, sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+const { triggerAutomations } = require('../services/dossierAutomations');
 
 const router = express.Router();
 const MIN_REMINDER_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48h
@@ -5185,6 +5186,13 @@ router.put(
           onlyTarificationSettingChanged || skipMontantSilentNotify || onlyPinnedChanged,
         skipAllPingAndSms: skipMontantSilentNotify,
       });
+
+      // Automations de statut
+      if (statut && statut !== oldStatut) {
+        triggerAutomations(dossierForNotification, oldStatut, statut).catch((err) =>
+          console.error('[automations] Erreur declenchement:', err.message)
+        );
+      }
 
       // Pour les admins, créer aussi des notifications spécifiques au client (logique existante)
       if ((req.user.role === 'admin' || req.user.role === 'superadmin') && !skipMontantSilentNotify) {

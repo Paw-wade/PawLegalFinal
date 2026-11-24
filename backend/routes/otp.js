@@ -3,9 +3,10 @@ const { body, validationResult } = require('express-validator');
 const OTP = require('../models/OTP');
 const User = require('../models/User');
 const EmailTemplate = require('../models/EmailTemplate');
-const { sendNotificationSMS, formatPhoneNumber } = require('../sendSMS');
+const { sendSMS, formatPhoneNumber } = require('../sendSMS');
 const { sendTransactionalEmailDetailed, escapeHtml } = require('../utils/emailNotifications');
 const jwt = require('jsonwebtoken');
+const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 const WELCOME_TEMPLATE_CODE = 'account_welcome';
@@ -98,8 +99,14 @@ const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+function buildWaLink(code) {
+  const botPhone = process.env.WHATSAPP_BOT_PHONE;
+  if (!botPhone) return null;
+  return `https://wa.me/${botPhone}?text=${encodeURIComponent(code)}`;
+}
+
 // @route   POST /api/otp/send
-// @desc    Envoyer un code OTP par email
+// @desc    Creer un OTP - WhatsApp prioritaire, email en secours
 // @access  Public
 router.post(
   '/send',
@@ -123,16 +130,24 @@ router.post(
       const { firstName, lastName, phone, email } = req.body;
       const cleanEmail = email.trim().toLowerCase();
 
-      // Formater le numero de telephone
       const formattedPhone = formatPhoneNumber(phone);
       if (!formattedPhone) {
-        return res.status(400).json({
+        return res.status(400).json({ success: false, message: 'Numero de telephone invalide' });
+      }
+
+      const botPhone = process.env.WHATSAPP_BOT_PHONE;
+      if (!botPhone) {
+        return res.status(503).json({
           success: false,
-          message: 'Numero de telephone invalide',
+          message: 'La verification WhatsApp n\'est pas configuree. Contactez le support.',
         });
       }
 
-      // Bloquer la reinscription si le compte existe et a deja un mot de passe
+      const normalizedBotPhone = '+' + botPhone.replace(/^\+/, '');
+      if (formattedPhone === normalizedBotPhone) {
+        return res.status(400).json({ success: false, message: 'Numero de telephone invalide' });
+      }
+
       const existingUser = await User.findOne({ phone: formattedPhone });
       if (existingUser && existingUser.password && !existingUser.needsPasswordSetup) {
         return res.status(400).json({
@@ -141,11 +156,9 @@ router.post(
         });
       }
 
-      // Generer le code OTP
       const code = generateOTP();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-      // Supprimer les anciens codes pour ce numero
       await OTP.deleteMany({ phone: formattedPhone });
 
       await OTP.create({
@@ -155,35 +168,20 @@ router.post(
         lastName,
         email: cleanEmail,
         expiresAt,
+        channel: 'whatsapp',
+        attempts: 0,
       });
 
-      // Envoyer le code par email
-      const prenomEsc = escapeHtml(String(firstName).trim());
-      const { ok, error: emailError } = await sendTransactionalEmailDetailed({
-        to: cleanEmail,
-        toName: `${String(firstName).trim()} ${String(lastName).trim()}`,
-        subject: 'Votre code de verification Ada Papers',
-        htmlContent: `<p>Bonjour ${prenomEsc},</p>
-<p>Voici votre code de verification pour creer votre compte Ada Papers :</p>
-<p style="font-size:32px;font-weight:700;letter-spacing:8px;color:#ea580c;margin:24px 0;">${code}</p>
-<p style="color:#666;font-size:13px;">Ce code est valable <strong>10 minutes</strong>. Ne le communiquez a personne.</p>
-<p style="color:#666;font-size:13px;">Si vous n'avez pas demande ce code, ignorez ce message.</p>`,
-        textContent: `Bonjour ${prenomEsc},\n\nVotre code de verification Ada Papers : ${code}\n\nValable 10 minutes. Ne le communiquez a personne.`,
-      });
+      const waLink = buildWaLink(code);
 
-      if (!ok) {
-        console.error('[otp/send] Email non envoye:', emailError);
-        return res.status(500).json({
-          success: false,
-          message: "Impossible d'envoyer l'email de verification. Verifiez votre adresse ou reessayez.",
-        });
-      }
-
-      console.log(`[otp/send] Code envoye par email a ${cleanEmail} (tel: ${formattedPhone})`);
+      console.log(`[otp/send] Code WhatsApp genere pour ${formattedPhone}`);
       return res.json({
         success: true,
-        message: `Un code de verification a ete envoye a ${cleanEmail}`,
+        channel: 'whatsapp',
+        waLink,
+        waPhone: botPhone,
         expiresAt: expiresAt.toISOString(),
+        message: `Envoyez le code au bot WhatsApp Ada Papers pour verifier votre numero.`,
       });
     } catch (error) {
       console.error('[otp/send] Erreur serveur:', error);
@@ -191,6 +189,134 @@ router.post(
     }
   }
 );
+
+// @route   POST /api/otp/send-sms
+// @desc    Fallback : envoyer le code par SMS Twilio
+// @access  Public
+router.post(
+  '/send-sms',
+  [body('phone').trim().notEmpty().withMessage('Le numero de telephone est requis')],
+  async (req, res) => {
+    try {
+      const { phone } = req.body;
+      const formattedPhone = formatPhoneNumber(phone);
+      if (!formattedPhone) {
+        return res.status(400).json({ success: false, message: 'Numero de telephone invalide' });
+      }
+
+      const otp = await OTP.findOne({ phone: formattedPhone, verified: false });
+      if (!otp) {
+        return res.status(404).json({
+          success: false,
+          message: 'Aucun code en attente. Recommencez l\'inscription.',
+        });
+      }
+      if (new Date() > otp.expiresAt) {
+        return res.status(400).json({
+          success: false,
+          message: 'Code expire. Recommencez l\'inscription.',
+        });
+      }
+
+      const smsText = `Ada Papers - votre code de verification : ${otp.code}. Valable 15 min.`;
+      try {
+        await sendSMS(formattedPhone, smsText);
+      } catch (smsErr) {
+        console.error('[otp/send-sms] Echec SMS:', smsErr.message);
+        return res.status(500).json({
+          success: false,
+          message: "Impossible d'envoyer le SMS. Verifiez votre numero ou utilisez WhatsApp.",
+        });
+      }
+
+      otp.channel = 'sms';
+      await otp.save();
+
+      console.log(`[otp/send-sms] SMS envoye a ${formattedPhone}`);
+      return res.json({
+        success: true,
+        channel: 'sms',
+        message: 'Code envoye par SMS. Saisissez-le ci-dessous.',
+      });
+    } catch (error) {
+      console.error('[otp/send-sms] Erreur serveur:', error);
+      return res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+  }
+);
+
+// @route   GET /api/otp/wa-status
+// @desc    Polling : verifier si le code WhatsApp a ete valide par le webhook
+// @access  Public
+router.get('/wa-status', async (req, res) => {
+  try {
+    const { phone } = req.query;
+    if (!phone) return res.status(400).json({ success: false, message: 'Parametre phone requis' });
+
+    const formattedPhone = formatPhoneNumber(phone);
+    if (!formattedPhone) {
+      return res.status(400).json({ success: false, message: 'Numero invalide' });
+    }
+
+    const otp = await OTP.findOne({ phone: formattedPhone }).select('+waToken');
+    if (!otp || !otp.waVerified || !otp.waToken) {
+      return res.json({ verified: false });
+    }
+
+    const { waToken } = otp;
+
+    await OTP.deleteOne({ _id: otp._id });
+
+    return res.json({ verified: true, token: waToken });
+  } catch (error) {
+    console.error('[otp/wa-status] Erreur:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// @route   POST /api/otp/whatsapp-link-code
+// @desc    Compte existant sans telephone verifie : genere un code pour lier le numero via WhatsApp
+// @access  Prive (utilisateur connecte)
+router.post('/whatsapp-link-code', protect, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user.phone) {
+      return res.status(400).json({ success: false, message: 'Aucun numero de telephone sur ce compte.' });
+    }
+
+    const botPhone = process.env.WHATSAPP_BOT_PHONE;
+    if (!botPhone) {
+      return res.status(503).json({ success: false, message: 'WhatsApp non configure.' });
+    }
+
+    const code = generateOTP();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await OTP.deleteMany({ phone: user.phone, verified: false });
+    await OTP.create({
+      phone: user.phone,
+      code,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email || '',
+      expiresAt,
+      channel: 'whatsapp',
+      attempts: 0,
+    });
+
+    const waLink = buildWaLink(code);
+
+    return res.json({
+      success: true,
+      waLink,
+      waPhone: botPhone,
+      expiresAt: expiresAt.toISOString(),
+    });
+  } catch (error) {
+    console.error('[otp/whatsapp-link-code] Erreur:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
 
 // @route   POST /api/otp/verify
 // @desc    Vérifier le code OTP et créer le compte

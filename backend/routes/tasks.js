@@ -39,6 +39,26 @@ async function isUserAssignedToDossier(dossierId, userId) {
   return Boolean(dossier);
 }
 
+// @route   POST /api/tasks/reorder
+// @desc    Mettre a jour l'ordre kanban de plusieurs taches en une fois
+// @access  Private/Admin
+router.post('/reorder', protect, authorize('admin', 'superadmin'), async (req, res) => {
+  try {
+    const { orders } = req.body; // [{ id, kanbanOrder }]
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return res.status(400).json({ success: false, message: 'orders requis' });
+    }
+    await Promise.all(
+      orders.map(({ id, kanbanOrder }) =>
+        Task.findByIdAndUpdate(id, { kanbanOrder })
+      )
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // @route   GET /api/tasks
 // @desc    Récupérer toutes les tâches (Admin seulement)
 // @access  Private/Admin
@@ -74,7 +94,7 @@ router.get('/', protect, authorizePermissionOrAssignment('taches', 'consulter'),
       .populate('createdBy', 'firstName lastName email role')
       .populate('completedBy', 'firstName lastName email role')
       .populate('dossier', 'titre numero statut')
-      .sort({ createdAt: -1 });
+      .sort({ kanbanOrder: 1, createdAt: -1 });
 
     res.json({
       success: true,
@@ -729,22 +749,18 @@ router.put(
         task.commentaireEffectue = req.body.commentaireEffectue || null;
       }
 
-      // Si le statut passe à "termine", enregistrer la date de fin et archiver
-      if (statut === 'termine' || (statut === undefined && task.statut === 'termine' && oldStatut !== 'termine')) {
+      // Si le statut passe à "termine", enregistrer la date de fin (sans archiver : visible dans le Kanban)
+      if (statut === 'termine' && oldStatut !== 'termine') {
         if (!task.dateFin) {
           task.dateFin = new Date();
         }
-        // Archiver automatiquement la tâche terminée
-        if (!task.archived) {
-          task.archived = true;
-          task.archivedAt = new Date();
-        }
       } else if (statut !== undefined && statut !== 'termine' && oldStatut === 'termine') {
-        // Si le statut change de "termine" à autre chose, désarchiver
-        if (task.archived) {
+        // Si le statut quitte "termine", désarchiver et effacer la date de fin automatique
+        if (task.archived && !task.effectue) {
           task.archived = false;
           task.archivedAt = null;
         }
+        task.dateFin = null;
       }
 
       // Créer des notifications pour tous les membres de l'équipe si la tâche est marquée comme effectuée

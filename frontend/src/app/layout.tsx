@@ -26,10 +26,25 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/ada-papers-logo.png', type: 'image/png' },
+      { url: '/ada-papers-icon.png', type: 'image/png' },
     ],
-    apple: '/ada-papers-logo.png',
+    apple: '/ada-papers-icon.png',
+  },
+  openGraph: {
+    title: 'Ada Papers',
+    description:
+      "Ada Papers - Service d'Accompagnement aux démarches administratives pour vos titres de séjour, visas et démarches liées au droit des étrangers et du travail.",
+    images: [{ url: '/ada-papers-icon.png' }],
+    siteName: 'Ada Papers',
+    locale: 'fr_FR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Ada Papers',
+    description:
+      "Ada Papers - Service d'Accompagnement aux démarches administratives pour vos titres de séjour, visas et démarches liées au droit des étrangers et du travail.",
+    images: ['/ada-papers-icon.png'],
   },
 };
 

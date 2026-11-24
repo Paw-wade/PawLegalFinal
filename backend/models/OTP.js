@@ -32,6 +32,23 @@ const otpSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  attempts: {
+    type: Number,
+    default: 0
+  },
+  channel: {
+    type: String,
+    enum: ['whatsapp', 'sms', 'email'],
+    default: 'whatsapp'
+  },
+  waVerified: {
+    type: Boolean,
+    default: false
+  },
+  waToken: {
+    type: String,
+    select: false
+  },
   expiresAt: {
     type: Date,
     required: true

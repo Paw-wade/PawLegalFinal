@@ -285,6 +285,7 @@ export default function HomePage() {
   const [hoveredPlateformeIndex, setHoveredPlateformeIndex] = useState<number | null>(0);
   const [showMobileTopBar, setShowMobileTopBar] = useState(true);
   const [scrollPastHero, setScrollPastHero] = useState(false);
+  const [mobilePageDrawerOpen, setMobilePageDrawerOpen] = useState(false);
   const [isWidgetOpen, setIsWidgetOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('reservationWidgetOpen');
@@ -500,52 +501,57 @@ export default function HomePage() {
         <Header variant="home" />
       </div>
 
-      {/* Barre de menu mobile sous le header (disparaît au scroll) */}
-      {showMobileTopBar && (
-        <div className="md:hidden sticky top-0 z-40 bg-white/95 border-b border-gray-200">
-          <div className="w-full max-w-[100vw] mx-auto px-2">
-            <div className="w-full flex items-center justify-center overflow-x-auto no-scrollbar py-2">
-              <div className="flex items-center gap-1 min-w-max">
-                <Link
-                  href="/a-propos"
-                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
-                >
-                  À propos
-                </Link>
-                <Link
-                  href="/faq"
-                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
-                >
-                  FAQ
-                </Link>
-                <Link
-                  href="/forum"
-                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
-                >
-                  Forum
-                </Link>
-                <Link
-                  href="/contact"
-                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
-                >
-                  Contact
-                </Link>
-                <Link
-                  href="/calculateur"
-                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-white bg-orange-500 hover:bg-orange-600 whitespace-nowrap"
-                >
-                  Calculateur
-                </Link>
-                <Link
-                  href="/nouvelle-demande"
-                  className="px-3 py-1.5 rounded-full text-[11px] font-medium text-orange-700 bg-orange-100 hover:bg-orange-200 whitespace-nowrap"
-                >
-                  Nouvelle demande
-                </Link>
-              </div>
+      {/* Drawer latéral mobile */}
+      {mobilePageDrawerOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-[90] md:hidden"
+            onClick={() => setMobilePageDrawerOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="fixed top-0 left-0 bottom-0 z-[100] w-72 max-w-[85vw] md:hidden bg-white shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <Link
+                href="/"
+                onClick={() => setMobilePageDrawerOpen(false)}
+                className="relative overflow-hidden hover:opacity-85 transition-opacity shrink-0"
+                style={{ width: 90, height: 42 }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo-h.png" alt="Ada Papers" style={{ position: 'absolute', width: 208, maxWidth: 'none', height: 'auto', left: -54, top: -32 }} />
+              </Link>
+              <button
+                onClick={() => setMobilePageDrawerOpen(false)}
+                className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+                aria-label="Fermer le menu"
+              >
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
+            <nav className="flex-1 overflow-y-auto p-3 flex flex-col gap-0.5">
+              <Link href="/a-propos" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px] flex items-center">A propos</Link>
+              <Link href="/faq" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px] flex items-center">FAQ</Link>
+              <Link href="/forum" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px] flex items-center">Forum</Link>
+              <Link href="/contact" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px] flex items-center">Contact</Link>
+              <div className="my-1 border-t border-gray-100" />
+              <Link href="/guides/nouvel-arrivant" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-medium text-emerald-700 hover:bg-emerald-50 transition-colors min-h-[44px] flex items-center border border-emerald-200">Guide nouvel arrivant</Link>
+              <Link href="/calculateur" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-semibold bg-orange-500 text-white hover:bg-orange-600 transition-colors min-h-[44px] flex items-center">Calculateur</Link>
+              <Link href="/nouvelle-demande" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-medium text-orange-700 hover:bg-orange-50 transition-colors min-h-[44px] flex items-center border border-orange-200">Nouvelle demande</Link>
+            </nav>
+            {!session ? (
+              <div className="p-4 border-t border-gray-200 flex flex-col gap-2">
+                <Link href="/auth/signin" onClick={() => setMobilePageDrawerOpen(false)} className="w-full text-center px-4 py-2.5 rounded-xl text-sm font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors">Connexion</Link>
+                <Link href="/auth/signup" onClick={() => setMobilePageDrawerOpen(false)} className="w-full text-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-ds-primary text-white hover:bg-ds-primary-hover transition-colors">Creer un compte</Link>
+              </div>
+            ) : (
+              <div className="p-4 border-t border-gray-200">
+                <Link href="/client/dossiers" onClick={() => setMobilePageDrawerOpen(false)} className="w-full text-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-ds-primary text-white hover:bg-ds-primary-hover transition-colors block">Mon espace</Link>
+              </div>
+            )}
           </div>
-        </div>
+        </>
       )}
 
       {/* Hero Section - carte flottante, formes décoratives et cadre incliné */}
@@ -564,6 +570,16 @@ export default function HomePage() {
           <div className="relative rounded-3xl border border-transparent bg-ds-elevated px-6 pt-5 pb-12 shadow-xl dark:border-ds-border sm:px-10 lg:px-14 lg:pb-20">
             {/* Nav integree dans la carte hero */}
             <nav className="flex items-center justify-between mb-10 lg:mb-12">
+              {/* Hamburger mobile - ouvre le drawer */}
+              <button
+                onClick={() => setMobilePageDrawerOpen(true)}
+                className="md:hidden p-2 -ml-1 mr-1 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0 flex items-center justify-center"
+                aria-label="Ouvrir le menu"
+              >
+                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
               <Link
                 href="/"
                 className="relative overflow-hidden hover:opacity-80 transition-opacity shrink-0"
@@ -588,6 +604,12 @@ export default function HomePage() {
                     {label}
                   </Link>
                 ))}
+                <Link
+                  href="/guides/nouvel-arrivant"
+                  className="px-3 py-1.5 rounded-md text-sm font-medium text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors border border-emerald-200"
+                >
+                  Guide arrivant
+                </Link>
               </div>
               <Link href={session ? (role === 'admin' || role === 'superadmin' ? '/admin' : '/client') : '/auth/signin'}>
                 <button className="rounded-full bg-ds-primary px-5 py-2 text-sm font-semibold text-white hover:bg-ds-primary-hover transition-colors shadow-sm">

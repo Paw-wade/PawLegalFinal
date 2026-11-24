@@ -257,6 +257,8 @@ api.interceptors.request.use(
           url.includes('/contact') ||
           url.includes('/otp/send') ||
           url.includes('/otp/verify') ||
+          url.includes('/otp/send-sms') ||
+          url.includes('/otp/wa-status') ||
           url.includes('/auth/register') ||
           url.includes('/auth/login');
 
@@ -469,9 +471,9 @@ export const authAPI = {
 };
 
 export const otpAPI = {
-  send: (data: { 
-    firstName: string; 
-    lastName: string; 
+  send: (data: {
+    firstName: string;
+    lastName: string;
     phone: string;
     professionnelType?: 'consulat' | 'cabinet_avocat';
     organisationName?: string;
@@ -479,14 +481,23 @@ export const otpAPI = {
   }) =>
     api.post('/otp/send', data),
   
-  verify: (data: { 
-    phone: string; 
+  verify: (data: {
+    phone: string;
     code: string;
     professionnelType?: 'consulat' | 'cabinet_avocat';
     organisationName?: string;
     email?: string;
   }) =>
     api.post('/otp/verify', data),
+
+  sendSms: (data: { phone: string }) =>
+    api.post('/otp/send-sms', data),
+
+  waStatus: (phone: string) =>
+    api.get(`/otp/wa-status?phone=${encodeURIComponent(phone)}`),
+
+  whatsappLinkCode: () =>
+    api.post('/otp/whatsapp-link-code'),
 };
 
 export const userAPI = {

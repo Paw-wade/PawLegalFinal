@@ -66,6 +66,8 @@ function devApiRewriteRules(backendOrigin) {
     'admin',
     'questionnaires',
     'assistant',
+    'automations',
+    'whatsapp-admin',
   ];
 
   const rules = [];

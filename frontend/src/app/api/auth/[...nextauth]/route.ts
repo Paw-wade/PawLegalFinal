@@ -57,6 +57,39 @@ function signInErr(message: string) {
 // Configuration NextAuth
 const providers: NextAuthOptions['providers'] = [
   CredentialsProvider({
+    id: 'token-login',
+    name: 'Token Login',
+    credentials: {
+      token: { type: 'text' },
+    },
+    async authorize(credentials) {
+      if (!credentials?.token) return null;
+      try {
+        const response = await fetch(authApiPath('/auth/me'), {
+          headers: { Authorization: `Bearer ${credentials.token}` },
+        });
+        const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        const user = data.user as Record<string, unknown> | undefined;
+        if (response.ok && user && user.id != null) {
+          const displayName = `${String(user.firstName ?? '')} ${String(user.lastName ?? '')}`.trim();
+          return {
+            id: String(user._id ?? user.id),
+            email: String(user.email ?? `phone:${user.phone ?? ''}`),
+            name: displayName,
+            role: String(user.role ?? 'client'),
+            profilComplete: Boolean(user.profilComplete),
+            needsPasswordSetup: Boolean(user.needsPasswordSetup),
+            daysRemaining: null,
+            token: credentials.token,
+          };
+        }
+      } catch (e) {
+        console.error('[NextAuth token-login]', e);
+      }
+      return null;
+    },
+  }),
+  CredentialsProvider({
     name: 'Credentials',
     credentials: {
       email: { label: 'Email', type: 'email' },
