@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const { protect } = require('../middleware/auth');
 const WhatsappConversation = require('../models/WhatsappConversation');
-const { sendProactiveMessage, sendMediaMessage } = require('../services/whatsappService');
+const { sendMessage, sendProactiveMessage, sendMediaMessage } = require('../services/whatsappService');
 const { uploadBufferToS3, getS3PresignedUrl, isS3Configured } = require('../utils/s3DocumentStorage');
 
 const uploadMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024 } });
