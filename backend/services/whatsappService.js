@@ -295,7 +295,7 @@ async function obtenirCreneauxDisponibles() {
   const Creneau = require('../models/Creneau');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return Creneau.find({ ferme: false, date: { $gte: today } })
+  return Creneau.find({ ferme: { $ne: true }, date: { $gte: today } })
     .sort({ date: 1, heure: 1 })
     .limit(5)
     .lean();
@@ -489,7 +489,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       if (creneaux.length === 0) {
         conv.state = 'rdv_note';
         await conv.save();
-        return `Aucun creneau n'est disponible en ligne pour le moment. Un conseiller vous recontactera directement.\n\nAvez-vous des precisions a ajouter ? (Tapez votre message ou *non*)`;
+        return `Aucun creneau n'est disponible en ligne pour le moment.\n\nUn conseiller vous rappellera dans les *48h* pour convenir d'un rendez-vous.\n\nSouhaitez-vous ajouter une precision pour faciliter le rappel ? (Tapez votre message ou *non*)`;
       }
       conv.state = 'rdv_creneau';
       await conv.save();
@@ -509,7 +509,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         if (creneaux.length === 0) {
           conv.state = 'rdv_note';
           await conv.save();
-          return `Aucun creneau n'est disponible. Avez-vous des precisions a ajouter pour le conseiller ? (Tapez votre message ou *non*)`;
+          return `Aucun creneau n'est disponible en ligne pour le moment.\n\nUn conseiller vous rappellera dans les *48h*.\n\nSouhaitez-vous ajouter une precision ? (Tapez votre message ou *non*)`;
         }
         return `Ecrivez un numero entre *1* et *${creneaux.length}*, ou *0* pour annuler.\n\n${formatMenuCreneaux(creneaux)}`;
       }
