@@ -185,6 +185,43 @@ export default function AdminWhatsAppPage() {
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const mobileMoreRef = useRef<HTMLDivElement>(null);
 
+  // Notifications de rappel actives (polling toutes les 30s)
+  useEffect(() => {
+    const notified = new Set<string>();
+
+    // Demander la permission de notification navigateur au montage
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+
+    const checkReminders = () => {
+      const now = Date.now();
+      conversations.forEach((conv: any) => {
+        if (!conv.reminderAt) return;
+        const t = new Date(conv.reminderAt).getTime();
+        const elapsed = now - t;
+        const key = `${conv._id}|${conv.reminderAt}`;
+        // Fenetre : rappel declenche il y a moins de 2 minutes et pas encore notifie
+        if (elapsed >= 0 && elapsed < 2 * 60_000 && !notified.has(key)) {
+          notified.add(key);
+          const name = getConvName(conv) || conv.phone || 'Contact';
+          const note = conv.reminderNote ? ` — ${conv.reminderNote}` : '';
+          setToast({ message: `Rappel : ${name}${note}`, type: 'warning' });
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            new Notification(`Rappel WhatsApp — ${name}`, {
+              body: conv.reminderNote || 'Rappel de suivi',
+              icon: '/favicon.ico',
+            });
+          }
+        }
+      });
+    };
+
+    checkReminders();
+    const interval = setInterval(checkReminders, 30_000);
+    return () => clearInterval(interval);
+  }, [conversations]);
+
   // Verification et suivi de la permission microphone
   useEffect(() => {
     if (!navigator.permissions) return;
