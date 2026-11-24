@@ -938,7 +938,11 @@ export default function AdminWhatsAppPage() {
                     : 'Assigner'}
                 </button>
                 {showAssignDropdown && (
-                  <div className="absolute top-full right-0 mt-1 z-50 min-w-[180px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden">
+                  <div style={{
+                    position: 'absolute', top: '110%', right: 0, zIndex: 50, minWidth: '180px',
+                    background: 'hsl(var(--background))', border: '1px solid #e5e7eb',
+                    borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden',
+                  }}>
                     <button
                       onClick={() => assignConversation(null)}
                       style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}
@@ -1006,7 +1010,11 @@ export default function AdminWhatsAppPage() {
                   <ChevronDown style={{ width: '0.65rem', height: '0.65rem' }} />
                 </button>
                 {showStatusDropdown && (
-                  <div className="absolute top-full right-0 mt-1 z-50 min-w-[170px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden">
+                  <div style={{
+                    position: 'absolute', top: '110%', right: 0, zIndex: 50, minWidth: '170px',
+                    background: 'hsl(var(--background))', border: '1px solid #e5e7eb',
+                    borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', overflow: 'hidden',
+                  }}>
                     {Object.entries(FOLLOW_UP_STATUS).map(([k, v]) => (
                       <button
                         key={k}
@@ -1135,7 +1143,11 @@ export default function AdminWhatsAppPage() {
                   <MoreVertical style={{ width: '1rem', height: '1rem' }} />
                 </button>
                 {showMobileMore && (
-                  <div className="absolute top-full right-0 mt-1 z-[100] min-w-[200px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+                  <div style={{
+                    position: 'absolute', top: '110%', right: 0, zIndex: 100, minWidth: '200px',
+                    background: 'hsl(var(--background))', border: '1px solid #e5e7eb',
+                    borderRadius: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', overflow: 'hidden',
+                  }}>
                     {/* Statut */}
                     <div style={{ borderBottom: '1px solid #f3f4f6', padding: '0.3rem 0' }}>
                       {Object.entries(FOLLOW_UP_STATUS).map(([k, v]) => (
@@ -1496,7 +1508,11 @@ export default function AdminWhatsAppPage() {
                 {/* Textarea + dropdown reponses rapides */}
                 <div ref={qrMenuRef} className="relative flex-1 min-w-0">
                   {showQRMenu && (
-                    <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden">
+                    <div style={{
+                      position: 'absolute', bottom: '110%', left: 0, right: 0, zIndex: 50,
+                      background: 'hsl(var(--background))', border: '1px solid #e5e7eb',
+                      borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden',
+                    }}>
                       <div className="p-2 border-b border-border">
                         <input
                           autoFocus
