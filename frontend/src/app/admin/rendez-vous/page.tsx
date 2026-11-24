@@ -702,6 +702,13 @@ export default function AdminRendezVousPage() {
   // ---- Helpers calendrier ----
   const CAL_HOURS = ['08','09','10','11','12','13','14','15','16','17','18'];
 
+  // Vérifie si la valeur heure est un créneau réel (format HH:MM)
+  // Exclut les placeholders comme "A definir", "A definir", etc.
+  function isValidHeure(h: string | null | undefined): boolean {
+    if (!h) return false;
+    return /^\d{1,2}:\d{2}$/.test(h.trim());
+  }
+
   function getWeekOffsetForDate(date: Date): number {
     const today = new Date();
     const dow = (today.getDay() + 6) % 7;
@@ -945,6 +952,47 @@ export default function AdminRendezVousPage() {
                   })}
                 </div>
 
+                {/* RDVs sans heure ou sans date - affiches au-dessus de la grille */}
+                {(() => {
+                  const noHourRdvs = filteredByStatus.filter((rdv: any) => {
+                    if (isValidHeure(rdv.heure)) return false;
+                    return true;
+                  });
+                  if (!noHourRdvs.length) return null;
+                  return (
+                    <div className="border-b border-amber-100 bg-amber-50/60 px-3 py-2.5">
+                      <p className="text-[10px] text-amber-700 font-semibold uppercase tracking-wide mb-2">
+                        {noHourRdvs.filter((r: any) => !r.date).length > 0 ? 'Non planifies' : 'Sans heure precise'}
+                        <span className="ml-1.5 font-bold text-amber-800">({noHourRdvs.length})</span>
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {noHourRdvs.map((rdv: any) => {
+                          const style = rdvStatusStyle(rdv.statut, rdv.effectue);
+                          const avColor = avatarColor((rdv.prenom || '') + (rdv.nom || ''));
+                          const dateLabel = rdv.date
+                            ? new Date(rdv.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+                            : 'Pas de date';
+                          const heureLabel = rdv.heure && !isValidHeure(rdv.heure) ? rdv.heure : '';
+                          return (
+                            <div
+                              key={rdv._id || rdv.id}
+                              onClick={() => openEdit(rdv)}
+                              className={`flex items-center gap-2 rounded-lg border-l-4 ${style.border} bg-white px-3 py-2 cursor-pointer hover:shadow-sm transition-shadow max-w-xs`}
+                            >
+                              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avColor}`}>{getInitialsFromRdv(rdv)}</span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-gray-800 truncate">{`${rdv.prenom || ''} ${rdv.nom || ''}`.trim() || 'Client'}</p>
+                                <p className="text-[10px] text-gray-400">{dateLabel}{heureLabel ? ` — ${heureLabel}` : ''}</p>
+                              </div>
+                              <span className={`shrink-0 text-[9px] font-semibold rounded-full px-1.5 py-0.5 ${style.badge}`}>{style.label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Grille heures */}
                 <div className="overflow-y-auto max-h-[calc(100dvh-380px)]">
                   {CAL_HOURS.map(hour => (
@@ -958,7 +1006,8 @@ export default function AdminRendezVousPage() {
                           const rd = rdv.date ? new Date(rdv.date) : null;
                           if (!rd) return false;
                           if (!isSameDay(rd, day)) return false;
-                          const h = rdv.heure ? rdv.heure.substring(0, 2) : null;
+                          if (!isValidHeure(rdv.heure)) return false;
+                          const h = rdv.heure.trim().split(':')[0].padStart(2, '0');
                           return h === hour;
                         });
                         return (
@@ -990,41 +1039,6 @@ export default function AdminRendezVousPage() {
                   ))}
                 </div>
 
-                {/* RDVs sans heure */}
-                {(() => {
-                  const noHourRdvs = filteredByStatus.filter((rdv: any) => {
-                    if (rdv.heure) return false;
-                    const rd = rdv.date ? new Date(rdv.date) : null;
-                    if (!rd) return true;
-                    return weekDays.some(d => isSameDay(rd, d));
-                  });
-                  if (!noHourRdvs.length) return null;
-                  return (
-                    <div className="border-t border-gray-200 p-3">
-                      <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-2">Sans heure precise</p>
-                      <div className="flex flex-wrap gap-2">
-                        {noHourRdvs.map((rdv: any) => {
-                          const style = rdvStatusStyle(rdv.statut, rdv.effectue);
-                          const avColor = avatarColor((rdv.prenom || '') + (rdv.nom || ''));
-                          return (
-                            <div
-                              key={rdv._id || rdv.id}
-                              onClick={() => openEdit(rdv)}
-                              className={`flex items-center gap-2 rounded-lg border-l-4 ${style.border} ${style.bg} px-3 py-2 cursor-pointer hover:shadow-sm transition-shadow max-w-xs`}
-                            >
-                              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avColor}`}>{getInitialsFromRdv(rdv)}</span>
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-gray-800 truncate">{`${rdv.prenom || ''} ${rdv.nom || ''}`.trim()}</p>
-                                <p className="text-[10px] text-gray-500 truncate">{rdv.motif || ''}</p>
-                              </div>
-                              <span className={`shrink-0 text-[9px] font-semibold rounded-full px-1.5 py-0.5 ${style.badge}`}>{style.label}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
               </div>
 
               {/* Banniere RDV hors semaine */}
