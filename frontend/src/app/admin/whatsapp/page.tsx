@@ -1164,6 +1164,13 @@ export default function AdminWhatsAppPage() {
               >
                 <Link2 className="w-4 h-4" />
               </button>
+              <a
+                href={`tel:+${selectedConv.phone.replace(/\D/g, '')}`}
+                className="p-1.5 rounded-md hover:bg-green-50 dark:hover:bg-green-900/20 text-muted-foreground hover:text-green-600 transition-colors"
+                title={`Appeler ${formatPhone(selectedConv.phone)}`}
+              >
+                <Phone className="w-4 h-4" />
+              </a>
               <button
                 onClick={() => deleteConversation(selectedConv._id)}
                 className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 text-muted-foreground hover:text-red-600 transition-colors"
@@ -1175,6 +1182,17 @@ export default function AdminWhatsAppPage() {
 
             {/* Actions mobiles (3 boutons + menu "plus") */}
             <div className="flex md:hidden gap-1 items-center shrink-0">
+              {/* Bouton appel direct */}
+              <a
+                href={`tel:+${selectedConv.phone.replace(/\D/g, '')}`}
+                title={`Appeler ${formatPhone(selectedConv.phone)}`}
+                style={{
+                  padding: '0.375rem', borderRadius: '0.375rem', display: 'flex', alignItems: 'center',
+                  border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', textDecoration: 'none',
+                }}
+              >
+                <Phone style={{ width: '1rem', height: '1rem' }} />
+              </a>
               {/* Bot/Conseiller icone seulement */}
               <button
                 onClick={toggleHumanMode}
