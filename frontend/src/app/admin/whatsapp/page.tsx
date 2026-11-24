@@ -564,6 +564,16 @@ export default function AdminWhatsAppPage() {
     }
   }
 
+  async function handleDismissReminder(convId: string) {
+    try {
+      await whatsappAdminAPI.setReminder(convId, null, '');
+      setConversations((prev) => prev.map((c) => c._id === convId ? { ...c, reminderAt: null, reminderNote: '' } : c));
+      if (selectedConv?._id === convId) setSelectedConv((c: any) => ({ ...c, reminderAt: null, reminderNote: '' }));
+    } catch {
+      setToast({ message: 'Erreur lors de la suppression du rappel', type: 'error' });
+    }
+  }
+
   async function handleSetStatus(followUpStatus: string) {
     if (!selectedConv) return;
     try {
@@ -953,6 +963,63 @@ export default function AdminWhatsAppPage() {
             })}
           </div>
         </div>
+
+        {/* ── Rappels epingles ── */}
+        {conversations.some((c: any) => c.reminderAt) && (
+          <div style={{ borderBottom: '1px solid #e5e7eb', background: '#fffbeb' }}>
+            <div style={{ padding: '0.4rem 0.75rem 0.2rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <Bell style={{ width: '0.7rem', height: '0.7rem', color: '#d97706' }} />
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Rappels
+              </span>
+              <span style={{ fontSize: '0.6rem', background: '#fef3c7', color: '#d97706', border: '1px solid #fcd34d', borderRadius: '9999px', padding: '0 0.35rem', fontWeight: 700 }}>
+                {conversations.filter((c: any) => c.reminderAt).length}
+              </span>
+            </div>
+            {[...conversations]
+              .filter((c: any) => c.reminderAt)
+              .sort((a: any, b: any) => new Date(a.reminderAt).getTime() - new Date(b.reminderAt).getTime())
+              .map((conv: any) => {
+                const overdue = new Date(conv.reminderAt) < new Date();
+                const name = getConvName(conv) || conv.phone || 'Contact';
+                const dateStr = new Date(conv.reminderAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                return (
+                  <div key={conv._id} style={{
+                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    padding: '0.35rem 0.75rem',
+                    background: overdue ? '#fef2f2' : '#fefce8',
+                    borderLeft: `3px solid ${overdue ? '#dc2626' : '#f59e0b'}`,
+                    marginBottom: '1px',
+                  }}>
+                    <button
+                      onClick={() => {
+                        const c = conversations.find((x: any) => x._id === conv._id);
+                        if (c) setSelectedConv(c);
+                      }}
+                      style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', minWidth: 0 }}
+                    >
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: overdue ? '#dc2626' : '#92400e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {overdue && <span style={{ marginRight: '0.3rem' }}>!</span>}
+                        {name}
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: overdue ? '#dc2626' : '#d97706', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <Bell style={{ width: '0.6rem', height: '0.6rem', flexShrink: 0 }} />
+                        {dateStr}
+                        {conv.reminderNote && <span style={{ color: '#6b7280' }}> - {conv.reminderNote}</span>}
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => handleDismissReminder(conv._id)}
+                      title="Supprimer ce rappel"
+                      style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: overdue ? '#dc2626' : '#d97706', padding: '0.2rem', borderRadius: '0.25rem', display: 'flex' }}
+                    >
+                      <X style={{ width: '0.75rem', height: '0.75rem' }} />
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        )}
 
         {/* Liste */}
         <div className="flex-1 overflow-y-auto">
