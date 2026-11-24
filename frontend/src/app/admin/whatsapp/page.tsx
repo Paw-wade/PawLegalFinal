@@ -193,6 +193,7 @@ export default function AdminWhatsAppPage() {
 
   // Actions rapides
   const [showQuickActions, setShowQuickActions] = useState(false);
+  const [showMobileQuickActions, setShowMobileQuickActions] = useState(false);
   const [showRdvModal, setShowRdvModal] = useState(false);
   const [rdvForm, setRdvForm] = useState({ nom: '', prenom: '', email: '', telephone: '', date: '', heure: '09:00', motif: 'premiere_demande_titre', description: '' });
   const [isCreatingRdv, setIsCreatingRdv] = useState(false);
@@ -207,6 +208,7 @@ export default function AdminWhatsAppPage() {
   const [isCreatingAppel, setIsCreatingAppel] = useState(false);
   const [convAppels, setConvAppels] = useState<any[]>([]);
   const quickActionsRef = useRef<HTMLDivElement>(null);
+  const mobileQuickActionsRef = useRef<HTMLDivElement>(null);
 
   const qrMenuRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
@@ -299,6 +301,7 @@ export default function AdminWhatsAppPage() {
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) setShowStatusDropdown(false);
       if (mobileMoreRef.current && !mobileMoreRef.current.contains(e.target as Node)) setShowMobileMore(false);
       if (quickActionsRef.current && !quickActionsRef.current.contains(e.target as Node)) setShowQuickActions(false);
+      if (mobileQuickActionsRef.current && !mobileQuickActionsRef.current.contains(e.target as Node)) setShowMobileQuickActions(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -683,6 +686,7 @@ export default function AdminWhatsAppPage() {
       description: 'Prise de contact via WhatsApp',
     });
     setShowQuickActions(false);
+    setShowMobileQuickActions(false);
     setShowRdvModal(true);
   }
 
@@ -697,6 +701,7 @@ export default function AdminWhatsAppPage() {
       dossier: linkedDossierId,
     });
     setShowQuickActions(false);
+    setShowMobileQuickActions(false);
     setShowTaskModal(true);
   }
 
@@ -714,6 +719,7 @@ export default function AdminWhatsAppPage() {
       description: '',
     });
     setShowQuickActions(false);
+    setShowMobileQuickActions(false);
     setShowDossierModal(true);
   }
 
@@ -794,6 +800,7 @@ export default function AdminWhatsAppPage() {
     setAppelForm({ date: dateStr, heure: heureStr, note: '' });
     setShowAppelModal(true);
     setShowQuickActions(false);
+    setShowMobileQuickActions(false);
   }
 
   async function handleCreateAppel() {
@@ -1514,20 +1521,20 @@ export default function AdminWhatsAppPage() {
                 <Phone style={{ width: '1rem', height: '1rem' }} />
               </a>
               {/* Actions rapides mobile */}
-              <div style={{ position: 'relative' }}>
+              <div ref={mobileQuickActionsRef} style={{ position: 'relative' }}>
                 <button
-                  onClick={() => { setShowQuickActions((v) => !v); setShowMobileMore(false); }}
+                  onClick={() => { setShowMobileQuickActions((v) => !v); setShowMobileMore(false); }}
                   title="Actions rapides"
                   style={{
                     padding: '0.375rem', borderRadius: '0.375rem', display: 'flex', alignItems: 'center',
-                    border: showQuickActions ? '1px solid #e96d2b' : '1px solid #d1d5db',
-                    background: showQuickActions ? '#fff3ed' : 'transparent',
-                    color: showQuickActions ? '#e96d2b' : '#6b7280', cursor: 'pointer',
+                    border: showMobileQuickActions ? '1px solid #e96d2b' : '1px solid #d1d5db',
+                    background: showMobileQuickActions ? '#fff3ed' : 'transparent',
+                    color: showMobileQuickActions ? '#e96d2b' : '#6b7280', cursor: 'pointer',
                   }}
                 >
                   <Zap style={{ width: '1rem', height: '1rem' }} />
                 </button>
-                {showQuickActions && (
+                {showMobileQuickActions && (
                   <div style={{
                     position: 'absolute', top: '110%', right: 0, zIndex: 100, minWidth: '190px',
                     background: '#ffffff', border: '1px solid #e5e7eb',
