@@ -84,40 +84,55 @@ Ecrivez *1*, *2* ou *3* pour choisir.`;
 const DEMANDE_MENU = `Quelle est votre situation ?
 
 *Droit des etrangers :*
-1️⃣  Titre de sejour (1re demande, renouvellement, changement)
-2️⃣  Carte de resident
-3️⃣  Nationalite francaise
-4️⃣  Regroupement familial
+1️⃣  Titre de sejour
+2️⃣  Nationalite francaise
+3️⃣  Regroupement familial
 
 *Recours :*
-5️⃣  OQTF (obligation de quitter le territoire)
-6️⃣  Refus de visa
-7️⃣  Absence de reponse a une demande de titre de sejour
+4️⃣  OQTF (obligation de quitter le territoire)
+5️⃣  Refus de visa
+6️⃣  Absence de reponse a une demande de titre de sejour
 
 *Demande de visa :*
-8️⃣  Visa France - Senegal
-9️⃣  Visa France - Etats-Unis
+7️⃣  Visa France - Senegal
+8️⃣  Visa France - Etats-Unis
 
 *Creation d'entreprise :*
-10.  Societe / entreprise en France
-11.  Societe / entreprise au Senegal
+9️⃣  Societe / entreprise en France
+10.  Societe / entreprise au Senegal
 
 0️⃣  Retour au menu principal
 
 Ecrivez le numero de votre choix.`;
 
+const TITRE_SEJOUR_MENU = `Quel type de titre de sejour ?
+
+1️⃣  Premiere demande de titre de sejour
+2️⃣  Renouvellement de titre de sejour
+3️⃣  Changement de statut
+4️⃣  Carte de resident (10 ans)
+
+0️⃣  Retour
+
+Ecrivez le numero de votre choix.`;
+
+const TITRE_SEJOUR_REPONSES = {
+  '1': { label: 'premiere demande de titre de sejour', detail: 'etudiant, salarie, visiteur ou autre motif' },
+  '2': { label: 'renouvellement de titre de sejour', detail: 'avant l\'expiration de votre titre actuel' },
+  '3': { label: 'changement de statut', detail: 'passer d\'un statut etudiant a salarie, par exemple' },
+  '4': { label: 'carte de resident 10 ans', detail: 'carte de longue duree pour residents etablis en France' },
+};
+
 const DEMANDE_REPONSES = {
-  '1': { label: 'titre de sejour', detail: 'premiere demande, renouvellement ou changement de statut' },
-  '2': { label: 'carte de resident', detail: 'carte de resident 10 ans' },
-  '3': { label: 'nationalite francaise', detail: 'acquisition de la nationalite par naturalisation ou mariage' },
-  '4': { label: 'regroupement familial', detail: 'faire venir vos proches en France' },
-  '5': { label: 'contestation d\'OQTF', detail: 'recours contre une obligation de quitter le territoire' },
-  '6': { label: 'recours refus de visa', detail: 'contester un refus de visa devant la CRRV ou le tribunal administratif' },
-  '7': { label: 'recours absence de reponse (titre de sejour)', detail: 'silence de la prefecture valant rejet apres 4 mois' },
-  '8': { label: 'visa France - Senegal', detail: 'visa de court ou long sejour pour entrer en France depuis le Senegal' },
-  '9': { label: 'visa France - Etats-Unis', detail: 'visa de court ou long sejour pour entrer en France depuis les Etats-Unis' },
-  '10': { label: 'creation de societe en France', detail: 'SARL, SAS, SCI ou auto-entrepreneur' },
-  '11': { label: 'creation de societe au Senegal', detail: 'SARL, SUARL ou SAS au Senegal' },
+  '2': { label: 'nationalite francaise', detail: 'acquisition par naturalisation ou mariage' },
+  '3': { label: 'regroupement familial', detail: 'faire venir vos proches en France' },
+  '4': { label: 'contestation d\'OQTF', detail: 'recours contre une obligation de quitter le territoire' },
+  '5': { label: 'recours refus de visa', detail: 'contester un refus de visa devant la CRRV ou le tribunal administratif' },
+  '6': { label: 'recours absence de reponse (titre de sejour)', detail: 'silence de la prefecture valant rejet apres 4 mois' },
+  '7': { label: 'visa France - Senegal', detail: 'visa de court ou long sejour pour entrer en France depuis le Senegal' },
+  '8': { label: 'visa France - Etats-Unis', detail: 'visa de court ou long sejour pour entrer en France depuis les Etats-Unis' },
+  '9': { label: 'creation de societe en France', detail: 'SARL, SAS, SCI ou auto-entrepreneur' },
+  '10': { label: 'creation de societe au Senegal', detail: 'SARL, SUARL ou SAS au Senegal' },
 };
 
 const FAQ_MENU = `Sur quel sujet souhaitez-vous des informations ?
@@ -320,9 +335,14 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         await conv.save();
         return menuPrincipal(prenom);
       }
+      if (text === '1') {
+        conv.state = 'titre_sejour_menu';
+        await conv.save();
+        return TITRE_SEJOUR_MENU;
+      }
       const demande = DEMANDE_REPONSES[text];
       if (!demande) {
-        return `Ecrivez un numero entre *1* et *9*, ou *0* pour revenir.\n\n${DEMANDE_MENU}`;
+        return `Ecrivez un numero entre *1* et *10*, ou *0* pour revenir.\n\n${DEMANDE_MENU}`;
       }
       conv.state = 'menu';
       await conv.save();
@@ -330,6 +350,24 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         ? `\n\n💡 _Creez votre compte sur *ada-papers.com* pour suivre l'avancement de votre dossier en temps reel._`
         : '';
       return `Pour votre demande de *${demande.label}* (${demande.detail}), rendez-vous sur :\n\n👉 *ada-papers.com/nouvelle-demande*\n\nRemplissez le formulaire en ligne. Notre equipe traitera votre dossier sous *48h* et vous recontactera.${compteMsg}\n\nTapez *menu* pour revenir au menu principal.`;
+    }
+
+    case 'titre_sejour_menu': {
+      if (text === '0') {
+        conv.state = 'demande_menu';
+        await conv.save();
+        return DEMANDE_MENU;
+      }
+      const titreDemande = TITRE_SEJOUR_REPONSES[text];
+      if (!titreDemande) {
+        return `Ecrivez *1*, *2*, *3* ou *4*, ou *0* pour revenir.\n\n${TITRE_SEJOUR_MENU}`;
+      }
+      conv.state = 'menu';
+      await conv.save();
+      const compteMsg2 = !prenom
+        ? `\n\n💡 _Creez votre compte sur *ada-papers.com* pour suivre l'avancement de votre dossier en temps reel._`
+        : '';
+      return `Pour votre *${titreDemande.label}* (${titreDemande.detail}), rendez-vous sur :\n\n👉 *ada-papers.com/nouvelle-demande*\n\nRemplissez le formulaire en ligne. Notre equipe traitera votre dossier sous *48h* et vous recontactera.${compteMsg2}\n\nTapez *menu* pour revenir au menu principal.`;
     }
 
     case 'rdv_name': {

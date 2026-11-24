@@ -33,6 +33,7 @@ const whatsappConversationSchema = new mongoose.Schema(
         'mes_dossiers',
         'suivi_dossier',
         'demande_menu',
+        'titre_sejour_menu',
       ],
       default: 'menu',
     },
