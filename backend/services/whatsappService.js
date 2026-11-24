@@ -58,16 +58,26 @@ const STATUT_DOSSIER_LABELS = {
 
 function menuPrincipal(prenom) {
   const salut = prenom ? `Bonjour *${prenom}* 👋` : `Bonjour et bienvenue chez *Ada Papers* 👋`;
-  const dossierOption = prenom ? `\n4️⃣  Mes dossiers` : '';
+  if (prenom) {
+    return `${salut}
+
+Je suis votre assistant juridique. Comment puis-je vous aider ?
+
+1️⃣  Prendre un rendez-vous
+2️⃣  Parler a un conseiller
+3️⃣  Mes dossiers
+4️⃣  Suivi de mon dossier
+
+Ecrivez *1*, *2*, *3* ou *4* pour choisir.`;
+  }
   return `${salut}
 
 Je suis votre assistant juridique. Comment puis-je vous aider ?
 
-1️⃣  Questions frequentes (OQTF, visa, titre de sejour)
-2️⃣  Prendre un rendez-vous
-3️⃣  Parler a un conseiller${dossierOption}
+1️⃣  Prendre un rendez-vous
+2️⃣  Parler a un conseiller
 
-Repondez avec le numero de votre choix.`;
+Ecrivez *1* ou *2* pour choisir.`;
 }
 
 const FAQ_MENU = `Sur quel sujet souhaitez-vous des informations ?
@@ -226,73 +236,53 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
   switch (conv.state) {
     case 'menu': {
       if (text === '1') {
-        conv.state = 'faq_menu';
+        conv.rdv = {};
+        if (!prenom) {
+          conv.state = 'rdv_name';
+          await conv.save();
+          return `Pour beneficier de l'accompagnement personnalise d'Ada Papers, nous vous recommandons de creer votre compte sur *ada-papers.com*.\n\nCela vous permettra de suivre vos dossiers et d'etre reconnu automatiquement.\n\nSi vous souhaitez quand meme prendre un rendez-vous, tapez votre *prenom* pour commencer.`;
+        }
+        conv.rdv.prenom = prenom;
+        conv.state = 'rdv_motif';
+        conv.markModified('rdv');
         await conv.save();
-        return FAQ_MENU;
+        return `Pour quel motif souhaitez-vous un rendez-vous, *${prenom}* ?\n\n1️⃣  OQTF\n2️⃣  Visa refuse\n3️⃣  Renouvellement titre de sejour\n4️⃣  Premiere demande de titre\n5️⃣  Regroupement familial\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
       }
       if (text === '2') {
-        conv.state = 'rdv_name';
-        conv.rdv = {};
-        await conv.save();
-        if (prenom) {
-          conv.rdv.prenom = prenom;
-          conv.state = 'rdv_motif';
-          conv.markModified('rdv');
+        if (!prenom) {
+          conv.state = 'contact_name';
           await conv.save();
-          return `Pour quel motif souhaitez-vous un rendez-vous, *${prenom}* ?\n
-1️⃣  OQTF
-2️⃣  Visa refuse
-3️⃣  Renouvellement titre de sejour
-4️⃣  Premiere demande de titre
-5️⃣  Regroupement familial
-6️⃣  Autre`;
+          return `Pour beneficier de l'accompagnement personnalise d'Ada Papers, nous vous recommandons de creer votre compte sur *ada-papers.com*.\n\nCela vous permettra de suivre vos dossiers et d'etre reconnu automatiquement.\n\nSi vous souhaitez quand meme parler a un conseiller, tapez votre *prenom et nom*.`;
         }
-        return `Parfait ! Pour prendre un rendez-vous, j'ai besoin de quelques informations.\n\n*Quel est votre prenom ?*`;
-      }
-      if (text === '3') {
-        conv.state = 'contact_name';
+        await enregistrerContactWA(conv.phone, `${user.firstName} ${user.lastName || ''}`.trim());
+        conv.state = 'menu';
         await conv.save();
-        if (prenom) {
-          await enregistrerContactWA(conv.phone, `${user.firstName} ${user.lastName}`);
-          conv.state = 'menu';
-          await conv.save();
-          return `Merci *${prenom}* ! Un conseiller vous contactera dans les *24h*.\n\nTapez *menu* pour revenir au menu principal.`;
-        }
-        return `Un de nos conseillers vous contactera dans les 24h.\n\n*Quel est votre prenom et nom ?*`;
+        return `Merci *${prenom}* ! Un conseiller vous contactera dans les *24h*.\n\nTapez *menu* pour revenir au menu principal.`;
       }
-      if (text === '4' && prenom) {
+      if (text === '3' && prenom) {
         return await afficherDossiers(conv, user);
       }
-      return `Je n'ai pas compris votre reponse. Veuillez taper *1*, *2*, *3*${prenom ? ' ou *4*' : ''}.\n\n${menuPrincipal(prenom)}`;
-    }
-
-    case 'faq_menu': {
-      const rep = FAQ_REPONSES[text];
-      if (rep) return rep;
-      return `Veuillez taper un numéro entre *1* et *5*, ou *0* pour revenir au menu.\n\n${FAQ_MENU}`;
+      if (text === '4' && prenom) {
+        return await suiviDossier(conv, user);
+      }
+      return `Ecrivez *1* ou *2*${prenom ? ', *3* ou *4*' : ''} pour choisir.\n\n${menuPrincipal(prenom)}`;
     }
 
     case 'rdv_name': {
       if (!incomingText || incomingText.trim().length < 2) {
-        return `Veuillez indiquer votre prénom (au moins 2 caractères).`;
+        return `Veuillez indiquer votre prenom (au moins 2 caracteres).`;
       }
       if (!conv.rdv) conv.rdv = {};
       conv.rdv.prenom = incomingText.trim();
       conv.state = 'rdv_motif';
       conv.markModified('rdv');
       await conv.save();
-      return `Merci *${conv.rdv.prenom}* ! Pour quel motif souhaitez-vous un rendez-vous ?\n
-1️⃣  OQTF
-2️⃣  Visa refusé
-3️⃣  Renouvellement titre de séjour
-4️⃣  Première demande de titre
-5️⃣  Regroupement familial
-6️⃣  Autre`;
+      return `Merci *${conv.rdv.prenom}* ! Pour quel motif souhaitez-vous un rendez-vous ?\n\n1️⃣  OQTF\n2️⃣  Visa refuse\n3️⃣  Renouvellement titre de sejour\n4️⃣  Premiere demande de titre\n5️⃣  Regroupement familial\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
     }
 
     case 'rdv_motif': {
       const motif = MOTIFS_RDV[text];
-      if (!motif) return `Veuillez choisir un numéro entre *1* et *6*.`;
+      if (!motif) return `Ecrivez un numero entre *1* et *6* pour choisir le motif.`;
       conv.rdv.motif = motif;
       conv.state = 'rdv_tel';
       conv.markModified('rdv');
@@ -399,6 +389,35 @@ async function afficherDossiers(conv, user) {
   } catch (err) {
     console.error('[WhatsApp] Erreur affichage dossiers:', err.message);
     return `Impossible de charger vos dossiers pour l'instant. Reessayez plus tard.\n\nTapez *menu* pour revenir au menu principal.`;
+  }
+}
+
+async function suiviDossier(conv, user) {
+  if (!user) {
+    return `Votre compte n'est pas encore lie a ce numero WhatsApp. Inscrivez-vous sur Ada Papers pour suivre vos dossiers.\n\nTapez *menu* pour revenir au menu principal.`;
+  }
+  try {
+    const Dossier = require('../models/Dossier');
+    const dossier = await Dossier.findOne({ user: user._id })
+      .select('numero titre statut categorie createdAt updatedAt')
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    if (!dossier) {
+      return `Vous n'avez pas encore de dossier ouvert chez Ada Papers.\n\nTapez *menu* pour revenir au menu principal.`;
+    }
+
+    const statutLabel = STATUT_DOSSIER_LABELS[dossier.statut] || dossier.statut;
+    const num = dossier.numero ? `N° ${dossier.numero}` : 'Dossier';
+    const titre = dossier.titre || dossier.categorie || 'Dossier juridique';
+    const dateMAJ = dossier.updatedAt
+      ? new Date(dossier.updatedAt).toLocaleDateString('fr-FR')
+      : '—';
+
+    return `📋 *Suivi de votre dossier*\n\n*${num}*\n${titre}\n\nStatut actuel : *${statutLabel}*\nDerniere mise a jour : ${dateMAJ}\n\nPour plus de details, connectez-vous sur ada-papers.com\n\nTapez *menu* pour revenir au menu principal.`;
+  } catch (err) {
+    console.error('[WhatsApp] Erreur suivi dossier:', err.message);
+    return `Impossible de charger votre dossier pour l'instant. Reessayez plus tard.\n\nTapez *menu* pour revenir au menu principal.`;
   }
 }
 
