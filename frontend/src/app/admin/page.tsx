@@ -790,27 +790,27 @@ export default function AdminDashboardPage() {
         {/* Vue d'ensemble */}
         <div className="mb-6">
           <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Vue d'ensemble</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {/* Badge Utilisateurs - Seulement pour les admins */}
           {isAdmin && (
             <Link href="/admin/utilisateurs" className="group" id="utilisateurs-section">
               <div className="rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-orange-200/70 to-orange-200/70 shadow-sm group-hover:shadow-md transition-all duration-300 group-hover:from-orange-400/70 group-hover:via-orange-400/70 group-hover:to-orange-400/70">
-                <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                      <span className="text-2xl">👥</span>
+                <div className="bg-white rounded-xl border border-white/70 p-3 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
+                  <div className="flex items-center justify-between mb-2 sm:mb-3">
+                    <div className="w-9 h-9 sm:w-12 sm:h-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                      <span className="text-lg sm:text-2xl">👥</span>
                     </div>
                     <div className="text-right">
-                      <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-primary transition-colors">{stats.utilisateurs}</p>
+                      <p className="text-xl sm:text-3xl font-bold text-foreground mb-0 group-hover:text-primary transition-colors">{stats.utilisateurs}</p>
                     </div>
                   </div>
-                  <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Utilisateurs</h3>
-                  <p className="text-xs text-gray-600 mb-3">Clients actifs</p>
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-semibold group-hover:bg-primary/20 transition-colors">
-                      +{stats.nouveauxClients} ce mois
+                  <h3 className="text-xs sm:text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Utilisateurs</h3>
+                  <p className="text-xs text-gray-600 mb-2 sm:mb-3">Clients actifs</p>
+                  <div className="flex items-center justify-between pt-2 sm:pt-3 border-t border-gray-100">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] sm:text-xs font-semibold group-hover:bg-primary/20 transition-colors">
+                      +{stats.nouveauxClients} mois
                     </span>
-                    <span className="text-primary text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
+                    <span className="text-primary text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">→</span>
                   </div>
                 </div>
               </div>
@@ -820,17 +820,17 @@ export default function AdminDashboardPage() {
           {/* Badge Dossiers */}
           <Link href="/admin/dossiers" className="group" id="dossiers-section">
             <div className="rounded-xl p-[1px] bg-gradient-to-r from-blue-200/70 via-indigo-200/70 to-blue-200/70 shadow-sm group-hover:shadow-md transition-all duration-300 group-hover:from-blue-400/70 group-hover:via-indigo-400/70 group-hover:to-blue-400/70">
-              <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
-                    <span className="text-2xl">📁</span>
+              <div className="bg-white rounded-xl border border-white/70 p-3 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 bg-blue-500/10 rounded-lg flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                    <span className="text-lg sm:text-2xl">📁</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-blue-600 transition-colors">{stats.dossiers}</p>
+                    <p className="text-xl sm:text-3xl font-bold text-foreground mb-0 group-hover:text-blue-600 transition-colors">{stats.dossiers}</p>
                   </div>
                 </div>
-                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Dossiers</h3>
-                <p className="text-xs text-gray-600 mb-3">Tous les dossiers</p>
+                <h3 className="text-xs sm:text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Dossiers</h3>
+                <p className="text-xs text-gray-600 mb-2 sm:mb-3">Tous les dossiers</p>
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <span className="text-xs text-gray-600">Gestion complète</span>
                   <span className="text-blue-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
@@ -842,17 +842,17 @@ export default function AdminDashboardPage() {
           {/* Badge Documents */}
           <Link href="/admin/documents" className="group" id="documents-section">
             <div className="rounded-xl p-[1px] bg-gradient-to-r from-purple-200/70 via-fuchsia-200/70 to-purple-200/70 shadow-sm group-hover:shadow-md transition-all duration-300 group-hover:from-purple-400/70 group-hover:via-fuchsia-400/70 group-hover:to-purple-400/70">
-              <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
-                    <span className="text-2xl">📄</span>
+              <div className="bg-white rounded-xl border border-white/70 p-3 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 bg-purple-500/10 rounded-lg flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                    <span className="text-lg sm:text-2xl">📄</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-purple-600 transition-colors">{stats.documents}</p>
+                    <p className="text-xl sm:text-3xl font-bold text-foreground mb-0 group-hover:text-purple-600 transition-colors">{stats.documents}</p>
                   </div>
                 </div>
-                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Documents</h3>
-                <p className="text-xs text-gray-600 mb-3">Total des documents</p>
+                <h3 className="text-xs sm:text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Documents</h3>
+                <p className="text-xs text-gray-600 mb-2 sm:mb-3">Total des documents</p>
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <span className="text-xs text-gray-600">Téléversés par les clients</span>
                   <span className="text-purple-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
@@ -864,22 +864,22 @@ export default function AdminDashboardPage() {
           {/* Badge Tâches */}
           <Link href="/admin/taches" className="group">
             <div className="rounded-xl p-[1px] bg-gradient-to-r from-orange-200/70 via-amber-200/70 to-orange-200/70 shadow-sm group-hover:shadow-md transition-all duration-300 group-hover:from-orange-400/70 group-hover:via-amber-400/70 group-hover:to-orange-400/70">
-              <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-12 h-12 bg-orange-500/10 rounded-lg flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
-                    <span className="text-2xl">✅</span>
+              <div className="bg-white rounded-xl border border-white/70 p-3 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 bg-orange-500/10 rounded-lg flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+                    <span className="text-lg sm:text-2xl">✅</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-orange-600 transition-colors">{stats.tasks}</p>
+                    <p className="text-xl sm:text-3xl font-bold text-foreground mb-0 group-hover:text-orange-600 transition-colors">{stats.tasks}</p>
                   </div>
                 </div>
-                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Tâches</h3>
-                <p className="text-xs text-gray-600 mb-3">Gestion complète des tâches</p>
+                <h3 className="text-xs sm:text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Tâches</h3>
+                <p className="text-xs text-gray-600 mb-2 sm:mb-3">Gestion complète des tâches</p>
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                  <span className="inline-flex items-center px-2 py-1 rounded-md bg-orange-500/10 text-orange-600 text-xs font-semibold">
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-600 text-[10px] sm:text-xs font-semibold">
                     {stats.tasksEnCours} en cours
                   </span>
-                  <span className="text-orange-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
+                  <span className="text-orange-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">→</span>
                 </div>
               </div>
             </div>
@@ -888,17 +888,17 @@ export default function AdminDashboardPage() {
           {/* Badge Rendez-vous */}
           <Link href="/admin/rendez-vous" className="group" id="rendez-vous-section">
             <div className="rounded-xl p-[1px] bg-gradient-to-r from-green-200/70 via-emerald-200/70 to-green-200/70 shadow-sm group-hover:shadow-md transition-all duration-300 group-hover:from-green-400/70 group-hover:via-emerald-400/70 group-hover:to-green-400/70">
-              <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
-                    <span className="text-2xl">📅</span>
+              <div className="bg-white rounded-xl border border-white/70 p-3 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
+                    <span className="text-lg sm:text-2xl">📅</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.rendezVous}</p>
+                    <p className="text-xl sm:text-3xl font-bold text-foreground mb-0 group-hover:text-green-600 transition-colors">{stats.rendezVous}</p>
                   </div>
                 </div>
-                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Rendez-vous</h3>
-                <p className="text-xs text-gray-600 mb-3">Gérez le calendrier</p>
+                <h3 className="text-xs sm:text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Rendez-vous</h3>
+                <p className="text-xs text-gray-600 mb-2 sm:mb-3">Gérez le calendrier</p>
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <span className="text-xs text-gray-600">Planification</span>
                   <span className="text-green-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
@@ -911,17 +911,17 @@ export default function AdminDashboardPage() {
           {isAdmin && (
             <Link href="/admin/temoignages" className="group" id="temoignages-section">
               <div className="rounded-xl p-[1px] bg-gradient-to-r from-yellow-200/70 via-amber-200/70 to-yellow-200/70 shadow-sm group-hover:shadow-md transition-all duration-300 group-hover:from-yellow-400/70 group-hover:via-amber-400/70 group-hover:to-yellow-400/70">
-                <div className="bg-white rounded-xl border border-white/70 p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-12 h-12 bg-yellow-500/10 rounded-lg flex items-center justify-center group-hover:bg-yellow-500/20 transition-colors">
-                      <span className="text-2xl">⭐</span>
+                <div className="bg-white rounded-xl border border-white/70 p-3 sm:p-5 group-hover:shadow-md group-hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full">
+                  <div className="flex items-center justify-between mb-2 sm:mb-3">
+                    <div className="w-9 h-9 sm:w-12 sm:h-12 bg-yellow-500/10 rounded-lg flex items-center justify-center group-hover:bg-yellow-500/20 transition-colors">
+                      <span className="text-lg sm:text-2xl">⭐</span>
                     </div>
                     <div className="text-right">
-                      <p className="text-3xl font-bold text-foreground mb-0 group-hover:text-yellow-600 transition-colors">{stats.temoignages}</p>
+                      <p className="text-xl sm:text-3xl font-bold text-foreground mb-0 group-hover:text-yellow-600 transition-colors">{stats.temoignages}</p>
                     </div>
                   </div>
-                  <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Témoignages</h3>
-                  <p className="text-xs text-gray-600 mb-3">Validez les avis</p>
+                  <h3 className="text-xs sm:text-sm font-medium text-gray-700 uppercase tracking-wide mb-1">Témoignages</h3>
+                  <p className="text-xs text-gray-600 mb-2 sm:mb-3">Validez les avis</p>
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                     <span className="text-xs text-gray-600">Avis clients</span>
                     <span className="text-yellow-600 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">Accéder →</span>
