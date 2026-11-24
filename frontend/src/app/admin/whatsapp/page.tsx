@@ -1457,7 +1457,7 @@ export default function AdminWhatsAppPage() {
               </div>
             )}
 
-            <div className="flex gap-2 items-end p-3">
+            <div className="px-3 pb-3 pt-2 border-t border-border">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1468,136 +1468,170 @@ export default function AdminWhatsAppPage() {
                   if (file) sendFile(file);
                 }}
               />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isSendingFile || isRecording}
-                title="Joindre un fichier"
-                className="p-2.5 rounded-md border border-input text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-              >
-                {isSendingFile ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Paperclip className="w-4 h-4" />
-                )}
-              </button>
-              {isRecording ? (
+
+              {/* Bandeau note interne */}
+              {showNoteInput && (
+                <div className="flex items-center gap-1.5 mb-2 px-2.5 py-1.5 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-700">
+                  <StickyNote className="w-3 h-3 shrink-0" />
+                  <span className="text-xs font-medium">Note interne — visible uniquement par l'equipe</span>
+                  <button
+                    onClick={() => setShowNoteInput(false)}
+                    className="ml-auto p-0.5 rounded hover:bg-yellow-200 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
+              {/* Conteneur integre pleine largeur */}
+              <div className={[
+                'flex items-end gap-1 rounded-2xl border px-2 py-1.5 transition-all',
+                showNoteInput
+                  ? 'border-yellow-300 bg-yellow-50/40 focus-within:border-yellow-400'
+                  : 'border-input bg-background focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/30',
+              ].join(' ')}>
+
+                {/* Gauche : joindre */}
                 <button
-                  onClick={stopRecording}
-                  title="Arreter l'enregistrement"
-                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors shrink-0 animate-pulse"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isSendingFile || isRecording}
+                  title="Joindre un fichier"
+                  className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0 self-end mb-0.5"
                 >
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                  <span className="text-xs font-mono tabular-nums">
-                    {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
-                  </span>
-                </button>
-              ) : (
-                <button
-                  onClick={startRecording}
-                  disabled={isSendingFile || micPermission === 'denied'}
-                  title={
-                    micPermission === 'denied'
-                      ? "Microphone bloque - autorisez l'acces dans les reglages du navigateur"
-                      : "Enregistrer un message vocal"
-                  }
-                  className={[
-                    'relative p-2.5 rounded-md border transition-colors shrink-0',
-                    micPermission === 'denied'
-                      ? 'border-red-300 text-red-400 cursor-not-allowed bg-red-50'
-                      : 'border-input text-muted-foreground hover:text-green-600 hover:border-green-400 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed',
-                  ].join(' ')}
-                >
-                  <Mic className="w-4 h-4" />
-                  {micPermission === 'denied' && (
-                    <span
-                      style={{
-                        position: 'absolute', top: '-4px', right: '-4px',
-                        width: '10px', height: '10px', borderRadius: '50%',
-                        background: '#ef4444', border: '1.5px solid white',
-                        display: 'block',
-                      }}
-                    />
+                  {isSendingFile ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Paperclip className="w-4 h-4" />
                   )}
                 </button>
-              )}
-              {/* Bouton note interne */}
-              <button
-                onClick={() => { setShowNoteInput((v) => !v); setReplyingTo(null); }}
-                title="Note interne"
-                className={[
-                  'p-2.5 rounded-md border transition-colors shrink-0',
-                  showNoteInput
-                    ? 'border-yellow-300 text-yellow-600 bg-yellow-50'
-                    : 'border-input text-muted-foreground hover:text-yellow-600 hover:border-yellow-300 hover:bg-yellow-50',
-                ].join(' ')}
-              >
-                <StickyNote className="w-4 h-4" />
-              </button>
 
-              {/* Textarea + dropdown réponses rapides */}
-              <div ref={qrMenuRef} className="relative flex-1">
-                {showQRMenu && (
-                  <div style={{
-                    position: 'absolute', bottom: '110%', left: 0, right: 0, zIndex: 50,
-                    background: 'var(--background, #fff)', border: '1px solid #e5e7eb',
-                    borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden',
-                  }}>
-                    <div className="p-2 border-b border-border">
-                      <input
-                        autoFocus
-                        value={qrFilter}
-                        onChange={(e) => setQrFilter(e.target.value)}
-                        placeholder="Filtrer…"
-                        className="w-full px-2 py-1 text-xs border border-input rounded bg-background focus:outline-none"
-                      />
+                {/* Textarea + dropdown reponses rapides */}
+                <div ref={qrMenuRef} className="relative flex-1 min-w-0">
+                  {showQRMenu && (
+                    <div style={{
+                      position: 'absolute', bottom: '110%', left: 0, right: 0, zIndex: 50,
+                      background: 'var(--background, #fff)', border: '1px solid #e5e7eb',
+                      borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden',
+                    }}>
+                      <div className="p-2 border-b border-border">
+                        <input
+                          autoFocus
+                          value={qrFilter}
+                          onChange={(e) => setQrFilter(e.target.value)}
+                          placeholder="Filtrer…"
+                          className="w-full px-2 py-1 text-xs border border-input rounded bg-background focus:outline-none"
+                        />
+                      </div>
+                      <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                        {QUICK_REPLIES.filter((r) => r.label.toLowerCase().includes(qrFilter.toLowerCase()) || r.text.toLowerCase().includes(qrFilter.toLowerCase())).map((r, i) => (
+                          <button
+                            key={i}
+                            onClick={() => { setReplyText(r.text); setShowQRMenu(false); setQrFilter(''); }}
+                            style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', border: 'none', background: 'none', cursor: 'pointer' }}
+                            className="hover:bg-accent"
+                          >
+                            <div className="text-xs font-semibold text-foreground">{r.label}</div>
+                            <div className="text-[11px] text-muted-foreground truncate">{r.text}</div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                      {QUICK_REPLIES.filter((r) => r.label.toLowerCase().includes(qrFilter.toLowerCase()) || r.text.toLowerCase().includes(qrFilter.toLowerCase())).map((r, i) => (
-                        <button
-                          key={i}
-                          onClick={() => { setReplyText(r.text); setShowQRMenu(false); setQrFilter(''); }}
-                          style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', border: 'none', background: 'none', cursor: 'pointer' }}
-                          className="hover:bg-accent"
-                        >
-                          <div className="text-xs font-semibold text-foreground">{r.label}</div>
-                          <div className="text-[11px] text-muted-foreground truncate">{r.text}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <textarea
-                  value={replyText}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setReplyText(val);
-                    if (val === '/') { setShowQRMenu(true); setQrFilter(''); }
-                    else if (!val.startsWith('/')) setShowQRMenu(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setShowQRMenu(false);
-                    if (e.key === 'Enter' && !e.shiftKey && !showQRMenu) {
-                      e.preventDefault();
-                      sendReply();
-                    }
-                  }}
-                  placeholder="Votre message… (/ pour réponses rapides, Entrée pour envoyer)"
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+                  )}
+                  <textarea
+                    value={replyText}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setReplyText(val);
+                      const ta = e.target;
+                      ta.style.height = 'auto';
+                      ta.style.height = Math.min(ta.scrollHeight, 128) + 'px';
+                      if (val === '/') { setShowQRMenu(true); setQrFilter(''); }
+                      else if (!val.startsWith('/')) setShowQRMenu(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setShowQRMenu(false);
+                      if (e.key === 'Enter' && !e.shiftKey && !showQRMenu) {
+                        e.preventDefault();
+                        sendReply();
+                      }
+                    }}
+                    placeholder={showNoteInput ? 'Note interne… (Entree pour enregistrer)' : 'Message… (/ pour reponses rapides)'}
+                    rows={1}
+                    className="w-full py-2 text-sm bg-transparent resize-none focus:outline-none placeholder:text-muted-foreground/60"
+                    style={{ minHeight: '36px', maxHeight: '128px', lineHeight: '1.4' }}
+                  />
+                </div>
+
+                {/* Droite : note, micro, envoyer */}
+                <div className="flex items-center gap-0.5 shrink-0 self-end mb-0.5">
+                  {/* Note interne */}
+                  <button
+                    onClick={() => { setShowNoteInput((v) => !v); setReplyingTo(null); }}
+                    title="Note interne"
+                    className={[
+                      'p-1.5 rounded-full transition-colors',
+                      showNoteInput
+                        ? 'text-yellow-600 bg-yellow-100'
+                        : 'text-muted-foreground hover:text-yellow-600 hover:bg-accent',
+                    ].join(' ')}
+                  >
+                    <StickyNote className="w-4 h-4" />
+                  </button>
+
+                  {/* Micro / enregistrement */}
+                  {isRecording ? (
+                    <button
+                      onClick={stopRecording}
+                      title="Arreter l'enregistrement"
+                      className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors animate-pulse"
+                    >
+                      <Square className="w-3 h-3 fill-current" />
+                      <span className="text-[11px] font-mono tabular-nums">
+                        {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={startRecording}
+                      disabled={isSendingFile || micPermission === 'denied'}
+                      title={
+                        micPermission === 'denied'
+                          ? "Microphone bloque - autorisez l'acces dans les reglages"
+                          : "Message vocal"
+                      }
+                      className={[
+                        'relative p-1.5 rounded-full transition-colors',
+                        micPermission === 'denied'
+                          ? 'text-red-400 cursor-not-allowed'
+                          : 'text-muted-foreground hover:text-green-600 hover:bg-accent disabled:opacity-40',
+                      ].join(' ')}
+                    >
+                      <Mic className="w-4 h-4" />
+                      {micPermission === 'denied' && (
+                        <span style={{
+                          position: 'absolute', top: '2px', right: '2px',
+                          width: '7px', height: '7px', borderRadius: '50%',
+                          background: '#ef4444', border: '1.5px solid white',
+                          display: 'block',
+                        }} />
+                      )}
+                    </button>
+                  )}
+
+                  {/* Envoyer */}
+                  <button
+                    onClick={sendReply}
+                    disabled={isSending || !replyText.trim()}
+                    className="ml-0.5 p-2 rounded-full bg-green-500 text-white hover:bg-green-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    {isSending ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
-
-              <button
-                onClick={sendReply}
-                disabled={isSending || !replyText.trim()}
-                className="p-2.5 rounded-md bg-green-500 text-white hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-              >
-                {isSending ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </button>
             </div>
           </div>
         </div>
