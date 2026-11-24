@@ -379,6 +379,10 @@ const startServer = async () => {
         setTimeout(runTarificationInstallmentReminders, 60_000);
         setInterval(runTarificationInstallmentReminders, 24 * 60 * 60 * 1000);
 
+        const { checkAppelPlanifieNotifications } = require('./utils/appelPlanifieNotifications');
+        setInterval(() => { void checkAppelPlanifieNotifications(); }, 60_000);
+        console.log('📞 Scheduler appels planifies actif (toutes les 60s)');
+
         if (String(process.env.DOCUMENTS_INTEGRITY_AUDIT_ENABLED || '').toLowerCase() === 'true') {
           const { runDocumentsIntegrityAudit } = require('./utils/documentsIntegrityAudit');
           const runAudit = () => {

@@ -325,6 +325,9 @@ router.post(
         dossier,
         notes,
         rappels,
+        type,
+        phone,
+        whatsappConvId,
       } = req.body;
 
       // Normaliser assignedTo en tableau (optionnel)
@@ -404,6 +407,9 @@ router.post(
         dossier: dossier || null,
         notes: notes || '',
         rappels: rappelsNormalized,
+        type: type === 'appel_planifie' ? 'appel_planifie' : 'normal',
+        phone: phone || null,
+        whatsappConvId: whatsappConvId || null,
       };
 
       // Ajouter assignedTo seulement s'il y a des utilisateurs assignés

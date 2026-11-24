@@ -1,6 +1,14 @@
 const mongoose = require('mongoose');
 
 const taskSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    enum: ['normal', 'appel_planifie'],
+    default: 'normal',
+  },
+  phone: { type: String, trim: true },
+  whatsappConvId: { type: mongoose.Schema.Types.ObjectId, ref: 'WhatsappConversation' },
+  appelNotifSent: { type: Boolean, default: false },
   titre: {
     type: String,
     required: false,

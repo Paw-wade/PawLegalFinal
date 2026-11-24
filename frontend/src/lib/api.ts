@@ -1044,6 +1044,9 @@ export const tasksAPI = {
     dossier?: string;
     notes?: string;
     rappels?: Array<{ triggerAt: string; canaux: string[] }>;
+    type?: string;
+    phone?: string;
+    whatsappConvId?: string;
   }) => {
     return api.post('/tasks', data);
   },

@@ -202,6 +202,10 @@ export default function AdminWhatsAppPage() {
   const [showDossierModal, setShowDossierModal] = useState(false);
   const [dossierForm, setDossierForm] = useState({ clientNom: '', clientPrenom: '', clientEmail: '', clientTelephone: '', titre: '', categorie: 'sejour_titres', description: '' });
   const [isCreatingDossier, setIsCreatingDossier] = useState(false);
+  const [showAppelModal, setShowAppelModal] = useState(false);
+  const [appelForm, setAppelForm] = useState({ date: '', heure: '', note: '' });
+  const [isCreatingAppel, setIsCreatingAppel] = useState(false);
+  const [convAppels, setConvAppels] = useState<any[]>([]);
   const quickActionsRef = useRef<HTMLDivElement>(null);
 
   const qrMenuRef = useRef<HTMLDivElement>(null);
@@ -240,10 +244,34 @@ export default function AdminWhatsAppPage() {
       });
     };
 
+    const notifiedAppels = new Set<string>();
+    const checkAppels = () => {
+      const now = Date.now();
+      convAppels.forEach((task: any) => {
+        if (!task?.dateEcheance) return;
+        const t = new Date(task.dateEcheance).getTime();
+        const diff = t - now;
+        const key = `appel|${task._id}|${task.dateEcheance}`;
+        // Fenetre : dans les 2 minutes qui precedent ou suivent l'heure prevue
+        if (diff <= 2 * 60_000 && diff >= -2 * 60_000 && !notifiedAppels.has(key)) {
+          notifiedAppels.add(key);
+          const label = task.titre || 'Appel planifie';
+          setToast({ message: `Appel prevu maintenant : ${label}`, type: 'info' });
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            new Notification(`Appel planifie - Ada Papers`, {
+              body: `${label}${task.phone ? ' - ' + task.phone : ''}`,
+              icon: '/favicon.ico',
+            });
+          }
+        }
+      });
+    };
+
     checkReminders();
-    const interval = setInterval(checkReminders, 30_000);
+    checkAppels();
+    const interval = setInterval(() => { checkReminders(); checkAppels(); }, 30_000);
     return () => clearInterval(interval);
-  }, [conversations]);
+  }, [conversations, convAppels]);
 
   // Verification et suivi de la permission microphone
   useEffect(() => {
@@ -370,6 +398,7 @@ export default function AdminWhatsAppPage() {
       setSelectedConv(res.data.conversation);
       setClientDossiers(res.data.clientDossiers || []);
       setIsRenamingContact(false);
+      fetchConvAppels(conv._id);
       if (conv.unreadAdmin > 0) {
         await whatsappAdminAPI.markRead(conv._id);
         setConversations((prev) =>
@@ -754,6 +783,53 @@ export default function AdminWhatsAppPage() {
     } finally {
       setIsCreatingDossier(false);
     }
+  }
+
+  function openAppelModal() {
+    if (!selectedConv) return;
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 30);
+    const dateStr = now.toISOString().slice(0, 10);
+    const heureStr = now.toTimeString().slice(0, 5);
+    setAppelForm({ date: dateStr, heure: heureStr, note: '' });
+    setShowAppelModal(true);
+    setShowQuickActions(false);
+  }
+
+  async function handleCreateAppel() {
+    if (!selectedConv || !appelForm.date || !appelForm.heure) return;
+    setIsCreatingAppel(true);
+    try {
+      const dateEcheance = new Date(`${appelForm.date}T${appelForm.heure}`).toISOString();
+      const name = getConvName(selectedConv) || selectedConv.phone;
+      const task = await tasksAPI.createTask({
+        titre: `Appel - ${name}`,
+        description: appelForm.note || undefined,
+        statut: 'a_faire',
+        priorite: 'haute',
+        assignedTo: session?.user?.id as string,
+        dateEcheance,
+        type: 'appel_planifie',
+        phone: selectedConv.phone,
+        whatsappConvId: selectedConv._id,
+        dossier: selectedConv.dossierId?._id || (typeof selectedConv.dossierId === 'string' ? selectedConv.dossierId : undefined),
+      });
+      setConvAppels((prev) => [...prev, task.data?.task || task.data?.data || task.data]);
+      setToast({ message: 'Appel planifie - rappel 1 minute avant', type: 'success' });
+      setShowAppelModal(false);
+    } catch (err: any) {
+      setToast({ message: err?.response?.data?.message || 'Erreur creation appel', type: 'error' });
+    } finally {
+      setIsCreatingAppel(false);
+    }
+  }
+
+  async function fetchConvAppels(convId: string) {
+    try {
+      const res = await tasksAPI.getAllTasks({ statut: 'a_faire' });
+      const all: any[] = res.data?.tasks || res.data?.data || [];
+      setConvAppels(all.filter((t: any) => t.type === 'appel_planifie' && String(t.whatsappConvId) === convId && t.statut !== 'termine' && t.statut !== 'annule'));
+    } catch { /* silencieux */ }
   }
 
   async function sendProactive() {
@@ -1396,6 +1472,10 @@ export default function AdminWhatsAppPage() {
                     background: '#ffffff', border: '1px solid #e5e7eb',
                     borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden',
                   }}>
+                    <button onClick={openAppelModal} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid #f3f4f6' }}>
+                      <Phone style={{ width: '0.9rem', height: '0.9rem', flexShrink: 0 }} />
+                      Planifier un appel
+                    </button>
                     <button onClick={openRdvModal} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: '#1d4ed8', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid #f3f4f6' }}>
                       <Calendar style={{ width: '0.9rem', height: '0.9rem', flexShrink: 0 }} />
                       Creer un rendez-vous
@@ -1453,6 +1533,10 @@ export default function AdminWhatsAppPage() {
                     background: '#ffffff', border: '1px solid #e5e7eb',
                     borderRadius: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', overflow: 'hidden',
                   }}>
+                    <button onClick={openAppelModal} style={{ width: '100%', textAlign: 'left', padding: '0.65rem 0.9rem', fontSize: '0.82rem', color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid #f3f4f6' }}>
+                      <Phone style={{ width: '0.9rem', height: '0.9rem', flexShrink: 0 }} />
+                      Planifier un appel
+                    </button>
                     <button onClick={openRdvModal} style={{ width: '100%', textAlign: 'left', padding: '0.65rem 0.9rem', fontSize: '0.82rem', color: '#1d4ed8', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid #f3f4f6' }}>
                       <Calendar style={{ width: '0.9rem', height: '0.9rem', flexShrink: 0 }} />
                       Creer un rendez-vous
@@ -1631,6 +1715,61 @@ export default function AdminWhatsAppPage() {
                 </div>
               );
             })()}
+
+            {/* ── Banniere appels planifies ── */}
+            {convAppels.length > 0 && convAppels.map((appel: any) => {
+              if (!appel?.dateEcheance) return null;
+              const appelDate = new Date(appel.dateEcheance);
+              const now = new Date();
+              const diffMs = appelDate.getTime() - now.getTime();
+              const overdue = diffMs < 0;
+              const soon = diffMs >= 0 && diffMs < 60 * 60_000;
+              const dateStr = appelDate.toLocaleString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+              const bg = overdue ? '#fef2f2' : soon ? '#fefce8' : '#f0fdf4';
+              const border = overdue ? '#dc2626' : soon ? '#f59e0b' : '#16a34a';
+              const color = overdue ? '#dc2626' : soon ? '#92400e' : '#166534';
+              return (
+                <div key={appel._id} style={{
+                  position: 'sticky', top: 0, zIndex: 19,
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  padding: '0.4rem 0.85rem',
+                  background: bg,
+                  borderBottom: `2px solid ${border}`,
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                }}>
+                  <Phone style={{ width: '0.8rem', height: '0.8rem', color: border, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color }}>
+                      {overdue ? 'Appel echu : ' : soon ? 'Appel imminent : ' : 'Appel planifie : '}
+                    </span>
+                    <span style={{ fontSize: '0.78rem', color }}>{dateStr}</span>
+                    {appel.description && (
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280', marginLeft: '0.4rem' }}>
+                        {appel.description}
+                      </span>
+                    )}
+                  </div>
+                  {appel.phone && (
+                    <a href={`tel:+${String(appel.phone).replace(/\D/g, '')}`} style={{ flexShrink: 0, background: '#16a34a', color: '#fff', border: 'none', cursor: 'pointer', padding: '0.2rem 0.5rem', borderRadius: '0.375rem', fontSize: '0.7rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem', textDecoration: 'none' }}>
+                      <Phone style={{ width: '0.65rem', height: '0.65rem' }} />
+                      Appeler
+                    </a>
+                  )}
+                  <button
+                    onClick={async () => {
+                      try {
+                        await tasksAPI.updateTask(appel._id, { statut: 'termine' });
+                        setConvAppels((prev) => prev.filter((a: any) => a._id !== appel._id));
+                      } catch { /* silencieux */ }
+                    }}
+                    title="Marquer comme effectue"
+                    style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', color, display: 'flex', borderRadius: '0.25rem' }}
+                  >
+                    <Check style={{ width: '0.75rem', height: '0.75rem' }} />
+                  </button>
+                </div>
+              );
+            })}
 
             {/* Messages epingles */}
             {(() => {
@@ -2257,6 +2396,51 @@ export default function AdminWhatsAppPage() {
               >
                 {isSending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 Envoyer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal : Planifier un appel ── */}
+      {showAppelModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div style={{ background: '#ffffff' }} className="rounded-lg shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-base flex items-center gap-2 text-gray-900">
+                <Phone className="w-4 h-4 text-green-600" />
+                Planifier un appel
+              </h2>
+              <button onClick={() => setShowAppelModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+            </div>
+            {selectedConv && (
+              <p className="text-xs text-gray-500 mb-3">
+                Contact : <span className="font-medium text-gray-700">{getConvName(selectedConv) || selectedConv.phone}</span>
+                {selectedConv.phone && <span className="ml-1 text-gray-400">({formatPhone(selectedConv.phone)})</span>}
+              </p>
+            )}
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Date *</label>
+                  <input type="date" value={appelForm.date} onChange={e => setAppelForm(f => ({ ...f, date: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-green-400 text-gray-900" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Heure *</label>
+                  <input type="time" value={appelForm.heure} onChange={e => setAppelForm(f => ({ ...f, heure: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-green-400 text-gray-900" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Note <span className="text-gray-400 font-normal">(optionnel)</span></label>
+                <input type="text" value={appelForm.note} onChange={e => setAppelForm(f => ({ ...f, note: e.target.value }))} placeholder="Ex: Dossier OQTF, pieces manquantes..." className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-green-400 text-gray-900" />
+              </div>
+              <p className="text-xs text-gray-400">Une notification push et in-app sera envoyee au moment de l'appel.</p>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowAppelModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700">Annuler</button>
+              <button onClick={handleCreateAppel} disabled={isCreatingAppel || !appelForm.date || !appelForm.heure} className="px-4 py-2 text-sm text-white rounded-md disabled:opacity-50 flex items-center gap-2" style={{ background: '#16a34a' }}>
+                {isCreatingAppel ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />}
+                Planifier
               </button>
             </div>
           </div>

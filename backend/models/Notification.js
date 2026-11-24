@@ -45,6 +45,7 @@ const notificationSchema = new mongoose.Schema({
       'tarification_prestation_paid',
       'calendar_rappel',
       'parrainage_bnp',
+      'appel_planifie',
       'other'
     ]
   },
