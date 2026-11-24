@@ -64,9 +64,9 @@ function menuPrincipal(prenom) {
 Je suis votre assistant juridique. Comment puis-je vous aider ?
 
 1️⃣  Prendre un rendez-vous
-2️⃣  Parler a un conseiller
+2️⃣  Faire une demande
 3️⃣  Mes dossiers
-4️⃣  Suivi de mon dossier
+4️⃣  Parler a un conseiller
 
 Ecrivez *1*, *2*, *3* ou *4* pour choisir.`;
   }
@@ -75,10 +75,44 @@ Ecrivez *1*, *2*, *3* ou *4* pour choisir.`;
 Je suis votre assistant juridique. Comment puis-je vous aider ?
 
 1️⃣  Prendre un rendez-vous
-2️⃣  Parler a un conseiller
+2️⃣  Faire une demande
+3️⃣  Parler a un conseiller
 
-Ecrivez *1* ou *2* pour choisir.`;
+Ecrivez *1*, *2* ou *3* pour choisir.`;
 }
+
+const DEMANDE_MENU = `Quelle est votre situation ?
+
+*Droit des etrangers - Accompagnement :*
+1️⃣  Titre de sejour (1re demande, renouvellement, changement)
+2️⃣  Visa ou carte de resident
+3️⃣  Nationalite francaise
+4️⃣  Regroupement familial
+
+*Recours :*
+5️⃣  OQTF (obligation de quitter le territoire)
+6️⃣  Refus de titre de sejour ou de visa
+7️⃣  Refus d'asile (CNDA)
+
+*Creation d'entreprise :*
+8️⃣  Societe / entreprise en France
+9️⃣  Societe / entreprise au Senegal
+
+0️⃣  Retour au menu principal
+
+Ecrivez le numero de votre choix.`;
+
+const DEMANDE_REPONSES = {
+  '1': { label: 'titre de sejour', detail: 'premiere demande, renouvellement ou changement de statut' },
+  '2': { label: 'visa ou carte de resident', detail: 'visa long sejour ou carte de resident 10 ans' },
+  '3': { label: 'nationalite francaise', detail: 'acquisition de la nationalite par naturalisation ou mariage' },
+  '4': { label: 'regroupement familial', detail: 'faire venir vos proches en France' },
+  '5': { label: 'contestation d\'OQTF', detail: 'recours contre une obligation de quitter le territoire' },
+  '6': { label: 'recours refus de titre ou de visa', detail: 'contester un refus administratif devant le tribunal' },
+  '7': { label: 'recours refus d\'asile (CNDA)', detail: 'appel aupres de la Cour nationale du droit d\'asile' },
+  '8': { label: 'creation de societe en France', detail: 'SARL, SAS, SCI ou auto-entrepreneur' },
+  '9': { label: 'creation de societe au Senegal', detail: 'SARL, SUARL ou SAS au Senegal' },
+};
 
 const FAQ_MENU = `Sur quel sujet souhaitez-vous des informations ?
 
@@ -235,6 +269,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
 
   switch (conv.state) {
     case 'menu': {
+      // Option 1 : RDV
       if (text === '1') {
         conv.rdv = {};
         if (!prenom) {
@@ -248,24 +283,47 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         await conv.save();
         return `Pour quel motif souhaitez-vous un rendez-vous, *${prenom}* ?\n\n1️⃣  OQTF\n2️⃣  Visa refuse\n3️⃣  Renouvellement titre de sejour\n4️⃣  Premiere demande de titre\n5️⃣  Regroupement familial\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
       }
+      // Option 2 : Faire une demande
       if (text === '2') {
-        if (!prenom) {
-          conv.state = 'contact_name';
-          await conv.save();
-          return `Pour beneficier de l'accompagnement personnalise d'Ada Papers, nous vous recommandons de creer votre compte sur *ada-papers.com*.\n\nCela vous permettra de suivre vos dossiers et d'etre reconnu automatiquement.\n\nSi vous souhaitez quand meme parler a un conseiller, tapez votre *prenom et nom*.`;
+        conv.state = 'demande_menu';
+        await conv.save();
+        return DEMANDE_MENU;
+      }
+      // Option 3 : Mes dossiers (utilisateur reconnu) OU Parler a un conseiller (visiteur)
+      if (text === '3') {
+        if (prenom) {
+          return await afficherDossiers(conv, user);
         }
+        conv.state = 'contact_name';
+        await conv.save();
+        return `Pour beneficier de l'accompagnement personnalise d'Ada Papers, nous vous recommandons de creer votre compte sur *ada-papers.com*.\n\nCela vous permettra de suivre vos dossiers et d'etre reconnu automatiquement.\n\nSi vous souhaitez quand meme parler a un conseiller, tapez votre *prenom et nom*.`;
+      }
+      // Option 4 : Parler a un conseiller (utilisateur reconnu uniquement)
+      if (text === '4' && prenom) {
         await enregistrerContactWA(conv.phone, `${user.firstName} ${user.lastName || ''}`.trim());
         conv.state = 'menu';
         await conv.save();
         return `Merci *${prenom}* ! Un conseiller vous contactera dans les *24h*.\n\nTapez *menu* pour revenir au menu principal.`;
       }
-      if (text === '3' && prenom) {
-        return await afficherDossiers(conv, user);
+      return `Ecrivez *1*, *2*${prenom ? ', *3* ou *4*' : ' ou *3*'} pour choisir.\n\n${menuPrincipal(prenom)}`;
+    }
+
+    case 'demande_menu': {
+      if (text === '0') {
+        conv.state = 'menu';
+        await conv.save();
+        return menuPrincipal(prenom);
       }
-      if (text === '4' && prenom) {
-        return await suiviDossier(conv, user);
+      const demande = DEMANDE_REPONSES[text];
+      if (!demande) {
+        return `Ecrivez un numero entre *1* et *9*, ou *0* pour revenir.\n\n${DEMANDE_MENU}`;
       }
-      return `Ecrivez *1* ou *2*${prenom ? ', *3* ou *4*' : ''} pour choisir.\n\n${menuPrincipal(prenom)}`;
+      conv.state = 'menu';
+      await conv.save();
+      const compteMsg = !prenom
+        ? `\n\n💡 _Creez votre compte sur *ada-papers.com* pour suivre l'avancement de votre dossier en temps reel._`
+        : '';
+      return `Pour votre demande de *${demande.label}* (${demande.detail}), rendez-vous sur :\n\n👉 *ada-papers.com/nouvelle-demande*\n\nRemplissez le formulaire en ligne. Notre equipe traitera votre dossier sous *48h* et vous recontactera.${compteMsg}\n\nTapez *menu* pour revenir au menu principal.`;
     }
 
     case 'rdv_name': {
@@ -389,35 +447,6 @@ async function afficherDossiers(conv, user) {
   } catch (err) {
     console.error('[WhatsApp] Erreur affichage dossiers:', err.message);
     return `Impossible de charger vos dossiers pour l'instant. Reessayez plus tard.\n\nTapez *menu* pour revenir au menu principal.`;
-  }
-}
-
-async function suiviDossier(conv, user) {
-  if (!user) {
-    return `Votre compte n'est pas encore lie a ce numero WhatsApp. Inscrivez-vous sur Ada Papers pour suivre vos dossiers.\n\nTapez *menu* pour revenir au menu principal.`;
-  }
-  try {
-    const Dossier = require('../models/Dossier');
-    const dossier = await Dossier.findOne({ user: user._id })
-      .select('numero titre statut categorie createdAt updatedAt')
-      .sort({ updatedAt: -1 })
-      .lean();
-
-    if (!dossier) {
-      return `Vous n'avez pas encore de dossier ouvert chez Ada Papers.\n\nTapez *menu* pour revenir au menu principal.`;
-    }
-
-    const statutLabel = STATUT_DOSSIER_LABELS[dossier.statut] || dossier.statut;
-    const num = dossier.numero ? `N° ${dossier.numero}` : 'Dossier';
-    const titre = dossier.titre || dossier.categorie || 'Dossier juridique';
-    const dateMAJ = dossier.updatedAt
-      ? new Date(dossier.updatedAt).toLocaleDateString('fr-FR')
-      : '—';
-
-    return `📋 *Suivi de votre dossier*\n\n*${num}*\n${titre}\n\nStatut actuel : *${statutLabel}*\nDerniere mise a jour : ${dateMAJ}\n\nPour plus de details, connectez-vous sur ada-papers.com\n\nTapez *menu* pour revenir au menu principal.`;
-  } catch (err) {
-    console.error('[WhatsApp] Erreur suivi dossier:', err.message);
-    return `Impossible de charger votre dossier pour l'instant. Reessayez plus tard.\n\nTapez *menu* pour revenir au menu principal.`;
   }
 }
 
