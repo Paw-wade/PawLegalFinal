@@ -17,12 +17,13 @@ async function handleVerificationCode(from, code) {
 
   const phone = normalizeWaPhone(from);
 
-  const otp = await OTP.findOne({ phone, verified: false }).select('+waToken');
+  const otp = await OTP.findOne({ phone, verified: false }).select('+waToken +resetToken');
   if (!otp) return null;
 
   if (new Date() > otp.expiresAt) {
     await OTP.deleteOne({ _id: otp._id });
-    return 'Ce code a expire. Recommencez l\'inscription sur Ada Papers.';
+    const ctx = otp.purpose === 'reset' ? 'reinitialisation' : 'inscription';
+    return `Ce code a expire. Recommencez la ${ctx} sur Ada Papers.`;
   }
 
   if (otp.attempts >= 5) {
@@ -36,6 +37,28 @@ async function handleVerificationCode(from, code) {
     return `Code incorrect (${restants} essai${restants > 1 ? 's' : ''} restant${restants > 1 ? 's' : ''}).`;
   }
 
+  // Flux reinitialisation de mot de passe
+  if (otp.purpose === 'reset') {
+    const user = await User.findOne({ phone });
+    if (!user) {
+      await OTP.deleteOne({ _id: otp._id });
+      return 'Aucun compte associe a ce numero. Inscrivez-vous sur Ada Papers.';
+    }
+    const resetToken = jwt.sign(
+      { id: user._id.toString(), purpose: 'reset' },
+      process.env.JWT_SECRET || 'your-secret-key-here',
+      { expiresIn: '15m' }
+    );
+    otp.waVerified = true;
+    otp.resetToken = resetToken;
+    otp.verified = true;
+    otp.expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    await otp.save();
+    console.log(`[WhatsApp] Reset mot de passe verifie via WhatsApp pour ${phone}`);
+    return `Votre identite est confirmee ! Retournez sur Ada Papers pour choisir votre nouveau mot de passe.`;
+  }
+
+  // Flux inscription (verify)
   const existingByEmail = otp.email
     ? await User.findOne({ email: otp.email })
     : null;
@@ -84,6 +107,17 @@ async function handleVerificationCode(from, code) {
   otp.verified = true;
   otp.expiresAt = new Date(Date.now() + 5 * 60 * 1000);
   await otp.save();
+
+  // Lier le compte a la conversation WhatsApp
+  try {
+    const WhatsappConversation = require('../models/WhatsappConversation');
+    await WhatsappConversation.findOneAndUpdate(
+      { phone },
+      { clientId: user._id, contactName: `${user.firstName || ''} ${user.lastName || ''}`.trim() }
+    );
+  } catch (e) {
+    console.warn('[WhatsApp] Impossible de lier clientId a la conversation:', e.message);
+  }
 
   console.log(`[WhatsApp] Compte verifie via WhatsApp pour ${phone}`);
   return `Votre compte Ada Papers est active ! Retournez sur le site, vous etes maintenant connecte.`;

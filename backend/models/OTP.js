@@ -49,6 +49,15 @@ const otpSchema = new mongoose.Schema({
     type: String,
     select: false
   },
+  purpose: {
+    type: String,
+    enum: ['verify', 'reset'],
+    default: 'verify'
+  },
+  resetToken: {
+    type: String,
+    select: false
+  },
   expiresAt: {
     type: Date,
     required: true

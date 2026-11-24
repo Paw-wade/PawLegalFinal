@@ -274,6 +274,99 @@ router.get('/wa-status', async (req, res) => {
   }
 });
 
+// @route   POST /api/otp/send-reset
+// @desc    Reinitialisation de mot de passe via WhatsApp
+// @access  Public
+router.post(
+  '/send-reset',
+  [body('phone').trim().notEmpty().withMessage('Le numero de telephone est requis')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, message: errors.array()[0]?.msg });
+      }
+
+      const { formatPhoneNumber } = require('../sendSMS');
+      const { phone } = req.body;
+      const formattedPhone = formatPhoneNumber(phone);
+      if (!formattedPhone) {
+        return res.status(400).json({ success: false, message: 'Numero de telephone invalide' });
+      }
+
+      const botPhone = process.env.WHATSAPP_BOT_PHONE;
+      if (!botPhone) {
+        return res.status(503).json({ success: false, message: 'WhatsApp non configure.' });
+      }
+
+      const user = await User.findOne({ phone: formattedPhone });
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'Aucun compte associe a ce numero de telephone.',
+        });
+      }
+
+      const code = generateOTP();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+      await OTP.deleteMany({ phone: formattedPhone });
+      await OTP.create({
+        phone: formattedPhone,
+        code,
+        firstName: user.firstName || 'Utilisateur',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        expiresAt,
+        channel: 'whatsapp',
+        purpose: 'reset',
+        attempts: 0,
+      });
+
+      const waLink = buildWaLink(code);
+      console.log(`[otp/send-reset] Code reset WhatsApp genere pour ${formattedPhone}`);
+      return res.json({
+        success: true,
+        channel: 'whatsapp',
+        waLink,
+        waPhone: botPhone,
+        expiresAt: expiresAt.toISOString(),
+      });
+    } catch (error) {
+      console.error('[otp/send-reset] Erreur:', error);
+      return res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+  }
+);
+
+// @route   GET /api/otp/wa-reset-status
+// @desc    Polling : verifier si le code reset WhatsApp a ete valide
+// @access  Public
+router.get('/wa-reset-status', async (req, res) => {
+  try {
+    const { phone } = req.query;
+    if (!phone) return res.status(400).json({ success: false, message: 'Parametre phone requis' });
+
+    const { formatPhoneNumber } = require('../sendSMS');
+    const formattedPhone = formatPhoneNumber(phone);
+    if (!formattedPhone) {
+      return res.status(400).json({ success: false, message: 'Numero invalide' });
+    }
+
+    const otp = await OTP.findOne({ phone: formattedPhone, purpose: 'reset' }).select('+resetToken');
+    if (!otp || !otp.waVerified || !otp.resetToken) {
+      return res.json({ verified: false });
+    }
+
+    const { resetToken } = otp;
+    await OTP.deleteOne({ _id: otp._id });
+    return res.json({ verified: true, resetToken });
+  } catch (error) {
+    console.error('[otp/wa-reset-status] Erreur:', error);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // @route   POST /api/otp/whatsapp-link-code
 // @desc    Compte existant sans telephone verifie : genere un code pour lier le numero via WhatsApp
 // @access  Prive (utilisateur connecte)

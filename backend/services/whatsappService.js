@@ -45,15 +45,30 @@ async function sendProactiveMessage(phone, text) {
 // Menus et réponses FAQ
 // ─────────────────────────────────────────────
 
-const MENU_PRINCIPAL = `Bonjour et bienvenue chez *Ada Papers* 👋
+const STATUT_DOSSIER_LABELS = {
+  recu: 'Recu',
+  en_cours: 'En cours de traitement',
+  en_attente_documents: 'En attente de documents',
+  en_attente: 'En attente',
+  traite: 'Traite',
+  clos: 'Clos',
+  refuse: 'Refuse',
+  archive: 'Archive',
+};
+
+function menuPrincipal(prenom) {
+  const salut = prenom ? `Bonjour *${prenom}* 👋` : `Bonjour et bienvenue chez *Ada Papers* 👋`;
+  const dossierOption = prenom ? `\n4️⃣  Mes dossiers` : '';
+  return `${salut}
 
 Je suis votre assistant juridique. Comment puis-je vous aider ?
 
-1️⃣  Questions fréquentes (OQTF, visa, titre de séjour)
+1️⃣  Questions frequentes (OQTF, visa, titre de sejour)
 2️⃣  Prendre un rendez-vous
-3️⃣  Parler à un conseiller
+3️⃣  Parler a un conseiller${dossierOption}
 
-Répondez avec le numéro de votre choix.`;
+Repondez avec le numero de votre choix.`;
+}
 
 const FAQ_MENU = `Sur quel sujet souhaitez-vous des informations ?
 
@@ -155,30 +170,57 @@ const MOTIFS_LABELS = {
 // ─────────────────────────────────────────────
 
 /**
+ * Charge l'utilisateur lie a la conversation (par clientId ou par phone en fallback).
+ */
+async function resolveUser(conv) {
+  try {
+    const User = require('../models/User');
+    if (conv.clientId) {
+      return await User.findById(conv.clientId).select('firstName lastName phone').lean();
+    }
+    // Fallback : recherche par numero si la conversation n'est pas encore liee
+    const user = await User.findOne({ phone: conv.phone }).select('_id firstName lastName phone').lean();
+    if (user) {
+      // Lier pour les prochains messages
+      conv.clientId = user._id;
+      conv.contactName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+      await conv.save();
+    }
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Traite un message entrant et met a jour l'etat de la conversation.
- * Retourne le texte de réponse à envoyer.
+ * Retourne le texte de réponse a envoyer.
  */
 async function handleIncomingMessage(conv, incomingText, messageType) {
-  // Pour les types médias, accusé de réception simple
+  // Pour les types medias, accuse de reception simple
   if (messageType && messageType !== 'text') {
     const typeLabels = {
       image: 'photo',
       document: 'document',
       audio: 'message vocal',
-      video: 'vidéo',
+      video: 'video',
       sticker: 'sticker',
     };
     const label = typeLabels[messageType] || 'fichier';
-    return `Merci, nous avons bien reçu votre ${label}. Un conseiller le consultera prochainement.\n\nTapez *menu* pour revenir au menu principal.`;
+    return `Merci, nous avons bien recu votre ${label}. Un conseiller le consultera prochainement.\n\nTapez *menu* pour revenir au menu principal.`;
   }
 
   const text = (incomingText || '').trim().toLowerCase();
+
+  // Identifier l'utilisateur lie a ce numero
+  const user = await resolveUser(conv);
+  const prenom = user?.firstName || null;
 
   if (text === 'menu' || text === '0') {
     conv.state = 'menu';
     conv.rdv = {};
     await conv.save();
-    return MENU_PRINCIPAL;
+    return menuPrincipal(prenom);
   }
 
   switch (conv.state) {
@@ -192,14 +234,36 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         conv.state = 'rdv_name';
         conv.rdv = {};
         await conv.save();
-        return `Parfait ! Pour prendre un rendez-vous, j'ai besoin de quelques informations.\n\n*Quel est votre prénom ?*`;
+        if (prenom) {
+          conv.rdv.prenom = prenom;
+          conv.state = 'rdv_motif';
+          conv.markModified('rdv');
+          await conv.save();
+          return `Pour quel motif souhaitez-vous un rendez-vous, *${prenom}* ?\n
+1️⃣  OQTF
+2️⃣  Visa refuse
+3️⃣  Renouvellement titre de sejour
+4️⃣  Premiere demande de titre
+5️⃣  Regroupement familial
+6️⃣  Autre`;
+        }
+        return `Parfait ! Pour prendre un rendez-vous, j'ai besoin de quelques informations.\n\n*Quel est votre prenom ?*`;
       }
       if (text === '3') {
         conv.state = 'contact_name';
         await conv.save();
-        return `Un de nos conseillers vous contactera dans les 24h.\n\n*Quel est votre prénom et nom ?*`;
+        if (prenom) {
+          await enregistrerContactWA(conv.phone, `${user.firstName} ${user.lastName}`);
+          conv.state = 'menu';
+          await conv.save();
+          return `Merci *${prenom}* ! Un conseiller vous contactera dans les *24h*.\n\nTapez *menu* pour revenir au menu principal.`;
+        }
+        return `Un de nos conseillers vous contactera dans les 24h.\n\n*Quel est votre prenom et nom ?*`;
       }
-      return `Je n'ai pas compris votre réponse. Veuillez taper *1*, *2* ou *3*.\n\n${MENU_PRINCIPAL}`;
+      if (text === '4' && prenom) {
+        return await afficherDossiers(conv, user);
+      }
+      return `Je n'ai pas compris votre reponse. Veuillez taper *1*, *2*, *3*${prenom ? ' ou *4*' : ''}.\n\n${menuPrincipal(prenom)}`;
     }
 
     case 'faq_menu': {
@@ -265,7 +329,7 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
         conv.state = 'menu';
         conv.rdv = {};
         await conv.save();
-        return `Votre demande a été annulée. Comment puis-je vous aider ?\n\n${MENU_PRINCIPAL}`;
+        return `Votre demande a ete annulee. Comment puis-je vous aider ?\n\n${menuPrincipal(prenom)}`;
       }
       if (text === 'oui') {
         await enregistrerDemandeRDV(conv);
@@ -284,17 +348,57 @@ Tapez *menu* à tout moment pour revenir au menu principal.`;
 
     case 'contact_name': {
       const nom = (incomingText || '').trim();
-      if (nom.length < 2) return `Veuillez indiquer votre prénom et nom.`;
+      if (nom.length < 2) return `Veuillez indiquer votre prenom et nom.`;
       await enregistrerContactWA(conv.phone, nom);
       conv.state = 'menu';
       await conv.save();
       return `Merci *${nom}* ! Un conseiller vous contactera dans les *24h*.\n\nTapez *menu* pour revenir au menu principal.`;
     }
 
+    case 'mes_dossiers': {
+      conv.state = 'menu';
+      await conv.save();
+      return await afficherDossiers(conv, user);
+    }
+
     default:
       conv.state = 'menu';
       await conv.save();
-      return MENU_PRINCIPAL;
+      return menuPrincipal(prenom);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Dossiers client
+// ─────────────────────────────────────────────
+
+async function afficherDossiers(conv, user) {
+  if (!user) {
+    return `Votre compte n'est pas encore lie a ce numero WhatsApp. Inscrivez-vous sur Ada Papers pour acceder a vos dossiers.\n\nTapez *menu* pour revenir au menu principal.`;
+  }
+  try {
+    const Dossier = require('../models/Dossier');
+    const dossiers = await Dossier.find({ user: user._id })
+      .select('numero titre statut categorie createdAt')
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    if (!dossiers || dossiers.length === 0) {
+      return `Vous n'avez pas encore de dossier ouvert chez Ada Papers.\n\nTapez *menu* pour revenir au menu principal.`;
+    }
+
+    const lignes = dossiers.map((d, i) => {
+      const statutLabel = STATUT_DOSSIER_LABELS[d.statut] || d.statut;
+      const num = d.numero ? `N° ${d.numero}` : `Dossier ${i + 1}`;
+      const titre = d.titre || d.categorie || 'Dossier';
+      return `${i + 1}. *${num}* - ${titre}\n   Statut : _${statutLabel}_`;
+    });
+
+    return `📂 *Vos dossiers Ada Papers*\n\n${lignes.join('\n\n')}\n\nPour plus de details, connectez-vous sur ada-papers.com\n\nTapez *menu* pour revenir au menu principal.`;
+  } catch (err) {
+    console.error('[WhatsApp] Erreur affichage dossiers:', err.message);
+    return `Impossible de charger vos dossiers pour l'instant. Reessayez plus tard.\n\nTapez *menu* pour revenir au menu principal.`;
   }
 }
 

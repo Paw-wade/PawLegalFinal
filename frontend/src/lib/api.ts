@@ -259,6 +259,11 @@ api.interceptors.request.use(
           url.includes('/otp/verify') ||
           url.includes('/otp/send-sms') ||
           url.includes('/otp/wa-status') ||
+          url.includes('/otp/send-reset') ||
+          url.includes('/otp/wa-reset-status') ||
+          url.includes('/auth/reset-password-whatsapp') ||
+          url.includes('/auth/reset-password') ||
+          url.includes('/auth/forgot-password') ||
           url.includes('/auth/register') ||
           url.includes('/auth/login');
 
@@ -465,6 +470,9 @@ export const authAPI = {
 
   resetPassword: (data: { token: string; password: string }) =>
     api.post('/auth/reset-password', data),
+
+  resetPasswordWhatsapp: (data: { resetToken: string; password: string }) =>
+    api.post('/auth/reset-password-whatsapp', data),
   
   getMe: () =>
     api.get('/auth/me'),
@@ -495,6 +503,12 @@ export const otpAPI = {
 
   waStatus: (phone: string) =>
     api.get(`/otp/wa-status?phone=${encodeURIComponent(phone)}`),
+
+  sendReset: (data: { phone: string }) =>
+    api.post('/otp/send-reset', data),
+
+  waResetStatus: (phone: string) =>
+    api.get(`/otp/wa-reset-status?phone=${encodeURIComponent(phone)}`),
 
   whatsappLinkCode: () =>
     api.post('/otp/whatsapp-link-code'),

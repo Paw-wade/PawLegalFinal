@@ -30,6 +30,7 @@ const whatsappConversationSchema = new mongoose.Schema(
         'rdv_note',
         'rdv_confirm',
         'contact_name',
+        'mes_dossiers',
       ],
       default: 'menu',
     },

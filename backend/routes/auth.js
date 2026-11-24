@@ -1246,6 +1246,54 @@ router.get('/me', protect, async (req, res) => {
   }
 });
 
+// @route   POST /api/auth/reset-password-whatsapp
+// @desc    Reinitialiser le mot de passe apres verification WhatsApp
+// @access  Public
+router.post(
+  '/reset-password-whatsapp',
+  [
+    body('resetToken').notEmpty().withMessage('Token de reinitialisation manquant'),
+    body('password').isLength({ min: 8 }).withMessage('Le mot de passe doit contenir au moins 8 caracteres'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, message: errors.array()[0]?.msg });
+      }
+
+      const { resetToken, password } = req.body;
+
+      let decoded;
+      try {
+        decoded = jwt.verify(resetToken, process.env.JWT_SECRET || 'your-secret-key-here');
+      } catch {
+        return res.status(400).json({ success: false, message: 'Token invalide ou expire. Recommencez la procedure.' });
+      }
+
+      if (decoded.purpose !== 'reset') {
+        return res.status(400).json({ success: false, message: 'Token invalide.' });
+      }
+
+      const user = await User.findById(decoded.id);
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'Utilisateur introuvable.' });
+      }
+
+      user.password = password;
+      user.needsPasswordSetup = false;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+
+      return res.json({ success: true, message: 'Mot de passe reinitialise avec succes.' });
+    } catch (error) {
+      console.error('[auth/reset-password-whatsapp] Erreur:', error);
+      return res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+  }
+);
+
 module.exports = router;
 
 
