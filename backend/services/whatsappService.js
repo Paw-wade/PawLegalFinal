@@ -393,7 +393,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         if (!prenom) {
           conv.state = 'rdv_name';
           await conv.save();
-          return `Pour beneficier de l'accompagnement personnalise d'Ada Papers, nous vous recommandons de creer votre compte sur *ada-papers.com*.\n\nCela vous permettra de suivre vos dossiers et d'etre reconnu automatiquement.\n\nSi vous souhaitez quand meme prendre un rendez-vous, tapez votre *prenom* pour commencer.`;
+          return `Pour beneficier de l'accompagnement personnalise d'Ada Papers, nous vous recommandons de creer votre compte sur *adapapers.fr*.\n\nCela vous permettra de suivre vos dossiers et d'etre reconnu automatiquement.\n\nSi vous souhaitez quand meme prendre un rendez-vous, tapez votre *prenom* pour commencer.`;
         }
         conv.rdv.prenom = prenom;
         conv.state = 'rdv_motif';
@@ -414,7 +414,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         }
         conv.state = 'contact_name';
         await conv.save();
-        return `Pour beneficier de l'accompagnement personnalise d'Ada Papers, nous vous recommandons de creer votre compte sur *ada-papers.com*.\n\nCela vous permettra de suivre vos dossiers et d'etre reconnu automatiquement.\n\nSi vous souhaitez quand meme parler a un conseiller, tapez votre *prenom et nom*.`;
+        return `Pour beneficier de l'accompagnement personnalise d'Ada Papers, nous vous recommandons de creer votre compte sur *adapapers.fr*.\n\nCela vous permettra de suivre vos dossiers et d'etre reconnu automatiquement.\n\nSi vous souhaitez quand meme parler a un conseiller, tapez votre *prenom et nom*.`;
       }
       // Option 4 : Parler a un conseiller (utilisateur reconnu uniquement)
       if (text === '4' && prenom) {
@@ -444,9 +444,9 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       conv.state = 'menu';
       await conv.save();
       const compteMsg = !prenom
-        ? `\n\n💡 _Creez votre compte sur *ada-papers.com* pour suivre l'avancement de votre dossier en temps reel._`
+        ? `\n\n💡 _Creez votre compte sur *adapapers.fr* pour suivre l'avancement de votre dossier en temps reel._`
         : '';
-      return `Pour votre demande de *${demande.label}* (${demande.detail}), rendez-vous sur :\n\n👉 *ada-papers.com/nouvelle-demande*\n\nRemplissez le formulaire en ligne. Notre equipe traitera votre dossier sous *48h* et vous recontactera.${compteMsg}\n\nTapez *menu* pour revenir au menu principal.`;
+      return `Pour votre demande de *${demande.label}* (${demande.detail}), rendez-vous sur :\n\n👉 *adapapers.fr/nouvelle-demande*\n\nRemplissez le formulaire en ligne. Notre equipe traitera votre dossier sous *48h* et vous recontactera.${compteMsg}\n\nTapez *menu* pour revenir au menu principal.`;
     }
 
     case 'titre_sejour_menu': {
@@ -462,9 +462,9 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       conv.state = 'menu';
       await conv.save();
       const compteMsg2 = !prenom
-        ? `\n\n💡 _Creez votre compte sur *ada-papers.com* pour suivre l'avancement de votre dossier en temps reel._`
+        ? `\n\n💡 _Creez votre compte sur *adapapers.fr* pour suivre l'avancement de votre dossier en temps reel._`
         : '';
-      return `Pour votre *${titreDemande.label}* (${titreDemande.detail}), rendez-vous sur :\n\n👉 *ada-papers.com/nouvelle-demande*\n\nRemplissez le formulaire en ligne. Notre equipe traitera votre dossier sous *48h* et vous recontactera.${compteMsg2}\n\nTapez *menu* pour revenir au menu principal.`;
+      return `Pour votre *${titreDemande.label}* (${titreDemande.detail}), rendez-vous sur :\n\n👉 *adapapers.fr/nouvelle-demande*\n\nRemplissez le formulaire en ligne. Notre equipe traitera votre dossier sous *48h* et vous recontactera.${compteMsg2}\n\nTapez *menu* pour revenir au menu principal.`;
     }
 
     case 'rdv_name': {
@@ -612,7 +612,7 @@ async function afficherDossiers(conv, user) {
       return `${i + 1}. *${num}* - ${titre}\n   Statut : _${statutLabel}_`;
     });
 
-    return `📂 *Vos dossiers Ada Papers*\n\n${lignes.join('\n\n')}\n\nPour plus de details, connectez-vous sur ada-papers.com\n\nTapez *menu* pour revenir au menu principal.`;
+    return `📂 *Vos dossiers Ada Papers*\n\n${lignes.join('\n\n')}\n\nPour plus de details, connectez-vous sur adapapers.fr\n\nTapez *menu* pour revenir au menu principal.`;
   } catch (err) {
     console.error('[WhatsApp] Erreur affichage dossiers:', err.message);
     return `Impossible de charger vos dossiers pour l'instant. Reessayez plus tard.\n\nTapez *menu* pour revenir au menu principal.`;
