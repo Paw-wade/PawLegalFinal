@@ -1,11 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import axios from 'axios';
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
+import api from '@/lib/api';
 
 const STANDARD_STATUTS = [
   { value: 'recu', label: 'Recu' },
@@ -67,8 +63,6 @@ const emptyAction = (): Action => ({
 const VARS_HELP = '{{prenom}}, {{dossier_titre}}, {{statut_label}}, {{dossier_numero}}';
 
 export default function AutomationsPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -81,24 +75,17 @@ export default function AutomationsPage() {
   const [formActif, setFormActif] = useState(true);
   const [formActions, setFormActions] = useState<Action[]>([emptyAction()]);
 
-  useEffect(() => {
-    if (status === 'unauthenticated') router.replace('/admin/login');
-  }, [status, router]);
-
   const fetchRules = useCallback(async () => {
-    if (!session?.accessToken) return;
     setLoading(true);
     try {
-      const { data } = await axios.get(`${API}/automations`, {
-        headers: { Authorization: `Bearer ${session.accessToken}` },
-      });
+      const { data } = await api.get('/automations');
       setRules(data);
     } catch {
       setError('Impossible de charger les regles.');
     } finally {
       setLoading(false);
     }
-  }, [session?.accessToken]);
+  }, []);
 
   useEffect(() => { fetchRules(); }, [fetchRules]);
 
@@ -158,13 +145,9 @@ export default function AutomationsPage() {
     try {
       const payload = { statutDeclencheur: declencheur, actions: formActions, actif: formActif };
       if (editingId) {
-        await axios.put(`${API}/automations/${editingId}`, payload, {
-          headers: { Authorization: `Bearer ${session?.accessToken}` },
-        });
+        await api.put(`/automations/${editingId}`, payload);
       } else {
-        await axios.post(`${API}/automations`, payload, {
-          headers: { Authorization: `Bearer ${session?.accessToken}` },
-        });
+        await api.post('/automations', payload);
       }
       closeForm();
       await fetchRules();
@@ -177,9 +160,7 @@ export default function AutomationsPage() {
 
   async function toggleActif(rule: Rule) {
     try {
-      await axios.put(`${API}/automations/${rule._id}`, { actif: !rule.actif }, {
-        headers: { Authorization: `Bearer ${session?.accessToken}` },
-      });
+      await api.put(`/automations/${rule._id}`, { actif: !rule.actif });
       await fetchRules();
     } catch {
       setError('Impossible de modifier la regle.');
@@ -189,16 +170,14 @@ export default function AutomationsPage() {
   async function deleteRule(id: string) {
     if (!confirm('Supprimer cette regle ?')) return;
     try {
-      await axios.delete(`${API}/automations/${id}`, {
-        headers: { Authorization: `Bearer ${session?.accessToken}` },
-      });
+      await api.delete(`/automations/${id}`);
       await fetchRules();
     } catch {
       setError('Impossible de supprimer la regle.');
     }
   }
 
-  if (status === 'loading' || loading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />

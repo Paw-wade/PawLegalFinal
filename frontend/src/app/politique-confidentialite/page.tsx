@@ -78,7 +78,7 @@ export default function PolitiqueConfidentialitePage() {
                 <li><strong>Données d'identification</strong> : prénom, nom, adresse e‑mail, numéro de téléphone.</li>
                 <li><strong>Données relatives au dossier</strong> : informations sur votre situation administrative, type de titre de séjour, dates importantes, documents transmis ou à transmettre, catégorie de démarches, historique des actions.</li>
                 <li><strong>Données de connexion et d'usage</strong> : identifiants de connexion, logs, adresse IP, type de navigateur, pages consultées, date et heure d'accès.</li>
-                <li><strong>Échanges</strong> : messages envoyés via la Plateforme, réponses aux formulaires, commentaires éventuels.</li>
+                <li><strong>Échanges</strong> : messages envoyés via la Plateforme, via WhatsApp Business, réponses aux formulaires, commentaires éventuels.</li>
               </ul>
               <p className="mt-2">
                 Certaines données peuvent être sensibles au sens large (informations sur la situation administrative,
@@ -119,7 +119,7 @@ export default function PolitiqueConfidentialitePage() {
               <ul className="list-disc list-inside mt-2 space-y-1">
                 <li>aux membres autorisés de l'équipe Ada Papers ;</li>
                 <li>à des partenaires intervenant sur le dossier (avocats, associations, etc.), uniquement si vous y consentez ou si cela est indispensable à l'exécution de la mission ;</li>
-                <li>aux prestataires techniques (hébergement, maintenance, envoi d'e‑mails/SMS), agissant en qualité de sous-traitants, liés par des obligations contractuelles de confidentialité et de sécurité.</li>
+                <li>aux prestataires techniques (hébergement, maintenance, envoi d'e‑mails/SMS/WhatsApp Business), agissant en qualité de sous-traitants, liés par des obligations contractuelles de confidentialité et de sécurité.</li>
               </ul>
               <p className="mt-2">
                 Aucune donnée n'est cédée à des fins de prospection commerciale à des tiers sans votre accord explicite.

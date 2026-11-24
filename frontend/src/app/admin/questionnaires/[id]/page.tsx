@@ -924,7 +924,7 @@ export default function QuestionnaireDetailPage() {
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3">
-                    <span className="font-medium text-sm">{r.expediteur.nom || 'Anonyme'}</span>
+                    <span className="font-medium text-sm">{r.expediteur.nom || r.expediteur.email || r.expediteur.tel || 'Anonyme'}</span>
                     {!r.lu && (
                       <span className="text-xs px-1.5 py-0.5 bg-primary text-white rounded-full">Nouveau</span>
                     )}

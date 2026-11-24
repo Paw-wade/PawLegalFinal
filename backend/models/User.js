@@ -210,6 +210,18 @@ const userSchema = new mongoose.Schema({
     },
   }],
   // Réinitialisation de mot de passe (token temporaire)
+  whatsappPhone: {
+    type: String,
+    trim: true,
+    default: null
+  },
+  whatsappLinkedAt: {
+    type: Date
+  },
+  whatsappUnlinkedPhone: {
+    type: String,
+    trim: true
+  },
   resetPasswordToken: {
     type: String,
     select: false
@@ -252,6 +264,8 @@ userSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
+
+userSchema.index({ whatsappPhone: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('User', userSchema);
 

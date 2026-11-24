@@ -62,6 +62,10 @@ const taskSchema = new mongoose.Schema({
     trim: true,
     default: null
   },
+  kanbanOrder: {
+    type: Number,
+    default: null
+  },
   // Historique des commentaires/notes internes liés à la tâche
   commentaires: [
     {

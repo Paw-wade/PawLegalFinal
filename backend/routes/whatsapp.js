@@ -1,7 +1,93 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const WhatsappConversation = require('../models/WhatsappConversation');
 const { sendMessage, handleIncomingMessage } = require('../services/whatsappService');
+
+const CODE_REGEX = /^(?:verif(?:ier|ication|)?\s*:?\s*)?(\d{6})$/i;
+
+function normalizeWaPhone(from) {
+  return from.startsWith('+') ? from : '+' + from;
+}
+
+async function handleVerificationCode(from, code) {
+  const OTP = require('../models/OTP');
+  const User = require('../models/User');
+
+  const phone = normalizeWaPhone(from);
+
+  const otp = await OTP.findOne({ phone, verified: false }).select('+waToken');
+  if (!otp) return null;
+
+  if (new Date() > otp.expiresAt) {
+    await OTP.deleteOne({ _id: otp._id });
+    return 'Ce code a expire. Recommencez l\'inscription sur Ada Papers.';
+  }
+
+  if (otp.attempts >= 5) {
+    return 'Trop d\'essais. Demandez un nouveau code sur Ada Papers.';
+  }
+
+  if (otp.code !== code) {
+    otp.attempts += 1;
+    await otp.save();
+    const restants = 5 - otp.attempts;
+    return `Code incorrect (${restants} essai${restants > 1 ? 's' : ''} restant${restants > 1 ? 's' : ''}).`;
+  }
+
+  const existingByEmail = otp.email
+    ? await User.findOne({ email: otp.email })
+    : null;
+
+  if (existingByEmail) {
+    await OTP.deleteOne({ _id: otp._id });
+    return 'Un compte existe deja avec cet email. Connectez-vous sur Ada Papers.';
+  }
+
+  let user = await User.findOne({ phone });
+
+  if (!user) {
+    const userData = {
+      firstName: otp.firstName,
+      lastName: otp.lastName,
+      phone,
+      phoneVerified: true,
+      needsPasswordSetup: true,
+      role: 'client',
+      profilComplete: false,
+      whatsappPhone: phone,
+      whatsappLinkedAt: new Date(),
+    };
+    if (otp.email) userData.email = otp.email;
+    user = await User.create(userData);
+  } else {
+    user.phoneVerified = true;
+    if (!user.email && otp.email) user.email = otp.email;
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: { whatsappPhone: phone, whatsappLinkedAt: new Date(), whatsappUnlinkedPhone: null },
+      }
+    );
+    await user.save();
+  }
+
+  const token = jwt.sign(
+    { id: user._id.toString() },
+    process.env.JWT_SECRET || 'your-secret-key-here',
+    { expiresIn: process.env.JWT_EXPIRES_IN || '90d' }
+  );
+
+  otp.waVerified = true;
+  otp.waToken = token;
+  otp.verified = true;
+  otp.expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+  await otp.save();
+
+  console.log(`[WhatsApp] Compte verifie via WhatsApp pour ${phone}`);
+  return `Votre compte Ada Papers est active ! Retournez sur le site, vous etes maintenant connecte.`;
+}
 
 // ─────────────────────────────────────────────
 // GET /api/webhook/whatsapp
@@ -94,6 +180,21 @@ router.post('/', async (req, res) => {
           conv.messages.push(msgEntry);
 
           const incomingText = msgType === 'text' ? (msg.text?.body || '') : null;
+
+          // Interception prioritaire : code de verification a 6 chiffres
+          if (incomingText) {
+            const codeMatch = CODE_REGEX.exec(incomingText.trim());
+            if (codeMatch) {
+              const verifReply = await handleVerificationCode(from, codeMatch[1]);
+              if (verifReply !== null) {
+                conv.messages.push({ direction: 'outbound', type: 'text', content: verifReply, timestamp: new Date() });
+                await conv.save();
+                await sendMessage(from, verifReply);
+                continue;
+              }
+            }
+          }
+
           const reply = await handleIncomingMessage(conv, incomingText, msgType);
 
           // Persister avant d'envoyer la réponse

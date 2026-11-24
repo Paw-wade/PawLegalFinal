@@ -347,6 +347,8 @@ function AdminTachesPageContent() {
   const [intakePage, setIntakePage] = useState(0);
   const [dossierFilter, setDossierFilter] = useState('');
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<'above' | 'below'>('below');
 
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -446,7 +448,7 @@ function AdminTachesPageContent() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await tasksAPI.getAllTasks();
+      const response = await tasksAPI.getAllTasks({ includeArchived: 'true' } as any);
       if (response.data.success) setTasks(response.data.tasks || []);
       else setError('Erreur lors du chargement des taches');
     } catch (err: any) {
@@ -1148,7 +1150,7 @@ function AdminTachesPageContent() {
                             <p className="text-xs text-gray-400 text-center">Aucune tache</p>
                           </div>
                         ) : (
-                          colTasks.map((task: any) => {
+                          colTasks.flatMap((task: any) => {
                             const taskId = task._id || task.id;
                             const isHighlighted = highlightedTaskId === taskId;
                             const assignees = Array.isArray(task.assignedTo) ? task.assignedTo : [task.assignedTo].filter(Boolean);
@@ -1156,14 +1158,63 @@ function AdminTachesPageContent() {
                             const dossierRef = task.dossier?.numero || task.dossier?.titre || null;
                             const isDone = task.statut === 'termine' || task.statut === 'annule';
 
-                            return (
+                            const result: any[] = [];
+                            if (dragOverTaskId === taskId && dragOverPosition === 'above') {
+                              result.push(<div key={`ia-${taskId}`} className="h-0.5 bg-blue-500 rounded-full mx-1 my-0.5 pointer-events-none" />);
+                            }
+                            result.push(
                               <div
                                 key={taskId}
                                 id={`task-${taskId}`}
                                 draggable
                                 onDragStart={() => setDragTaskId(taskId)}
-                                onDragEnd={() => setDragTaskId(null)}
-                                className={`bg-white rounded-xl border shadow-sm p-3 cursor-grab active:cursor-grabbing transition-all ${isHighlighted ? 'ring-2 ring-orange-400 border-orange-300' : 'border-gray-100 hover:border-gray-300 hover:shadow-md'} ${isDone ? 'opacity-55' : ''} ${dragTaskId === taskId ? 'opacity-40 scale-95' : ''}`}
+                                onDragEnd={() => { setDragTaskId(null); setDragOverTaskId(null); }}
+                                onDragOver={(e) => {
+                                  if (!dragTaskId || dragTaskId === taskId) return;
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setDragOverTaskId(taskId);
+                                  setDragOverPosition(e.clientY < rect.top + rect.height / 2 ? 'above' : 'below');
+                                }}
+                                onDragLeave={(e) => {
+                                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                    if (dragOverTaskId === taskId) setDragOverTaskId(null);
+                                  }
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (!dragTaskId) { setDragOverTaskId(null); return; }
+                                  const draggedInCol = colTasks.some((t: any) => (t._id || t.id) === dragTaskId);
+                                  if (!draggedInCol) {
+                                    if (col.isCustom) {
+                                      tasksAPI.updateTask(dragTaskId, { kanbanGroup: col.key }).then(() => loadTasks()).catch(() => {});
+                                    } else {
+                                      const draggedTask = tasks.find((t: any) => (t._id || t.id) === dragTaskId);
+                                      if (draggedTask) {
+                                        const upd: any = { statut: dropTarget };
+                                        if (draggedTask.kanbanGroup) upd.kanbanGroup = null;
+                                        tasksAPI.updateTask(dragTaskId, upd).then(() => loadTasks()).catch(() => {});
+                                      }
+                                    }
+                                  } else if (dragTaskId !== taskId) {
+                                    const fromIdx = colTasks.findIndex((t: any) => (t._id || t.id) === dragTaskId);
+                                    const toIdx = colTasks.findIndex((t: any) => (t._id || t.id) === taskId);
+                                    if (fromIdx !== -1 && toIdx !== -1) {
+                                      const reordered = [...colTasks];
+                                      const [moved] = reordered.splice(fromIdx, 1);
+                                      let insertAt = dragOverPosition === 'above' ? toIdx : toIdx + 1;
+                                      if (fromIdx < toIdx) insertAt = Math.max(0, insertAt - 1);
+                                      reordered.splice(insertAt, 0, moved);
+                                      const orders = reordered.map((t: any, idx: number) => ({ id: t._id || t.id, kanbanOrder: idx }));
+                                      tasksAPI.reorderTasks(orders).then(() => loadTasks()).catch(() => {});
+                                    }
+                                  }
+                                  setDragOverTaskId(null);
+                                  setDragTaskId(null);
+                                }}
+                                className={`bg-white rounded-xl border shadow-sm p-3 cursor-grab active:cursor-grabbing transition-all ${isHighlighted ? 'ring-2 ring-orange-400 border-orange-300' : 'border-gray-100 hover:border-gray-300 hover:shadow-md'} ${isDone ? 'opacity-55' : ''} ${dragTaskId === taskId ? 'opacity-20' : ''}`}
                                 onClick={() => handleEditTask(task)}
                               >
                                 {/* Title */}
@@ -1297,6 +1348,10 @@ function AdminTachesPageContent() {
                                 )}
                               </div>
                             );
+                            if (dragOverTaskId === taskId && dragOverPosition === 'below') {
+                              result.push(<div key={`ib-${taskId}`} className="h-0.5 bg-blue-500 rounded-full mx-1 my-0.5 pointer-events-none" />);
+                            }
+                            return result;
                           })
                         )}
                       </div>
