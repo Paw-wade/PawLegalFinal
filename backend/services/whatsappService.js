@@ -5,26 +5,75 @@ const BASE_URL = 'https://graph.facebook.com/v19.0';
 /**
  * Envoie un message texte WhatsApp via la Cloud API Meta et le persiste dans la conversation.
  */
-async function sendMessage(to, text, conv) {
+async function sendMessage(to, text, conv, options = {}) {
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const token = process.env.WHATSAPP_TOKEN;
   if (!phoneId || !token) {
     console.warn('WhatsApp: WHATSAPP_PHONE_NUMBER_ID ou WHATSAPP_TOKEN manquant');
     return;
   }
-  await axios.post(
+  const payload = { messaging_product: 'whatsapp', to, type: 'text', text: { body: text } };
+  if (options.replyToWaId) payload.context = { message_id: options.replyToWaId };
+
+  const resp = await axios.post(
     `${BASE_URL}/${phoneId}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: text },
-    },
+    payload,
     { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
   );
+  const waMessageId = resp.data?.messages?.[0]?.id || '';
 
   if (conv) {
-    conv.messages.push({ direction: 'outbound', type: 'text', content: text, timestamp: new Date() });
+    conv.messages.push({
+      direction: 'outbound',
+      type: 'text',
+      content: text,
+      waMessageId,
+      replyToWaId: options.replyToWaId || '',
+      replyToContent: options.replyToContent || '',
+      timestamp: new Date(),
+    });
+    await conv.save();
+  }
+}
+
+/**
+ * Envoie un message media (audio, image, document, video) depuis l'admin.
+ * mediaId doit etre un ID obtenu via l'API Meta Media Upload.
+ */
+async function sendMediaMessage(to, mediaId, mediaType, filename, conv) {
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token = process.env.WHATSAPP_TOKEN;
+  if (!phoneId || !token) {
+    console.warn('WhatsApp: WHATSAPP_PHONE_NUMBER_ID ou WHATSAPP_TOKEN manquant');
+    return;
+  }
+
+  const typePayloads = {
+    image: { image: { id: mediaId } },
+    video: { video: { id: mediaId } },
+    audio: { audio: { id: mediaId } },
+    document: { document: { id: mediaId, filename: filename || 'document' } },
+  };
+  const extra = typePayloads[mediaType] || typePayloads.document;
+
+  const resp = await axios.post(
+    `${BASE_URL}/${phoneId}/messages`,
+    { messaging_product: 'whatsapp', to, type: mediaType, ...extra },
+    { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+  );
+  const waMessageId = resp.data?.messages?.[0]?.id || '';
+
+  if (conv) {
+    conv.messages.push({
+      direction: 'outbound',
+      type: mediaType,
+      content: filename || '',
+      mediaId,
+      filename: filename || '',
+      waMessageId,
+      timestamp: new Date(),
+    });
+    conv.lastActivity = new Date();
     await conv.save();
   }
 }
@@ -274,10 +323,26 @@ async function resolveUser(conv) {
     // Fallback : recherche par numero si la conversation n'est pas encore liee
     const user = await User.findOne({ phone: conv.phone }).select('_id firstName lastName phone').lean();
     if (user) {
-      // Lier pour les prochains messages
       conv.clientId = user._id;
       conv.contactName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
       await conv.save();
+
+      // Auto-lier le dossier le plus recent si aucun n'est encore lie
+      if (!conv.dossierId) {
+        try {
+          const Dossier = require('../models/Dossier');
+          const dossier = await Dossier.findOne({ user: user._id })
+            .sort({ createdAt: -1 })
+            .select('_id')
+            .lean();
+          if (dossier) {
+            conv.dossierId = dossier._id;
+            await conv.save();
+          }
+        } catch (e) {
+          console.warn('[WhatsApp] Auto-lien dossier echoue:', e.message);
+        }
+      }
     }
     return user;
   } catch {
@@ -290,17 +355,21 @@ async function resolveUser(conv) {
  * Retourne le texte de réponse a envoyer.
  */
 async function handleIncomingMessage(conv, incomingText, messageType) {
-  // Pour les types medias, accuse de reception simple
-  if (messageType && messageType !== 'text') {
+  // Pour les types medias, accuser reception et passer la conversation a un conseiller
+  if (messageType && messageType !== 'text' && messageType !== 'location') {
     const typeLabels = {
       image: 'photo',
       document: 'document',
       audio: 'message vocal',
       video: 'video',
-      sticker: 'sticker',
     };
     const label = typeLabels[messageType] || 'fichier';
-    return `Merci, nous avons bien recu votre ${label}. Un conseiller le consultera prochainement.\n\nTapez *menu* pour revenir au menu principal.`;
+    // Activer le mode conseiller pour que le bot ne reponde plus a ce contact
+    if (!conv.humanMode) {
+      conv.humanMode = true;
+      conv.markModified('humanMode');
+    }
+    return `Votre ${label} a bien ete recu. Un conseiller Ada Papers va l'examiner et vous recontactera dans les plus brefs delais.\n\nTapez *menu* pour revenir au menu.`;
   }
 
   const text = (incomingText || '').trim().toLowerCase();
@@ -554,6 +623,40 @@ async function afficherDossiers(conv, user) {
 // Persistance
 // ─────────────────────────────────────────────
 
+async function notifierAdminsRDV(rendezVous, motifLabel) {
+  try {
+    const User = require('../models/User');
+    const Notification = require('../models/Notification');
+    const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id').lean();
+    if (!admins.length) return;
+
+    const dateLabel = new Date(rendezVous.date).toLocaleDateString('fr-FR', {
+      weekday: 'long', day: 'numeric', month: 'long',
+    });
+    const message = `${rendezVous.prenom} (${rendezVous.telephone}) a demande un rendez-vous via WhatsApp le ${dateLabel} a ${rendezVous.heure}. Motif : ${motifLabel}.`;
+
+    const docs = admins.map((admin) => ({
+      user: admin._id,
+      type: 'appointment_created',
+      titre: 'Nouveau rendez-vous WhatsApp',
+      message,
+      lien: '/admin/rendez-vous',
+      lue: false,
+      metadata: {
+        appointmentId: rendezVous._id.toString(),
+        telephone: rendezVous.telephone,
+        date: rendezVous.date,
+        heure: rendezVous.heure,
+        motif: rendezVous.motif,
+        source: 'whatsapp',
+      },
+    }));
+    await Notification.insertManyWithPush(docs);
+  } catch (e) {
+    console.warn('[WhatsApp] Erreur notification admins RDV:', e.message);
+  }
+}
+
 async function enregistrerDemandeRDV(conv) {
   try {
     const RendezVous = require('../models/RendezVous');
@@ -561,7 +664,6 @@ async function enregistrerDemandeRDV(conv) {
     dateRdv.setDate(dateRdv.getDate() + 3);
     let heureRdv = 'A definir';
 
-    // Utiliser le creneau choisi si disponible
     if (conv.rdv.creneauId) {
       try {
         const Creneau = require('../models/Creneau');
@@ -578,7 +680,7 @@ async function enregistrerDemandeRDV(conv) {
       }
     }
 
-    await RendezVous.create({
+    const rdv = await RendezVous.create({
       nom: conv.rdv.prenom,
       prenom: conv.rdv.prenom,
       email: `whatsapp_${conv.phone.replace(/\D/g, '')}@adapapers.placeholder`,
@@ -587,10 +689,24 @@ async function enregistrerDemandeRDV(conv) {
       heure: heureRdv,
       motif: conv.rdv.motif || 'autre',
       description: conv.rdv.note || '',
-      notes: `Demande via WhatsApp — ${conv.phone}${conv.rdv.date ? ` — Creneau choisi : ${conv.rdv.date} a ${conv.rdv.heure}` : ''}`,
+      notes: `Demande via WhatsApp — ${conv.phone}${conv.rdv.date ? ` — Creneau : ${conv.rdv.date} a ${conv.rdv.heure}` : ''}`,
       statut: 'en_attente',
     });
     console.log(`[WhatsApp] RDV enregistre pour ${conv.phone}`);
+
+    // Notifications in-app + push pour tous les admins
+    const motifLabel = MOTIFS_LABELS[rdv.motif] || rdv.motif;
+    await notifierAdminsRDV(rdv, motifLabel);
+
+    // Sync Google Calendar (non bloquant)
+    try {
+      const { syncAppointmentGoogleCalendar } = require('../services/googleCalendarSync');
+      syncAppointmentGoogleCalendar(rdv, (m) => MOTIFS_LABELS[m] || m).catch((e) =>
+        console.warn('[WhatsApp] Google Calendar sync RDV:', e.message)
+      );
+    } catch (e) {
+      console.warn('[WhatsApp] Google Calendar sync RDV (import):', e.message);
+    }
   } catch (err) {
     console.error('[WhatsApp] Erreur enregistrement RDV:', err.message);
   }
@@ -598,15 +714,24 @@ async function enregistrerDemandeRDV(conv) {
 
 async function enregistrerContactWA(phone, nom) {
   try {
+    const User = require('../models/User');
     const Notification = require('../models/Notification');
-    await Notification.create({
+    const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id').lean();
+    if (!admins.length) return;
+
+    const docs = admins.map((admin) => ({
+      user: admin._id,
       type: 'whatsapp_contact',
-      message: `Demande de contact WhatsApp de *${nom}* (${phone})`,
+      titre: 'Demande de contact WhatsApp',
+      message: `${nom} (${phone}) souhaite etre contacte par un conseiller.`,
+      lien: '/admin/whatsapp',
       lue: false,
-    });
+      metadata: { phone, nom, source: 'whatsapp' },
+    }));
+    await Notification.insertManyWithPush(docs);
   } catch (err) {
     console.error('[WhatsApp] Erreur notification contact:', err.message);
   }
 }
 
-module.exports = { sendMessage, handleIncomingMessage, sendProactiveMessage };
+module.exports = { sendMessage, sendMediaMessage, handleIncomingMessage, sendProactiveMessage };

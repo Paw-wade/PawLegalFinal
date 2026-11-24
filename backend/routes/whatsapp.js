@@ -108,13 +108,19 @@ async function handleVerificationCode(from, code) {
   otp.expiresAt = new Date(Date.now() + 5 * 60 * 1000);
   await otp.save();
 
-  // Lier le compte a la conversation WhatsApp
+  // Lier le compte et le dossier le plus recent a la conversation WhatsApp
   try {
     const WhatsappConversation = require('../models/WhatsappConversation');
-    await WhatsappConversation.findOneAndUpdate(
-      { phone },
-      { clientId: user._id, contactName: `${user.firstName || ''} ${user.lastName || ''}`.trim() }
-    );
+    const update = { clientId: user._id, contactName: `${user.firstName || ''} ${user.lastName || ''}`.trim() };
+
+    const existing = await WhatsappConversation.findOne({ phone }).select('dossierId').lean();
+    if (!existing?.dossierId) {
+      const Dossier = require('../models/Dossier');
+      const dossier = await Dossier.findOne({ user: user._id }).sort({ createdAt: -1 }).select('_id').lean();
+      if (dossier) update.dossierId = dossier._id;
+    }
+
+    await WhatsappConversation.findOneAndUpdate({ phone }, update);
   } catch (e) {
     console.warn('[WhatsApp] Impossible de lier clientId a la conversation:', e.message);
   }
@@ -184,6 +190,8 @@ router.post('/', async (req, res) => {
             direction: 'inbound',
             type: msgType,
             timestamp: msg.timestamp ? new Date(Number(msg.timestamp) * 1000) : new Date(),
+            waMessageId: msg.id || '',
+            replyToWaId: msg.context?.id || '',
           };
 
           if (msgType === 'text') {
@@ -227,6 +235,12 @@ router.post('/', async (req, res) => {
                 continue;
               }
             }
+          }
+
+          // Si un conseiller a pris la main, ne pas repondre avec le bot
+          if (conv.humanMode) {
+            await conv.save();
+            continue;
           }
 
           const reply = await handleIncomingMessage(conv, incomingText, msgType);

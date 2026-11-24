@@ -10,10 +10,16 @@ const messageSchema = new mongoose.Schema({
   content: { type: String, default: '' },
   mediaUrl: { type: String, default: '' },
   mediaId: { type: String, default: '' },
+  mediaUri: { type: String, default: '' },
   filename: { type: String, default: '' },
   mimeType: { type: String, default: '' },
   timestamp: { type: Date, default: Date.now },
-}, { _id: false });
+  waMessageId: { type: String, default: '' },
+  replyToWaId: { type: String, default: '' },
+  replyToContent: { type: String, default: '' },
+  isInternalNote: { type: Boolean, default: false },
+  pinned: { type: Boolean, default: false },
+}, { _id: true });
 
 const whatsappConversationSchema = new mongoose.Schema(
   {
@@ -52,7 +58,17 @@ const whatsappConversationSchema = new mongoose.Schema(
     unreadAdmin: { type: Number, default: 0 },
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     dossierId: { type: mongoose.Schema.Types.ObjectId, ref: 'Dossier', default: null },
+    customName: { type: String, default: '' },
+    humanMode: { type: Boolean, default: false },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     lastActivity: { type: Date, default: Date.now },
+    reminderAt: { type: Date, default: null },
+    reminderNote: { type: String, default: '' },
+    followUpStatus: {
+      type: String,
+      enum: ['none', 'en_attente_client', 'en_attente_document', 'en_cours', 'resolu'],
+      default: 'none',
+    },
   },
   { timestamps: true }
 );

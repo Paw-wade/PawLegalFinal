@@ -2055,13 +2055,36 @@ export const parrainageAPI = {
 };
 
 export const whatsappAdminAPI = {
-  listConversations: (params?: { page?: number; limit?: number; unread?: boolean }) =>
+  listConversations: (params?: { page?: number; limit?: number; unread?: boolean; assignedTo?: string }) =>
     api.get('/whatsapp-admin/conversations', { params }),
   getConversation: (id: string) => api.get(`/whatsapp-admin/conversations/${id}`),
   markRead: (id: string) => api.put(`/whatsapp-admin/conversations/${id}/read`),
-  send: (phone: string, text: string) => api.post('/whatsapp-admin/send', { phone, text }),
+  send: (phone: string, text: string, opts?: { replyToWaId?: string; replyToContent?: string }) =>
+    api.post('/whatsapp-admin/send', { phone, text, ...opts }),
+  addNote: (id: string, text: string) => api.post(`/whatsapp-admin/conversations/${id}/notes`, { text }),
+  setReminder: (id: string, reminderAt: string | null, reminderNote?: string) =>
+    api.put(`/whatsapp-admin/conversations/${id}/reminder`, { reminderAt, reminderNote }),
+  setFollowUpStatus: (id: string, followUpStatus: string) =>
+    api.put(`/whatsapp-admin/conversations/${id}/status`, { followUpStatus }),
+  pinMessage: (id: string, messageId: string, pinned: boolean) =>
+    api.put(`/whatsapp-admin/conversations/${id}/pin-message`, { messageId, pinned }),
   link: (id: string, data: { clientId?: string | null; dossierId?: string | null }) =>
     api.put(`/whatsapp-admin/conversations/${id}/link`, data),
+  setHumanMode: (id: string, humanMode: boolean) =>
+    api.put(`/whatsapp-admin/conversations/${id}/human-mode`, { humanMode }),
+  rename: (id: string, customName: string) =>
+    api.put(`/whatsapp-admin/conversations/${id}/rename`, { customName }),
+  assign: (id: string, userId: string | null) =>
+    api.put(`/whatsapp-admin/conversations/${id}/assign`, { userId }),
+  getAdvisors: () => api.get('/whatsapp-admin/advisors'),
+  getMedia: (mediaId: string, params: { convId?: string; filename?: string; mimeType?: string }) =>
+    api.get(`/whatsapp-admin/media/${mediaId}`, { params }),
+  sendMedia: (phone: string, file: File) => {
+    const fd = new FormData();
+    fd.append('phone', phone);
+    fd.append('file', file);
+    return api.post('/whatsapp-admin/send-media', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   remove: (id: string) => api.delete(`/whatsapp-admin/conversations/${id}`),
 };
 
