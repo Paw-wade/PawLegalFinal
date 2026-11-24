@@ -110,7 +110,7 @@ function menuPrincipal(prenom) {
   if (prenom) {
     return `${salut}
 
-Je suis votre assistant juridique. Comment puis-je vous aider ?
+Je suis Ada. Comment puis-je vous aider ?
 
 1️⃣  Prendre un rendez-vous
 2️⃣  Faire une demande
@@ -121,7 +121,7 @@ Ecrivez *1*, *2*, *3* ou *4* pour choisir.`;
   }
   return `${salut}
 
-Je suis votre assistant juridique. Comment puis-je vous aider ?
+Je suis Ada. Comment puis-je vous aider ?
 
 1️⃣  Prendre un rendez-vous
 2️⃣  Faire une demande
