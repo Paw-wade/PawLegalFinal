@@ -489,7 +489,7 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
         conv.rdv = {};
         conv.markModified('rdv');
         await conv.save();
-        return `✅ *Votre demande de rendez-vous a bien ete enregistree !*${creneauConfirm}\n\nUn conseiller Ada Papers vous recontactera sous *48h* au numero indique.\n\nTapez *menu* pour revenir au menu principal.`;
+        return `✅ *Votre rendez-vous est bien pris en compte.*${creneauConfirm}\n\nTapez *menu* pour revenir au menu principal.`;
       }
       return `Veuillez répondre *oui* pour confirmer ou *non* pour annuler.`;
     }
