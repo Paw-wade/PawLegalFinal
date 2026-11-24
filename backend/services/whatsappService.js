@@ -231,6 +231,34 @@ const MOTIFS_LABELS = {
 };
 
 // ─────────────────────────────────────────────
+// Créneaux disponibles
+// ─────────────────────────────────────────────
+
+const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const MOIS_FR = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'];
+
+function formatDateFr(date) {
+  const d = new Date(date);
+  return `${JOURS_FR[d.getDay()]} ${d.getDate()} ${MOIS_FR[d.getMonth()]}`;
+}
+
+async function obtenirCreneauxDisponibles() {
+  const Creneau = require('../models/Creneau');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Creneau.find({ ferme: false, date: { $gte: today } })
+    .sort({ date: 1, heure: 1 })
+    .limit(5)
+    .lean();
+}
+
+function formatMenuCreneaux(creneaux) {
+  const nums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
+  const lignes = creneaux.map((c, i) => `${nums[i]}  ${formatDateFr(c.date)} a ${c.heure}`);
+  return `Voici les prochains creneaux disponibles :\n\n${lignes.join('\n')}\n\nEcrivez le numero de votre choix, ou *0* pour annuler.`;
+}
+
+// ─────────────────────────────────────────────
 // Machine à états conversationnelle
 // ─────────────────────────────────────────────
 
@@ -386,10 +414,48 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       const motif = MOTIFS_RDV[text];
       if (!motif) return `Ecrivez un numero entre *1* et *6* pour choisir le motif.`;
       conv.rdv.motif = motif;
+      conv.markModified('rdv');
+      await conv.save();
+      const creneaux = await obtenirCreneauxDisponibles();
+      if (creneaux.length === 0) {
+        conv.state = 'rdv_tel';
+        await conv.save();
+        return `Aucun creneau n'est disponible en ligne pour le moment.\n\nVotre numero de telephone pour qu'un conseiller vous recontacte (ex: 06 12 34 56 78) ?`;
+      }
+      conv.state = 'rdv_creneau';
+      await conv.save();
+      return formatMenuCreneaux(creneaux);
+    }
+
+    case 'rdv_creneau': {
+      if (text === '0') {
+        conv.state = 'menu';
+        conv.rdv = {};
+        await conv.save();
+        return menuPrincipal(prenom);
+      }
+      const idx = parseInt(text, 10);
+      if (isNaN(idx) || idx < 1 || idx > 5) {
+        const creneaux = await obtenirCreneauxDisponibles();
+        if (creneaux.length === 0) {
+          conv.state = 'rdv_tel';
+          await conv.save();
+          return `Aucun creneau n'est disponible. Votre numero de telephone ?`;
+        }
+        return `Ecrivez un numero entre *1* et *${creneaux.length}*, ou *0* pour annuler.\n\n${formatMenuCreneaux(creneaux)}`;
+      }
+      const creneaux = await obtenirCreneauxDisponibles();
+      const choisi = creneaux[idx - 1];
+      if (!choisi) {
+        return `Ce creneau n'est plus disponible. Voici les creneaux actuels :\n\n${formatMenuCreneaux(creneaux)}`;
+      }
+      conv.rdv.date = formatDateFr(choisi.date);
+      conv.rdv.heure = choisi.heure;
+      conv.rdv.creneauId = choisi._id;
       conv.state = 'rdv_tel';
       conv.markModified('rdv');
       await conv.save();
-      return `Votre numéro de téléphone pour la confirmation (ex: 06 12 34 56 78) ?`;
+      return `Creneau retenu : *${conv.rdv.date} a ${conv.rdv.heure}* ✅\n\nVotre numero de telephone pour la confirmation (ex: 06 12 34 56 78) ?`;
     }
 
     case 'rdv_tel': {
@@ -408,9 +474,11 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       conv.markModified('rdv');
       await conv.save();
       const motifLabel = MOTIFS_LABELS[conv.rdv.motif] || conv.rdv.motif;
-      return `Voici le récapitulatif de votre demande :\n
-👤 Prénom : *${conv.rdv.prenom}*
+      const creneauLine = conv.rdv.date ? `📅 Creneau : *${conv.rdv.date} a ${conv.rdv.heure}*\n` : '';
+      return `Voici le recapitulatif de votre demande :\n
+👤 Prenom : *${conv.rdv.prenom}*
 📋 Motif : *${motifLabel}*
+${creneauLine}
 📱 Téléphone : *${conv.rdv.telephone}*
 ${conv.rdv.note ? `💬 Note : ${conv.rdv.note}\n` : ''}
 Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
@@ -425,15 +493,14 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       }
       if (text === 'oui') {
         await enregistrerDemandeRDV(conv);
+        const creneauConfirm = conv.rdv.date
+          ? `\n\n📅 Creneau : *${conv.rdv.date} a ${conv.rdv.heure}*`
+          : '';
         conv.state = 'menu';
         conv.rdv = {};
         conv.markModified('rdv');
         await conv.save();
-        return `✅ *Votre demande de rendez-vous a bien été enregistrée !*
-
-Un conseiller Ada Papers vous contactera sous *48h* au numéro que vous avez indiqué.
-
-Tapez *menu* à tout moment pour revenir au menu principal.`;
+        return `✅ *Votre demande de rendez-vous a bien ete enregistree !*${creneauConfirm}\n\nUn conseiller Ada Papers vous recontactera sous *48h* au numero indique.\n\nTapez *menu* pour revenir au menu principal.`;
       }
       return `Veuillez répondre *oui* pour confirmer ou *non* pour annuler.`;
     }
@@ -501,22 +568,40 @@ async function afficherDossiers(conv, user) {
 async function enregistrerDemandeRDV(conv) {
   try {
     const RendezVous = require('../models/RendezVous');
-    const dateProvisoire = new Date();
-    dateProvisoire.setDate(dateProvisoire.getDate() + 3);
+    let dateRdv = new Date();
+    dateRdv.setDate(dateRdv.getDate() + 3);
+    let heureRdv = 'A definir';
+
+    // Utiliser le creneau choisi si disponible
+    if (conv.rdv.creneauId) {
+      try {
+        const Creneau = require('../models/Creneau');
+        const creneau = await Creneau.findById(conv.rdv.creneauId);
+        if (creneau && !creneau.ferme) {
+          dateRdv = creneau.date;
+          heureRdv = creneau.heure;
+          creneau.ferme = true;
+          creneau.motifFermeture = `Reserve WhatsApp ${conv.phone}`;
+          await creneau.save();
+        }
+      } catch (e) {
+        console.warn('[WhatsApp] Impossible de reserver le creneau:', e.message);
+      }
+    }
 
     await RendezVous.create({
       nom: conv.rdv.prenom,
       prenom: conv.rdv.prenom,
       email: `whatsapp_${conv.phone.replace(/\D/g, '')}@adapapers.placeholder`,
       telephone: conv.rdv.telephone || conv.phone,
-      date: dateProvisoire,
-      heure: 'À définir',
+      date: dateRdv,
+      heure: heureRdv,
       motif: conv.rdv.motif || 'autre',
       description: conv.rdv.note || '',
-      notes: `Demande via WhatsApp — ${conv.phone}`,
+      notes: `Demande via WhatsApp — ${conv.phone}${conv.rdv.date ? ` — Creneau choisi : ${conv.rdv.date} a ${conv.rdv.heure}` : ''}`,
       statut: 'en_attente',
     });
-    console.log(`[WhatsApp] RDV enregistré pour ${conv.phone}`);
+    console.log(`[WhatsApp] RDV enregistre pour ${conv.phone}`);
   } catch (err) {
     console.error('[WhatsApp] Erreur enregistrement RDV:', err.message);
   }
