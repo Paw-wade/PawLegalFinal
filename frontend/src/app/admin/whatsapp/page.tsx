@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { whatsappAdminAPI, dossiersAPI, userAPI } from '@/lib/api';
+import { whatsappAdminAPI, dossiersAPI, userAPI, appointmentsAPI, tasksAPI } from '@/lib/api';
 import { Toast } from '@/components/Toast';
 import {
   MessageCircle,
@@ -40,6 +40,10 @@ import {
   Play,
   ArrowLeft,
   MoreVertical,
+  Zap,
+  Calendar,
+  ListTodo,
+  FolderPlus,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────
@@ -186,6 +190,20 @@ export default function AdminWhatsAppPage() {
   const [saveToDossierCategorie, setSaveToDossierCategorie] = useState('autre');
   const [saveToDossierDossierId, setSaveToDossierDossierId] = useState('');
   const [isSavingToDossier, setIsSavingToDossier] = useState(false);
+
+  // Actions rapides
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  const [showRdvModal, setShowRdvModal] = useState(false);
+  const [rdvForm, setRdvForm] = useState({ nom: '', prenom: '', email: '', telephone: '', date: '', heure: '09:00', motif: 'premiere_demande_titre', description: '' });
+  const [isCreatingRdv, setIsCreatingRdv] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskForm, setTaskForm] = useState({ titre: '', description: '', priorite: 'normale', dateEcheance: '', dossier: '' });
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [showDossierModal, setShowDossierModal] = useState(false);
+  const [dossierForm, setDossierForm] = useState({ clientNom: '', clientPrenom: '', clientEmail: '', clientTelephone: '', titre: '', categorie: 'sejour_titres', description: '' });
+  const [isCreatingDossier, setIsCreatingDossier] = useState(false);
+  const quickActionsRef = useRef<HTMLDivElement>(null);
+
   const qrMenuRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const mobileMoreRef = useRef<HTMLDivElement>(null);
@@ -211,7 +229,7 @@ export default function AdminWhatsAppPage() {
           notified.add(key);
           const name = getConvName(conv) || conv.phone || 'Contact';
           const note = conv.reminderNote ? ` — ${conv.reminderNote}` : '';
-          setToast({ message: `Rappel : ${name}${note}`, type: 'warning' });
+          setToast({ message: `Rappel : ${name}${note}`, type: 'info' });
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             new Notification(`Rappel WhatsApp — ${name}`, {
               body: conv.reminderNote || 'Rappel de suivi',
@@ -252,6 +270,7 @@ export default function AdminWhatsAppPage() {
       if (qrMenuRef.current && !qrMenuRef.current.contains(e.target as Node)) setShowQRMenu(false);
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) setShowStatusDropdown(false);
       if (mobileMoreRef.current && !mobileMoreRef.current.contains(e.target as Node)) setShowMobileMore(false);
+      if (quickActionsRef.current && !quickActionsRef.current.contains(e.target as Node)) setShowQuickActions(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -607,6 +626,123 @@ export default function AdminWhatsAppPage() {
       setToast({ message: err?.response?.data?.message || 'Erreur lors de l\'enregistrement', type: 'error' });
     } finally {
       setIsSavingToDossier(false);
+    }
+  }
+
+  function openRdvModal() {
+    if (!selectedConv) return;
+    const name = getConvName(selectedConv);
+    const parts = name.trim().split(/\s+/);
+    setRdvForm({
+      nom: parts.length > 1 ? parts[parts.length - 1] : (parts[0] || ''),
+      prenom: parts.length > 1 ? parts.slice(0, -1).join(' ') : '',
+      email: selectedConv.clientId?.email || '',
+      telephone: formatPhone(selectedConv.phone),
+      date: new Date().toISOString().slice(0, 10),
+      heure: '09:00',
+      motif: 'premiere_demande_titre',
+      description: 'Prise de contact via WhatsApp',
+    });
+    setShowQuickActions(false);
+    setShowRdvModal(true);
+  }
+
+  function openTaskModal() {
+    if (!selectedConv) return;
+    const linkedDossierId = selectedConv.dossierId?._id || (typeof selectedConv.dossierId === 'string' ? selectedConv.dossierId : '');
+    setTaskForm({
+      titre: `Suivi WhatsApp - ${getConvName(selectedConv) || selectedConv.phone}`,
+      description: '',
+      priorite: 'normale',
+      dateEcheance: '',
+      dossier: linkedDossierId,
+    });
+    setShowQuickActions(false);
+    setShowTaskModal(true);
+  }
+
+  function openDossierModal() {
+    if (!selectedConv) return;
+    const name = getConvName(selectedConv);
+    const parts = name.trim().split(/\s+/);
+    setDossierForm({
+      clientNom: parts.length > 1 ? parts[parts.length - 1] : (parts[0] || ''),
+      clientPrenom: parts.length > 1 ? parts.slice(0, -1).join(' ') : '',
+      clientEmail: selectedConv.clientId?.email || '',
+      clientTelephone: formatPhone(selectedConv.phone),
+      titre: '',
+      categorie: 'sejour_titres',
+      description: '',
+    });
+    setShowQuickActions(false);
+    setShowDossierModal(true);
+  }
+
+  async function handleCreateRdv() {
+    if (!rdvForm.nom || !rdvForm.date || !rdvForm.heure || !rdvForm.motif) return;
+    setIsCreatingRdv(true);
+    try {
+      const dossierId = selectedConv?.dossierId?._id || (typeof selectedConv?.dossierId === 'string' ? selectedConv.dossierId : undefined);
+      await appointmentsAPI.createAppointment({
+        nom: rdvForm.nom,
+        prenom: rdvForm.prenom,
+        email: rdvForm.email || undefined,
+        telephone: rdvForm.telephone,
+        date: rdvForm.date,
+        heure: rdvForm.heure,
+        motif: rdvForm.motif,
+        description: rdvForm.description,
+        dossierId: dossierId || undefined,
+      } as any);
+      setToast({ message: 'Rendez-vous cree avec succes', type: 'success' });
+      setShowRdvModal(false);
+    } catch (err: any) {
+      setToast({ message: err?.response?.data?.message || 'Erreur creation rendez-vous', type: 'error' });
+    } finally {
+      setIsCreatingRdv(false);
+    }
+  }
+
+  async function handleCreateTask() {
+    if (!taskForm.titre) return;
+    setIsCreatingTask(true);
+    try {
+      await tasksAPI.createTask({
+        titre: taskForm.titre,
+        description: taskForm.description,
+        priorite: taskForm.priorite,
+        dateEcheance: taskForm.dateEcheance || undefined,
+        dossier: taskForm.dossier || undefined,
+        assignedTo: (session?.user as any)?.id || '',
+      });
+      setToast({ message: 'Tache creee avec succes', type: 'success' });
+      setShowTaskModal(false);
+    } catch (err: any) {
+      setToast({ message: err?.response?.data?.message || 'Erreur creation tache', type: 'error' });
+    } finally {
+      setIsCreatingTask(false);
+    }
+  }
+
+  async function handleCreateDossier() {
+    if (!dossierForm.clientNom) return;
+    setIsCreatingDossier(true);
+    try {
+      await dossiersAPI.createDossier({
+        clientNom: dossierForm.clientNom,
+        clientPrenom: dossierForm.clientPrenom || undefined,
+        clientEmail: dossierForm.clientEmail || undefined,
+        clientTelephone: dossierForm.clientTelephone || undefined,
+        titre: dossierForm.titre || `Dossier ${dossierForm.clientPrenom} ${dossierForm.clientNom}`.trim(),
+        categorie: dossierForm.categorie,
+        description: dossierForm.description || undefined,
+      });
+      setToast({ message: 'Dossier cree avec succes', type: 'success' });
+      setShowDossierModal(false);
+    } catch (err: any) {
+      setToast({ message: err?.response?.data?.message || 'Erreur creation dossier', type: 'error' });
+    } finally {
+      setIsCreatingDossier(false);
     }
   }
 
@@ -1171,6 +1307,43 @@ export default function AdminWhatsAppPage() {
               >
                 <Phone className="w-4 h-4" />
               </a>
+              {/* Actions rapides */}
+              <div ref={quickActionsRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowQuickActions((v) => !v)}
+                  title="Actions rapides"
+                  style={{
+                    padding: '0.375rem 0.5rem', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', gap: '0.25rem',
+                    fontSize: '0.7rem', fontWeight: 500,
+                    border: showQuickActions ? '1px solid #e96d2b' : '1px solid #d1d5db',
+                    background: showQuickActions ? '#fff3ed' : 'transparent',
+                    color: showQuickActions ? '#e96d2b' : '#6b7280', cursor: 'pointer',
+                  }}
+                >
+                  <Zap style={{ width: '0.875rem', height: '0.875rem' }} />
+                  <span>Actions</span>
+                </button>
+                {showQuickActions && (
+                  <div style={{
+                    position: 'absolute', top: '110%', right: 0, zIndex: 50, minWidth: '190px',
+                    background: '#ffffff', border: '1px solid #e5e7eb',
+                    borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden',
+                  }}>
+                    <button onClick={openRdvModal} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: '#1d4ed8', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid #f3f4f6' }}>
+                      <Calendar style={{ width: '0.9rem', height: '0.9rem', flexShrink: 0 }} />
+                      Creer un rendez-vous
+                    </button>
+                    <button onClick={openTaskModal} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: '#d97706', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid #f3f4f6' }}>
+                      <ListTodo style={{ width: '0.9rem', height: '0.9rem', flexShrink: 0 }} />
+                      Creer une tache
+                    </button>
+                    <button onClick={openDossierModal} style={{ width: '100%', textAlign: 'left', padding: '0.6rem 0.85rem', fontSize: '0.8rem', color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <FolderPlus style={{ width: '0.9rem', height: '0.9rem', flexShrink: 0 }} />
+                      Creer un dossier
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => deleteConversation(selectedConv._id)}
                 className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 text-muted-foreground hover:text-red-600 transition-colors"
@@ -1193,6 +1366,41 @@ export default function AdminWhatsAppPage() {
               >
                 <Phone style={{ width: '1rem', height: '1rem' }} />
               </a>
+              {/* Actions rapides mobile */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => { setShowQuickActions((v) => !v); setShowMobileMore(false); }}
+                  title="Actions rapides"
+                  style={{
+                    padding: '0.375rem', borderRadius: '0.375rem', display: 'flex', alignItems: 'center',
+                    border: showQuickActions ? '1px solid #e96d2b' : '1px solid #d1d5db',
+                    background: showQuickActions ? '#fff3ed' : 'transparent',
+                    color: showQuickActions ? '#e96d2b' : '#6b7280', cursor: 'pointer',
+                  }}
+                >
+                  <Zap style={{ width: '1rem', height: '1rem' }} />
+                </button>
+                {showQuickActions && (
+                  <div style={{
+                    position: 'absolute', top: '110%', right: 0, zIndex: 100, minWidth: '190px',
+                    background: '#ffffff', border: '1px solid #e5e7eb',
+                    borderRadius: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', overflow: 'hidden',
+                  }}>
+                    <button onClick={openRdvModal} style={{ width: '100%', textAlign: 'left', padding: '0.65rem 0.9rem', fontSize: '0.82rem', color: '#1d4ed8', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid #f3f4f6' }}>
+                      <Calendar style={{ width: '0.9rem', height: '0.9rem', flexShrink: 0 }} />
+                      Creer un rendez-vous
+                    </button>
+                    <button onClick={openTaskModal} style={{ width: '100%', textAlign: 'left', padding: '0.65rem 0.9rem', fontSize: '0.82rem', color: '#d97706', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', borderBottom: '1px solid #f3f4f6' }}>
+                      <ListTodo style={{ width: '0.9rem', height: '0.9rem', flexShrink: 0 }} />
+                      Creer une tache
+                    </button>
+                    <button onClick={openDossierModal} style={{ width: '100%', textAlign: 'left', padding: '0.65rem 0.9rem', fontSize: '0.82rem', color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <FolderPlus style={{ width: '0.9rem', height: '0.9rem', flexShrink: 0 }} />
+                      Creer un dossier
+                    </button>
+                  </div>
+                )}
+              </div>
               {/* Bot/Conseiller icone seulement */}
               <button
                 onClick={toggleHumanMode}
@@ -1934,6 +2142,195 @@ export default function AdminWhatsAppPage() {
               >
                 {isSending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 Envoyer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal : Creer un rendez-vous ── */}
+      {showRdvModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div style={{ background: '#ffffff' }} className="rounded-lg shadow-xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-base flex items-center gap-2 text-gray-900">
+                <Calendar className="w-4 h-4 text-blue-600" />
+                Nouveau rendez-vous
+              </h2>
+              <button onClick={() => setShowRdvModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Prenom</label>
+                  <input type="text" value={rdvForm.prenom} onChange={e => setRdvForm(f => ({ ...f, prenom: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-900" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Nom *</label>
+                  <input type="text" value={rdvForm.nom} onChange={e => setRdvForm(f => ({ ...f, nom: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-900" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Email <span className="text-gray-400 font-normal">(optionnel)</span></label>
+                <input type="email" value={rdvForm.email} onChange={e => setRdvForm(f => ({ ...f, email: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-900" placeholder="Pour confirmation par email" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Telephone</label>
+                <input type="text" value={rdvForm.telephone} onChange={e => setRdvForm(f => ({ ...f, telephone: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-900" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Date *</label>
+                  <input type="date" value={rdvForm.date} onChange={e => setRdvForm(f => ({ ...f, date: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-900" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Heure *</label>
+                  <input type="time" value={rdvForm.heure} onChange={e => setRdvForm(f => ({ ...f, heure: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-900" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Motif *</label>
+                <select value={rdvForm.motif} onChange={e => setRdvForm(f => ({ ...f, motif: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-900">
+                  <option value="premiere_demande_titre">Premiere demande titre de sejour</option>
+                  <option value="renouvellement_titre">Renouvellement titre de sejour</option>
+                  <option value="changement_statut">Changement de statut</option>
+                  <option value="regroupement_familial">Regroupement familial</option>
+                  <option value="nationalite_francaise">Nationalite francaise</option>
+                  <option value="demande_visa">Demande de visa</option>
+                  <option value="conteste_oqtf">OQTF recue</option>
+                  <option value="conteste_refus_titre">Contestation refus titre</option>
+                  <option value="constitution_societe_france">Constitution societe (France)</option>
+                  <option value="constitution_societe_senegal">Constitution societe (Senegal)</option>
+                  <option value="autre">Autre</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Note</label>
+                <textarea value={rdvForm.description} onChange={e => setRdvForm(f => ({ ...f, description: e.target.value }))} rows={2} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 text-gray-900 resize-none" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowRdvModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700">Annuler</button>
+              <button onClick={handleCreateRdv} disabled={isCreatingRdv || !rdvForm.nom || !rdvForm.date || !rdvForm.heure} className="px-4 py-2 text-sm text-white rounded-md disabled:opacity-50 flex items-center gap-2" style={{ background: '#1d4ed8' }}>
+                {isCreatingRdv ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Calendar className="w-3.5 h-3.5" />}
+                Creer le RDV
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal : Creer une tache ── */}
+      {showTaskModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div style={{ background: '#ffffff' }} className="rounded-lg shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-base flex items-center gap-2 text-gray-900">
+                <ListTodo className="w-4 h-4 text-amber-600" />
+                Nouvelle tache
+              </h2>
+              <button onClick={() => setShowTaskModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Titre *</label>
+                <input type="text" value={taskForm.titre} onChange={e => setTaskForm(f => ({ ...f, titre: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-400 text-gray-900" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Description</label>
+                <textarea value={taskForm.description} onChange={e => setTaskForm(f => ({ ...f, description: e.target.value }))} rows={2} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-400 text-gray-900 resize-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Priorite</label>
+                  <select value={taskForm.priorite} onChange={e => setTaskForm(f => ({ ...f, priorite: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-400 text-gray-900">
+                    <option value="basse">Basse</option>
+                    <option value="normale">Normale</option>
+                    <option value="haute">Haute</option>
+                    <option value="urgente">Urgente</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Echeance</label>
+                  <input type="date" value={taskForm.dateEcheance} onChange={e => setTaskForm(f => ({ ...f, dateEcheance: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-400 text-gray-900" />
+                </div>
+              </div>
+              {clientDossiers.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Dossier lie</label>
+                  <select value={taskForm.dossier} onChange={e => setTaskForm(f => ({ ...f, dossier: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-400 text-gray-900">
+                    <option value="">Aucun</option>
+                    {clientDossiers.map((d: any) => (
+                      <option key={d._id} value={d._id}>{d.numero || d._id.slice(-6)} {d.titre ? `- ${d.titre}` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowTaskModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700">Annuler</button>
+              <button onClick={handleCreateTask} disabled={isCreatingTask || !taskForm.titre} className="px-4 py-2 text-sm text-white rounded-md disabled:opacity-50 flex items-center gap-2" style={{ background: '#d97706' }}>
+                {isCreatingTask ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ListTodo className="w-3.5 h-3.5" />}
+                Creer la tache
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal : Creer un dossier ── */}
+      {showDossierModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div style={{ background: '#ffffff' }} className="rounded-lg shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-base flex items-center gap-2 text-gray-900">
+                <FolderPlus className="w-4 h-4 text-purple-600" />
+                Nouveau dossier
+              </h2>
+              <button onClick={() => setShowDossierModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Prenom</label>
+                  <input type="text" value={dossierForm.clientPrenom} onChange={e => setDossierForm(f => ({ ...f, clientPrenom: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-400 text-gray-900" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">Nom *</label>
+                  <input type="text" value={dossierForm.clientNom} onChange={e => setDossierForm(f => ({ ...f, clientNom: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-400 text-gray-900" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Email</label>
+                <input type="email" value={dossierForm.clientEmail} onChange={e => setDossierForm(f => ({ ...f, clientEmail: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-400 text-gray-900" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Telephone</label>
+                <input type="text" value={dossierForm.clientTelephone} onChange={e => setDossierForm(f => ({ ...f, clientTelephone: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-400 text-gray-900" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Titre du dossier</label>
+                <input type="text" value={dossierForm.titre} onChange={e => setDossierForm(f => ({ ...f, titre: e.target.value }))} placeholder="Ex: Titre de sejour - OQTF..." className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-400 text-gray-900" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 block mb-1">Categorie</label>
+                <select value={dossierForm.categorie} onChange={e => setDossierForm(f => ({ ...f, categorie: e.target.value }))} className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-400 text-gray-900">
+                  <option value="sejour_titres">Titre de sejour</option>
+                  <option value="contentieux_administratif">Contentieux administratif</option>
+                  <option value="asile">Asile</option>
+                  <option value="regroupement_familial">Regroupement familial</option>
+                  <option value="nationalite_francaise">Nationalite francaise</option>
+                  <option value="eloignement_urgence">Eloignement urgence</option>
+                  <option value="constitution_societe">Constitution de societe</option>
+                  <option value="autre">Autre</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowDossierModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700">Annuler</button>
+              <button onClick={handleCreateDossier} disabled={isCreatingDossier || !dossierForm.clientNom} className="px-4 py-2 text-sm text-white rounded-md disabled:opacity-50 flex items-center gap-2" style={{ background: '#7c3aed' }}>
+                {isCreatingDossier ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FolderPlus className="w-3.5 h-3.5" />}
+                Creer le dossier
               </button>
             </div>
           </div>

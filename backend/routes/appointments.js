@@ -69,7 +69,7 @@ router.post(
     body('nom').trim().notEmpty().withMessage('Le nom est requis'),
     // Le prénom est recommandé mais n'est plus bloquant
     body('prenom').optional().trim(),
-    body('email').isEmail().normalizeEmail().withMessage('Email invalide'),
+    body('email').optional({ checkFalsy: true }).isEmail().normalizeEmail().withMessage('Email invalide'),
     // Le téléphone est recommandé mais n'est plus bloquant
     body('telephone').optional().trim(),
     body('date').notEmpty().withMessage('La date est requise'),
