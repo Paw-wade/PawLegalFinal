@@ -181,6 +181,11 @@ export default function AdminWhatsAppPage() {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showMobileMore, setShowMobileMore] = useState(false);
+  const [saveToDossierMsg, setSaveToDossierMsg] = useState<any>(null);
+  const [saveToDossierName, setSaveToDossierName] = useState('');
+  const [saveToDossierCategorie, setSaveToDossierCategorie] = useState('autre');
+  const [saveToDossierDossierId, setSaveToDossierDossierId] = useState('');
+  const [isSavingToDossier, setIsSavingToDossier] = useState(false);
   const qrMenuRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const mobileMoreRef = useRef<HTMLDivElement>(null);
@@ -563,6 +568,45 @@ export default function AdminWhatsAppPage() {
       }));
     } catch (err: any) {
       setToast({ message: err?.response?.data?.message || 'Erreur epinglage', type: 'error' });
+    }
+  }
+
+  function openSaveToDossierModal(msg: any) {
+    const name = msg.filename || (msg.type === 'image' ? 'photo.jpg' : msg.type === 'audio' ? 'audio.ogg' : 'document');
+    setSaveToDossierMsg(msg);
+    setSaveToDossierName(name);
+    setSaveToDossierCategorie('autre');
+    const linkedId = selectedConv?.dossierId?._id || selectedConv?.dossierId || '';
+    setSaveToDossierDossierId(typeof linkedId === 'string' ? linkedId : '');
+  }
+
+  async function handleSaveToDossier() {
+    if (!saveToDossierMsg || !saveToDossierDossierId || !selectedConv) return;
+    setIsSavingToDossier(true);
+    try {
+      const payload: any = {
+        dossierId: saveToDossierDossierId,
+        nom: saveToDossierName,
+        categorie: saveToDossierCategorie,
+        mimeType: saveToDossierMsg.mimeType || undefined,
+        filename: saveToDossierMsg.filename || undefined,
+      };
+      if (saveToDossierMsg.mediaUri) {
+        payload.mediaUri = saveToDossierMsg.mediaUri;
+      } else if (saveToDossierMsg.mediaId) {
+        payload.mediaId = saveToDossierMsg.mediaId;
+      }
+      const { default: axios } = await import('axios');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      await axios.post(`${apiUrl}/api/whatsapp-admin/conversations/${selectedConv._id}/save-to-dossier`, payload, {
+        withCredentials: true,
+      });
+      setToast({ message: 'Document enregistre dans le dossier', type: 'success' });
+      setSaveToDossierMsg(null);
+    } catch (err: any) {
+      setToast({ message: err?.response?.data?.message || 'Erreur lors de l\'enregistrement', type: 'error' });
+    } finally {
+      setIsSavingToDossier(false);
     }
   }
 
@@ -977,7 +1021,7 @@ export default function AdminWhatsAppPage() {
                 {showAssignDropdown && (
                   <div style={{
                     position: 'absolute', top: '110%', right: 0, zIndex: 50, minWidth: '180px',
-                    background: 'hsl(var(--background))', border: '1px solid #e5e7eb',
+                    background: '#ffffff', border: '1px solid #e5e7eb',
                     borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden',
                   }}>
                     <button
@@ -1049,7 +1093,7 @@ export default function AdminWhatsAppPage() {
                 {showStatusDropdown && (
                   <div style={{
                     position: 'absolute', top: '110%', right: 0, zIndex: 50, minWidth: '170px',
-                    background: 'hsl(var(--background))', border: '1px solid #e5e7eb',
+                    background: '#ffffff', border: '1px solid #e5e7eb',
                     borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', overflow: 'hidden',
                   }}>
                     {Object.entries(FOLLOW_UP_STATUS).map(([k, v]) => (
@@ -1182,7 +1226,7 @@ export default function AdminWhatsAppPage() {
                 {showMobileMore && (
                   <div style={{
                     position: 'absolute', top: '110%', right: 0, zIndex: 100, minWidth: '200px',
-                    background: 'hsl(var(--background))', border: '1px solid #e5e7eb',
+                    background: '#ffffff', border: '1px solid #e5e7eb',
                     borderRadius: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', overflow: 'hidden',
                   }}>
                     {/* Statut */}
@@ -1320,6 +1364,19 @@ export default function AdminWhatsAppPage() {
                             >
                               <Pin className="w-3 h-3" />
                             </button>
+                            {msg.type !== 'text' && (msg.mediaId || msg.mediaUri) && (
+                              <button
+                                onClick={() => openSaveToDossierModal(msg)}
+                                title="Enregistrer dans le dossier"
+                                className="p-1 rounded bg-background border border-border shadow-sm hover:bg-ds-primary-tint hover:border-ds-primary/40 text-muted-foreground hover:text-ds-primary transition-colors"
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                  <polyline points="17 21 17 13 7 13 7 21"/>
+                                  <polyline points="7 3 7 8 15 8"/>
+                                </svg>
+                              </button>
+                            )}
                           </div>
                         )}
 
@@ -1547,7 +1604,7 @@ export default function AdminWhatsAppPage() {
                   {showQRMenu && (
                     <div style={{
                       position: 'absolute', bottom: '110%', left: 0, right: 0, zIndex: 50,
-                      background: 'hsl(var(--background))', border: '1px solid #e5e7eb',
+                      background: '#ffffff', border: '1px solid #e5e7eb',
                       borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden',
                     }}>
                       <div className="p-2 border-b border-border">
@@ -1859,6 +1916,99 @@ export default function AdminWhatsAppPage() {
               >
                 {isSending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 Envoyer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal : Enregistrer media dans le dossier ── */}
+      {saveToDossierMsg && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div style={{ background: '#ffffff' }} className="rounded-lg shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-base flex items-center gap-2 text-gray-900">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ds-primary">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                Enregistrer dans le dossier
+              </h2>
+              <button onClick={() => setSaveToDossierMsg(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium block mb-1 text-gray-700">Nom du document</label>
+                <input
+                  type="text"
+                  value={saveToDossierName}
+                  onChange={(e) => setSaveToDossierName(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-ds-primary/40 text-gray-900"
+                  placeholder="Nom du document"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium block mb-1 text-gray-700">Categorie</label>
+                <select
+                  value={saveToDossierCategorie}
+                  onChange={(e) => setSaveToDossierCategorie(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-ds-primary/40 text-gray-900"
+                >
+                  <option value="identite">Identite</option>
+                  <option value="titre_sejour">Titre de sejour</option>
+                  <option value="contrat">Contrat</option>
+                  <option value="facture">Facture</option>
+                  <option value="autre">Autre</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium block mb-1 text-gray-700">Dossier</label>
+                {clientDossiers.length > 0 ? (
+                  <select
+                    value={saveToDossierDossierId}
+                    onChange={(e) => setSaveToDossierDossierId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-ds-primary/40 text-gray-900"
+                  >
+                    <option value="">-- Choisir un dossier --</option>
+                    {clientDossiers.map((d: any) => (
+                      <option key={d._id} value={d._id}>
+                        {d.numero || d._id.slice(-6)} {d.titre ? `- ${d.titre}` : ''} {d.categorie ? `(${d.categorie})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">Aucun dossier lie a cette conversation. Liez d'abord un dossier via le bouton <svg width="12" height="12" className="inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => setSaveToDossierMsg(null)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors text-gray-700"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSaveToDossier}
+                disabled={isSavingToDossier || !saveToDossierDossierId || !saveToDossierName.trim()}
+                className="px-4 py-2 text-sm text-white rounded-md disabled:opacity-50 transition-colors flex items-center gap-2"
+                style={{ background: 'var(--ds-primary, #E96D2B)' }}
+              >
+                {isSavingToDossier ? <RefreshCw className="w-4 h-4 animate-spin" /> : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                )}
+                Enregistrer
               </button>
             </div>
           </div>

@@ -159,7 +159,7 @@ router.get('/conversations/:id', async (req, res) => {
     if (conv.clientId) {
       const Dossier = require('../models/Dossier');
       clientDossiers = await Dossier.find({ user: conv.clientId._id })
-        .select('titre reference categorie statut createdAt')
+        .select('titre numero categorie statut createdAt')
         .sort({ createdAt: -1 })
         .limit(20)
         .lean();
@@ -460,6 +460,82 @@ router.delete('/conversations/:id', async (req, res) => {
     await WhatsappConversation.findByIdAndDelete(req.params.id);
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/whatsapp-admin/conversations/:id/save-to-dossier
+// Telecharge un media WhatsApp et l'enregistre dans les documents d'un dossier
+router.post('/conversations/:id/save-to-dossier', async (req, res) => {
+  try {
+    const { mediaId, mediaUri, dossierId, nom, categorie, mimeType, filename } = req.body;
+    if (!mediaId && !mediaUri) return res.status(400).json({ success: false, message: 'mediaId ou mediaUri requis' });
+    if (!dossierId) return res.status(400).json({ success: false, message: 'dossierId requis' });
+
+    const Document = require('../models/Document');
+    const Dossier = require('../models/Dossier');
+    const { resolveCabinetForUser } = require('../utils/cabinetResolver');
+
+    const dossier = await Dossier.findById(dossierId).lean();
+    if (!dossier) return res.status(404).json({ success: false, message: 'Dossier introuvable' });
+
+    const token = process.env.WHATSAPP_TOKEN;
+    let buffer;
+    let resolvedMime = mimeType || 'application/octet-stream';
+
+    if (mediaUri) {
+      const url = await getS3PresignedUrl(mediaUri, { expiresIn: 300, inline: true });
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('Impossible de recuperer le media depuis R2');
+      buffer = Buffer.from(await r.arrayBuffer());
+    } else {
+      if (!token) return res.status(500).json({ success: false, message: 'WHATSAPP_TOKEN non configure' });
+      const metaRes = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!metaRes.ok) throw new Error('Erreur API WhatsApp lors de la recuperation du media');
+      const meta = await metaRes.json();
+      if (!meta.url) throw new Error('URL media introuvable dans la reponse WhatsApp');
+      resolvedMime = mimeType || meta.mime_type || 'application/octet-stream';
+      const fileRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!fileRes.ok) throw new Error('Echec du telechargement du media WhatsApp');
+      buffer = Buffer.from(await fileRes.arrayBuffer());
+    }
+
+    const safeName = (filename || `media_${mediaId || Date.now()}`).replace(/[^\w.\-]/g, '_');
+    const cabinet = await resolveCabinetForUser(req.user);
+    const s3Prefix = cabinet?.s3Prefix || null;
+
+    const r2Uri = await uploadBufferToS3(buffer, {
+      fileName: `${Date.now()}_${safeName}`,
+      contentType: resolvedMime,
+      subfolder: 'documents',
+      prefix: s3Prefix,
+    });
+
+    const normalizeCategorie = (c) => {
+      const allowed = ['identite', 'titre_sejour', 'contrat', 'facture', 'autre'];
+      return allowed.includes(c) ? c : 'autre';
+    };
+
+    const doc = await Document.create({
+      user: dossier.user || req.user.id,
+      nom: nom || safeName,
+      nomFichier: safeName,
+      originalName: filename || safeName,
+      cheminFichier: r2Uri,
+      typeMime: resolvedMime,
+      taille: buffer.length,
+      categorie: normalizeCategorie(categorie),
+      dossierId,
+      cabinetId: cabinet?._id || null,
+      visibleToClient: false,
+      description: 'Document recu via WhatsApp',
+    });
+
+    res.json({ success: true, document: doc });
+  } catch (err) {
+    console.error('[WhatsApp save-to-dossier]', err.message);
     res.status(500).json({ success: false, message: err.message });
   }
 });
