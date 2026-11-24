@@ -701,6 +701,38 @@ export default function AdminRendezVousPage() {
 
   // ---- Helpers calendrier ----
   const CAL_HOURS = ['08','09','10','11','12','13','14','15','16','17','18'];
+
+  function getWeekOffsetForDate(date: Date): number {
+    const today = new Date();
+    const dow = (today.getDay() + 6) % 7;
+    const thisMon = new Date(today);
+    thisMon.setDate(today.getDate() - dow);
+    thisMon.setHours(0, 0, 0, 0);
+    const targetMon = new Date(date);
+    const tdow = (targetMon.getDay() + 6) % 7;
+    targetMon.setDate(targetMon.getDate() - tdow);
+    targetMon.setHours(0, 0, 0, 0);
+    return Math.round((targetMon.getTime() - thisMon.getTime()) / (7 * 24 * 3600 * 1000));
+  }
+
+  function handleStatusChipClick(key: string) {
+    setStatusFilter(key as any);
+    if (viewMode === 'calendar') {
+      const matching = rendezVous.filter((rdv: any) => {
+        if (key === 'all') return !rdv.archived;
+        if (key === 'archived') return rdv.archived === true;
+        if (key === 'termine') return isRdvTerminated(rdv);
+        if (rdv.archived) return false;
+        if (key === 'en_attente') return rdv.statut === 'en_attente';
+        if (key === 'confirme') return rdv.statut === 'confirme' || rdv.statut === 'confirmé';
+        return true;
+      }).filter((rdv: any) => rdv.date);
+      if (matching.length > 0) {
+        const sorted = [...matching].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        setCalWeekOffset(getWeekOffsetForDate(new Date(sorted[0].date)));
+      }
+    }
+  }
   const CAL_JOURS_COURTS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
   const CAL_MOIS_COURTS = ['Janv','Fevr','Mars','Avr','Mai','Juin','Juil','Aout','Sept','Oct','Nov','Dec'];
 
@@ -811,7 +843,7 @@ export default function AdminRendezVousPage() {
               <button
                 key={stat.key}
                 type="button"
-                onClick={() => setStatusFilter(stat.key as any)}
+                onClick={() => handleStatusChipClick(stat.key)}
                 className={`text-left rounded-xl border p-4 transition-all hover:shadow-sm ${stat.bg} ${statusFilter === stat.key ? 'ring-2 ring-offset-1 ring-orange-400' : ''}`}
               >
                 <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1 ${stat.text}`}>{stat.label}</p>
@@ -891,7 +923,13 @@ export default function AdminRendezVousPage() {
           if (viewMode === 'calendar') {
             const weekDays = getWeekDays(calWeekOffset);
             const today = new Date(); today.setHours(0,0,0,0);
+            const rdvHorsSemaine = filteredByStatus.filter((rdv: any) => {
+              if (!rdv.date) return false;
+              const rd = new Date(rdv.date);
+              return !weekDays.some(d => isSameDay(rd, d));
+            });
             return (
+              <>
               <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
                 {/* Entetes jours */}
                 <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: '64px repeat(7, 1fr)' }}>
@@ -988,6 +1026,24 @@ export default function AdminRendezVousPage() {
                   );
                 })()}
               </div>
+
+              {/* Banniere RDV hors semaine */}
+              {rdvHorsSemaine.length > 0 && (
+                <div className="mt-3 flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-2.5 text-sm text-orange-700">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 5v3.5l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  <span>{rdvHorsSemaine.length} rendez-vous hors de la semaine visible.</span>
+                  <button
+                    className="ml-auto text-xs font-semibold underline hover:text-orange-900"
+                    onClick={() => {
+                      const sorted = [...rdvHorsSemaine].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                      setCalWeekOffset(getWeekOffsetForDate(new Date(sorted[0].date)));
+                    }}
+                  >
+                    Aller au plus proche
+                  </button>
+                </div>
+              )}
+              </>
             );
           }
 
