@@ -83,20 +83,24 @@ Ecrivez *1*, *2* ou *3* pour choisir.`;
 
 const DEMANDE_MENU = `Quelle est votre situation ?
 
-*Droit des etrangers - Accompagnement :*
+*Droit des etrangers :*
 1️⃣  Titre de sejour (1re demande, renouvellement, changement)
-2️⃣  Visa ou carte de resident
+2️⃣  Carte de resident
 3️⃣  Nationalite francaise
 4️⃣  Regroupement familial
 
 *Recours :*
 5️⃣  OQTF (obligation de quitter le territoire)
-6️⃣  Refus de titre de sejour ou de visa
-7️⃣  Refus d'asile (CNDA)
+6️⃣  Refus de visa
+7️⃣  Absence de reponse a une demande de titre de sejour
+
+*Demande de visa :*
+8️⃣  Visa France - Senegal
+9️⃣  Visa France - Etats-Unis
 
 *Creation d'entreprise :*
-8️⃣  Societe / entreprise en France
-9️⃣  Societe / entreprise au Senegal
+10.  Societe / entreprise en France
+11.  Societe / entreprise au Senegal
 
 0️⃣  Retour au menu principal
 
@@ -104,14 +108,16 @@ Ecrivez le numero de votre choix.`;
 
 const DEMANDE_REPONSES = {
   '1': { label: 'titre de sejour', detail: 'premiere demande, renouvellement ou changement de statut' },
-  '2': { label: 'visa ou carte de resident', detail: 'visa long sejour ou carte de resident 10 ans' },
+  '2': { label: 'carte de resident', detail: 'carte de resident 10 ans' },
   '3': { label: 'nationalite francaise', detail: 'acquisition de la nationalite par naturalisation ou mariage' },
   '4': { label: 'regroupement familial', detail: 'faire venir vos proches en France' },
   '5': { label: 'contestation d\'OQTF', detail: 'recours contre une obligation de quitter le territoire' },
-  '6': { label: 'recours refus de titre ou de visa', detail: 'contester un refus administratif devant le tribunal' },
-  '7': { label: 'recours refus d\'asile (CNDA)', detail: 'appel aupres de la Cour nationale du droit d\'asile' },
-  '8': { label: 'creation de societe en France', detail: 'SARL, SAS, SCI ou auto-entrepreneur' },
-  '9': { label: 'creation de societe au Senegal', detail: 'SARL, SUARL ou SAS au Senegal' },
+  '6': { label: 'recours refus de visa', detail: 'contester un refus de visa devant la CRRV ou le tribunal administratif' },
+  '7': { label: 'recours absence de reponse (titre de sejour)', detail: 'silence de la prefecture valant rejet apres 4 mois' },
+  '8': { label: 'visa France - Senegal', detail: 'visa de court ou long sejour pour entrer en France depuis le Senegal' },
+  '9': { label: 'visa France - Etats-Unis', detail: 'visa de court ou long sejour pour entrer en France depuis les Etats-Unis' },
+  '10': { label: 'creation de societe en France', detail: 'SARL, SAS, SCI ou auto-entrepreneur' },
+  '11': { label: 'creation de societe au Senegal', detail: 'SARL, SUARL ou SAS au Senegal' },
 };
 
 const FAQ_MENU = `Sur quel sujet souhaitez-vous des informations ?
