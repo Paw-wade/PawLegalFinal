@@ -536,7 +536,10 @@ export default function HomePage() {
               <Link href="/forum" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px] flex items-center">Forum</Link>
               <Link href="/contact" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors min-h-[44px] flex items-center">Contact</Link>
               <div className="my-1 border-t border-gray-100" />
-              <Link href="/guides/nouvel-arrivant" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-medium text-emerald-700 hover:bg-emerald-50 transition-colors min-h-[44px] flex items-center border border-emerald-200">Guide nouvel arrivant</Link>
+              <Link href="/guides/nouvel-arrivant" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-semibold text-ds-primary hover:bg-ds-primary-tint transition-colors min-h-[44px] flex items-center gap-2 border border-ds-primary/40">
+                <svg width="15" height="15" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h7A1.5 1.5 0 0 1 12 2.5v9a.5.5 0 0 1-.8.4L7 9.333l-4.2 2.567A.5.5 0 0 1 2 11.5v-9Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                Guide arrivant
+              </Link>
               <Link href="/calculateur" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-semibold bg-orange-500 text-white hover:bg-orange-600 transition-colors min-h-[44px] flex items-center">Calculateur</Link>
               <Link href="/nouvelle-demande" onClick={() => setMobilePageDrawerOpen(false)} className="px-4 py-3 rounded-xl text-sm font-medium text-orange-700 hover:bg-orange-50 transition-colors min-h-[44px] flex items-center border border-orange-200">Nouvelle demande</Link>
             </nav>
@@ -606,8 +609,9 @@ export default function HomePage() {
                 ))}
                 <Link
                   href="/guides/nouvel-arrivant"
-                  className="px-3 py-1.5 rounded-md text-sm font-medium text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors border border-emerald-200"
+                  className="ml-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold text-ds-primary border border-ds-primary/40 hover:bg-ds-primary-tint hover:border-ds-primary/70 transition-colors"
                 >
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h7A1.5 1.5 0 0 1 12 2.5v9a.5.5 0 0 1-.8.4L7 9.333l-4.2 2.567A.5.5 0 0 1 2 11.5v-9Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
                   Guide arrivant
                 </Link>
               </div>
