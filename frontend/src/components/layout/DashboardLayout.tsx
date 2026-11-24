@@ -20,6 +20,7 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
   const router = useRouter();
   const pathname = usePathname();
   const lexiaFullscreen = pathname === '/lexia' || pathname === '/admin/lexia';
+  const fullHeightPage = lexiaFullscreen || pathname === '/admin/whatsapp' || pathname?.startsWith('/admin/messages');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -98,8 +99,8 @@ export function DashboardLayout({ children, variant = 'client' }: DashboardLayou
 
         {/* Contenu - padding mobile et pas de débordement */}
         <main
-          className={`flex flex-1 flex-col min-h-0 overflow-x-hidden w-full max-w-[100vw] px-3 sm:px-4 lg:px-6 safe-bottom ${
-            lexiaFullscreen ? 'overflow-y-hidden pb-0 pt-0' : 'overflow-y-auto pb-6'
+          className={`flex flex-1 flex-col min-h-0 overflow-x-hidden w-full max-w-[100vw] safe-bottom ${
+            fullHeightPage ? 'overflow-y-hidden pb-0 pt-0 px-0' : 'overflow-y-auto pb-6 px-3 sm:px-4 lg:px-6'
           }`}
         >
           {children}

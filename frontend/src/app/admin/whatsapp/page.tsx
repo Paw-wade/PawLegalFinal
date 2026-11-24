@@ -38,6 +38,8 @@ import {
   ChevronDown,
   SearchIcon,
   Play,
+  ArrowLeft,
+  MoreVertical,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────
@@ -178,8 +180,10 @@ export default function AdminWhatsAppPage() {
   const [showPinned, setShowPinned] = useState(true);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [showMobileMore, setShowMobileMore] = useState(false);
   const qrMenuRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const mobileMoreRef = useRef<HTMLDivElement>(null);
 
   // Verification et suivi de la permission microphone
   useEffect(() => {
@@ -200,11 +204,12 @@ export default function AdminWhatsAppPage() {
     if (status === 'unauthenticated') router.push('/auth/login');
   }, [status, router]);
 
-  // Fermeture dropdown QR et statut au clic exterieur
+  // Fermeture dropdown QR, statut et menu mobile au clic exterieur
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (qrMenuRef.current && !qrMenuRef.current.contains(e.target as Node)) setShowQRMenu(false);
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) setShowStatusDropdown(false);
+      if (mobileMoreRef.current && !mobileMoreRef.current.contains(e.target as Node)) setShowMobileMore(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -614,13 +619,13 @@ export default function AdminWhatsAppPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-background">
+    <div className="flex flex-1 min-h-0 bg-background overflow-hidden">
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
 
       {/* ── Panneau gauche : liste des conversations ── */}
-      <div className="w-80 flex flex-col border-r border-border shrink-0">
+      <div className={`flex flex-col border-r border-border shrink-0 w-full md:w-80 ${selectedConv ? 'hidden md:flex' : 'flex'}`}>
         {/* Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
@@ -833,19 +838,28 @@ export default function AdminWhatsAppPage() {
 
       {/* ── Panneau droit : conversation ── */}
       {selectedConv ? (
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 w-full">
           {/* Header conversation */}
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-3 group">
-              <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+          <div className="px-2 md:px-4 py-2 md:py-3 border-b border-border flex items-center gap-1 md:gap-2">
+            {/* Bouton retour (mobile uniquement) */}
+            <button
+              className="md:hidden p-2 -ml-1 rounded-md text-muted-foreground hover:bg-accent shrink-0"
+              onClick={() => setSelectedConv(null)}
+              title="Retour"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 group min-w-0 flex-1">
+              <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
                 {selectedConv.clientId ? (
                   <User className="w-4 h-4 text-blue-600" />
                 ) : (
                   <MessageCircle className="w-4 h-4 text-green-600" />
                 )}
               </div>
-              <div>
-                <div className="font-semibold text-sm flex items-center gap-1">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm flex items-center gap-1 min-w-0">
                   {isRenamingContact ? (
                     <>
                       <input
@@ -853,37 +867,34 @@ export default function AdminWhatsAppPage() {
                         value={renameValue}
                         onChange={(e) => setRenameValue(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') setIsRenamingContact(false); }}
-                        className="border border-input rounded px-2 py-0.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring w-44"
+                        className="border border-input rounded px-2 py-0.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring w-32 md:w-44"
                         placeholder="Nom du contact"
                       />
-                      <button onClick={saveRename} className="p-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20">
+                      <button onClick={saveRename} className="p-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 shrink-0">
                         <Check className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => setIsRenamingContact(false)} className="p-1 rounded text-muted-foreground hover:bg-accent">
+                      <button onClick={() => setIsRenamingContact(false)} className="p-1 rounded text-muted-foreground hover:bg-accent shrink-0">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </>
                   ) : (
                     <>
-                      <span>{getConvName(selectedConv) || formatPhone(selectedConv.phone)}</span>
-                      <button onClick={startRename} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent opacity-0 group-hover:opacity-100 transition-opacity" title="Renommer le contact">
+                      <span className="truncate">{getConvName(selectedConv) || formatPhone(selectedConv.phone)}</span>
+                      <button onClick={startRename} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="Renommer">
                         <Pencil className="w-3 h-3" />
                       </button>
                     </>
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground flex items-center gap-2">
-                  <Phone className="w-3 h-3" />
-                  {formatPhone(selectedConv.phone)}
+                <div className="text-xs text-muted-foreground flex items-center gap-1 md:gap-2 min-w-0">
+                  <Phone className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{formatPhone(selectedConv.phone)}</span>
                   {selectedConv.clientId?.email && (
-                    <span className="opacity-70">· {selectedConv.clientId.email}</span>
-                  )}
-                  {!selectedConv.clientId && selectedConv.contactName && (
-                    <span className="opacity-60">· {selectedConv.contactName}</span>
+                    <span className="opacity-70 truncate hidden md:inline">· {selectedConv.clientId.email}</span>
                   )}
                 </div>
                 {clientDossiers.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1">
+                  <div className="hidden md:flex flex-wrap gap-1 mt-1">
                     {clientDossiers.map((d: any) => (
                       <a
                         key={d._id}
@@ -891,7 +902,7 @@ export default function AdminWhatsAppPage() {
                         className="inline-flex items-center gap-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded hover:bg-purple-200 dark:hover:bg-purple-800/40 transition-colors"
                       >
                         <FileText className="w-3 h-3 shrink-0" />
-                        <span className="truncate max-w-[140px]">{d.titre || d.reference || 'Dossier'}</span>
+                        <span className="truncate max-w-[120px]">{d.titre || d.reference || 'Dossier'}</span>
                         <span className="opacity-60 shrink-0">· {d.statut}</span>
                       </a>
                     ))}
@@ -899,7 +910,9 @@ export default function AdminWhatsAppPage() {
                 )}
               </div>
             </div>
-            <div className="flex gap-1 items-center">
+
+            {/* Actions desktop (toutes les actions) */}
+            <div className="hidden md:flex gap-1 items-center shrink-0">
               {/* Assignation */}
               <div ref={assignDropdownRef} style={{ position: 'relative' }}>
                 <button
@@ -1077,6 +1090,105 @@ export default function AdminWhatsAppPage() {
               >
                 <Trash2 className="w-4 h-4" />
               </button>
+            </div>
+
+            {/* Actions mobiles (3 boutons + menu "plus") */}
+            <div className="flex md:hidden gap-1 items-center shrink-0">
+              {/* Bot/Conseiller icone seulement */}
+              <button
+                onClick={toggleHumanMode}
+                title={selectedConv.humanMode ? 'Réactiver le bot' : 'Prendre la main'}
+                style={{
+                  padding: '0.375rem',
+                  borderRadius: '0.375rem',
+                  display: 'flex', alignItems: 'center',
+                  border: selectedConv.humanMode ? '1px solid #22c55e' : '1px solid #d1d5db',
+                  background: selectedConv.humanMode ? '#f0fdf4' : 'transparent',
+                  color: selectedConv.humanMode ? '#16a34a' : '#6b7280',
+                  cursor: 'pointer',
+                }}
+              >
+                {selectedConv.humanMode
+                  ? <UserCheck style={{ width: '1rem', height: '1rem' }} />
+                  : <Bot style={{ width: '1rem', height: '1rem' }} />
+                }
+              </button>
+
+              {/* Recherche */}
+              <button
+                onClick={() => { setShowMsgSearch((v) => !v); setMsgSearch(''); }}
+                title="Rechercher"
+                style={{
+                  padding: '0.375rem', borderRadius: '0.375rem', display: 'flex', alignItems: 'center',
+                  border: showMsgSearch ? '1px solid #3b82f6' : '1px solid #d1d5db',
+                  background: showMsgSearch ? '#eff6ff' : 'transparent',
+                  color: showMsgSearch ? '#2563eb' : '#6b7280', cursor: 'pointer',
+                }}
+              >
+                <SearchIcon style={{ width: '1rem', height: '1rem' }} />
+              </button>
+
+              {/* Menu plus (mobile) */}
+              <div ref={mobileMoreRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowMobileMore((v) => !v)}
+                  style={{
+                    padding: '0.375rem', borderRadius: '0.375rem', display: 'flex', alignItems: 'center',
+                    border: showMobileMore ? '1px solid #6b7280' : '1px solid #d1d5db',
+                    background: showMobileMore ? '#f3f4f6' : 'transparent',
+                    color: '#6b7280', cursor: 'pointer',
+                  }}
+                  title="Plus d'actions"
+                >
+                  <MoreVertical style={{ width: '1rem', height: '1rem' }} />
+                </button>
+                {showMobileMore && (
+                  <div style={{
+                    position: 'absolute', top: '110%', right: 0, zIndex: 100, minWidth: '200px',
+                    background: 'var(--background, #fff)', border: '1px solid #e5e7eb',
+                    borderRadius: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', overflow: 'hidden',
+                  }}>
+                    {/* Statut */}
+                    <div style={{ borderBottom: '1px solid #f3f4f6', padding: '0.3rem 0' }}>
+                      {Object.entries(FOLLOW_UP_STATUS).map(([k, v]) => (
+                        <button key={k} onClick={() => { handleSetStatus(k); setShowMobileMore(false); }} style={{
+                          width: '100%', textAlign: 'left', padding: '0.45rem 0.75rem', fontSize: '0.78rem',
+                          color: v.color, fontWeight: (selectedConv.followUpStatus || 'none') === k ? 600 : 400,
+                          background: (selectedConv.followUpStatus || 'none') === k ? v.bg : 'none',
+                          border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                        }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: v.color, flexShrink: 0 }} />
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Rappel */}
+                    <button onClick={() => {
+                      setShowMobileMore(false);
+                      if (selectedConv.reminderAt) { setReminderDate(new Date(selectedConv.reminderAt).toISOString().slice(0, 16)); setReminderNoteText(selectedConv.reminderNote || ''); } else { setReminderDate(''); setReminderNoteText(''); }
+                      setShowReminderModal(true);
+                    }} style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: selectedConv.reminderAt ? '#d97706' : '#6b7280', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Bell style={{ width: '0.875rem', height: '0.875rem' }} />
+                      {selectedConv.reminderAt ? 'Modifier le rappel' : 'Poser un rappel'}
+                    </button>
+                    {/* Assigner */}
+                    <button onClick={() => { setShowMobileMore(false); setShowAssignDropdown(true); }} style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <User style={{ width: '0.875rem', height: '0.875rem' }} />
+                      {selectedConv.assignedTo ? `Assigné: ${selectedConv.assignedTo.prenom}` : 'Assigner'}
+                    </button>
+                    {/* Lier dossier */}
+                    <button onClick={() => { setShowMobileMore(false); openLinkModal(); }} style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Link2 style={{ width: '0.875rem', height: '0.875rem' }} />
+                      Lier à un dossier
+                    </button>
+                    {/* Supprimer */}
+                    <button onClick={() => { setShowMobileMore(false); deleteConversation(selectedConv._id); }} style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Trash2 style={{ width: '0.875rem', height: '0.875rem' }} />
+                      Supprimer
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
