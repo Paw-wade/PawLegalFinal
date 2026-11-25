@@ -45,6 +45,8 @@ const whatsappConversationSchema = new mongoose.Schema(
         'dossier_detail',
         'doc_choix_type',
         'doc_attente_fichier',
+        'contact_motif',
+        'contact_message',
       ],
       default: 'menu',
     },

@@ -336,6 +336,10 @@ async function fetchPendingRequests(dossierId) {
   }
 }
 
+function menuContactConseiller() {
+  return `Pour quelle raison souhaitez-vous parler a un conseiller ?\n\n1️⃣  Question sur mon dossier en cours\n2️⃣  Premiere prise de contact\n3️⃣  Urgence (convocation, OQTF)\n4️⃣  Autre\n\nEcrivez le numero de votre choix, *R* pour revenir au menu.`;
+}
+
 function buildDocChoixTypeMenu(pendingRequests, dossierNumero) {
   const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
   if (pendingRequests.length === 0) {
@@ -502,10 +506,9 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       }
       // Option 4 : Parler a un conseiller (utilisateur reconnu uniquement)
       if (text === '4' && prenom) {
-        await enregistrerContactWA(conv.phone, `${user.firstName} ${user.lastName || ''}`.trim());
-        conv.state = 'menu';
+        conv.state = 'contact_motif';
         await conv.save();
-        return `Vous serez contacte tres rapidement par un conseiller. A bientot !\n\nTapez *menu* pour revenir au menu principal.`;
+        return menuContactConseiller();
       }
       return `Ecrivez *1*, *2*${prenom ? ', *3* ou *4*' : ' ou *3*'} pour choisir.\n\n${menuPrincipal(prenom)}`;
     }
@@ -650,10 +653,54 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
     case 'contact_name': {
       const nom = (incomingText || '').trim();
       if (nom.length < 2) return `Veuillez indiquer votre prenom et nom.`;
-      await enregistrerContactWA(conv.phone, nom);
+      if (!conv.rdv) conv.rdv = {};
+      conv.rdv.prenom = nom;
+      conv.markModified('rdv');
+      conv.state = 'contact_motif';
+      await conv.save();
+      return menuContactConseiller();
+    }
+
+    case 'contact_motif': {
+      const MOTIFS_CONTACT = {
+        '1': 'Question sur mon dossier en cours',
+        '2': 'Premiere prise de contact',
+        '3': 'Urgence (convocation, OQTF)',
+        '4': 'Autre',
+      };
+      if (text === 'r') {
+        conv.state = 'menu';
+        await conv.save();
+        return menuPrincipal(prenom);
+      }
+      const motifContact = MOTIFS_CONTACT[text];
+      if (!motifContact) return `Ecrivez *1*, *2*, *3* ou *4* pour choisir.\n\n${menuContactConseiller()}`;
+      if (!conv.rdv) conv.rdv = {};
+      conv.rdv.motif = motifContact;
+      conv.markModified('rdv');
+      conv.state = 'contact_message';
+      await conv.save();
+      return `Laissez-nous un message et un conseiller vous recontactera tres rapidement.\n_(Ecrivez votre message ci-dessous)_`;
+    }
+
+    case 'contact_message': {
+      const msg = (incomingText || '').trim();
+      if (!msg) return `Ecrivez votre message pour continuer.`;
+      if (text === 'r') {
+        conv.state = 'contact_motif';
+        await conv.save();
+        return menuContactConseiller();
+      }
+      if (!conv.rdv) conv.rdv = {};
+      conv.rdv.note = msg;
+      conv.markModified('rdv');
+      const nomContact = prenom
+        ? `${user.firstName} ${user.lastName || ''}`.trim()
+        : conv.rdv?.prenom || conv.contactName || conv.phone;
+      await enregistrerContactWA(conv.phone, nomContact, conv.rdv.motif, msg);
       conv.state = 'menu';
       await conv.save();
-      return `Vous serez contacte tres rapidement par un conseiller. A bientot !\n\nTapez *menu* pour revenir au menu principal.`;
+      return `✅ *Message bien recu !*\n\nVous serez contacte tres rapidement par un conseiller. A bientot !\n\nTapez *0* pour revenir au menu.`;
     }
 
     case 'mes_dossiers': {
@@ -890,21 +937,23 @@ async function enregistrerDemandeRDV(conv) {
   }
 }
 
-async function enregistrerContactWA(phone, nom) {
+async function enregistrerContactWA(phone, nom, motif, message) {
   try {
     const User = require('../models/User');
     const Notification = require('../models/Notification');
     const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id').lean();
     if (!admins.length) return;
 
+    const motifLine = motif ? ` - ${motif}` : '';
+    const msgLine = message ? `\nMessage : "${message}"` : '';
     const docs = admins.map((admin) => ({
       user: admin._id,
       type: 'whatsapp_contact',
       titre: 'Demande de contact WhatsApp',
-      message: `${nom} (${phone}) souhaite etre contacte par un conseiller.`,
+      message: `${nom} (${phone}) souhaite etre contacte par un conseiller${motifLine}.${msgLine}`,
       lien: '/admin/whatsapp',
       lue: false,
-      metadata: { phone, nom, source: 'whatsapp' },
+      metadata: { phone, nom, motif: motif || '', message: message || '', source: 'whatsapp' },
     }));
     await Notification.insertManyWithPush(docs);
   } catch (err) {
