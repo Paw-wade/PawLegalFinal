@@ -20,7 +20,7 @@ const PLATFORM_CONFIG = {
   },
   email: 'contact@adapapers.fr',
   website: 'https://www.adapapers.fr',
-  phone: '07 68 03 33 58'
+  phone: '07 63 69 64 81'
 };
 
 /**

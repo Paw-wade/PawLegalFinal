@@ -63,8 +63,8 @@ export default function PolitiqueConfidentialitePage() {
                   contact@adapapers.fr
                 </a><br />
                 Téléphone :{' '}
-                <a href="tel:+33768033358" className="text-primary hover:underline">
-                  +33 7 68 03 33 58
+                <a href="tel:+33763696481" className="text-primary hover:underline">
+                  +33 7 63 69 64 81
                 </a>
               </p>
             </section>

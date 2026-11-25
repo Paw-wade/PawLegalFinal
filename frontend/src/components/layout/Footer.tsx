@@ -25,7 +25,7 @@ export function Footer() {
             <span className="text-gray-400">|</span>
             <span className="text-gray-400">contact@adapapers.fr</span>
             <span className="text-gray-400">|</span>
-            <span className="text-gray-400">07 68 03 33 58</span>
+            <span className="text-gray-400">07 63 69 64 81</span>
           </div>
 
           <div className="text-gray-400">
