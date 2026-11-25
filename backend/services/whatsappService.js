@@ -279,6 +279,80 @@ const MOTIFS_LABELS = {
   autre: 'Autre',
 };
 
+const TYPES_DOCUMENT_WA = {
+  '1': 'Passeport',
+  '2': 'Acte de naissance',
+  '3': 'Justificatif de domicile',
+  '4': 'Titre de sejour actuel',
+  '5': 'Attestation employeur',
+  '6': 'Contrat de travail',
+  '7': 'Bulletin de salaire',
+  '8': 'Acte de mariage',
+  '9': 'Formulaire CERFA',
+  '10': 'Taxe de sejour (timbres fiscaux)',
+  '11': 'Photos d\'identite',
+  '12': 'Autre document',
+};
+
+function menuTypesDocument() {
+  const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+  const lignes = Object.entries(TYPES_DOCUMENT_WA).map(([k, v]) => {
+    const n = parseInt(k, 10);
+    const em = n <= 9 ? emojis[n - 1] : `${n}.`;
+    return `${em}  ${v}`;
+  });
+  return `Quel type de document souhaitez-vous envoyer ?\n\n${lignes.join('\n')}\n\nEcrivez le numero de votre choix, ou *0* pour annuler.`;
+}
+
+function mapDocTypeToCategorie(docType) {
+  const t = (docType || '').toLowerCase();
+  if (t.includes('passeport') || t.includes('identite') || t.includes('naissance') || t.includes('mariage')) return 'identite';
+  if (t.includes('titre') || t.includes('sejour') || t.includes('oqtf') || t.includes('prefec')) return 'titre_sejour';
+  if (t.includes('contrat') || t.includes('salaire') || t.includes('attestation') || t.includes('emploi')) return 'contrat';
+  if (t.includes('taxe') || t.includes('timbre') || t.includes('facture') || t.includes('loyer')) return 'facture';
+  return 'autre';
+}
+
+function getExtFromMime(mimeType) {
+  const map = {
+    'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+    'application/pdf': 'pdf',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  };
+  return map[mimeType] || 'bin';
+}
+
+async function fetchPendingRequests(dossierId) {
+  if (!dossierId) return [];
+  try {
+    const DocumentRequest = require('../models/DocumentRequest');
+    return await DocumentRequest.find({ dossier: dossierId, status: 'pending' })
+      .sort({ isUrgent: -1, createdAt: 1 })
+      .lean();
+  } catch (e) {
+    console.warn('[WhatsApp] fetchPendingRequests:', e.message);
+    return [];
+  }
+}
+
+function buildDocChoixTypeMenu(pendingRequests, dossierNumero) {
+  const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+  if (pendingRequests.length === 0) {
+    return menuTypesDocument();
+  }
+  const dossierRef = dossierNumero ? `dossier N° ${dossierNumero}` : 'votre dossier';
+  const lignes = pendingRequests.map((req, i) => {
+    const em = i < 9 ? emojis[i] : `${i + 1}.`;
+    const urgent = req.isUrgent ? ' ⚠️ URGENT' : '';
+    return `${em}  ${req.documentTypeLabel}${urgent}`;
+  });
+  const autrIdx = pendingRequests.length + 1;
+  const autrEm = autrIdx <= 9 ? emojis[autrIdx - 1] : `${autrIdx}.`;
+  lignes.push(`${autrEm}  Autre document`);
+  return `Documents demandes pour le ${dossierRef} :\n\n${lignes.join('\n')}\n\nEcrivez le numero de votre choix, *R* pour revenir, *0* pour le menu.`;
+}
+
 // ─────────────────────────────────────────────
 // Créneaux disponibles
 // ─────────────────────────────────────────────
@@ -364,32 +438,33 @@ async function resolveUser(conv) {
  * Retourne le texte de réponse a envoyer.
  */
 async function handleIncomingMessage(conv, incomingText, messageType) {
-  // Pour les types medias, accuser reception et passer la conversation a un conseiller
+  const text = (incomingText || '').trim().toLowerCase();
+
+  // Identifier l'utilisateur lie a ce numero (doit etre fait avant le check media)
+  const user = await resolveUser(conv);
+  const prenom = user?.firstName || null;
+
+  // Pour les types medias
   if (messageType && messageType !== 'text' && messageType !== 'location') {
-    const typeLabels = {
-      image: 'photo',
-      document: 'document',
-      audio: 'message vocal',
-      video: 'video',
-    };
+    // Si on attend un fichier pour un dossier, traiter le document
+    if (conv.state === 'doc_attente_fichier' && conv.docContext?.dossierId && user) {
+      return await traiterDocumentRecu(conv, user);
+    }
+    // Sinon accusé de reception + mode conseiller
+    const typeLabels = { image: 'photo', document: 'document', audio: 'message vocal', video: 'video' };
     const label = typeLabels[messageType] || 'fichier';
-    // Activer le mode conseiller pour que le bot ne reponde plus a ce contact
     if (!conv.humanMode) {
       conv.humanMode = true;
       conv.markModified('humanMode');
     }
-    return `Votre ${label} a bien ete recu. Un conseiller Ada Papers va l'examiner et vous recontactera dans les plus brefs delais.\n\nTapez *menu* pour revenir au menu.`;
+    return `Votre ${label} a bien ete recu. Un conseiller Ada Papers va l'examiner et vous recontactera dans les plus brefs delais.\n\nTapez *0* pour revenir au menu.`;
   }
-
-  const text = (incomingText || '').trim().toLowerCase();
-
-  // Identifier l'utilisateur lie a ce numero
-  const user = await resolveUser(conv);
-  const prenom = user?.firstName || null;
 
   if (text === 'menu' || text === '0') {
     conv.state = 'menu';
     conv.rdv = {};
+    conv.docContext = {};
+    conv.markModified('docContext');
     await conv.save();
     return menuPrincipal(prenom);
   }
@@ -582,9 +657,96 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
     }
 
     case 'mes_dossiers': {
-      conv.state = 'menu';
-      await conv.save();
       return await afficherDossiers(conv, user);
+    }
+
+    case 'dossier_select': {
+      const dossierCount = conv.docContext?.dossierCount || 5;
+      const idx = parseInt(text, 10);
+      if (isNaN(idx) || idx < 1 || idx > dossierCount) {
+        return `Ecrivez un numero entre *1* et *${dossierCount}*, ou *0* pour revenir au menu.`;
+      }
+      const Dossier = require('../models/Dossier');
+      const dossiers = await Dossier.find({ user: user._id })
+        .select('numero titre statut categorie createdAt documents')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+      const dossier = dossiers[idx - 1];
+      if (!dossier) {
+        conv.state = 'menu';
+        await conv.save();
+        return menuPrincipal(prenom);
+      }
+      if (!conv.docContext) conv.docContext = {};
+      conv.docContext.dossierId = dossier._id;
+      conv.docContext.dossierNumero = dossier.numero || `Dossier ${idx}`;
+      conv.state = 'dossier_detail';
+      conv.markModified('docContext');
+      await conv.save();
+      const statutLabel = STATUT_DOSSIER_LABELS[dossier.statut] || dossier.statut || 'En cours';
+      const nbDocs = dossier.documents?.length || 0;
+      const titre = dossier.titre || dossier.categorie || 'Dossier';
+      const numRef = dossier.numero ? `N° ${dossier.numero}` : `Dossier ${idx}`;
+      const pendingReqs = await fetchPendingRequests(dossier._id);
+      const pendingLine = pendingReqs.length > 0
+        ? `\n📩 *${pendingReqs.length} document${pendingReqs.length > 1 ? 's' : ''} demande${pendingReqs.length > 1 ? 's' : ''}* par votre conseiller`
+        : '';
+      return `📋 *${numRef}*\n_${titre}_\n\n📊 Statut : *${statutLabel}*\n📎 *${nbDocs} document${nbDocs !== 1 ? 's' : ''} fourni${nbDocs !== 1 ? 's' : ''}*${pendingLine}\n\n1️⃣  Ajouter un document\n2️⃣  Revenir a la liste\n\nEcrivez *1* pour ajouter un document, *2* pour la liste, *0* pour le menu.`;
+    }
+
+    case 'dossier_detail': {
+      if (text === '1') {
+        const pendingReqs = await fetchPendingRequests(conv.docContext?.dossierId);
+        conv.state = 'doc_choix_type';
+        await conv.save();
+        return buildDocChoixTypeMenu(pendingReqs, conv.docContext?.dossierNumero);
+      }
+      if (text === '2' || text === 'r') {
+        return await afficherDossiers(conv, user);
+      }
+      return `Ecrivez *1* pour ajouter un document, *2* pour la liste des dossiers, *0* pour le menu.`;
+    }
+
+    case 'doc_choix_type': {
+      if (text === 'r') {
+        conv.state = 'dossier_detail';
+        await conv.save();
+        const numRef = conv.docContext?.dossierNumero ? `N° ${conv.docContext.dossierNumero}` : 'le dossier';
+        return `Tapez *1* pour ajouter un document au dossier *${numRef}*, *2* pour la liste, *0* pour le menu.`;
+      }
+      const pendingReqs = await fetchPendingRequests(conv.docContext?.dossierId);
+      const totalOpts = pendingReqs.length + 1;
+      const idx = parseInt(text, 10);
+      if (isNaN(idx) || idx < 1 || idx > totalOpts) {
+        return `Ecrivez un numero entre *1* et *${totalOpts}*, ou *R* pour revenir, *0* pour le menu.\n\n${buildDocChoixTypeMenu(pendingReqs, conv.docContext?.dossierNumero)}`;
+      }
+      let docType, documentRequestId = '';
+      if (idx <= pendingReqs.length) {
+        const req = pendingReqs[idx - 1];
+        docType = req.documentTypeLabel;
+        documentRequestId = req._id.toString();
+      } else {
+        docType = 'Autre document';
+      }
+      if (!conv.docContext) conv.docContext = {};
+      conv.docContext.docType = docType;
+      conv.docContext.documentRequestId = documentRequestId;
+      conv.state = 'doc_attente_fichier';
+      conv.markModified('docContext');
+      await conv.save();
+      const dossierRef = conv.docContext.dossierNumero ? `dossier *N° ${conv.docContext.dossierNumero}*` : 'votre dossier';
+      return `Envoyez votre *${docType}* en piece jointe (PDF, JPG, PNG - max 10 Mo).\n\nIl sera automatiquement rattache au ${dossierRef}.\n\nTapez *R* pour choisir un autre type, *0* pour annuler.`;
+    }
+
+    case 'doc_attente_fichier': {
+      if (text === 'r') {
+        conv.state = 'doc_choix_type';
+        await conv.save();
+        return menuTypesDocument();
+      }
+      const dossierRef = conv.docContext?.dossierNumero ? `dossier *N° ${conv.docContext.dossierNumero}*` : 'votre dossier';
+      return `Envoyez votre *${conv.docContext?.docType || 'document'}* en piece jointe pour le ${dossierRef}.\n\nTapez *R* pour choisir un autre type, *0* pour annuler.`;
     }
 
     default:
@@ -614,17 +776,24 @@ async function afficherDossiers(conv, user) {
       return `Vous n'avez pas encore de dossier ouvert chez Ada Papers.\n\nTapez *menu* pour revenir au menu principal.`;
     }
 
+    const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
     const lignes = dossiers.map((d, i) => {
       const statutLabel = STATUT_DOSSIER_LABELS[d.statut] || d.statut;
       const num = d.numero ? `N° ${d.numero}` : `Dossier ${i + 1}`;
       const titre = d.titre || d.categorie || 'Dossier';
-      return `${i + 1}. *${num}* - ${titre}\n   Statut : _${statutLabel}_`;
+      return `${emojis[i]}  *${num}* - ${titre}\n   Statut : _${statutLabel}_`;
     });
 
-    return `📂 *Vos dossiers Ada Papers*\n\n${lignes.join('\n\n')}\n\nPour plus de details, connectez-vous sur adapapers.fr\n\nTapez *menu* pour revenir au menu principal.`;
+    if (!conv.docContext) conv.docContext = {};
+    conv.docContext.dossierCount = dossiers.length;
+    conv.state = 'dossier_select';
+    conv.markModified('docContext');
+    await conv.save();
+
+    return `📂 *Vos dossiers Ada Papers*\n\n${lignes.join('\n\n')}\n\nSelectionnez un dossier pour voir son avancement et ajouter des documents.\n\nTapez *0* pour revenir au menu.`;
   } catch (err) {
     console.error('[WhatsApp] Erreur affichage dossiers:', err.message);
-    return `Impossible de charger vos dossiers pour l'instant. Reessayez plus tard.\n\nTapez *menu* pour revenir au menu principal.`;
+    return `Impossible de charger vos dossiers pour l'instant. Reessayez plus tard.\n\nTapez *0* pour revenir au menu principal.`;
   }
 }
 
@@ -740,6 +909,130 @@ async function enregistrerContactWA(phone, nom) {
     await Notification.insertManyWithPush(docs);
   } catch (err) {
     console.error('[WhatsApp] Erreur notification contact:', err.message);
+  }
+}
+
+async function traiterDocumentRecu(conv, user) {
+  try {
+    const lastMsg = conv.messages[conv.messages.length - 1];
+    const mediaId = lastMsg?.mediaId;
+    if (!mediaId) {
+      conv.state = 'menu';
+      await conv.save();
+      return `Votre document a bien ete recu. Un conseiller Ada Papers va l'examiner.\n\nTapez *0* pour revenir au menu.`;
+    }
+
+    const docType = conv.docContext?.docType || 'Autre document';
+    const dossierId = conv.docContext?.dossierId;
+    const dossierNumero = conv.docContext?.dossierNumero || '';
+    const token = process.env.WHATSAPP_TOKEN;
+
+    let cheminFichier = `whatsapp:${mediaId}`;
+    let taille = 0;
+    let mimeType = lastMsg.mimeType || 'application/octet-stream';
+    const baseNom = `${Date.now()}_${docType.replace(/[^\w]/g, '_')}`;
+    let safeName = `${baseNom}.bin`;
+
+    // Telecharger depuis Meta et uploader sur S3
+    try {
+      const { uploadBufferToS3, isS3Configured } = require('../utils/s3DocumentStorage');
+      if (token && isS3Configured()) {
+        const metaRes = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (metaRes.ok) {
+          const meta = await metaRes.json();
+          if (meta.mime_type) mimeType = meta.mime_type;
+          const ext = getExtFromMime(mimeType);
+          safeName = `${baseNom}.${ext}`;
+          if (meta.url) {
+            const fileRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${token}` } });
+            if (fileRes.ok) {
+              const buffer = Buffer.from(await fileRes.arrayBuffer());
+              taille = buffer.length;
+              cheminFichier = await uploadBufferToS3(buffer, {
+                fileName: safeName,
+                contentType: mimeType,
+                subfolder: 'whatsapp-docs',
+              });
+            }
+          }
+        }
+      }
+    } catch (uploadErr) {
+      console.warn('[WhatsApp] Upload S3 echoue, conservation du mediaId:', uploadErr.message);
+    }
+
+    // Creer le document en base et l'attacher au dossier
+    try {
+      const Document = require('../models/Document');
+      const Dossier = require('../models/Dossier');
+      const doc = await Document.create({
+        user: user._id,
+        nom: docType,
+        nomFichier: safeName,
+        originalName: lastMsg.filename || safeName,
+        cheminFichier,
+        typeMime: mimeType,
+        taille,
+        description: `Envoye via WhatsApp${dossierNumero ? ` pour dossier N° ${dossierNumero}` : ''}`,
+        categorie: mapDocTypeToCategorie(docType),
+        dossierId: dossierId || null,
+      });
+      if (dossierId) {
+        await Dossier.findByIdAndUpdate(dossierId, { $addToSet: { documents: doc._id } });
+      }
+      if (conv.docContext?.documentRequestId) {
+        try {
+          const DocumentRequest = require('../models/DocumentRequest');
+          await DocumentRequest.findByIdAndUpdate(conv.docContext.documentRequestId, {
+            status: 'received',
+            document: doc._id,
+            receivedAt: new Date(),
+          });
+        } catch (e) {
+          console.warn('[WhatsApp] Mise a jour DocumentRequest:', e.message);
+        }
+      }
+      await notifierAdminsDocument(conv, docType, dossierNumero, doc._id);
+    } catch (dbErr) {
+      console.error('[WhatsApp] Erreur creation document en base:', dbErr.message);
+    }
+
+    conv.state = 'dossier_detail';
+    conv.markModified('docContext');
+    await conv.save();
+
+    const dossierRef = dossierNumero ? `dossier *N° ${dossierNumero}*` : 'votre dossier';
+    return `✅ *${docType}* recu et rattache au ${dossierRef}.\n\nVotre conseiller en sera notifie.\n\nTapez *1* pour ajouter un autre document, *0* pour revenir au menu.`;
+  } catch (err) {
+    console.error('[WhatsApp] Erreur traiterDocumentRecu:', err.message);
+    conv.state = 'menu';
+    await conv.save();
+    return `Votre document a bien ete recu. Un conseiller Ada Papers va l'examiner.\n\nTapez *0* pour revenir au menu.`;
+  }
+}
+
+async function notifierAdminsDocument(conv, docType, dossierNumero, docId) {
+  try {
+    const User = require('../models/User');
+    const Notification = require('../models/Notification');
+    const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id').lean();
+    if (!admins.length) return;
+    const ref = dossierNumero ? `dossier N° ${dossierNumero}` : 'un dossier';
+    const message = `${conv.contactName || conv.phone} a envoye un document via WhatsApp pour ${ref} : ${docType}.`;
+    const docs = admins.map((admin) => ({
+      user: admin._id,
+      type: 'document_uploaded',
+      titre: 'Nouveau document WhatsApp',
+      message,
+      lien: '/admin/whatsapp',
+      lue: false,
+      metadata: { phone: conv.phone, docType, dossierNumero, docId: docId?.toString(), source: 'whatsapp' },
+    }));
+    await Notification.insertManyWithPush(docs);
+  } catch (e) {
+    console.warn('[WhatsApp] Erreur notification document:', e.message);
   }
 }
 
