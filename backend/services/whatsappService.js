@@ -262,20 +262,20 @@ Tapez *menu* pour revenir ou *2* pour prendre un rendez-vous.`,
 };
 
 const MOTIFS_RDV = {
-  '1': 'renouvellement_titre',
+  '1': 'titre_sejour',
   '2': 'conteste_oqtf',
-  '3': 'conteste_refus_visa',
-  '4': 'premiere_demande_titre',
-  '5': 'regroupement_familial',
+  '3': 'regroupement_familial',
+  '4': 'demande_visa',
+  '5': 'creation_entreprise',
   '6': 'autre',
 };
 
 const MOTIFS_LABELS = {
+  titre_sejour: 'Demande et renouvellement titre de sejour',
   conteste_oqtf: 'OQTF',
-  conteste_refus_visa: 'Visa refusé',
-  renouvellement_titre: 'Renouvellement titre de séjour',
-  premiere_demande_titre: 'Première demande de titre',
   regroupement_familial: 'Regroupement familial',
+  demande_visa: 'Demande de visa',
+  creation_entreprise: 'Creation d\'entreprise',
   autre: 'Autre',
 };
 
@@ -408,7 +408,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         conv.state = 'rdv_motif';
         conv.markModified('rdv');
         await conv.save();
-        return `Pour quel motif souhaitez-vous un rendez-vous, *${prenom}* ?\n\n1️⃣  Renouvellement titre de sejour\n2️⃣  OQTF\n3️⃣  Visa refuse\n4️⃣  Premiere demande de titre\n5️⃣  Regroupement familial\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
+        return `Pour quel motif souhaitez-vous un rendez-vous, *${prenom}* ?\n\n1️⃣  Demande et renouvellement titre de sejour\n2️⃣  OQTF\n3️⃣  Regroupement familial\n4️⃣  Demande de visa\n5️⃣  Creation d'entreprise\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
       }
       // Option 2 : Faire une demande
       if (text === '2') {
@@ -485,7 +485,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       conv.state = 'rdv_motif';
       conv.markModified('rdv');
       await conv.save();
-      return `Merci *${conv.rdv.prenom}* ! Pour quel motif souhaitez-vous un rendez-vous ?\n\n1️⃣  Renouvellement titre de sejour\n2️⃣  OQTF\n3️⃣  Visa refuse\n4️⃣  Premiere demande de titre\n5️⃣  Regroupement familial\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
+      return `Merci *${conv.rdv.prenom}* ! Pour quel motif souhaitez-vous un rendez-vous ?\n\n1️⃣  Demande et renouvellement titre de sejour\n2️⃣  OQTF\n3️⃣  Regroupement familial\n4️⃣  Demande de visa\n5️⃣  Creation d'entreprise\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
     }
 
     case 'rdv_motif': {
