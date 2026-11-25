@@ -182,6 +182,10 @@ export default function AdminWhatsAppPage() {
   const [qrFilter, setQrFilter] = useState('');
   const [mediaUrlCache, setMediaUrlCache] = useState<Record<string, string>>({});
   const [showPinned, setShowPinned] = useState(true);
+  const [showAttachmentsPanel, setShowAttachmentsPanel] = useState(false);
+  const [showDossierPanel, setShowDossierPanel] = useState(false);
+  const [dossierPanelData, setDossierPanelData] = useState<any>(null);
+  const [loadingDossierPanel, setLoadingDossierPanel] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showMobileMore, setShowMobileMore] = useState(false);
@@ -400,6 +404,9 @@ export default function AdminWhatsAppPage() {
       const res = await whatsappAdminAPI.getConversation(conv._id);
       setSelectedConv(res.data.conversation);
       setClientDossiers(res.data.clientDossiers || []);
+      setShowAttachmentsPanel(false);
+      setShowDossierPanel(false);
+      setDossierPanelData(null);
       setIsRenamingContact(false);
       fetchConvAppels(conv._id);
       if (conv.unreadAdmin > 0) {
@@ -831,6 +838,17 @@ export default function AdminWhatsAppPage() {
     }
   }
 
+  useEffect(() => {
+    if (!showDossierPanel || !selectedConv?.dossierId) return;
+    const id = typeof selectedConv.dossierId === 'object' ? selectedConv.dossierId._id : selectedConv.dossierId;
+    if (!id) return;
+    setLoadingDossierPanel(true);
+    dossiersAPI.getDossierById(id)
+      .then((r: any) => setDossierPanelData(r.data?.dossier || r.data || null))
+      .catch(() => setDossierPanelData(null))
+      .finally(() => setLoadingDossierPanel(false));
+  }, [showDossierPanel, selectedConv?._id]);
+
   async function fetchConvAppels(convId: string) {
     try {
       const res = await tasksAPI.getAllTasks({ statut: 'a_faire' });
@@ -1205,7 +1223,8 @@ export default function AdminWhatsAppPage() {
 
       {/* ── Panneau droit : conversation ── */}
       {selectedConv ? (
-        <div className="flex-1 flex flex-col min-w-0 w-full">
+        <div className="flex-1 flex min-w-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0">
           {/* Header conversation */}
           <div className="px-2 md:px-4 py-2 md:py-3 border-b border-border flex items-center gap-1 md:gap-2">
             {/* Bouton retour (mobile uniquement) */}
@@ -1443,6 +1462,36 @@ export default function AdminWhatsAppPage() {
                 <SearchIcon style={{ width: '0.875rem', height: '0.875rem' }} />
               </button>
 
+              {/* Pieces jointes */}
+              <button
+                onClick={() => setShowAttachmentsPanel((v) => !v)}
+                title="Pieces jointes"
+                style={{
+                  padding: '0.375rem', borderRadius: '0.375rem', display: 'flex', alignItems: 'center',
+                  border: showAttachmentsPanel ? '1px solid #e96d2b' : '1px solid #d1d5db',
+                  background: showAttachmentsPanel ? '#fff3ed' : 'transparent',
+                  color: showAttachmentsPanel ? '#e96d2b' : '#6b7280', cursor: 'pointer',
+                }}
+              >
+                <Paperclip style={{ width: '0.875rem', height: '0.875rem' }} />
+              </button>
+
+              {/* Fiche dossier */}
+              {selectedConv.dossierId && (
+                <button
+                  onClick={() => setShowDossierPanel((v) => !v)}
+                  title="Fiche dossier"
+                  style={{
+                    padding: '0.375rem', borderRadius: '0.375rem', display: 'flex', alignItems: 'center',
+                    border: showDossierPanel ? '1px solid #8b5cf6' : '1px solid #d1d5db',
+                    background: showDossierPanel ? '#f5f3ff' : 'transparent',
+                    color: showDossierPanel ? '#8b5cf6' : '#6b7280', cursor: 'pointer',
+                  }}
+                >
+                  <FileText style={{ width: '0.875rem', height: '0.875rem' }} />
+                </button>
+              )}
+
               <button
                 onClick={openLinkModal}
                 className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
@@ -1658,7 +1707,109 @@ export default function AdminWhatsAppPage() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto bg-[#e5ddd5] dark:bg-[#0d1117] flex flex-col">
+          {showAttachmentsPanel && (() => {
+            const mediaMessages = (selectedConv.messages || []).filter((m: any) =>
+              ['image', 'document', 'audio', 'video'].includes(m.type) && (m.mediaId || m.mediaUri)
+            );
+            const groups: Record<string, any[]> = { image: [], document: [], audio: [], video: [] };
+            mediaMessages.forEach((m: any) => { const t = m.type in groups ? m.type : 'document'; groups[t].push(m); });
+            const groupColors: Record<string, string> = { image: '#3b82f6', document: '#8b5cf6', audio: '#10b981', video: '#f59e0b' };
+            const groupLabels: Record<string, string> = { image: 'Images', document: 'Documents', audio: 'Audios', video: 'Videos' };
+            return (
+                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--background, #ffffff)' }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', flexShrink: 0 }}>
+                    <Paperclip style={{ width: '1rem', height: '1rem', color: '#e96d2b' }} />
+                    <span style={{ flex: 1, fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+                      Pieces jointes ({mediaMessages.length})
+                    </span>
+                    <button
+                      onClick={() => setShowAttachmentsPanel(false)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', display: 'flex', borderRadius: '0.25rem', color: '#6b7280' }}
+                    >
+                      <X style={{ width: '1rem', height: '1rem' }} />
+                    </button>
+                  </div>
+                  {/* Contenu */}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
+                    {mediaMessages.length === 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', gap: '0.5rem', paddingTop: '3rem' }}>
+                        <Paperclip style={{ width: '2rem', height: '2rem', opacity: 0.4 }} />
+                        <span style={{ fontSize: '0.85rem' }}>Aucune piece jointe dans cette conversation</span>
+                      </div>
+                    ) : (
+                      Object.entries(groups).map(([type, items]) => {
+                        if (!items.length) return null;
+                        const color = groupColors[type];
+                        const label = groupLabels[type];
+                        return (
+                          <div key={type} style={{ marginBottom: '1.25rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                              <MediaIcon type={type} />
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                {label} ({items.length})
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                              {items.map((m: any, i: number) => {
+                                const cachedUrl = m.mediaId ? mediaUrlCache[m.mediaId] : null;
+                                const isOut = m.direction === 'outbound';
+                                return (
+                                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.5rem 0.65rem', borderRadius: '0.5rem', background: '#f9fafb', border: '1px solid #e5e7eb' }}>
+                                    {type === 'image' && cachedUrl ? (
+                                      <img src={cachedUrl} alt={m.filename || 'image'} style={{ width: '2.5rem', height: '2.5rem', objectFit: 'cover', borderRadius: '0.25rem', flexShrink: 0 }} />
+                                    ) : (
+                                      <div style={{ width: '2.5rem', height: '2.5rem', borderRadius: '0.375rem', background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <MediaIcon type={type} />
+                                      </div>
+                                    )}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: '0.78rem', fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {m.filename || m.content || `${label.slice(0, -1)} sans nom`}
+                                      </div>
+                                      <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginTop: '0.1rem' }}>
+                                        {isOut ? 'Vous' : getConvName(selectedConv) || formatPhone(selectedConv.phone)}
+                                        {' · '}
+                                        {new Date(m.timestamp).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+                                        {' '}
+                                        {new Date(m.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          let url = cachedUrl;
+                                          if (!url) {
+                                            const r = await whatsappAdminAPI.getMedia(m.mediaId, { convId: selectedConv._id, filename: m.filename || undefined, mimeType: m.mimeType || undefined });
+                                            url = r.data?.url;
+                                            if (url && m.mediaId) setMediaUrlCache((prev: any) => ({ ...prev, [m.mediaId]: url }));
+                                          }
+                                          if (url) window.open(url, '_blank');
+                                        } catch {
+                                          setToast({ message: 'Impossible de telecharger le fichier', type: 'error' });
+                                        }
+                                      }}
+                                      title="Telecharger"
+                                      style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.3rem 0.6rem', borderRadius: '0.375rem', fontSize: '0.72rem', fontWeight: 500, border: `1px solid ${color}`, color, background: `${color}10`, cursor: 'pointer' }}
+                                    >
+                                      <Download style={{ width: '0.7rem', height: '0.7rem' }} />
+                                      {cachedUrl || m.mediaUri ? 'Ouvrir' : 'Telecharger'}
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+            );
+          })()}
+
+          <div className="flex-1 overflow-y-auto bg-[#e5ddd5] dark:bg-[#0d1117] flex flex-col" style={{ display: showAttachmentsPanel ? 'none' : undefined }}>
+
             {/* Barre de recherche dans le fil */}
             {showMsgSearch && (
               <div className="sticky top-0 z-10 px-3 py-2 bg-background/95 backdrop-blur border-b border-border">
@@ -1778,26 +1929,57 @@ export default function AdminWhatsAppPage() {
               );
             })}
 
-            {/* Messages epingles */}
+            {/* ── Banniere messages epingles ── */}
             {(() => {
               const pinned = (selectedConv.messages || []).filter((m: any) => m.pinned);
               if (!pinned.length) return null;
+              const single = pinned.length === 1;
               return (
-                <div className="mx-3 mt-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 overflow-hidden">
-                  <button
-                    onClick={() => setShowPinned((v) => !v)}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-800/30 transition-colors"
+                <div style={{ position: 'sticky', top: 0, zIndex: 18, background: '#fffbeb', borderBottom: '2px solid #f59e0b', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                  <div
+                    onClick={() => !single && setShowPinned((v) => !v)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.85rem', cursor: single ? 'default' : 'pointer' }}
                   >
-                    <Pin className="w-3 h-3" />
-                    {pinned.length} message{pinned.length > 1 ? 's' : ''} épinglé{pinned.length > 1 ? 's' : ''}
-                    <ChevronDown className={`w-3 h-3 ml-auto transition-transform ${showPinned ? '' : '-rotate-90'}`} />
-                  </button>
-                  {showPinned && pinned.map((m: any, i: number) => (
-                    <div key={i} className="px-3 py-1 border-t border-amber-100 dark:border-amber-800/30 text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
-                      <span className="opacity-60">{m.direction === 'outbound' ? 'Vous' : formatPhone(selectedConv.phone)}</span>
-                      <span className="flex-1 truncate">{m.content || `(${m.type})`}</span>
-                      <button onClick={() => handlePinMessage(m)} className="shrink-0 opacity-50 hover:opacity-100" title="Désépingler">
-                        <X className="w-3 h-3" />
+                    <Pin style={{ width: '0.8rem', height: '0.8rem', color: '#d97706', flexShrink: 0 }} />
+                    {single ? (
+                      <span style={{ flex: 1, fontSize: '0.78rem', color: '#92400e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontWeight: 600, marginRight: '0.4rem' }}>
+                          {pinned[0].direction === 'outbound' ? 'Vous :' : `${getConvName(selectedConv) || formatPhone(selectedConv.phone)} :`}
+                        </span>
+                        {pinned[0].content || `(${pinned[0].type})`}
+                      </span>
+                    ) : (
+                      <span style={{ flex: 1, fontSize: '0.78rem', fontWeight: 600, color: '#92400e' }}>
+                        {pinned.length} messages epingles
+                      </span>
+                    )}
+                    {!single && (
+                      <ChevronDown style={{ width: '0.75rem', height: '0.75rem', color: '#d97706', flexShrink: 0, transform: showPinned ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s' }} />
+                    )}
+                    {single && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handlePinMessage(pinned[0]); }}
+                        title="Desepingler"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.1rem', color: '#d97706', display: 'flex', borderRadius: '0.25rem', flexShrink: 0 }}
+                      >
+                        <X style={{ width: '0.75rem', height: '0.75rem' }} />
+                      </button>
+                    )}
+                  </div>
+                  {!single && showPinned && pinned.map((m: any, i: number) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0.85rem', borderTop: '1px solid #fde68a' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#a16207', flexShrink: 0 }}>
+                        {m.direction === 'outbound' ? 'Vous' : getConvName(selectedConv) || formatPhone(selectedConv.phone)}
+                      </span>
+                      <span style={{ flex: 1, fontSize: '0.75rem', color: '#78350f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {m.content || `(${m.type})`}
+                      </span>
+                      <button
+                        onClick={() => handlePinMessage(m)}
+                        title="Desepingler"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.1rem', color: '#d97706', display: 'flex', borderRadius: '0.25rem', flexShrink: 0, opacity: 0.7 }}
+                      >
+                        <X style={{ width: '0.7rem', height: '0.7rem' }} />
                       </button>
                     </div>
                   ))}
@@ -2215,6 +2397,126 @@ export default function AdminWhatsAppPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* ── Panneau mini-dossier ── */}
+        {showDossierPanel && selectedConv.dossierId && (() => {
+          const STATUT_MAP: Record<string, { label: string; color: string; bg: string }> = {
+            recu: { label: 'Recu', color: '#2563eb', bg: '#eff6ff' },
+            en_cours: { label: 'En cours', color: '#d97706', bg: '#fffbeb' },
+            cloture: { label: 'Cloture', color: '#16a34a', bg: '#f0fdf4' },
+            refuse: { label: 'Refuse', color: '#dc2626', bg: '#fef2f2' },
+            archive: { label: 'Archive', color: '#6b7280', bg: '#f9fafb' },
+          };
+          const CAT_MAP: Record<string, string> = {
+            sejour_titres: 'Titre de sejour',
+            contentieux_administratif: 'Contentieux admin.',
+            asile: 'Asile',
+            regroupement_familial: 'Regroupement familial',
+            nationalite_francaise: 'Nationalite francaise',
+            eloignement_urgence: 'Eloignement / OQTF',
+            constitution_societe: 'Constitution societe',
+            constitution_societe_senegal: 'Societe Senegal',
+            constitution_societe_france: 'Societe France',
+            autre: 'Autre',
+          };
+          const PRIO_MAP: Record<string, { label: string; color: string }> = {
+            basse: { label: 'Basse', color: '#6b7280' },
+            normale: { label: 'Normale', color: '#2563eb' },
+            haute: { label: 'Haute', color: '#d97706' },
+            urgente: { label: 'Urgente', color: '#dc2626' },
+          };
+          const statut = STATUT_MAP[dossierPanelData?.statut] || { label: dossierPanelData?.statut || '-', color: '#6b7280', bg: '#f9fafb' };
+          const prio = PRIO_MAP[dossierPanelData?.priorite] || { label: dossierPanelData?.priorite || '-', color: '#6b7280' };
+          const echeance = dossierPanelData?.dateEcheance ? new Date(dossierPanelData.dateEcheance) : null;
+          const echeancePast = echeance && echeance < new Date();
+          const echeanceSoon = echeance && !echeancePast && (echeance.getTime() - Date.now()) < 7 * 24 * 60 * 60 * 1000;
+          return (
+            <div style={{ width: '280px', borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', background: 'var(--background, #ffffff)', flexShrink: 0, overflowY: 'auto' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', flexShrink: 0 }}>
+                <FileText style={{ width: '1rem', height: '1rem', color: '#8b5cf6', flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>Fiche dossier</span>
+                <button onClick={() => setShowDossierPanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', display: 'flex', borderRadius: '0.25rem', color: '#6b7280' }}>
+                  <X style={{ width: '1rem', height: '1rem' }} />
+                </button>
+              </div>
+              {/* Corps */}
+              {loadingDossierPanel ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', color: '#9ca3af' }}>
+                  <RefreshCw style={{ width: '1.25rem', height: '1.25rem', animation: 'spin 1s linear infinite' }} />
+                </div>
+              ) : !dossierPanelData ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', color: '#9ca3af', fontSize: '0.8rem', textAlign: 'center' }}>
+                  Dossier introuvable
+                </div>
+              ) : (
+                <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+                  {/* Identification */}
+                  <div>
+                    {dossierPanelData.numero && (
+                      <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginBottom: '0.2rem', letterSpacing: '0.02em' }}>
+                        N&deg; {dossierPanelData.numero}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>
+                      {dossierPanelData.titre || 'Dossier sans titre'}
+                    </div>
+                  </div>
+                  {/* Statut + priorite */}
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.6rem', borderRadius: '999px', background: statut.bg, color: statut.color }}>
+                      {statut.label}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 500, padding: '0.2rem 0.6rem', borderRadius: '999px', background: '#f3f4f6', color: prio.color }}>
+                      {prio.label}
+                    </span>
+                  </div>
+                  {/* Categorie */}
+                  {dossierPanelData.categorie && (
+                    <div>
+                      <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Type</div>
+                      <div style={{ fontSize: '0.78rem', color: '#374151' }}>
+                        {CAT_MAP[dossierPanelData.categorie] || dossierPanelData.categorie}
+                      </div>
+                    </div>
+                  )}
+                  {/* Echeance */}
+                  {echeance && (
+                    <div>
+                      <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Echeance</div>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 500, color: echeancePast ? '#dc2626' : echeanceSoon ? '#d97706' : '#374151', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        {echeancePast && <span style={{ fontSize: '0.68rem', background: '#fef2f2', color: '#dc2626', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', fontWeight: 600 }}>En retard</span>}
+                        {echeanceSoon && !echeancePast && <span style={{ fontSize: '0.68rem', background: '#fffbeb', color: '#d97706', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', fontWeight: 600 }}>Bientot</span>}
+                        {echeance.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      </div>
+                    </div>
+                  )}
+                  {/* Notes */}
+                  {dossierPanelData.notes && (
+                    <div>
+                      <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notes</div>
+                      <div style={{ fontSize: '0.75rem', color: '#374151', lineHeight: 1.5, maxHeight: '4.5rem', overflowY: 'auto', padding: '0.4rem 0.5rem', background: '#fafafa', borderRadius: '0.375rem', border: '1px solid #f3f4f6' }}>
+                        {dossierPanelData.notes}
+                      </div>
+                    </div>
+                  )}
+                  {/* Lien */}
+                  <a
+                    href={`/admin/dossiers/${dossierPanelData._id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.5rem', borderRadius: '0.5rem', fontSize: '0.78rem', fontWeight: 500, color: '#8b5cf6', border: '1px solid #e9d5ff', background: '#faf5ff', textDecoration: 'none', marginTop: '0.25rem' }}
+                  >
+                    <FileText style={{ width: '0.875rem', height: '0.875rem' }} />
+                    Ouvrir le dossier
+                  </a>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-muted-foreground">
