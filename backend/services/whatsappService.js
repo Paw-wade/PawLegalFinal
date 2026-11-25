@@ -262,9 +262,9 @@ Tapez *menu* pour revenir ou *2* pour prendre un rendez-vous.`,
 };
 
 const MOTIFS_RDV = {
-  '1': 'conteste_oqtf',
-  '2': 'conteste_refus_visa',
-  '3': 'renouvellement_titre',
+  '1': 'renouvellement_titre',
+  '2': 'conteste_oqtf',
+  '3': 'conteste_refus_visa',
   '4': 'premiere_demande_titre',
   '5': 'regroupement_familial',
   '6': 'autre',
@@ -408,7 +408,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         conv.state = 'rdv_motif';
         conv.markModified('rdv');
         await conv.save();
-        return `Pour quel motif souhaitez-vous un rendez-vous, *${prenom}* ?\n\n1️⃣  OQTF\n2️⃣  Visa refuse\n3️⃣  Renouvellement titre de sejour\n4️⃣  Premiere demande de titre\n5️⃣  Regroupement familial\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
+        return `Pour quel motif souhaitez-vous un rendez-vous, *${prenom}* ?\n\n1️⃣  Renouvellement titre de sejour\n2️⃣  OQTF\n3️⃣  Visa refuse\n4️⃣  Premiere demande de titre\n5️⃣  Regroupement familial\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
       }
       // Option 2 : Faire une demande
       if (text === '2') {
@@ -485,7 +485,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       conv.state = 'rdv_motif';
       conv.markModified('rdv');
       await conv.save();
-      return `Merci *${conv.rdv.prenom}* ! Pour quel motif souhaitez-vous un rendez-vous ?\n\n1️⃣  OQTF\n2️⃣  Visa refuse\n3️⃣  Renouvellement titre de sejour\n4️⃣  Premiere demande de titre\n5️⃣  Regroupement familial\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
+      return `Merci *${conv.rdv.prenom}* ! Pour quel motif souhaitez-vous un rendez-vous ?\n\n1️⃣  Renouvellement titre de sejour\n2️⃣  OQTF\n3️⃣  Visa refuse\n4️⃣  Premiere demande de titre\n5️⃣  Regroupement familial\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
     }
 
     case 'rdv_motif': {
