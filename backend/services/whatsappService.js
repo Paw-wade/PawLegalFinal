@@ -129,7 +129,7 @@ Je suis Ada. Comment puis-je vous aider ?
 
 Ecrivez *1*, *2* ou *3* pour choisir.
 
-_Pas encore de compte ? Inscrivez-vous sur *adapapers.fr* pour suivre vos dossiers en temps reel._`;
+_Pas encore de compte ? Inscrivez-vous sur *adapapers.fr* pour une meilleure experience._`;
 }
 
 const DEMANDE_MENU = `Quelle est votre situation ?
