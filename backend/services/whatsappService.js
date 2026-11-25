@@ -340,6 +340,29 @@ function menuContactConseiller() {
   return `Pour quelle raison souhaitez-vous parler a un conseiller ?\n\n1️⃣  Question sur mon dossier en cours\n2️⃣  Premiere prise de contact\n3️⃣  Urgence\n4️⃣  Autre\n\nEcrivez le numero de votre choix, *R* pour revenir au menu.`;
 }
 
+async function afficherDocsDossier(conv, docIds) {
+  const Document = require('../models/Document');
+  const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+  const docs = await Document.find({ _id: { $in: docIds } })
+    .select('nom nomFichier typeMime')
+    .lean();
+  if (!docs.length) {
+    conv.state = 'dossier_detail';
+    await conv.save();
+    return `Aucun document fourni pour ce dossier.\n\nTapez *0* pour revenir au menu.`;
+  }
+  const dossierNumero = conv.docContext?.dossierNumero || '';
+  const header = dossierNumero ? `📂 *Documents du dossier N° ${dossierNumero}*\n\n` : '📂 *Mes documents*\n\n';
+  let list = '';
+  docs.forEach((d, i) => {
+    const ext = (d.typeMime || '').includes('pdf') ? 'PDF' : (d.typeMime || '').includes('image') ? 'Image' : 'Fichier';
+    list += `${emojis[i] || (i + 1) + '.'} ${d.nom || d.nomFichier || 'Document'} _(${ext})_\n`;
+  });
+  conv.state = 'dossier_docs_list';
+  await conv.save();
+  return `${header}${list}\nEcrivez le numero du document pour obtenir le lien de telechargement.\n*R* pour revenir au dossier.`;
+}
+
 function buildDocChoixTypeMenu(pendingRequests, dossierNumero) {
   const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
   if (pendingRequests.length === 0) {
@@ -739,7 +762,9 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       const pendingLine = pendingReqs.length > 0
         ? `\n📩 *${pendingReqs.length} document${pendingReqs.length > 1 ? 's' : ''} demande${pendingReqs.length > 1 ? 's' : ''}* par votre conseiller`
         : '';
-      return `📋 *${numRef}*\n_${titre}_\n\n📊 Statut : *${statutLabel}*\n📎 *${nbDocs} document${nbDocs !== 1 ? 's' : ''} fourni${nbDocs !== 1 ? 's' : ''}*${pendingLine}\n\n1️⃣  Ajouter un document\n2️⃣  Revenir a la liste\n\nEcrivez *1* pour ajouter un document, *2* pour la liste, *0* pour le menu.`;
+      const docsOptLine = nbDocs > 0 ? `\n2️⃣  Voir mes documents (${nbDocs})` : '';
+      const retourNum = nbDocs > 0 ? '3' : '2';
+      return `📋 *${numRef}*\n_${titre}_\n\n📊 Statut : *${statutLabel}*\n📎 *${nbDocs} document${nbDocs !== 1 ? 's' : ''} fourni${nbDocs !== 1 ? 's' : ''}*${pendingLine}\n\n1️⃣  Ajouter un document${docsOptLine}\n${retourNum}️⃣  Revenir a la liste\n\nEcrivez votre choix, *0* pour le menu.`;
     }
 
     case 'dossier_detail': {
@@ -749,10 +774,70 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
         await conv.save();
         return buildDocChoixTypeMenu(pendingReqs, conv.docContext?.dossierNumero);
       }
-      if (text === '2' || text === 'r') {
+      if (text === '2') {
+        const Dossier = require('../models/Dossier');
+        const dos = await Dossier.findById(conv.docContext?.dossierId).select('documents').lean();
+        if (dos?.documents?.length > 0) {
+          return await afficherDocsDossier(conv, dos.documents);
+        }
         return await afficherDossiers(conv, user);
       }
-      return `Ecrivez *1* pour ajouter un document, *2* pour la liste des dossiers, *0* pour le menu.`;
+      if (text === '3' || text === 'r') {
+        return await afficherDossiers(conv, user);
+      }
+      return `Ecrivez votre choix, *0* pour le menu.`;
+    }
+
+    case 'dossier_docs_list': {
+      if (text === 'r') {
+        const Dossier = require('../models/Dossier');
+        const dos = await Dossier.findById(conv.docContext?.dossierId)
+          .select('numero titre statut categorie documents')
+          .lean();
+        if (!dos) return await afficherDossiers(conv, user);
+        const statutLabel = STATUT_DOSSIER_LABELS[dos.statut] || dos.statut || 'En cours';
+        const nbDocs = dos.documents?.length || 0;
+        const titre = dos.titre || dos.categorie || 'Dossier';
+        const numRef = dos.numero ? `N° ${dos.numero}` : 'Dossier';
+        const pendingReqs = await fetchPendingRequests(dos._id);
+        const pendingLine = pendingReqs.length > 0
+          ? `\n📩 *${pendingReqs.length} document${pendingReqs.length > 1 ? 's' : ''} demande${pendingReqs.length > 1 ? 's' : ''}* par votre conseiller`
+          : '';
+        const docsOptLine = nbDocs > 0 ? `\n2️⃣  Voir mes documents (${nbDocs})` : '';
+        const retourNum = nbDocs > 0 ? '3' : '2';
+        conv.state = 'dossier_detail';
+        await conv.save();
+        return `📋 *${numRef}*\n_${titre}_\n\n📊 Statut : *${statutLabel}*\n📎 *${nbDocs} document${nbDocs !== 1 ? 's' : ''} fourni${nbDocs !== 1 ? 's' : ''}*${pendingLine}\n\n1️⃣  Ajouter un document${docsOptLine}\n${retourNum}️⃣  Revenir a la liste\n\nEcrivez votre choix, *0* pour le menu.`;
+      }
+      const idx = parseInt(text, 10);
+      if (isNaN(idx) || idx < 1) {
+        return `Ecrivez le numero du document, ou *R* pour revenir au dossier.`;
+      }
+      const Dossier = require('../models/Dossier');
+      const Document = require('../models/Document');
+      const dos = await Dossier.findById(conv.docContext?.dossierId).select('documents').lean();
+      if (!dos?.documents?.length) {
+        conv.state = 'dossier_detail';
+        await conv.save();
+        return `Aucun document disponible.\n\nTapez *0* pour revenir au menu.`;
+      }
+      if (idx > dos.documents.length) {
+        return `Ecrivez un numero entre *1* et *${dos.documents.length}*, ou *R* pour revenir.`;
+      }
+      const doc = await Document.findById(dos.documents[idx - 1]).lean();
+      if (!doc) return `Ce document n'est plus disponible.\n\nEcrivez un autre numero ou *R* pour revenir.`;
+      const { getS3PresignedUrl, isS3Configured } = require('../utils/s3DocumentStorage');
+      if (!isS3Configured() || !doc.cheminFichier) {
+        return `Ce document n'est pas disponible au telechargement pour le moment.\n\nEcrivez un autre numero ou *R* pour revenir.`;
+      }
+      const url = await getS3PresignedUrl(doc.cheminFichier, {
+        expiresIn: 3600,
+        inline: false,
+        fileName: doc.nomFichier || doc.nom || 'document',
+      });
+      if (!url) return `Ce document n'est pas disponible au telechargement pour le moment.\n\nEcrivez un autre numero ou *R* pour revenir.`;
+      const nomDoc = doc.nom || doc.nomFichier || `Document ${idx}`;
+      return `📄 *${nomDoc}*\n\nLien de telechargement (valable 1h) :\n${url}\n\nEcrivez un autre numero pour telecharger un autre document, ou *R* pour revenir au dossier.`;
     }
 
     case 'doc_choix_type': {
