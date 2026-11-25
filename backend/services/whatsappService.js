@@ -430,7 +430,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         await enregistrerContactWA(conv.phone, `${user.firstName} ${user.lastName || ''}`.trim());
         conv.state = 'menu';
         await conv.save();
-        return `Merci *${prenom}* ! Un conseiller vous contactera dans les *24h*.\n\nTapez *menu* pour revenir au menu principal.`;
+        return `Vous serez contacte tres rapidement par un conseiller. A bientot !\n\nTapez *menu* pour revenir au menu principal.`;
       }
       return `Ecrivez *1*, *2*${prenom ? ', *3* ou *4*' : ' ou *3*'} pour choisir.\n\n${menuPrincipal(prenom)}`;
     }
@@ -498,7 +498,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       if (creneaux.length === 0) {
         conv.state = 'rdv_note';
         await conv.save();
-        return `Aucun creneau n'est disponible en ligne pour le moment.\n\nUn conseiller vous rappellera dans les *48h* pour convenir d'un rendez-vous.\n\nSouhaitez-vous ajouter une precision pour faciliter le rappel ? (Tapez votre message ou *non*)`;
+        return `Aucun creneau n'est disponible en ligne pour le moment.\n\nVous serez contacte tres rapidement par un conseiller. A bientot !\n\nSouhaitez-vous ajouter une precision pour faciliter la prise de contact ? (Tapez votre message ou *non*)`;
       }
       conv.state = 'rdv_creneau';
       await conv.save();
@@ -518,7 +518,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         if (creneaux.length === 0) {
           conv.state = 'rdv_note';
           await conv.save();
-          return `Aucun creneau n'est disponible en ligne pour le moment.\n\nUn conseiller vous rappellera dans les *48h*.\n\nSouhaitez-vous ajouter une precision ? (Tapez votre message ou *non*)`;
+          return `Aucun creneau n'est disponible en ligne pour le moment.\n\nVous serez contacte tres rapidement par un conseiller. A bientot !\n\nSouhaitez-vous ajouter une precision ? (Tapez votre message ou *non*)`;
         }
         return `Ecrivez un numero entre *1* et *${creneaux.length}*, ou *0* pour annuler.\n\n${formatMenuCreneaux(creneaux)}`;
       }
@@ -578,7 +578,7 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       await enregistrerContactWA(conv.phone, nom);
       conv.state = 'menu';
       await conv.save();
-      return `Merci *${nom}* ! Un conseiller vous contactera dans les *24h*.\n\nTapez *menu* pour revenir au menu principal.`;
+      return `Vous serez contacte tres rapidement par un conseiller. A bientot !\n\nTapez *menu* pour revenir au menu principal.`;
     }
 
     case 'mes_dossiers': {
