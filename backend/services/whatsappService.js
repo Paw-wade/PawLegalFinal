@@ -127,7 +127,9 @@ Je suis Ada. Comment puis-je vous aider ?
 2️⃣  Faire une demande
 3️⃣  Parler a un conseiller
 
-Ecrivez *1*, *2* ou *3* pour choisir.`;
+Ecrivez *1*, *2* ou *3* pour choisir.
+
+_Vous avez deja un compte Ada Papers ? Votre numero est reconnu automatiquement. Sinon, creez votre compte sur *adapapers.fr* pour un suivi personnalise de vos dossiers._`;
 }
 
 const DEMANDE_MENU = `Quelle est votre situation ?
