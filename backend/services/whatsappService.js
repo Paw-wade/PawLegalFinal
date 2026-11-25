@@ -700,7 +700,7 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       await enregistrerContactWA(conv.phone, nomContact, conv.rdv.motif, msg);
       conv.state = 'menu';
       await conv.save();
-      return `✅ *Message bien recu !*\n\nVous serez contacte tres rapidement par un conseiller. A bientot !\n\nTapez *0* pour revenir au menu.`;
+      return `✅ *Message bien recu.*\n\nVous serez recontacte tres rapidement. A bientot !\n\nTapez *0* pour revenir au menu.`;
     }
 
     case 'mes_dossiers': {
