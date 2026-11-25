@@ -337,7 +337,7 @@ async function fetchPendingRequests(dossierId) {
 }
 
 function menuContactConseiller() {
-  return `Pour quelle raison souhaitez-vous parler a un conseiller ?\n\n1️⃣  Question sur mon dossier en cours\n2️⃣  Premiere prise de contact\n3️⃣  Urgence (convocation, OQTF)\n4️⃣  Autre\n\nEcrivez le numero de votre choix, *R* pour revenir au menu.`;
+  return `Pour quelle raison souhaitez-vous parler a un conseiller ?\n\n1️⃣  Question sur mon dossier en cours\n2️⃣  Premiere prise de contact\n3️⃣  Urgence\n4️⃣  Autre\n\nEcrivez le numero de votre choix, *R* pour revenir au menu.`;
 }
 
 function buildDocChoixTypeMenu(pendingRequests, dossierNumero) {
@@ -665,7 +665,7 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       const MOTIFS_CONTACT = {
         '1': 'Question sur mon dossier en cours',
         '2': 'Premiere prise de contact',
-        '3': 'Urgence (convocation, OQTF)',
+        '3': 'Urgence',
         '4': 'Autre',
       };
       if (text === 'r') {
