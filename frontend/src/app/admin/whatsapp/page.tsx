@@ -219,6 +219,13 @@ export default function AdminWhatsAppPage() {
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const mobileMoreRef = useRef<HTMLDivElement>(null);
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // Notifications de rappel actives (polling toutes les 30s)
   useEffect(() => {
     const notified = new Set<string>();
@@ -2435,7 +2442,16 @@ export default function AdminWhatsAppPage() {
           };
           const dossiers = Array.isArray(dossierPanelData) ? dossierPanelData : [];
           return (
-            <div style={{ width: '280px', borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', background: 'var(--background, #ffffff)', flexShrink: 0, overflowY: 'auto' }}>
+            <div style={isMobile ? {
+              position: 'fixed', inset: 0, zIndex: 60,
+              display: 'flex', flexDirection: 'column',
+              background: 'var(--background, #ffffff)',
+            } : {
+              width: '280px', borderLeft: '1px solid #e5e7eb',
+              display: 'flex', flexDirection: 'column',
+              background: 'var(--background, #ffffff)',
+              flexShrink: 0, overflowY: 'auto',
+            }}>
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', flexShrink: 0 }}>
                 <FileText style={{ width: '1rem', height: '1rem', color: '#8b5cf6', flexShrink: 0 }} />
