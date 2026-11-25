@@ -114,11 +114,11 @@ async function handleVerificationCode(from, code) {
     const update = { clientId: user._id, contactName: `${user.firstName || ''} ${user.lastName || ''}`.trim() };
 
     const phoneAltCheck = phone.startsWith('+') ? phone.slice(1) : '+' + phone;
-    const existing = await WhatsappConversation.findOne({ phone: { $in: [phone, phoneAltCheck] } }).select('dossierId').lean();
-    if (!existing?.dossierId) {
+    const existing = await WhatsappConversation.findOne({ phone: { $in: [phone, phoneAltCheck] } }).select('dossierIds').lean();
+    if (!existing?.dossierIds?.length) {
       const Dossier = require('../models/Dossier');
-      const dossier = await Dossier.findOne({ user: user._id }).sort({ createdAt: -1 }).select('_id').lean();
-      if (dossier) update.dossierId = dossier._id;
+      const dossiers = await Dossier.find({ user: user._id }).sort({ createdAt: -1 }).select('_id').lean();
+      if (dossiers.length) update.dossierIds = dossiers.map((d) => d._id);
     }
 
     const phoneAlt = phone.startsWith('+') ? phone.slice(1) : '+' + phone;

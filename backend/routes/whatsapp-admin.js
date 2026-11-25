@@ -120,7 +120,7 @@ router.get('/conversations', async (req, res) => {
         .skip(skip)
         .limit(limit)
         .populate('clientId', 'prenom nom email')
-        .populate({ path: 'dossierId', select: 'titre categorie statut reference clientNom clientPrenom user', populate: { path: 'user', select: 'prenom nom' } })
+        .populate({ path: 'dossierIds', select: 'titre numero categorie statut reference clientNom clientPrenom user', populate: { path: 'user', select: 'prenom nom' } })
         .populate('assignedTo', 'prenom nom'),
       WhatsappConversation.countDocuments(filter),
     ]);
@@ -148,7 +148,7 @@ router.get('/conversations/:id', async (req, res) => {
   try {
     const conv = await WhatsappConversation.findById(req.params.id)
       .populate('clientId', 'prenom nom email telephone')
-      .populate({ path: 'dossierId', select: 'titre categorie statut reference clientNom clientPrenom user', populate: { path: 'user', select: 'prenom nom' } })
+      .populate({ path: 'dossierIds', select: 'titre numero categorie statut reference clientNom clientPrenom user dateEcheance notes priorite', populate: { path: 'user', select: 'prenom nom' } })
       .populate('assignedTo', 'prenom nom');
 
     if (!conv) {
@@ -164,11 +164,11 @@ router.get('/conversations/:id', async (req, res) => {
         .limit(20)
         .lean();
 
-      // Auto-lier le dossier le plus recent si aucun n'est encore lie
-      if (!conv.dossierId && clientDossiers.length > 0) {
-        const autoLink = clientDossiers[0];
-        WhatsappConversation.findByIdAndUpdate(conv._id, { dossierId: autoLink._id }).catch(() => {});
-        conv.dossierId = autoLink;
+      // Auto-lier tous les dossiers du client si aucun n'est encore lie
+      if ((!conv.dossierIds || conv.dossierIds.length === 0) && clientDossiers.length > 0) {
+        const ids = clientDossiers.map((d) => d._id);
+        WhatsappConversation.findByIdAndUpdate(conv._id, { dossierIds: ids }).catch(() => {});
+        conv.dossierIds = clientDossiers;
       }
     }
 
@@ -388,15 +388,18 @@ router.put('/conversations/:id/assign', async (req, res) => {
 // PUT /api/whatsapp-admin/conversations/:id/link
 router.put('/conversations/:id/link', async (req, res) => {
   try {
-    const { clientId, dossierId } = req.body;
+    const { clientId, dossierIds } = req.body;
     const update = {};
     if (clientId !== undefined) update.clientId = clientId || null;
-    if (dossierId !== undefined) update.dossierId = dossierId || null;
+    if (dossierIds !== undefined) {
+      update.dossierIds = Array.isArray(dossierIds) ? dossierIds.filter(Boolean) : [];
+    }
 
-    if (dossierId && !clientId) {
+    // Auto-recuperer le clientId depuis le premier dossier si non fourni
+    if (Array.isArray(dossierIds) && dossierIds.length > 0 && !clientId) {
       try {
         const Dossier = require('../models/Dossier');
-        const dossier = await Dossier.findById(dossierId).select('user').lean();
+        const dossier = await Dossier.findById(dossierIds[0]).select('user').lean();
         if (dossier?.user) update.clientId = dossier.user;
       } catch (e) {
         console.warn('[WhatsApp Admin] Impossible de recuperer le user du dossier:', e.message);
@@ -405,7 +408,7 @@ router.put('/conversations/:id/link', async (req, res) => {
 
     const conv = await WhatsappConversation.findByIdAndUpdate(req.params.id, update, { new: true })
       .populate('clientId', 'prenom nom email')
-      .populate({ path: 'dossierId', select: 'titre categorie statut reference clientNom clientPrenom user', populate: { path: 'user', select: 'prenom nom' } })
+      .populate({ path: 'dossierIds', select: 'titre numero categorie statut reference clientNom clientPrenom user dateEcheance notes priorite', populate: { path: 'user', select: 'prenom nom' } })
       .populate('assignedTo', 'prenom nom');
 
     if (!conv) return res.status(404).json({ success: false, message: 'Conversation introuvable' });

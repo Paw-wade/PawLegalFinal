@@ -67,11 +67,12 @@ function getConvName(conv: any): string {
   if (conv.clientId?.prenom || conv.clientId?.nom) {
     return `${conv.clientId.prenom || ''} ${conv.clientId.nom || ''}`.trim();
   }
-  if (conv.dossierId?.user?.prenom || conv.dossierId?.user?.nom) {
-    return `${conv.dossierId.user.prenom || ''} ${conv.dossierId.user.nom || ''}`.trim();
+  const d0 = conv.dossierIds?.[0];
+  if (d0?.user?.prenom || d0?.user?.nom) {
+    return `${d0.user.prenom || ''} ${d0.user.nom || ''}`.trim();
   }
-  if (conv.dossierId?.clientPrenom || conv.dossierId?.clientNom) {
-    return `${conv.dossierId.clientPrenom || ''} ${conv.dossierId.clientNom || ''}`.trim();
+  if (d0?.clientPrenom || d0?.clientNom) {
+    return `${d0.clientPrenom || ''} ${d0.clientNom || ''}`.trim();
   }
   return conv.contactName || '';
 }
@@ -145,7 +146,7 @@ export default function AdminWhatsAppPage() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [dossiers, setDossiers] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
-  const [linkDossierId, setLinkDossierId] = useState('');
+  const [linkDossierIds, setLinkDossierIds] = useState<string[]>([]);
   const [linkClientId, setLinkClientId] = useState('');
   const [showProactiveModal, setShowProactiveModal] = useState(false);
   const [proactivePhone, setProactivePhone] = useState('');
@@ -644,7 +645,8 @@ export default function AdminWhatsAppPage() {
     setSaveToDossierMsg(msg);
     setSaveToDossierName(name);
     setSaveToDossierCategorie('autre');
-    const linkedId = selectedConv?.dossierId?._id || selectedConv?.dossierId || '';
+    const firstDossier = selectedConv?.dossierIds?.[0];
+    const linkedId = firstDossier?._id || firstDossier || '';
     setSaveToDossierDossierId(typeof linkedId === 'string' ? linkedId : '');
   }
 
@@ -699,7 +701,8 @@ export default function AdminWhatsAppPage() {
 
   function openTaskModal() {
     if (!selectedConv) return;
-    const linkedDossierId = selectedConv.dossierId?._id || (typeof selectedConv.dossierId === 'string' ? selectedConv.dossierId : '');
+    const fd = selectedConv.dossierIds?.[0];
+    const linkedDossierId = fd?._id || (typeof fd === 'string' ? fd : '');
     setTaskForm({
       titre: `Suivi WhatsApp - ${getConvName(selectedConv) || selectedConv.phone}`,
       description: '',
@@ -734,7 +737,8 @@ export default function AdminWhatsAppPage() {
     if (!rdvForm.nom || !rdvForm.date || !rdvForm.heure || !rdvForm.motif) return;
     setIsCreatingRdv(true);
     try {
-      const dossierId = selectedConv?.dossierId?._id || (typeof selectedConv?.dossierId === 'string' ? selectedConv.dossierId : undefined);
+      const fd0 = selectedConv?.dossierIds?.[0];
+      const dossierId = fd0?._id || (typeof fd0 === 'string' ? fd0 : undefined);
       await appointmentsAPI.createAppointment({
         nom: rdvForm.nom,
         prenom: rdvForm.prenom,
@@ -826,7 +830,7 @@ export default function AdminWhatsAppPage() {
         type: 'appel_planifie',
         phone: selectedConv.phone,
         whatsappConvId: selectedConv._id,
-        dossier: selectedConv.dossierId?._id || (typeof selectedConv.dossierId === 'string' ? selectedConv.dossierId : undefined),
+        dossier: (() => { const d = selectedConv.dossierIds?.[0]; return d?._id || (typeof d === 'string' ? d : undefined); })(),
       });
       setConvAppels((prev) => [...prev, task.data?.task || task.data?.data || task.data]);
       setToast({ message: 'Appel planifie - rappel 1 minute avant', type: 'success' });
@@ -839,13 +843,14 @@ export default function AdminWhatsAppPage() {
   }
 
   useEffect(() => {
-    if (!showDossierPanel || !selectedConv?.dossierId) return;
-    const id = typeof selectedConv.dossierId === 'object' ? selectedConv.dossierId._id : selectedConv.dossierId;
-    if (!id) return;
+    if (!showDossierPanel || !selectedConv?.dossierIds?.length) return;
+    const ids = (selectedConv.dossierIds as any[]).map((d: any) => typeof d === 'object' ? d._id : d).filter(Boolean);
+    if (!ids.length) return;
     setLoadingDossierPanel(true);
-    dossiersAPI.getDossierById(id)
-      .then((r: any) => setDossierPanelData(r.data?.dossier || r.data || null))
-      .catch(() => setDossierPanelData(null))
+    Promise.all(ids.map((id: string) =>
+      dossiersAPI.getDossierById(id).then((r: any) => r.data?.dossier || r.data || null).catch(() => null)
+    ))
+      .then((results) => setDossierPanelData(results.filter(Boolean)))
       .finally(() => setLoadingDossierPanel(false));
   }, [showDossierPanel, selectedConv?._id]);
 
@@ -877,7 +882,8 @@ export default function AdminWhatsAppPage() {
 
   async function openLinkModal() {
     setShowLinkModal(true);
-    setLinkDossierId(selectedConv?.dossierId?._id || selectedConv?.dossierId || '');
+    const existingIds = (selectedConv?.dossierIds || []).map((d: any) => d?._id || d).filter(Boolean);
+    setLinkDossierIds(existingIds);
     setLinkClientId(selectedConv?.clientId?._id || selectedConv?.clientId || '');
     if (dossiers.length === 0) {
       try {
@@ -898,7 +904,7 @@ export default function AdminWhatsAppPage() {
     try {
       const res = await whatsappAdminAPI.link(selectedConv._id, {
         clientId: linkClientId || null,
-        dossierId: linkDossierId || null,
+        dossierIds: linkDossierIds,
       });
       setSelectedConv(res.data.conversation);
       setShowLinkModal(false);
@@ -1169,7 +1175,7 @@ export default function AdminWhatsAppPage() {
                           </span>
                         )}
                       </div>
-                      {(conv.dossierId || conv.humanMode || conv.assignedTo) && (
+                      {(conv.dossierIds?.length || conv.humanMode || conv.assignedTo) && (
                         <div className="flex gap-1 mt-1 flex-wrap">
                           {conv.assignedTo && (
                             <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded flex items-center gap-0.5 max-w-[130px] truncate">
@@ -1183,10 +1189,11 @@ export default function AdminWhatsAppPage() {
                               Off
                             </span>
                           )}
-                          {conv.dossierId && (
+                          {conv.dossierIds?.length > 0 && (
                             <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded truncate max-w-[100px]">
                               <FileText className="w-2.5 h-2.5 inline mr-0.5" />
-                              {conv.dossierId.titre || conv.dossierId.reference || 'Dossier'}
+                              {conv.dossierIds[0]?.titre || conv.dossierIds[0]?.reference || 'Dossier'}
+                              {conv.dossierIds.length > 1 ? ` +${conv.dossierIds.length - 1}` : ''}
                             </span>
                           )}
                           {conv.followUpStatus && conv.followUpStatus !== 'none' && (
@@ -1477,7 +1484,7 @@ export default function AdminWhatsAppPage() {
               </button>
 
               {/* Fiche dossier */}
-              {selectedConv.dossierId && (
+              {selectedConv.dossierIds?.length > 0 && (
                 <button
                   onClick={() => setShowDossierPanel((v) => !v)}
                   title="Fiche dossier"
@@ -2400,7 +2407,7 @@ export default function AdminWhatsAppPage() {
         </div>
 
         {/* ── Panneau mini-dossier ── */}
-        {showDossierPanel && selectedConv.dossierId && (() => {
+        {showDossierPanel && selectedConv.dossierIds?.length > 0 && (() => {
           const STATUT_MAP: Record<string, { label: string; color: string; bg: string }> = {
             recu: { label: 'Recu', color: '#2563eb', bg: '#eff6ff' },
             en_cours: { label: 'En cours', color: '#d97706', bg: '#fffbeb' },
@@ -2426,17 +2433,15 @@ export default function AdminWhatsAppPage() {
             haute: { label: 'Haute', color: '#d97706' },
             urgente: { label: 'Urgente', color: '#dc2626' },
           };
-          const statut = STATUT_MAP[dossierPanelData?.statut] || { label: dossierPanelData?.statut || '-', color: '#6b7280', bg: '#f9fafb' };
-          const prio = PRIO_MAP[dossierPanelData?.priorite] || { label: dossierPanelData?.priorite || '-', color: '#6b7280' };
-          const echeance = dossierPanelData?.dateEcheance ? new Date(dossierPanelData.dateEcheance) : null;
-          const echeancePast = echeance && echeance < new Date();
-          const echeanceSoon = echeance && !echeancePast && (echeance.getTime() - Date.now()) < 7 * 24 * 60 * 60 * 1000;
+          const dossiers = Array.isArray(dossierPanelData) ? dossierPanelData : [];
           return (
             <div style={{ width: '280px', borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', background: 'var(--background, #ffffff)', flexShrink: 0, overflowY: 'auto' }}>
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', flexShrink: 0 }}>
                 <FileText style={{ width: '1rem', height: '1rem', color: '#8b5cf6', flexShrink: 0 }} />
-                <span style={{ flex: 1, fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>Fiche dossier</span>
+                <span style={{ flex: 1, fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+                  Dossiers ({selectedConv.dossierIds.length})
+                </span>
                 <button onClick={() => setShowDossierPanel(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', display: 'flex', borderRadius: '0.25rem', color: '#6b7280' }}>
                   <X style={{ width: '1rem', height: '1rem' }} />
                 </button>
@@ -2446,71 +2451,69 @@ export default function AdminWhatsAppPage() {
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', color: '#9ca3af' }}>
                   <RefreshCw style={{ width: '1.25rem', height: '1.25rem', animation: 'spin 1s linear infinite' }} />
                 </div>
-              ) : !dossierPanelData ? (
+              ) : dossiers.length === 0 ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', color: '#9ca3af', fontSize: '0.8rem', textAlign: 'center' }}>
-                  Dossier introuvable
+                  Dossiers introuvables
                 </div>
               ) : (
-                <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-                  {/* Identification */}
-                  <div>
-                    {dossierPanelData.numero && (
-                      <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginBottom: '0.2rem', letterSpacing: '0.02em' }}>
-                        N&deg; {dossierPanelData.numero}
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  {dossiers.map((dos: any, idx: number) => {
+                    const statut = STATUT_MAP[dos.statut] || { label: dos.statut || '-', color: '#6b7280', bg: '#f9fafb' };
+                    const prio = PRIO_MAP[dos.priorite] || { label: dos.priorite || '-', color: '#6b7280' };
+                    const echeance = dos.dateEcheance ? new Date(dos.dateEcheance) : null;
+                    const echeancePast = echeance && echeance < new Date();
+                    const echeanceSoon = echeance && !echeancePast && (echeance.getTime() - Date.now()) < 7 * 24 * 60 * 60 * 1000;
+                    return (
+                      <div key={dos._id || idx} style={{ padding: '0.875rem 1rem', borderBottom: idx < dossiers.length - 1 ? '1px solid #f3f4f6' : 'none', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                        {/* Numero + Titre */}
+                        <div>
+                          {dos.numero && <div style={{ fontSize: '0.65rem', color: '#9ca3af', marginBottom: '0.15rem' }}>N&deg; {dos.numero}</div>}
+                          <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>
+                            {dos.titre || 'Dossier sans titre'}
+                          </div>
+                        </div>
+                        {/* Statut + priorite */}
+                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: '999px', background: statut.bg, color: statut.color }}>
+                            {statut.label}
+                          </span>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 500, padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#f3f4f6', color: prio.color }}>
+                            {prio.label}
+                          </span>
+                        </div>
+                        {/* Categorie */}
+                        {dos.categorie && (
+                          <div style={{ fontSize: '0.74rem', color: '#6b7280' }}>
+                            {CAT_MAP[dos.categorie] || dos.categorie}
+                          </div>
+                        )}
+                        {/* Echeance */}
+                        {echeance && (
+                          <div style={{ fontSize: '0.74rem', fontWeight: 500, color: echeancePast ? '#dc2626' : echeanceSoon ? '#d97706' : '#374151', display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
+                            {echeancePast && <span style={{ fontSize: '0.65rem', background: '#fef2f2', color: '#dc2626', padding: '0.1rem 0.35rem', borderRadius: '0.2rem', fontWeight: 700 }}>En retard</span>}
+                            {echeanceSoon && !echeancePast && <span style={{ fontSize: '0.65rem', background: '#fffbeb', color: '#d97706', padding: '0.1rem 0.35rem', borderRadius: '0.2rem', fontWeight: 700 }}>Bientot</span>}
+                            {echeance.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                          </div>
+                        )}
+                        {/* Notes */}
+                        {dos.notes && (
+                          <div style={{ fontSize: '0.72rem', color: '#374151', lineHeight: 1.45, maxHeight: '3.5rem', overflowY: 'auto', padding: '0.3rem 0.45rem', background: '#fafafa', borderRadius: '0.3rem', border: '1px solid #f3f4f6' }}>
+                            {dos.notes}
+                          </div>
+                        )}
+                        {/* Lien */}
+                        <a
+                          href={`/admin/dossiers/${dos._id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', padding: '0.4rem', borderRadius: '0.4rem', fontSize: '0.74rem', fontWeight: 500, color: '#8b5cf6', border: '1px solid #e9d5ff', background: '#faf5ff', textDecoration: 'none' }}
+                        >
+                          <FileText style={{ width: '0.8rem', height: '0.8rem' }} />
+                          Ouvrir
+                        </a>
                       </div>
-                    )}
-                    <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>
-                      {dossierPanelData.titre || 'Dossier sans titre'}
-                    </div>
-                  </div>
-                  {/* Statut + priorite */}
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.6rem', borderRadius: '999px', background: statut.bg, color: statut.color }}>
-                      {statut.label}
-                    </span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 500, padding: '0.2rem 0.6rem', borderRadius: '999px', background: '#f3f4f6', color: prio.color }}>
-                      {prio.label}
-                    </span>
-                  </div>
-                  {/* Categorie */}
-                  {dossierPanelData.categorie && (
-                    <div>
-                      <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Type</div>
-                      <div style={{ fontSize: '0.78rem', color: '#374151' }}>
-                        {CAT_MAP[dossierPanelData.categorie] || dossierPanelData.categorie}
-                      </div>
-                    </div>
-                  )}
-                  {/* Echeance */}
-                  {echeance && (
-                    <div>
-                      <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Echeance</div>
-                      <div style={{ fontSize: '0.78rem', fontWeight: 500, color: echeancePast ? '#dc2626' : echeanceSoon ? '#d97706' : '#374151', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        {echeancePast && <span style={{ fontSize: '0.68rem', background: '#fef2f2', color: '#dc2626', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', fontWeight: 600 }}>En retard</span>}
-                        {echeanceSoon && !echeancePast && <span style={{ fontSize: '0.68rem', background: '#fffbeb', color: '#d97706', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', fontWeight: 600 }}>Bientot</span>}
-                        {echeance.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                      </div>
-                    </div>
-                  )}
-                  {/* Notes */}
-                  {dossierPanelData.notes && (
-                    <div>
-                      <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notes</div>
-                      <div style={{ fontSize: '0.75rem', color: '#374151', lineHeight: 1.5, maxHeight: '4.5rem', overflowY: 'auto', padding: '0.4rem 0.5rem', background: '#fafafa', borderRadius: '0.375rem', border: '1px solid #f3f4f6' }}>
-                        {dossierPanelData.notes}
-                      </div>
-                    </div>
-                  )}
-                  {/* Lien */}
-                  <a
-                    href={`/admin/dossiers/${dossierPanelData._id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.5rem', borderRadius: '0.5rem', fontSize: '0.78rem', fontWeight: 500, color: '#8b5cf6', border: '1px solid #e9d5ff', background: '#faf5ff', textDecoration: 'none', marginTop: '0.25rem' }}
-                  >
-                    <FileText style={{ width: '0.875rem', height: '0.875rem' }} />
-                    Ouvrir le dossier
-                  </a>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2594,39 +2597,98 @@ export default function AdminWhatsAppPage() {
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium block mb-1">Client</label>
-                <select
-                  value={linkClientId}
-                  onChange={(e) => setLinkClientId(e.target.value)}
-                  className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">Aucun</option>
-                  {clients.map((c: any) => (
-                    <option key={c._id} value={c._id}>
-                      {c.prenom} {c.nom} ({c.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {(() => {
+              const clientDossiers = linkClientId
+                ? dossiers.filter((d: any) => {
+                    const uid = typeof d.user === 'object' ? d.user?._id : d.user;
+                    return uid === linkClientId || d.clientId === linkClientId;
+                  })
+                : [];
+              const toggleDossier = (id: string) => {
+                setLinkDossierIds((prev) =>
+                  prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+                );
+              };
+              const handleClientChange = (cid: string) => {
+                setLinkClientId(cid);
+                if (cid) {
+                  const filtered = dossiers.filter((d: any) => {
+                    const uid = typeof d.user === 'object' ? d.user?._id : d.user;
+                    return uid === cid || d.clientId === cid;
+                  });
+                  setLinkDossierIds(filtered.map((d: any) => d._id));
+                } else {
+                  setLinkDossierIds([]);
+                }
+              };
+              return (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium block mb-1">Client</label>
+                    <select
+                      value={linkClientId}
+                      onChange={(e) => handleClientChange(e.target.value)}
+                      className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">Aucun</option>
+                      {clients.map((c: any) => (
+                        <option key={c._id} value={c._id}>
+                          {c.prenom} {c.nom} ({c.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div>
-                <label className="text-sm font-medium block mb-1">Dossier</label>
-                <select
-                  value={linkDossierId}
-                  onChange={(e) => setLinkDossierId(e.target.value)}
-                  className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">Aucun</option>
-                  {dossiers.map((d: any) => (
-                    <option key={d._id} value={d._id}>
-                      {d.titre || d.reference || d._id} — {d.statut}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1">
+                      Dossiers
+                      {linkClientId && clientDossiers.length > 0 && (
+                        <span className="ml-2 text-xs text-muted-foreground font-normal">
+                          {linkDossierIds.length}/{clientDossiers.length} selectionne{linkDossierIds.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </label>
+                    {!linkClientId ? (
+                      <p className="text-sm text-muted-foreground italic py-2">
+                        Selectionnez un client pour voir ses dossiers.
+                      </p>
+                    ) : clientDossiers.length === 0 ? (
+                      <p className="text-sm text-muted-foreground italic py-2">
+                        Aucun dossier pour ce client.
+                      </p>
+                    ) : (
+                      <div className="border border-input rounded-md divide-y divide-border max-h-48 overflow-y-auto">
+                        {clientDossiers.map((d: any) => {
+                          const checked = linkDossierIds.includes(d._id);
+                          return (
+                            <label
+                              key={d._id}
+                              className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-accent/50 transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleDossier(d._id)}
+                                className="mt-0.5 h-4 w-4 rounded border-input accent-primary"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">
+                                  {d.titre || d.reference || 'Dossier sans titre'}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {d.numero && <span className="mr-2">N&deg; {d.numero}</span>}
+                                  <span>{d.statut}</span>
+                                </div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="flex justify-end gap-2 mt-6">
               <button

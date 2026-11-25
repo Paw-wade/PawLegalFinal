@@ -57,7 +57,7 @@ const whatsappConversationSchema = new mongoose.Schema(
     messages: { type: [messageSchema], default: [] },
     unreadAdmin: { type: Number, default: 0 },
     clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    dossierId: { type: mongoose.Schema.Types.ObjectId, ref: 'Dossier', default: null },
+    dossierIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Dossier' }],
     customName: { type: String, default: '' },
     humanMode: { type: Boolean, default: false },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

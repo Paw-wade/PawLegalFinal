@@ -2071,7 +2071,7 @@ export const whatsappAdminAPI = {
     api.put(`/whatsapp-admin/conversations/${id}/status`, { followUpStatus }),
   pinMessage: (id: string, messageId: string, pinned: boolean) =>
     api.put(`/whatsapp-admin/conversations/${id}/pin-message`, { messageId, pinned }),
-  link: (id: string, data: { clientId?: string | null; dossierId?: string | null }) =>
+  link: (id: string, data: { clientId?: string | null; dossierIds?: string[] }) =>
     api.put(`/whatsapp-admin/conversations/${id}/link`, data),
   setHumanMode: (id: string, humanMode: boolean) =>
     api.put(`/whatsapp-admin/conversations/${id}/human-mode`, { humanMode }),
