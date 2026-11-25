@@ -292,26 +292,33 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
   const SmsTemplate = require('./models/SmsTemplate');
   const SmsHistory = require('./models/SmsHistory');
   const User = require('./models/User');
-  
+
+  // Types secrets : doivent toujours transiter par SMS, jamais WhatsApp
+  const SMS_ONLY_TYPES = ['otp', 'password_reset_temp'];
+  const isSmsOnly = SMS_ONLY_TYPES.includes(type);
+
   let message = '';
   let templateCode = type;
   let templateName = type;
   let variables = data;
-  /** True si un enregistrement SmsTemplate actif a servi à composer le message (hors fallback erreur). */
+  /** True si un enregistrement SmsTemplate actif a servi a composer le message (hors fallback erreur). */
   let usedActiveDbTemplate = false;
-  
-  // Vérifier les préférences utilisateur si un userId est fourni
-  if (options.userId && !options.skipPreferences) {
-    const user = await User.findById(options.userId);
-    if (user && !canReceiveSMS(user, type)) {
-      console.log(`⚠️ SMS non envoyé: l'utilisateur ${options.userId} a désactivé les SMS de type ${type}`);
-      return {
-        success: false,
-        skipped: true,
-        reason: 'user_preferences',
-        message: 'SMS non envoyé selon les préférences utilisateur'
-      };
-    }
+
+  // Charger l'utilisateur une seule fois pour preferences + whatsappPhone
+  let user = null;
+  if (options.userId) {
+    user = await User.findById(options.userId).select('whatsappPhone smsPreferences');
+  }
+
+  // Verifier les preferences utilisateur
+  if (user && !options.skipPreferences && !canReceiveSMS(user, type)) {
+    console.log(`Warning SMS non envoye: l'utilisateur ${options.userId} a desactive les SMS de type ${type}`);
+    return {
+      success: false,
+      skipped: true,
+      reason: 'user_preferences',
+      message: 'SMS non envoye selon les preferences utilisateur'
+    };
   }
   
   // Essayer de charger un template depuis la base de données
@@ -386,16 +393,34 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
   let result;
   let historyRecord;
 
-  // Priorité au push: si un push est envoyé, on n'envoie pas de SMS.
-  // Exception: conserver systématiquement le SMS pour l'envoi de code/mot de passe.
+  // Priorite 1: WhatsApp si l'utilisateur a un whatsappPhone (sauf codes secrets)
+  if (!isSmsOnly && user?.whatsappPhone) {
+    try {
+      const { sendProactiveMessage } = require('./services/whatsappService');
+      await sendProactiveMessage(user.whatsappPhone, message);
+      console.log(`WA notification envoyee pour ${type} (userId=${options.userId})`);
+      return {
+        success: true,
+        provider: 'whatsapp',
+        to: user.whatsappPhone,
+        templateCode,
+        templateName,
+        message: 'Notification envoyee par WhatsApp.'
+      };
+    } catch (waError) {
+      console.warn(`Echec WhatsApp pour ${type}, fallback push/SMS:`, waError.message);
+    }
+  }
+
+  // Priorite 2: push web si un push est envoye, on n'envoie pas de SMS.
+  // Exception: codes/mots de passe toujours par SMS.
   const shouldPreferPush =
     options.preferPush !== false &&
     Boolean(options.userId) &&
-    type !== 'password_reset_temp' &&
-    type !== 'otp';
+    !isSmsOnly;
 
-  // Règle métier: pour "nouveau message", jamais de SMS client.
-  // On tente le push si possible, puis on s'arrête sans fallback SMS.
+  // Regle metier: pour "nouveau message", jamais de SMS client.
+  // On tente le push si possible, puis on s'arrete sans fallback SMS.
   if (type === 'message_received') {
     try {
       if (options.userId) {
