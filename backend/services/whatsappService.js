@@ -320,8 +320,17 @@ async function resolveUser(conv) {
     if (conv.clientId) {
       return await User.findById(conv.clientId).select('firstName lastName phone').lean();
     }
-    // Fallback : recherche par numero si la conversation n'est pas encore liee
-    const user = await User.findOne({ phone: conv.phone }).select('_id firstName lastName phone').lean();
+    // Recherche par numero avec les deux formats (avec et sans +) et par whatsappPhone
+    const phone = conv.phone || '';
+    const phoneAlt = phone.startsWith('+') ? phone.slice(1) : '+' + phone;
+    const user = await User.findOne({
+      $or: [
+        { phone },
+        { phone: phoneAlt },
+        { whatsappPhone: phone },
+        { whatsappPhone: phoneAlt },
+      ],
+    }).select('_id firstName lastName phone').lean();
     if (user) {
       conv.clientId = user._id;
       conv.contactName = `${user.firstName || ''} ${user.lastName || ''}`.trim();

@@ -113,14 +113,19 @@ async function handleVerificationCode(from, code) {
     const WhatsappConversation = require('../models/WhatsappConversation');
     const update = { clientId: user._id, contactName: `${user.firstName || ''} ${user.lastName || ''}`.trim() };
 
-    const existing = await WhatsappConversation.findOne({ phone }).select('dossierId').lean();
+    const phoneAltCheck = phone.startsWith('+') ? phone.slice(1) : '+' + phone;
+    const existing = await WhatsappConversation.findOne({ phone: { $in: [phone, phoneAltCheck] } }).select('dossierId').lean();
     if (!existing?.dossierId) {
       const Dossier = require('../models/Dossier');
       const dossier = await Dossier.findOne({ user: user._id }).sort({ createdAt: -1 }).select('_id').lean();
       if (dossier) update.dossierId = dossier._id;
     }
 
-    await WhatsappConversation.findOneAndUpdate({ phone }, update);
+    const phoneAlt = phone.startsWith('+') ? phone.slice(1) : '+' + phone;
+    await WhatsappConversation.findOneAndUpdate(
+      { phone: { $in: [phone, phoneAlt] } },
+      update
+    );
   } catch (e) {
     console.warn('[WhatsApp] Impossible de lier clientId a la conversation:', e.message);
   }
@@ -162,7 +167,8 @@ router.post('/', async (req, res) => {
         if (!value || !value.messages) continue;
 
         for (const msg of value.messages) {
-          const from = msg.from;
+          const rawFrom = msg.from || '';
+          const from = rawFrom.startsWith('+') ? rawFrom : '+' + rawFrom;
           const msgType = msg.type || 'unknown';
 
           let conv = await WhatsappConversation.findOne({ phone: from });
