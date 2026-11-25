@@ -1709,6 +1709,11 @@ export default function AdminWhatsAppPage() {
                       <Link2 style={{ width: '0.875rem', height: '0.875rem' }} />
                       Lier à un dossier
                     </button>
+                    {/* Note interne */}
+                    <button onClick={() => { setShowMobileMore(false); setShowNoteInput((v) => !v); setReplyingTo(null); }} style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: showNoteInput ? '#d97706' : '#6b7280', background: showNoteInput ? '#fefce8' : 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <StickyNote style={{ width: '0.875rem', height: '0.875rem' }} />
+                      {showNoteInput ? 'Annuler note interne' : 'Note interne'}
+                    </button>
                     {/* Supprimer */}
                     <button onClick={() => { setShowMobileMore(false); deleteConversation(selectedConv._id); }} style={{ width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <Trash2 style={{ width: '0.875rem', height: '0.875rem' }} />
@@ -2328,20 +2333,6 @@ export default function AdminWhatsAppPage() {
 
                 {/* Droite : note, micro, envoyer */}
                 <div className="flex items-center gap-0.5 shrink-0 self-end mb-0.5">
-                  {/* Note interne */}
-                  <button
-                    onClick={() => { setShowNoteInput((v) => !v); setReplyingTo(null); }}
-                    title="Note interne"
-                    className={[
-                      'p-1.5 rounded-full transition-colors',
-                      showNoteInput
-                        ? 'text-yellow-600 bg-yellow-100'
-                        : 'text-muted-foreground hover:text-yellow-600 hover:bg-accent',
-                    ].join(' ')}
-                  >
-                    <StickyNote className="w-4 h-4" />
-                  </button>
-
                   {/* Micro / enregistrement */}
                   {isRecording ? (
                     <button
