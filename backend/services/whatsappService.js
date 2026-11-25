@@ -129,7 +129,7 @@ Je suis Ada. Comment puis-je vous aider ?
 
 Ecrivez *1*, *2* ou *3* pour choisir.
 
-_Vous avez deja un compte Ada Papers ? Votre numero est reconnu automatiquement. Sinon, creez votre compte sur *adapapers.fr* pour un suivi personnalise de vos dossiers._`;
+_Pas encore de compte ? Inscrivez-vous sur *adapapers.fr* pour suivre vos dossiers en temps reel._`;
 }
 
 const DEMANDE_MENU = `Quelle est votre situation ?
