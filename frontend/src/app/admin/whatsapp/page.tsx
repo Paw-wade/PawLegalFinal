@@ -2246,19 +2246,6 @@ export default function AdminWhatsAppPage() {
                 }}
               />
 
-              {/* Bandeau note interne */}
-              {showNoteInput && (
-                <div className="flex items-center gap-1.5 mb-2 px-2.5 py-1.5 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-700">
-                  <StickyNote className="w-3 h-3 shrink-0" />
-                  <span className="text-xs font-medium">Note interne — visible uniquement par l'equipe</span>
-                  <button
-                    onClick={() => setShowNoteInput(false)}
-                    className="ml-auto p-0.5 rounded hover:bg-yellow-200 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
 
               {/* Conteneur integre pleine largeur */}
               <div className={[
