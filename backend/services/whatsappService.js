@@ -106,7 +106,7 @@ const STATUT_DOSSIER_LABELS = {
 };
 
 function menuPrincipal(prenom) {
-  const salut = prenom ? `Bonjour *${prenom}* 👋` : `Bonjour et bienvenue chez *Ada Papers* 👋`;
+  const salut = prenom ? `Bonjour *${prenom}* 👋` : `Bonjour et bienvenue 👋`;
   if (prenom) {
     return `${salut}
 
@@ -121,7 +121,7 @@ Ecrivez *1*, *2*, *3* ou *4* pour choisir.`;
   }
   return `${salut}
 
-Je suis Ada. Comment puis-je vous aider ?
+Je suis *Ada*, l'assistante du cabinet *Ada Papers*.\nComment puis-je vous aider ?
 
 1️⃣  Prendre un rendez-vous
 2️⃣  Faire une demande
