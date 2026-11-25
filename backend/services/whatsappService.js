@@ -336,8 +336,11 @@ async function fetchPendingRequests(dossierId) {
   }
 }
 
-function menuContactConseiller() {
-  return `Pour quelle raison souhaitez-vous parler a un conseiller ?\n\n1️⃣  Question sur mon dossier en cours\n2️⃣  Premiere prise de contact\n3️⃣  Urgence\n4️⃣  Autre\n\nEcrivez le numero de votre choix, *R* pour revenir au menu.`;
+function menuContactConseiller(avecDossier = false) {
+  if (avecDossier) {
+    return `Pour quelle raison souhaitez-vous parler a un conseiller ?\n\n1️⃣  Question sur mon dossier en cours\n2️⃣  Premiere prise de contact\n3️⃣  Urgence\n4️⃣  Autre\n\nEcrivez le numero de votre choix, *R* pour revenir au menu.`;
+  }
+  return `Pour quelle raison souhaitez-vous parler a un conseiller ?\n\n1️⃣  Premiere prise de contact\n2️⃣  Urgence\n3️⃣  Autre\n\nEcrivez le numero de votre choix, *R* pour revenir au menu.`;
 }
 
 async function afficherDocsDossier(conv, docIds) {
@@ -531,7 +534,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       if (text === '4' && prenom) {
         conv.state = 'contact_motif';
         await conv.save();
-        return menuContactConseiller();
+        return menuContactConseiller(true);
       }
       return `Ecrivez *1*, *2*${prenom ? ', *3* ou *4*' : ' ou *3*'} pour choisir.\n\n${menuPrincipal(prenom)}`;
     }
@@ -681,23 +684,29 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       conv.markModified('rdv');
       conv.state = 'contact_motif';
       await conv.save();
-      return menuContactConseiller();
+      return menuContactConseiller(false);
     }
 
     case 'contact_motif': {
-      const MOTIFS_CONTACT = {
+      const MOTIFS_CONTACT_CLIENT = {
         '1': 'Question sur mon dossier en cours',
         '2': 'Premiere prise de contact',
         '3': 'Urgence',
         '4': 'Autre',
       };
+      const MOTIFS_CONTACT_VISITEUR = {
+        '1': 'Premiere prise de contact',
+        '2': 'Urgence',
+        '3': 'Autre',
+      };
+      const MOTIFS_CONTACT = prenom ? MOTIFS_CONTACT_CLIENT : MOTIFS_CONTACT_VISITEUR;
       if (text === 'r') {
         conv.state = 'menu';
         await conv.save();
         return menuPrincipal(prenom);
       }
       const motifContact = MOTIFS_CONTACT[text];
-      if (!motifContact) return `Ecrivez *1*, *2*, *3* ou *4* pour choisir.\n\n${menuContactConseiller()}`;
+      if (!motifContact) return `Ecrivez un numero pour choisir.\n\n${menuContactConseiller(!!prenom)}`;
       if (!conv.rdv) conv.rdv = {};
       conv.rdv.motif = motifContact;
       conv.markModified('rdv');
@@ -712,7 +721,7 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       if (text === 'r') {
         conv.state = 'contact_motif';
         await conv.save();
-        return menuContactConseiller();
+        return menuContactConseiller(!!prenom);
       }
       if (!conv.rdv) conv.rdv = {};
       conv.rdv.note = msg;
