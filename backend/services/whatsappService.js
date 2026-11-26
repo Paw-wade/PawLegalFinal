@@ -171,8 +171,9 @@ Je suis Ada. Comment puis-je vous aider ?
 2️⃣  Faire une demande
 3️⃣  Mes dossiers
 4️⃣  Parler a un conseiller
+5️⃣  Poser une question sur le forum
 
-Ecrivez *1*, *2*, *3* ou *4* pour choisir.`;
+Ecrivez *1*, *2*, *3*, *4* ou *5* pour choisir.`;
   }
   return `${salut}
 
@@ -181,8 +182,9 @@ Je suis Ada. Comment puis-je vous aider ?
 1️⃣  Prendre un rendez-vous
 2️⃣  Faire une demande
 3️⃣  Parler a un conseiller
+4️⃣  Poser une question sur le forum
 
-Ecrivez *1*, *2* ou *3* pour choisir.
+Ecrivez *1*, *2*, *3* ou *4* pour choisir.
 
 _Pas encore de compte ? Inscrivez-vous sur *adapapers.fr* pour une meilleure experience._`;
 }
@@ -587,13 +589,24 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         await conv.save();
         return `Pour beneficier de l'accompagnement personnalise d'Ada Papers, nous vous recommandons de creer votre compte sur *adapapers.fr*.\n\nCela vous permettra de suivre vos dossiers et d'etre reconnu automatiquement.\n\nSi vous souhaitez quand meme parler a un conseiller, tapez votre *prenom et nom*.`;
       }
-      // Option 4 : Parler a un conseiller (utilisateur reconnu uniquement)
-      if (text === '4' && prenom) {
-        conv.state = 'contact_motif';
+      // Option 4 : Parler a un conseiller (utilisateur reconnu) OU Forum (visiteur)
+      if (text === '4') {
+        if (prenom) {
+          conv.state = 'contact_motif';
+          await conv.save();
+          return menuContactConseiller(true);
+        }
+        conv.state = 'forum_question_body';
         await conv.save();
-        return menuContactConseiller(true);
+        return `Posez votre question ci-dessous.\n\nElle sera publiee de facon *anonyme* sur le forum *adapapers.fr/forum* et une reponse vous sera apportee par notre equipe.\n\n_Ecrivez votre question ou tapez *R* pour revenir au menu._`;
       }
-      return `Ecrivez *1*, *2*${prenom ? ', *3* ou *4*' : ' ou *3*'} pour choisir.\n\n${menuPrincipal(prenom)}`;
+      // Option 5 : Forum (utilisateur reconnu uniquement)
+      if (text === '5' && prenom) {
+        conv.state = 'forum_question_body';
+        await conv.save();
+        return `Posez votre question ci-dessous.\n\nElle sera publiee de facon *anonyme* sur le forum *adapapers.fr/forum* et une reponse vous sera apportee par notre equipe.\n\n_Ecrivez votre question ou tapez *R* pour revenir au menu._`;
+      }
+      return `Ecrivez *1*, *2*${prenom ? ', *3*, *4* ou *5*' : ', *3* ou *4*'} pour choisir.\n\n${menuPrincipal(prenom)}`;
     }
 
     case 'demande_menu': {
@@ -742,6 +755,40 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       conv.state = 'contact_motif';
       await conv.save();
       return menuContactConseiller(false);
+    }
+
+    case 'forum_question_body': {
+      if (text === 'r' || text === 'menu') {
+        conv.state = 'menu';
+        await conv.save();
+        return menuPrincipal(prenom);
+      }
+      if (!text || text.length < 10) {
+        return `Votre question est trop courte. Merci de developper un peu pour que notre equipe puisse vous repondre.\n\n_Ecrivez votre question ou tapez *R* pour revenir._`;
+      }
+      try {
+        const ForumThread = require('../models/ForumThread');
+        // Generer un titre a partir de la premiere phrase ou des 100 premiers caracteres
+        const premiereSentence = text.match(/^[^.?!\n]{1,100}/)?.[0]?.trim() || '';
+        const titre = premiereSentence.length >= 10
+          ? premiereSentence
+          : (text.length <= 120 ? text : text.slice(0, 117) + '...');
+        await ForumThread.create({
+          title: titre,
+          body: text,
+          guestName: 'Anonyme (WhatsApp)',
+          theme: 'autres',
+          isVerified: false,
+        });
+        conv.state = 'menu';
+        await conv.save();
+        return `Merci ! Votre question a bien ete soumise.\n\nElle sera visible sur *adapapers.fr/forum* apres validation par notre equipe, qui vous repondra directement sur le forum.\n\nTapez *menu* pour revenir.`;
+      } catch (err) {
+        console.error('Erreur creation thread forum WhatsApp:', err);
+        conv.state = 'menu';
+        await conv.save();
+        return `Une erreur est survenue lors de l'envoi de votre question. Veuillez reessayer depuis *adapapers.fr/forum*.\n\nTapez *menu* pour revenir.`;
+      }
     }
 
     case 'contact_motif': {

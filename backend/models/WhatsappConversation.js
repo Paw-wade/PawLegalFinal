@@ -48,6 +48,7 @@ const whatsappConversationSchema = new mongoose.Schema(
         'contact_motif',
         'contact_message',
         'dossier_docs_list',
+        'forum_question_body',
       ],
       default: 'menu',
     },
