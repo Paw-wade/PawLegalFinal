@@ -598,13 +598,13 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         }
         conv.state = 'forum_question_body';
         await conv.save();
-        return `Posez votre question ci-dessous.\n\nElle sera publiee de facon *anonyme* sur le forum *adapapers.fr/forum* et une reponse vous sera apportee par notre equipe.\n\n_Ecrivez votre question ou tapez *R* pour revenir au menu._`;
+        return `Posez votre question.\n\nElle sera publiee de facon anonyme sur le forum et vous obtiendrez une reponse.\n\n_Tapez votre question ou *R* pour revenir._`;
       }
       // Option 5 : Forum (utilisateur reconnu uniquement)
       if (text === '5' && prenom) {
         conv.state = 'forum_question_body';
         await conv.save();
-        return `Posez votre question ci-dessous.\n\nElle sera publiee de facon *anonyme* sur le forum *adapapers.fr/forum* et une reponse vous sera apportee par notre equipe.\n\n_Ecrivez votre question ou tapez *R* pour revenir au menu._`;
+        return `Posez votre question.\n\nElle sera publiee de facon anonyme sur le forum et vous obtiendrez une reponse.\n\n_Tapez votre question ou *R* pour revenir._`;
       }
       return `Ecrivez *1*, *2*${prenom ? ', *3*, *4* ou *5*' : ', *3* ou *4*'} pour choisir.\n\n${menuPrincipal(prenom)}`;
     }
