@@ -281,6 +281,35 @@ function resolvePushTitle(type, data = {}) {
 }
 
 /**
+ * Resout le template WhatsApp et ses parametres pour un type de notification donne.
+ * Retourne null si aucun template n'est defini pour ce type (fallback texte libre).
+ * @param {string} type - code de notification (appointment_confirmed, dossier_updated...)
+ * @param {object} data - donnees de la notification
+ * @returns {{ name: string, params: string[] } | null}
+ */
+function resolveWhatsAppTemplate(type, data = {}) {
+  const map = {
+    appointment_confirmed:        () => ({ name: 'appointment_confirmed',   params: [data.name || '', data.date || '', data.time || ''] }),
+    appointment_created:          () => ({ name: 'appointment_created',     params: [data.name || '', data.date || '', data.time || ''] }),
+    appointment_reminder:         () => ({ name: 'appointment_reminder',    params: [data.date || '', data.time || ''] }),
+    appointment_cancelled:        () => ({ name: 'appointment_cancelled',   params: [data.date || '', data.time || ''] }),
+    appointment_updated:          () => ({ name: 'appointment_updated',     params: [data.date || '', data.time || ''] }),
+    dossier_created:              () => ({ name: 'dossier_created',         params: [data.dossierTitle || '', data.dossierId || ''] }),
+    dossier_updated:              () => ({ name: 'dossier_updated',         params: [data.dossierTitle || '', data.statut || ''] }),
+    dossier_status_changed:       () => ({ name: 'dossier_status_changed',  params: [data.dossierTitle || '', data.statut || ''] }),
+    document_uploaded:            () => ({ name: 'document_uploaded',       params: [data.dossierTitle || ''] }),
+    document_request:             () => ({ name: 'document_request',        params: [data.bodyLine1 || data.documentType || 'Document requis'] }),
+    document_received:            () => ({ name: 'document_received',       params: [data.documentName || '', data.dossierNumero || ''] }),
+    message_received:             () => ({ name: 'message_received',        params: [data.senderName || ''] }),
+    tarification_choice_reminder: () => ({ name: 'tarification_info',       params: [] }),
+    tarification_payment_reminder:() => ({ name: 'tarification_info',       params: [] }),
+    frais_tarification_exoneres:  () => ({ name: 'frais_exoneres',          params: [] }),
+    contact_confirmation:         () => ({ name: 'contact_confirmation',    params: [] }),
+  };
+  return map[type] ? map[type]() : null;
+}
+
+/**
  * Envoie un SMS de notification avec template et historique
  * @param {string} to - numéro du destinataire
  * @param {string} type - type de notification (appointment_confirmed, etc.) ou code de template
@@ -396,15 +425,23 @@ async function sendNotificationSMS(to, type, data = {}, options = {}) {
   // Priorite 1: WhatsApp si l'utilisateur a un whatsappPhone (sauf codes secrets)
   if (!isSmsOnly && user?.whatsappPhone) {
     try {
-      const { sendProactiveMessage } = require('./services/whatsappService');
-      await sendProactiveMessage(user.whatsappPhone, message);
-      console.log(`WA notification envoyee pour ${type} (userId=${options.userId})`);
+      const { sendWhatsAppTemplate, sendProactiveMessage } = require('./services/whatsappService');
+      const tpl = resolveWhatsAppTemplate(type, data);
+      if (tpl) {
+        // Template approuve par Meta : fonctionne hors fenetre 24h
+        await sendWhatsAppTemplate(user.whatsappPhone, tpl.name, tpl.params);
+      } else {
+        // Type sans template defini : message libre (fenetre 24h uniquement)
+        await sendProactiveMessage(user.whatsappPhone, message);
+      }
+      console.log(`WA notification envoyee pour ${type} via ${tpl ? 'template:' + tpl.name : 'message libre'} (userId=${options.userId})`);
       return {
         success: true,
         provider: 'whatsapp',
         to: user.whatsappPhone,
         templateCode,
         templateName,
+        waTemplate: tpl ? tpl.name : null,
         message: 'Notification envoyee par WhatsApp.'
       };
     } catch (waError) {

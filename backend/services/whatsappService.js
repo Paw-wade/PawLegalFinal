@@ -90,6 +90,61 @@ async function sendProactiveMessage(phone, text) {
   await sendMessage(phone, text, conv);
 }
 
+/**
+ * Envoie un message de type template WhatsApp (hors fenetre 24h).
+ * Utilise les templates valides par Meta pour les notifications proactives.
+ * @param {string} phone - numero au format E.164 (+33...)
+ * @param {string} templateName - nom du template approuve par Meta
+ * @param {string[]} params - valeurs des variables {{1}}, {{2}}... dans le corps
+ */
+async function sendWhatsAppTemplate(phone, templateName, params = []) {
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token = process.env.WHATSAPP_TOKEN;
+  if (!phoneId || !token) {
+    throw new Error('WhatsApp non configure : WHATSAPP_PHONE_NUMBER_ID ou WHATSAPP_TOKEN manquant');
+  }
+
+  const components = params.length > 0
+    ? [{ type: 'body', parameters: params.map(p => ({ type: 'text', text: String(p || '') })) }]
+    : [];
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    to: phone,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: 'fr' },
+      ...(components.length > 0 && { components }),
+    },
+  };
+
+  const resp = await axios.post(
+    `${BASE_URL}/${phoneId}/messages`,
+    payload,
+    { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+  );
+
+  // Persister dans la conversation pour garder l'historique
+  const WhatsappConversation = require('../models/WhatsappConversation');
+  let conv = await WhatsappConversation.findOne({ phone });
+  if (!conv) {
+    conv = new WhatsappConversation({ phone, state: 'menu', lastActivity: new Date() });
+  }
+  const waMessageId = resp.data?.messages?.[0]?.id || '';
+  conv.messages.push({
+    direction: 'outbound',
+    type: 'text',
+    content: `[template:${templateName}] ${params.join(' | ')}`,
+    waMessageId,
+    timestamp: new Date(),
+  });
+  conv.lastActivity = new Date();
+  await conv.save();
+
+  return resp.data;
+}
+
 // ─────────────────────────────────────────────
 // Menus et réponses FAQ
 // ─────────────────────────────────────────────
@@ -1181,4 +1236,4 @@ async function notifierAdminsDocument(conv, docType, dossierNumero, docId) {
   }
 }
 
-module.exports = { sendMessage, sendMediaMessage, handleIncomingMessage, sendProactiveMessage };
+module.exports = { sendMessage, sendMediaMessage, handleIncomingMessage, sendProactiveMessage, sendWhatsAppTemplate };
