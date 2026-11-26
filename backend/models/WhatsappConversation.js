@@ -60,6 +60,7 @@ const whatsappConversationSchema = new mongoose.Schema(
       note: String,
       date: String,
       heure: String,
+      dateISO: { type: String, default: '' },
       creneauId: { type: mongoose.Schema.Types.ObjectId, default: null },
     },
     docContext: {

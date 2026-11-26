@@ -456,16 +456,52 @@ function formatDateFr(date) {
 
 async function obtenirCreneauxDisponibles() {
   const Creneau = require('../models/Creneau');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Creneau.find({ ferme: { $ne: true }, date: { $gte: today } })
-    .sort({ date: 1, heure: 1 })
-    .limit(5)
-    .lean();
+  const RendezVous = require('../models/RendezVous');
+
+  const HEURES = [
+    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+    '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00',
+  ];
+
+  const maintenant = new Date();
+  const slots = [];
+
+  for (let i = 0; i < 21 && slots.length < 8; i++) {
+    const jour = new Date(maintenant);
+    jour.setDate(maintenant.getDate() + i);
+    jour.setHours(0, 0, 0, 0);
+
+    if (jour.getDay() === 0) continue;
+
+    const finJour = new Date(jour);
+    finJour.setHours(23, 59, 59, 999);
+
+    const [creneauxFermes, rdvPris] = await Promise.all([
+      Creneau.find({ date: { $gte: jour, $lte: finJour }, ferme: true }).lean(),
+      RendezVous.find({ date: { $gte: jour, $lte: finJour }, statut: { $in: ['en_attente', 'confirme'] } }).lean(),
+    ]);
+
+    const heuresBloquees = new Set([
+      ...creneauxFermes.map(c => c.heure),
+      ...rdvPris.map(r => r.heure),
+    ]);
+
+    const estAujourdhui = jour.toDateString() === maintenant.toDateString();
+    const heureActuelleStr = `${maintenant.getHours().toString().padStart(2, '0')}:${maintenant.getMinutes().toString().padStart(2, '0')}`;
+
+    for (const heure of HEURES) {
+      if (slots.length >= 8) break;
+      if (heuresBloquees.has(heure)) continue;
+      if (estAujourdhui && heure <= heureActuelleStr) continue;
+      slots.push({ date: new Date(jour), heure });
+    }
+  }
+
+  return slots;
 }
 
 function formatMenuCreneaux(creneaux) {
-  const nums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
+  const nums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣'];
   const lignes = creneaux.map((c, i) => `${nums[i]}  ${formatDateFr(c.date)} a ${c.heure}`);
   return `Voici les prochains creneaux disponibles :\n\n${lignes.join('\n')}\n\nEcrivez le numero de votre choix, ou *0* pour annuler.`;
 }
@@ -687,7 +723,7 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
         return menuPrincipal(prenom);
       }
       const idx = parseInt(text, 10);
-      if (isNaN(idx) || idx < 1 || idx > 5) {
+      if (isNaN(idx) || idx < 1 || idx > 8) {
         const creneaux = await obtenirCreneauxDisponibles();
         if (creneaux.length === 0) {
           conv.state = 'rdv_note';
@@ -703,7 +739,8 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       }
       conv.rdv.date = formatDateFr(choisi.date);
       conv.rdv.heure = choisi.heure;
-      conv.rdv.creneauId = choisi._id;
+      conv.rdv.dateISO = choisi.date.toISOString();
+      conv.rdv.creneauId = null;
       conv.state = 'rdv_note';
       conv.markModified('rdv');
       await conv.save();
@@ -1087,7 +1124,22 @@ async function enregistrerDemandeRDV(conv) {
     dateRdv.setDate(dateRdv.getDate() + 3);
     let heureRdv = 'A definir';
 
-    if (conv.rdv.creneauId) {
+    if (conv.rdv.dateISO && conv.rdv.heure) {
+      try {
+        const Creneau = require('../models/Creneau');
+        const dateParsed = new Date(conv.rdv.dateISO);
+        dateParsed.setHours(0, 0, 0, 0);
+        dateRdv = dateParsed;
+        heureRdv = conv.rdv.heure;
+        await Creneau.findOneAndUpdate(
+          { date: dateParsed, heure: conv.rdv.heure },
+          { $set: { ferme: true, motifFermeture: `Reserve WhatsApp ${conv.phone}` } },
+          { upsert: true, new: true }
+        );
+      } catch (e) {
+        console.warn('[WhatsApp] Impossible de bloquer le creneau:', e.message);
+      }
+    } else if (conv.rdv.creneauId) {
       try {
         const Creneau = require('../models/Creneau');
         const creneau = await Creneau.findById(conv.rdv.creneauId);
