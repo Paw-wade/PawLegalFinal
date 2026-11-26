@@ -100,7 +100,8 @@ nextjs-portal[data-cursor-element-id] {
 
 @layer base {
   /* --- Forme pill + position/overflow pour pseudo-element --- */
-  button:not([data-no-pill]) {
+  /* Exclut les boutons text-left (accordeons, listes) qui ne sont pas des CTA visuels */
+  button:not([data-no-pill]):not([class*="text-left"]) {
     border-radius: 9999px !important;
     overflow: hidden;
     position: relative;
@@ -112,8 +113,8 @@ nextjs-portal[data-cursor-element-id] {
       color 180ms ease !important;
   }
 
-  /* --- Shimmer pseudo-element sur tous les boutons --- */
-  button:not([data-no-pill])::after {
+  /* --- Shimmer pseudo-element sur les vrais boutons CTA --- */
+  button:not([data-no-pill]):not([class*="text-left"])::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -132,13 +133,13 @@ nextjs-portal[data-cursor-element-id] {
   }
 
   /* --- Shimmer declenche au hover --- */
-  button:not([data-no-pill]):not(:disabled):hover::after {
+  button:not([data-no-pill]):not([class*="text-left"]):not(:disabled):hover::after {
     opacity: 1;
     animation: btn-shimmer 520ms ease forwards;
   }
 
   /* --- Scale spring subtil au hover --- */
-  button:not([data-no-pill]):not(:disabled):hover {
+  button:not([data-no-pill]):not([class*="text-left"]):not(:disabled):hover {
     transform: scale(1.03) translateY(-1px);
   }
 
@@ -159,7 +160,7 @@ nextjs-portal[data-cursor-element-id] {
   }
 
   /* --- Presse (active) --- */
-  button:not([data-no-pill]):not(:disabled):active {
+  button:not([data-no-pill]):not([class*="text-left"]):not(:disabled):active {
     transform: scale(0.96) translateY(0) !important;
     box-shadow: none !important;
     transition-duration: 60ms !important;
@@ -176,15 +177,15 @@ nextjs-portal[data-cursor-element-id] {
 
   /* --- Killswitch accessibilite --- */
   @media (prefers-reduced-motion: reduce) {
-    button:not([data-no-pill]) {
+    button:not([data-no-pill]):not([class*="text-left"]) {
       transition: background-color 100ms ease, border-color 100ms ease, color 100ms ease !important;
     }
-    button:not([data-no-pill])::after { display: none; }
-    button:not([data-no-pill]):hover { transform: none !important; }
+    button:not([data-no-pill]):not([class*="text-left"])::after { display: none; }
+    button:not([data-no-pill]):not([class*="text-left"]):hover { transform: none !important; }
   }
 
   /* --- Focus ring reste visible (outline externe, pas clipped par overflow) --- */
-  button:not([data-no-pill]):focus-visible {
+  button:not([data-no-pill]):not([class*="text-left"]):focus-visible {
     outline: 2.5px solid #f97316;
     outline-offset: 2px;
   }
