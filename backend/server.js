@@ -162,6 +162,7 @@ try {
 } catch (e) {}
 try { app.use('/api/fiches', require('./routes/fiches')); } catch (e) {}
 try { app.use('/api/fiche-invitations', require('./routes/ficheInvitations')); } catch (e) {}
+try { app.use('/api/piste', require('./routes/piste')); console.log('Route PISTE (Légifrance + JUDILIBRE) enregistrée'); } catch (e) { console.error('piste:', e.message); }
 
 try {
   app.use('/api/user/documents', require('./routes/documents'));
