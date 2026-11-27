@@ -99,11 +99,12 @@ nextjs-portal[data-cursor-element-id] {
 }
 
 @layer base {
-  /* --- Forme pill + position/overflow pour pseudo-element --- */
+  /* --- Forme pill + position pour pseudo-element --- */
   /* Exclut les boutons text-left (accordeons, listes) qui ne sont pas des CTA visuels */
+  /* overflow:visible pour ne pas clipper les badges absolus (-top-1 -right-1) */
   button:not([data-no-pill]):not([class*="text-left"]) {
     border-radius: 9999px !important;
-    overflow: hidden;
+    overflow: visible;
     position: relative;
     transition:
       transform 180ms cubic-bezier(.34, 1.56, .64, 1),
@@ -114,11 +115,13 @@ nextjs-portal[data-cursor-element-id] {
   }
 
   /* --- Shimmer pseudo-element sur les vrais boutons CTA --- */
+  /* clip-path remplace overflow:hidden pour clipper le shimmer a la forme pill */
   button:not([data-no-pill]):not([class*="text-left"])::after {
     content: "";
     position: absolute;
     inset: 0;
     border-radius: inherit;
+    clip-path: inset(0 round 9999px);
     background: linear-gradient(
       110deg,
       transparent 20%,
@@ -170,7 +173,7 @@ nextjs-portal[data-cursor-element-id] {
   button:disabled {
     transform: none !important;
     box-shadow: none !important;
-    overflow: hidden;
+    overflow: visible;
     border-radius: 9999px !important;
   }
   button:disabled::after { display: none; }
