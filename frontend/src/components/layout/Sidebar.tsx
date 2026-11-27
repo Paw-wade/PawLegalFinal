@@ -285,18 +285,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <button
             type="button"
             onClick={async () => {
-              // Nettoyer les tokens et recharger vers la home
               if (typeof window !== 'undefined') {
                 localStorage.removeItem('token');
                 sessionStorage.removeItem('token');
-                try {
-                  // Déconnexion NextAuth (important : juste vider les tokens ne suffit pas)
-                  await signOut({ redirect: false });
-                } catch {
-                  // Si signOut échoue, on force quand même la redirection
-                }
-                window.location.href = '/';
               }
+              await signOut({ callbackUrl: '/' });
             }}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors min-h-[44px]"
           >
