@@ -137,9 +137,17 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
         return;
       }
 
-      // Si pas de session mais on a un token, récupérer depuis l'API
-      // Vérifier aussi si status est 'loading' pour éviter d'afficher "déconnecté" pendant le chargement
-      if ((status === 'unauthenticated' || status === 'loading') && typeof window !== 'undefined') {
+      // NextAuth dit explicitement que l'utilisateur n'est pas connecte :
+      // on efface userInfo sans regarder le localStorage (evite la re-connexion
+      // fantome via un token stale apres signOut).
+      if (status === 'unauthenticated') {
+        setUserInfo(null);
+        return;
+      }
+
+      // Pendant le chargement NextAuth, utiliser le token localStorage pour eviter
+      // un flash "deconnecte" : affichage optimiste en attendant la session.
+      if (status === 'loading' && typeof window !== 'undefined') {
         const token = localStorage.getItem('token') || sessionStorage.getItem('token');
         if (token) {
           try {
@@ -152,24 +160,10 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
                 email: user.email || '',
               });
             }
-          } catch (error: any) {
-            // Gérer les erreurs de connexion de manière gracieuse
-            if (error.isConnectionError) {
-              console.warn('⚠️ Le serveur backend n\'est pas disponible. Les fonctionnalités peuvent être limitées.');
-              // Ne pas supprimer le token si c'est juste une erreur de connexion
-              // L'utilisateur peut toujours utiliser l'application en mode hors ligne
-            } else {
-              console.error('Erreur lors de la récupération du profil:', error);
-              // Ne plus supprimer automatiquement le token :
-              // l'utilisateur restera connecté tant qu'il ne clique pas sur "Déconnexion".
-            }
+          } catch {
+            // Ignore : NextAuth prendra le relais des que son statut est resolu
           }
-        } else if (status === 'unauthenticated') {
-          // Seulement mettre userInfo à null si on est vraiment non authentifié ET qu'on n'a pas de token
-          setUserInfo(null);
         }
-      } else if (status === 'unauthenticated' && !session) {
-        setUserInfo(null);
       }
     };
 
@@ -289,8 +283,6 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
     localStorage.removeItem('token');
     sessionStorage.removeItem('token');
     setUserInfo(null);
-    // signOut avec callbackUrl : NextAuth efface les cookies de session AVANT
-    // de rediriger, ce qui evite la race condition de l'ancien redirect: false.
     await signOut({ callbackUrl: '/' });
   };
 
