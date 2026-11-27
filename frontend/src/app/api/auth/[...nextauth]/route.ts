@@ -354,6 +354,35 @@ const authOptions: NextAuthOptions = {
   // Coolify / reverse-proxy HTTPS : cookies Secure alignés sur NEXTAUTH_URL
   useSecureCookies: String(process.env.NEXTAUTH_URL || '').startsWith('https://'),
   secret: process.env.NEXTAUTH_SECRET || 'your-secret-key-change-this-in-production',
+  // Cookie domain explicite : couvre adapapers.fr ET www.adapapers.fr.
+  // Evite le mismatch CSRF state quand le navigateur a un vieux cookie d'un
+  // sous-domaine different (cause principale de l'echec OAuthCallback).
+  ...(String(process.env.NEXTAUTH_URL || '').startsWith('https://') && {
+    cookies: {
+      sessionToken: {
+        name: '__Secure-next-auth.session-token',
+        options: { httpOnly: true, sameSite: 'lax' as const, path: '/', secure: true, domain: '.adapapers.fr' },
+      },
+      callbackUrl: {
+        name: '__Secure-next-auth.callback-url',
+        options: { sameSite: 'lax' as const, path: '/', secure: true, domain: '.adapapers.fr' },
+      },
+      csrfToken: {
+        // __Host- interdit le domain= ; on utilise __Secure- a la place pour
+        // pouvoir partager le cookie sur adapapers.fr et www.adapapers.fr.
+        name: '__Secure-next-auth.csrf-token',
+        options: { httpOnly: true, sameSite: 'lax' as const, path: '/', secure: true, domain: '.adapapers.fr' },
+      },
+      pkceCodeVerifier: {
+        name: '__Secure-next-auth.pkce.code_verifier',
+        options: { httpOnly: true, sameSite: 'lax' as const, path: '/', secure: true, domain: '.adapapers.fr', maxAge: 60 * 15 },
+      },
+      state: {
+        name: '__Secure-next-auth.state',
+        options: { httpOnly: true, sameSite: 'lax' as const, path: '/', secure: true, domain: '.adapapers.fr', maxAge: 60 * 15 },
+      },
+    },
+  }),
 };
 
 const handler = NextAuth(authOptions);
