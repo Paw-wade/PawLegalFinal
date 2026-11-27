@@ -4999,11 +4999,11 @@ export default function LexiaClient({ audience = 'admin' }: LexiaClientProps) {
                             </div>
                           ) : null}
                           <LexiaMarkdown content={m.content} />
-                          {!m.isError && m.lexiaKnowledgeSources && m.lexiaKnowledgeSources.length > 0 ? (
+                          {!m.isError && m.lexiaKnowledgeSources && m.lexiaKnowledgeSources.filter(s => (s.metadata?.source ?? s.source) === 'internal_index').length > 0 ? (
                             <div className="lexia-knowledge-strip" role="region" aria-label="Références de la base interne">
                               <div className="lexia-knowledge-strip-label">Références (base interne)</div>
                               <ul className="lexia-knowledge-strip-list">
-                                {m.lexiaKnowledgeSources.map((s, idx) => (
+                                {m.lexiaKnowledgeSources.filter(s => (s.metadata?.source ?? s.source) === 'internal_index').map((s, idx) => (
                                   <li key={s.file}>
                                     <button
                                       type="button"
