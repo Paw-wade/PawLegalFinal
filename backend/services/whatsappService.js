@@ -594,6 +594,20 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
     return menuPrincipal(prenom);
   }
 
+  // Detection OQTF urgence : interception avant le switch si l'utilisateur mentionne une OQTF
+  const OQTF_KEYWORDS = ['oqtf', 'obligation de quitter', 'obliger de quitter', 'quitter le territoire'];
+  const oqtfStates = ['oqtf_date_notif', 'oqtf_date_depart', 'oqtf_prefecture'];
+  if (
+    conv.state === 'menu' &&
+    OQTF_KEYWORDS.some(k => text.includes(k))
+  ) {
+    conv.state = 'oqtf_date_notif';
+    conv.rdv = {};
+    conv.markModified('rdv');
+    await conv.save();
+    return `⚠️ *OQTF detectee - Prise en charge urgente*\n\nNous allons vous aider immediatement. Avez-vous recu une notification de votre OQTF ?\n\nQuelle est la date indiquee sur l'arrete ? _(ex: 15/01/2025)_\n\nTapez la date ou *non* si vous ne l'avez pas.`;
+  }
+
   switch (conv.state) {
     case 'menu': {
       // Option 1 : RDV
@@ -692,10 +706,11 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       }
       if (!conv.rdv) conv.rdv = {};
       conv.rdv.prenom = incomingText.trim();
-      conv.state = 'rdv_motif';
+      // Nouveaux utilisateurs non reconnus : pre-qualification avant le motif RDV
+      conv.state = 'prequal_situation';
       conv.markModified('rdv');
       await conv.save();
-      return `Merci *${conv.rdv.prenom}* ! Pour quel motif souhaitez-vous un rendez-vous ?\n\n1️⃣  Demande et renouvellement titre de sejour\n2️⃣  OQTF\n3️⃣  Regroupement familial\n4️⃣  Demande de visa\n5️⃣  Creation d'entreprise\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
+      return `Merci *${conv.rdv.prenom}* ! Pour mieux vous orienter, quelle est votre situation ?\n\n1️⃣  OQTF (obligation de quitter le territoire)\n2️⃣  Titre de sejour (premiere demande ou renouvellement)\n3️⃣  Regroupement familial\n4️⃣  Refus de visa\n5️⃣  Creation d'entreprise\n6️⃣  Autre situation\n\nEcrivez le numero de votre choix.`;
     }
 
     case 'rdv_motif': {
@@ -706,9 +721,9 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       await conv.save();
       const creneaux = await obtenirCreneauxDisponibles();
       if (creneaux.length === 0) {
-        conv.state = 'rdv_note';
+        conv.state = 'waitlist_confirm';
         await conv.save();
-        return `Aucun creneau n'est disponible en ligne pour le moment.\n\nVous serez contacte tres rapidement par un conseiller. A bientot !\n\nSouhaitez-vous ajouter une precision pour faciliter la prise de contact ? (Tapez votre message ou *non*)`;
+        return `Aucun creneau n'est disponible en ligne pour le moment.\n\nSouhaitez-vous rejoindre la *liste d'attente* ? Vous serez notifie par WhatsApp des qu'un creneau se libere.\n\nTapez *oui* pour vous inscrire ou *non* pour qu'un conseiller vous rappelle directement.`;
       }
       conv.state = 'rdv_creneau';
       await conv.save();
@@ -726,9 +741,9 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
       if (isNaN(idx) || idx < 1 || idx > 8) {
         const creneaux = await obtenirCreneauxDisponibles();
         if (creneaux.length === 0) {
-          conv.state = 'rdv_note';
+          conv.state = 'waitlist_confirm';
           await conv.save();
-          return `Aucun creneau n'est disponible en ligne pour le moment.\n\nVous serez contacte tres rapidement par un conseiller. A bientot !\n\nSouhaitez-vous ajouter une precision ? (Tapez votre message ou *non*)`;
+          return `Aucun creneau n'est disponible en ligne pour le moment.\n\nSouhaitez-vous rejoindre la liste d'attente ? Tapez *oui* pour vous inscrire ou *non* pour qu'un conseiller vous rappelle.`;
         }
         return `Ecrivez un numero entre *1* et *${creneaux.length}*, ou *0* pour annuler.\n\n${formatMenuCreneaux(creneaux)}`;
       }
@@ -1031,6 +1046,104 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       return `Envoyez votre *${conv.docContext?.docType || 'document'}* en piece jointe pour le ${dossierRef}.\n\nTapez *R* pour choisir un autre type, *0* pour annuler.`;
     }
 
+    // ─── OQTF urgence flow ───────────────────────────────────────────────
+
+    case 'oqtf_date_notif': {
+      if (!conv.rdv) conv.rdv = {};
+      conv.rdv.note = `Date notif OQTF: ${incomingText?.trim() || 'non indiquee'}`;
+      conv.state = 'oqtf_date_depart';
+      conv.markModified('rdv');
+      await conv.save();
+      return `Quelle est la date limite de depart indiquee sur l'arrete OQTF ?\n\n_(ex: 15/02/2025, ou tapez *non* si vous ne savez pas)_`;
+    }
+
+    case 'oqtf_date_depart': {
+      if (!conv.rdv) conv.rdv = {};
+      conv.rdv.note = (conv.rdv.note || '') + ` | Date depart: ${incomingText?.trim() || 'non indiquee'}`;
+      conv.state = 'oqtf_prefecture';
+      conv.markModified('rdv');
+      await conv.save();
+      return `Quelle prefecture a emis cet arrete OQTF ?\n\n_(ex: Paris, Lyon, Marseille, ou tapez *non* si inconnu)_`;
+    }
+
+    case 'oqtf_prefecture': {
+      if (!conv.rdv) conv.rdv = {};
+      conv.rdv.note = (conv.rdv.note || '') + ` | Prefecture: ${incomingText?.trim() || 'non indiquee'}`;
+      conv.rdv.motif = 'conteste_oqtf';
+      conv.markModified('rdv');
+      await notifierAdminsOQTF(conv, prenom);
+      try {
+        await sendWhatsAppTemplate(conv.phone, 'oqtf_urgence_confirme', [
+          prenom || conv.contactName || 'Client',
+        ]);
+      } catch (e) {
+        console.warn('[WhatsApp] Template oqtf_urgence_confirme:', e.message);
+      }
+      conv.state = 'menu';
+      await conv.save();
+      return `✅ *Votre situation OQTF a ete enregistree.*\n\nUn avocat specialise en droit des etrangers va vous contacter en urgence.\n\n⚠️ Ne quittez pas le territoire avant d'avoir parle a notre equipe.\n\nTapez *0* pour revenir au menu.`;
+    }
+
+    // ─── Pre-qualification nouveaux utilisateurs ─────────────────────────
+
+    case 'prequal_situation': {
+      const SITUATIONS = {
+        '1': 'OQTF (obligation de quitter le territoire)',
+        '2': 'Titre de sejour - premiere demande ou renouvellement',
+        '3': 'Regroupement familial',
+        '4': 'Refus de visa',
+        '5': "Creation d'entreprise",
+        '6': 'Autre situation',
+      };
+      const situation = SITUATIONS[text];
+      if (!situation) {
+        return `Ecrivez un numero entre *1* et *6* pour choisir votre situation.`;
+      }
+      if (!conv.rdv) conv.rdv = {};
+      conv.rdv.note = `Situation: ${situation}`;
+      conv.state = 'prequal_duree';
+      conv.markModified('rdv');
+      await conv.save();
+      return `Depuis combien de temps etes-vous en France ?\n\n1️⃣  Moins de 1 an\n2️⃣  1 a 5 ans\n3️⃣  5 a 10 ans\n4️⃣  Plus de 10 ans\n5️⃣  Je ne suis pas encore en France\n\nEcrivez le numero de votre choix.`;
+    }
+
+    case 'prequal_duree': {
+      const DUREES = {
+        '1': 'moins de 1 an',
+        '2': '1 a 5 ans',
+        '3': '5 a 10 ans',
+        '4': 'plus de 10 ans',
+        '5': 'pas encore en France',
+      };
+      const duree = DUREES[text];
+      if (!duree) {
+        return `Ecrivez un numero entre *1* et *5* pour indiquer votre duree de sejour.`;
+      }
+      if (!conv.rdv) conv.rdv = {};
+      conv.rdv.note = (conv.rdv.note || '') + ` | Duree en France: ${duree}`;
+      conv.state = 'rdv_motif';
+      conv.markModified('rdv');
+      await conv.save();
+      return `Merci. Pour quel motif souhaitez-vous un rendez-vous ?\n\n1️⃣  Demande et renouvellement titre de sejour\n2️⃣  OQTF\n3️⃣  Regroupement familial\n4️⃣  Demande de visa\n5️⃣  Creation d'entreprise\n6️⃣  Autre\n\nEcrivez le numero de votre choix.`;
+    }
+
+    // ─── Liste d'attente RDV ─────────────────────────────────────────────
+
+    case 'waitlist_confirm': {
+      if (text === 'oui' || text === '1') {
+        conv.waitlisted = true;
+        conv.waitlistMotif = conv.rdv?.motif || '';
+        conv.markModified('rdv');
+        await conv.save();
+        return `✅ Vous etes bien inscrit sur la *liste d'attente*.\n\nDes qu'un creneau se libere, vous serez notifie directement par WhatsApp.\n\nTapez *0* pour revenir au menu.`;
+      }
+      conv.state = 'menu';
+      conv.rdv = {};
+      conv.markModified('rdv');
+      await conv.save();
+      return `Pas de souci. Un conseiller vous recontactera directement dans les meilleurs delais.\n\nTapez *0* pour revenir au menu.`;
+    }
+
     default:
       conv.state = 'menu';
       await conv.save();
@@ -1309,6 +1422,30 @@ async function traiterDocumentRecu(conv, user) {
     conv.state = 'menu';
     await conv.save();
     return `Votre document a bien ete recu. Un conseiller Ada Papers va l'examiner.\n\nTapez *0* pour revenir au menu.`;
+  }
+}
+
+async function notifierAdminsOQTF(conv, prenom) {
+  try {
+    const User = require('../models/User');
+    const Notification = require('../models/Notification');
+    const admins = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: { $ne: false } }).select('_id').lean();
+    if (!admins.length) return;
+    const nom = prenom || conv.contactName || conv.phone;
+    const note = conv.rdv?.note || '';
+    const message = `URGENCE OQTF : ${nom} (${conv.phone}) a signale une OQTF via WhatsApp. ${note}`;
+    const docs = admins.map((admin) => ({
+      user: admin._id,
+      type: 'oqtf_urgence',
+      titre: 'URGENCE - OQTF signalee via WhatsApp',
+      message,
+      lien: '/admin/whatsapp',
+      lue: false,
+      metadata: { phone: conv.phone, nom, note, source: 'whatsapp' },
+    }));
+    await Notification.insertManyWithPush(docs);
+  } catch (e) {
+    console.warn('[WhatsApp] Erreur notification OQTF:', e.message);
   }
 }
 

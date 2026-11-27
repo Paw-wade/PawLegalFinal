@@ -403,6 +403,128 @@ const startServer = async () => {
         setInterval(resetExpiredHumanMode, 60 * 60 * 1000);
         console.log('🤖 Scheduler reset humanMode actif (toutes les heures, seuil 24h)');
 
+        // Rappel WhatsApp 2h avant le rendez-vous
+        const checkRdvReminders2h = async () => {
+          try {
+            const RendezVous = require('./models/RendezVous');
+            const User = require('./models/User');
+            const WhatsappConversation = require('./models/WhatsappConversation');
+            const { sendWhatsAppTemplate } = require('./services/whatsappService');
+            const now = new Date();
+            const debut = new Date(now.getTime() + 1 * 60 * 60 * 1000 + 45 * 60 * 1000);
+            const fin = new Date(now.getTime() + 2 * 60 * 60 * 1000 + 15 * 60 * 1000);
+            const rdvs = await RendezVous.find({
+              statut: { $in: ['en_attente', 'confirme'] },
+              whatsappReminderSent: { $ne: true },
+              date: { $gte: debut, $lte: fin },
+            }).lean();
+            for (const rdv of rdvs) {
+              try {
+                let phone = rdv.telephone || '';
+                if (rdv.user) {
+                  const u = await User.findById(rdv.user).select('phone whatsappPhone').lean();
+                  phone = u?.whatsappPhone || u?.phone || phone;
+                }
+                if (!phone) continue;
+                const phoneAlt = phone.startsWith('+') ? phone.slice(1) : '+' + phone;
+                const waConv = await WhatsappConversation.findOne({ phone: { $in: [phone, phoneAlt] } });
+                if (!waConv) continue;
+                const prenom = rdv.prenom || rdv.nom || 'Madame/Monsieur';
+                const dateLabel = new Date(rdv.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+                await sendWhatsAppTemplate(phone, 'rdv_rappel_2h', [prenom, dateLabel, rdv.heure]);
+                await RendezVous.findByIdAndUpdate(rdv._id, { whatsappReminderSent: true });
+                console.log(`📲 Rappel RDV 2h envoye a ${phone} pour ${dateLabel} ${rdv.heure}`);
+              } catch (e) {
+                console.warn(`⚠️ Rappel RDV 2h echoue pour ${rdv._id}:`, e.message);
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ Scheduler rappel RDV 2h:', e.message);
+          }
+        };
+        setTimeout(checkRdvReminders2h, 2 * 60 * 1000);
+        setInterval(checkRdvReminders2h, 15 * 60 * 1000);
+        console.log('📲 Scheduler rappel RDV 2h actif (toutes les 15 min)');
+
+        // Relance documents manquants (quotidien, dossiers avec demandes > 3 jours sans reponse)
+        const checkDocumentsManquants = async () => {
+          try {
+            const DocumentRequest = require('./models/DocumentRequest');
+            const User = require('./models/User');
+            const WhatsappConversation = require('./models/WhatsappConversation');
+            const { sendWhatsAppTemplate } = require('./services/whatsappService');
+            const cutoff3j = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+            const pendingReqs = await DocumentRequest.find({
+              status: 'pending',
+              createdAt: { $lt: cutoff3j },
+            })
+              .populate({ path: 'dossier', select: 'user numero titre' })
+              .lean();
+            const treated = new Set();
+            for (const req of pendingReqs) {
+              try {
+                const userId = req.dossier?.user;
+                if (!userId) continue;
+                const userKey = userId.toString();
+                if (treated.has(userKey)) continue;
+                const u = await User.findById(userId).select('firstName phone whatsappPhone').lean();
+                if (!u) continue;
+                const phone = u.whatsappPhone || u.phone || '';
+                if (!phone) continue;
+                const phoneAlt = phone.startsWith('+') ? phone.slice(1) : '+' + phone;
+                const waConv = await WhatsappConversation.findOne({ phone: { $in: [phone, phoneAlt] } });
+                if (!waConv) continue;
+                const prenom = u.firstName || 'Madame/Monsieur';
+                const dossierRef = req.dossier?.numero ? `N° ${req.dossier.numero}` : (req.dossier?.titre || 'votre dossier');
+                const docLabel = req.documentTypeLabel || 'document';
+                await sendWhatsAppTemplate(phone, 'document_manquant_relance', [prenom, docLabel, dossierRef]);
+                treated.add(userKey);
+                console.log(`📋 Relance document manquant envoyee a ${phone}`);
+              } catch (e) {
+                console.warn('⚠️ Relance document manquant individuelle:', e.message);
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ Scheduler relance documents:', e.message);
+          }
+        };
+        setTimeout(checkDocumentsManquants, 30 * 1000);
+        setInterval(checkDocumentsManquants, 24 * 60 * 60 * 1000);
+        console.log('📋 Scheduler relance documents manquants actif (quotidien)');
+
+        // Notification liste d'attente : verifie les nouveaux creneaux et previent les inscrits
+        const checkWaitlistNotifications = async () => {
+          try {
+            const WhatsappConversation = require('./models/WhatsappConversation');
+            const { sendWhatsAppTemplate } = require('./services/whatsappService');
+            const Creneau = require('./models/Creneau');
+            const RendezVous = require('./models/RendezVous');
+            const waitlisted = await WhatsappConversation.find({ waitlisted: true }).lean();
+            if (!waitlisted.length) return;
+            // Verifier si un creneau est disponible
+            const maintenant = new Date();
+            const finRecherche = new Date(maintenant.getTime() + 21 * 24 * 60 * 60 * 1000);
+            const nbFermes = await Creneau.countDocuments({ date: { $gte: maintenant, $lte: finRecherche }, ferme: true });
+            const nbPris = await RendezVous.countDocuments({ date: { $gte: maintenant, $lte: finRecherche }, statut: { $in: ['en_attente', 'confirme'] } });
+            const totalOccupes = nbFermes + nbPris;
+            // Estimation simple : si moins de 100 slots occupes, il y a probablement des creneaux libres
+            if (totalOccupes > 100) return;
+            for (const conv of waitlisted) {
+              try {
+                await sendWhatsAppTemplate(conv.phone, 'creneau_disponible', [conv.contactName || 'Client']);
+                await WhatsappConversation.findByIdAndUpdate(conv._id, { waitlisted: false, state: 'menu' });
+                console.log(`📅 Notification creneau disponible envoyee a ${conv.phone}`);
+              } catch (e) {
+                console.warn('⚠️ Notification liste attente:', e.message);
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ Scheduler liste attente:', e.message);
+          }
+        };
+        setInterval(checkWaitlistNotifications, 60 * 60 * 1000);
+        console.log('📅 Scheduler liste d\'attente RDV actif (toutes les heures)');
+
         if (String(process.env.DOCUMENTS_INTEGRITY_AUDIT_ENABLED || '').toLowerCase() === 'true') {
           const { runDocumentsIntegrityAudit } = require('./utils/documentsIntegrityAudit');
           const runAudit = () => {

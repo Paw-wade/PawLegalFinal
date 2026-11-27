@@ -106,6 +106,11 @@ const rendezVousSchema = new mongoose.Schema({
     trim: true,
     default: undefined,
   },
+  /** Rappel WhatsApp 2h avant envoye */
+  whatsappReminderSent: {
+    type: Boolean,
+    default: false,
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -5263,8 +5263,31 @@ Suivi : ${suiviUrlGuest}`,
             `/client/dossiers`,
             { dossierId: dossierForNotification._id.toString(), oldStatut, newStatut: statut }
           );
-          
+
             console.log('✅ Notification créée avec succès');
+
+          // Notification WhatsApp si le client a une conversation active
+          try {
+            const WhatsappConversation = require('../models/WhatsappConversation');
+            const { sendWhatsAppTemplate } = require('../services/whatsappService');
+            const User = require('../models/User');
+            const userForWa = await User.findById(userId).select('phone whatsappPhone firstName').lean();
+            if (userForWa) {
+              const phone = userForWa.whatsappPhone || userForWa.phone || '';
+              if (phone) {
+                const phoneAlt = phone.startsWith('+') ? phone.slice(1) : '+' + phone;
+                const waConv = await WhatsappConversation.findOne({ phone: { $in: [phone, phoneAlt] } });
+                if (waConv) {
+                  const prenomWa = userForWa.firstName || 'Madame/Monsieur';
+                  const titreDossierWa = dossierForNotification.titre || 'votre dossier';
+                  await sendWhatsAppTemplate(phone, 'dossier_status_changed', [prenomWa, titreDossierWa, newStatutLabel]);
+                  console.log(`📲 WhatsApp statut dossier envoye a ${phone}`);
+                }
+              }
+            }
+          } catch (waErr) {
+            console.warn('[WhatsApp] Notification statut dossier:', waErr.message);
+          }
           }
           
           // ⚠️ Ne plus notifier le client sur les changements d'assignation de dossier
