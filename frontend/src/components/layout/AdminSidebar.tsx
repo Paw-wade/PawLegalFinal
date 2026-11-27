@@ -468,8 +468,7 @@ export function AdminSidebar({ isOpen = true, onClose, collapsed = false, onTogg
                   if (typeof window !== 'undefined') {
                     localStorage.removeItem('token');
                     sessionStorage.removeItem('token');
-                    try { await signOut({ redirect: false }); } catch {}
-                    window.location.href = '/';
+                    await signOut({ callbackUrl: '/' });
                   }
                 }}
                 className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[12.5px] font-semibold text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors"

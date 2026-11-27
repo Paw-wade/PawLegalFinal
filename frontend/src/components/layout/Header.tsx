@@ -286,25 +286,12 @@ export function Header({ variant = 'home', showNav = true, navItems, onMenuClick
 
   const handleSignOut = async () => {
     if (typeof window === 'undefined') return;
-    
-    // Nettoyer complètement l'état de l'utilisateur
     localStorage.removeItem('token');
     sessionStorage.removeItem('token');
     setUserInfo(null);
-    
-    // Si on a une session NextAuth, la déconnecter
-    if (session) {
-      try {
-        // Déconnecter de NextAuth en arrière-plan
-        await signOut({ redirect: false });
-      } catch (error) {
-        console.warn('Erreur lors de la déconnexion NextAuth:', error);
-      }
-    }
-    
-    // Rediriger immédiatement vers la page d'accueil
-    // Utiliser window.location.href pour une redirection complète qui évite les requêtes API
-    window.location.href = '/';
+    // signOut avec callbackUrl : NextAuth efface les cookies de session AVANT
+    // de rediriger, ce qui evite la race condition de l'ancien redirect: false.
+    await signOut({ callbackUrl: '/' });
   };
 
   const handleDashboardClick = (e: React.MouseEvent) => {

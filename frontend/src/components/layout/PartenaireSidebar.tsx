@@ -140,13 +140,7 @@ export function PartenaireSidebar({ isOpen = true, onClose }: PartenaireSidebarP
               if (typeof window !== 'undefined') {
                 localStorage.removeItem('token');
                 sessionStorage.removeItem('token');
-                try {
-                  // Déconnexion NextAuth (sinon la session peut rester active)
-                  await signOut({ redirect: false });
-                } catch {
-                  // ignore - redirection forcée juste après
-                }
-                window.location.href = '/';
+                await signOut({ callbackUrl: '/' });
               }
             }}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors min-h-[44px]"
