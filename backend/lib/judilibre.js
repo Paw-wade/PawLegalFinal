@@ -1,33 +1,12 @@
 const fetch = require('node-fetch');
+const { getPisteToken } = require('./auth');
 
-const BASE = 'https://sandbox-api.piste.gouv.fr/cassation/judilibre/v1.0';
-const TOKEN_URL = 'https://sandbox-oauth.piste.gouv.fr/api/oauth/token';
-
-let cachedToken = null;
-let tokenExpiry = 0;
+const BASE =
+  process.env.JUDILIBRE_API_URL ||
+  'https://api.piste.gouv.fr/cassation/judilibre/v1.0';
 
 async function getJudilibreToken() {
-  if (cachedToken && Date.now() < tokenExpiry - 10000) return cachedToken;
-
-  const params = new URLSearchParams({
-    grant_type: 'client_credentials',
-    client_id: process.env.PISTE_CLIENT_ID,
-    client_secret: process.env.PISTE_CLIENT_SECRET,
-    scope: 'openid',
-  });
-
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params,
-  });
-
-  const data = await res.json();
-  if (!data.access_token) throw new Error('Échec auth Judilibre : ' + JSON.stringify(data));
-
-  cachedToken = data.access_token;
-  tokenExpiry = Date.now() + data.expires_in * 1000;
-  return cachedToken;
+  return getPisteToken();
 }
 
 // Recherche de décisions
