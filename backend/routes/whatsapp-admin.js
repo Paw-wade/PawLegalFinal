@@ -444,6 +444,11 @@ router.put('/conversations/:id/human-mode', async (req, res) => {
     if (humanMode) {
       const existing = await WhatsappConversation.findById(req.params.id).select('assignedTo').lean();
       if (!existing?.assignedTo) update.assignedTo = req.user._id;
+    } else {
+      // Retour au bot : reinitialise l'etat pour eviter de reprendre un flow en cours
+      update.state = 'menu';
+      update.rdv = {};
+      update.docContext = {};
     }
 
     const conv = await WhatsappConversation.findByIdAndUpdate(req.params.id, update, { new: true })
