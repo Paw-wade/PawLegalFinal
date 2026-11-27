@@ -383,6 +383,26 @@ const startServer = async () => {
         setInterval(() => { void checkAppelPlanifieNotifications(); }, 60_000);
         console.log('📞 Scheduler appels planifies actif (toutes les 60s)');
 
+        // Retour automatique en mode bot apres 24h d'inactivite en mode conseiller
+        const resetExpiredHumanMode = async () => {
+          try {
+            const WhatsappConversation = require('./models/WhatsappConversation');
+            const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            const result = await WhatsappConversation.updateMany(
+              { humanMode: true, lastActivity: { $lt: cutoff } },
+              { $set: { humanMode: false, state: 'menu', rdv: {}, docContext: {} } }
+            );
+            if (result.modifiedCount > 0) {
+              console.log(`🤖 ${result.modifiedCount} conversation(s) repassee(s) en mode bot (inactivite 24h)`);
+            }
+          } catch (e) {
+            console.warn('⚠️ Reset humanMode expire:', e.message);
+          }
+        };
+        setTimeout(resetExpiredHumanMode, 5 * 60 * 1000);
+        setInterval(resetExpiredHumanMode, 60 * 60 * 1000);
+        console.log('🤖 Scheduler reset humanMode actif (toutes les heures, seuil 24h)');
+
         if (String(process.env.DOCUMENTS_INTEGRITY_AUDIT_ENABLED || '').toLowerCase() === 'true') {
           const { runDocumentsIntegrityAudit } = require('./utils/documentsIntegrityAudit');
           const runAudit = () => {
