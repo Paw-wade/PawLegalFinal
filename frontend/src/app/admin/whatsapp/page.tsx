@@ -673,11 +673,7 @@ export default function AdminWhatsAppPage() {
       } else if (saveToDossierMsg.mediaId) {
         payload.mediaId = saveToDossierMsg.mediaId;
       }
-      const { default: axios } = await import('axios');
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      await axios.post(`${apiUrl}/api/whatsapp-admin/conversations/${selectedConv._id}/save-to-dossier`, payload, {
-        withCredentials: true,
-      });
+      await whatsappAdminAPI.saveToDossier(selectedConv._id, payload);
       setToast({ message: 'Document enregistre dans le dossier', type: 'success' });
       setSaveToDossierMsg(null);
     } catch (err: any) {

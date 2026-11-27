@@ -2089,6 +2089,8 @@ export const whatsappAdminAPI = {
     return api.post('/whatsapp-admin/send-media', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   remove: (id: string) => api.delete(`/whatsapp-admin/conversations/${id}`),
+  saveToDossier: (id: string, payload: { dossierId: string; nom: string; categorie: string; mediaId?: string; mediaUri?: string; mimeType?: string; filename?: string }) =>
+    api.post(`/whatsapp-admin/conversations/${id}/save-to-dossier`, payload),
 };
 
 export const questionnairesAPI = {
