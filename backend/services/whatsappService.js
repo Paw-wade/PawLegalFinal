@@ -646,15 +646,15 @@ async function handleIncomingMessage(conv, incomingText, messageType) {
           await conv.save();
           return menuContactConseiller(true);
         }
-        conv.state = 'forum_question_body';
+        conv.state = 'forum_question_title';
         await conv.save();
-        return `Posez votre question.\n\nElle sera publiee de facon anonyme sur le forum et vous obtiendrez une reponse.\n\n_Tapez votre question ou *R* pour revenir._`;
+        return `Posez votre question sur le forum.\n\nCommencez par donner un *titre court* a votre question (ex: "OQTF recue, que faire ?").\n\n_Tapez le titre ou *R* pour revenir._`;
       }
       // Option 5 : Forum (utilisateur reconnu uniquement)
       if (text === '5' && prenom) {
-        conv.state = 'forum_question_body';
+        conv.state = 'forum_question_title';
         await conv.save();
-        return `Posez votre question.\n\nElle sera publiee de facon anonyme sur le forum et vous obtiendrez une reponse.\n\n_Tapez votre question ou *R* pour revenir._`;
+        return `Posez votre question sur le forum.\n\nCommencez par donner un *titre court* a votre question (ex: "OQTF recue, que faire ?").\n\n_Tapez le titre ou *R* pour revenir._`;
       }
       return `Ecrivez *1*, *2*${prenom ? ', *3*, *4* ou *5*' : ', *3* ou *4*'} pour choisir.\n\n${menuPrincipal(prenom)}`;
     }
@@ -809,8 +809,25 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       return menuContactConseiller(false);
     }
 
+    case 'forum_question_title': {
+      if (text === 'r' || text === 'menu') {
+        conv.state = 'menu';
+        await conv.save();
+        return menuPrincipal(prenom);
+      }
+      if (!text || text.length < 5) {
+        return `Le titre est trop court. Resumez votre question en quelques mots.\n\n_Ecrivez le titre ou tapez *R* pour revenir._`;
+      }
+      const titreNormalise = text.length <= 150 ? text : text.slice(0, 147) + '...';
+      conv.forumContext = { pendingTitle: titreNormalise };
+      conv.state = 'forum_question_body';
+      await conv.save();
+      return `Maintenant, *decrivez votre question en detail*.\n\nPlus votre message est precis, plus la reponse sera utile.\n\n_Tapez votre question ou *R* pour revenir._`;
+    }
+
     case 'forum_question_body': {
       if (text === 'r' || text === 'menu') {
+        conv.forumContext = { pendingTitle: '' };
         conv.state = 'menu';
         await conv.save();
         return menuPrincipal(prenom);
@@ -818,13 +835,9 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
       if (!text || text.length < 10) {
         return `Votre question est trop courte. Merci de developper un peu pour que notre equipe puisse vous repondre.\n\n_Ecrivez votre question ou tapez *R* pour revenir._`;
       }
+      const titre = conv.forumContext?.pendingTitle || text.slice(0, 100);
       try {
         const ForumThread = require('../models/ForumThread');
-        // Generer un titre a partir de la premiere phrase ou des 100 premiers caracteres
-        const premiereSentence = text.match(/^[^.?!\n]{1,100}/)?.[0]?.trim() || '';
-        const titre = premiereSentence.length >= 10
-          ? premiereSentence
-          : (text.length <= 120 ? text : text.slice(0, 117) + '...');
         await ForumThread.create({
           title: titre,
           body: text,
@@ -832,6 +845,7 @@ Confirmez-vous ? Tapez *oui* pour valider ou *non* pour annuler.`;
           theme: 'autres',
           isVerified: false,
         });
+        conv.forumContext = { pendingTitle: '' };
         conv.state = 'menu';
         await conv.save();
         return `Merci ! Votre question a bien ete soumise.\n\nElle sera visible sur *adapapers.fr/forum* apres validation par notre equipe, qui vous repondra directement sur le forum.\n\nTapez *menu* pour revenir.`;

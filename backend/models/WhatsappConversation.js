@@ -48,6 +48,7 @@ const whatsappConversationSchema = new mongoose.Schema(
         'contact_motif',
         'contact_message',
         'dossier_docs_list',
+        'forum_question_title',
         'forum_question_body',
         'oqtf_date_notif',
         'oqtf_date_depart',
@@ -75,6 +76,9 @@ const whatsappConversationSchema = new mongoose.Schema(
       dossierCount: { type: Number, default: 0 },
       docType: { type: String, default: '' },
       documentRequestId: { type: String, default: '' },
+    },
+    forumContext: {
+      pendingTitle: { type: String, default: '' },
     },
     messages: { type: [messageSchema], default: [] },
     unreadAdmin: { type: Number, default: 0 },
